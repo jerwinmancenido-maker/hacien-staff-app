@@ -1,0 +1,225 @@
+// HACIEN Staff App — Prisma schema (MySQL 8)
+//
+// Rules that shape this schema:
+// - Nothing is ever hard-deleted. Master data uses `active` + `archivedAt`;
+//   documents (later) will use `voidedAt` + `voidReason`. The Prisma client
+//   is extended to throw on delete/deleteMany (src/lib/no-delete.ts).
+// - Every change writes an AuditLog row in the same transaction.
+// - Settings are versioned: each save is a new SettingsVersion row holding the
+//   full settings snapshot. Future documents store `settingsVersionId`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users, roles, sessions
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique @db.VarChar(191)
+  name         String    @db.VarChar(120)
+  // Null until the user sets a password from their invite link.
+  passwordHash String?   @db.VarChar(100)
+  // Roles (a user may hold several, e.g. Admin + Approver). Stored as flags so
+  // removing a role is an update, never a delete.
+  isAdmin      Boolean   @default(false)
+  isApprover   Boolean   @default(false)
+  isStaff      Boolean   @default(false)
+  isViewer     Boolean   @default(false)
+  canSeeCosts  Boolean   @default(false)
+  // Turned-off users cannot sign in; they are never deleted.
+  active       Boolean   @default(true)
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions      Session[]
+  resetTokens   PasswordResetToken[]
+  auditLogs     AuditLog[]
+  settingsSaves SettingsVersion[]
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  // HMAC-SHA256 of the cookie token (the raw token is never stored).
+  tokenHash String    @unique @db.VarChar(64)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  // Sign out / user turned off: sessions are revoked, not deleted.
+  revokedAt DateTime?
+  ip        String?   @db.VarChar(64)
+  userAgent String?   @db.VarChar(255)
+
+  @@index([userId])
+}
+
+enum TokenPurpose {
+  RESET
+  INVITE
+}
+
+model PasswordResetToken {
+  id        String       @id @default(cuid())
+  tokenHash String       @unique @db.VarChar(64)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  purpose   TokenPurpose
+  createdAt DateTime     @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String   @db.VarChar(191)
+  ip        String   @db.VarChar(64)
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, ip, createdAt])
+  // Per-email failure cap (any IP).
+  @@index([email, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Settings (versioned)
+// ---------------------------------------------------------------------------
+
+model SettingsVersion {
+  id            String   @id @default(cuid())
+  // 1, 2, 3 … increasing. Shown in the change log.
+  version       Int      @unique
+  // Full settings snapshot (see src/lib/settings/schema.ts).
+  data          Json
+  // Which section changed in this version (null for the seed version).
+  changedKey    String?  @db.VarChar(64)
+  before        Json?
+  after         Json?
+  effectiveFrom DateTime @default(now())
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Companies and contacts
+// ---------------------------------------------------------------------------
+
+enum WithholdingType {
+  GOVERNMENT
+  TOP_WITHHOLDING_AGENT
+  NONE
+}
+
+enum SupplierTaxType {
+  VAT
+  NON_VAT
+  NO_RECEIPT
+}
+
+model Customer {
+  id              String          @id @default(cuid())
+  name            String          @db.VarChar(191)
+  // Normalized 000-000-000-000 (branch code defaults to 000). Unique among customers.
+  tin             String?         @unique @db.VarChar(20)
+  address         String?         @db.Text
+  withholdingType WithholdingType
+  defaultTerms    String?         @db.VarChar(100)
+  notes           String?         @db.Text
+  active          Boolean         @default(true)
+  archivedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  contacts Contact[]
+
+  @@index([name])
+}
+
+model Supplier {
+  id                String          @id @default(cuid())
+  name              String          @db.VarChar(191)
+  // Normalized like customer TINs. Unique among suppliers.
+  tin               String?         @unique @db.VarChar(20)
+  address           String?         @db.Text
+  taxType           SupplierTaxType
+  defaultTerms      String?         @db.VarChar(100)
+  // UnionBank details used when paying this supplier.
+  bankAccountName   String?         @db.VarChar(191)
+  bankAccountNumber String?         @db.VarChar(64)
+  bankBranch        String?         @db.VarChar(191)
+  bankNotes         String?         @db.Text
+  notes             String?         @db.Text
+  active            Boolean         @default(true)
+  archivedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  contacts Contact[]
+
+  @@index([name])
+}
+
+// A contact belongs to exactly one customer OR one supplier.
+model Contact {
+  id         String    @id @default(cuid())
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  name       String    @db.VarChar(191)
+  role       String?   @db.VarChar(100)
+  email      String?   @db.VarChar(191)
+  phone      String?   @db.VarChar(64)
+  isMain     Boolean   @default(false)
+  active     Boolean   @default(true)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+enum AuditAction {
+  create
+  update
+  archive
+  restore
+  void
+  login
+  login_failed
+  settings_change
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  at         DateTime    @default(now())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
+  entityType String      @db.VarChar(40)
+  entityId   String?     @db.VarChar(64)
+  action     AuditAction
+  // Only the changed fields: { field: value } before and after.
+  before     Json?
+  after      Json?
+  ip         String?     @db.VarChar(64)
+
+  @@index([entityType, entityId])
+  @@index([at])
+  @@index([userId])
+}
