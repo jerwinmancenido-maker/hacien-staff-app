@@ -5,7 +5,7 @@ export const DEFAULT_SETTINGS: Settings = {
   approval: { marginBelowPct: 18, totalAbove: 500_000 },
   quotes: { defaultValidityDays: 30 },
   numbering: {
-    quote: { prefix: "Q", padding: 4, resetYearly: true },
+    quote: { prefix: "QT", padding: 4, resetYearly: true },
     salesOrder: { prefix: "SO", padding: 4, resetYearly: true },
     supplierPo: { prefix: "PO", padding: 4, resetYearly: true },
   },

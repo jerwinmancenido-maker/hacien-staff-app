@@ -4,6 +4,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getCustomer } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { listWithholdingRates } from "@/lib/services/withholding";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
 import { db } from "@/lib/db";
@@ -33,6 +34,7 @@ export default async function CustomerPage({
   const customer = await getCustomer(id);
   if (!customer) notFound();
   const { settings } = await getSettingsSnapshot();
+  const rates = (await listWithholdingRates()).map((r) => ({ code: r.code, label: r.label, active: r.active }));
   const canEdit = can(user, "edit_data");
   const { contacts, ...record } = customer;
   const main = contacts.find((c) => c.isMain && c.active);
@@ -140,6 +142,7 @@ export default async function CustomerPage({
           <CustomerForm
             customer={record}
             terms={settings.lists.paymentTerms}
+            rates={rates}
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
           />

@@ -1,0 +1,117 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requirePagePermission } from "@/lib/auth/current-user";
+import { can } from "@/lib/permissions";
+import { getQuoteView } from "@/lib/quotes/views";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { Activity } from "@/components/Activity";
+import { Chip, PageHeader } from "@/components/ui";
+import { ApprovalChip, ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
+import { QuoteActions } from "@/components/docs/QuoteActions";
+import { convertQuoteAction, emailDraftAction, markQuoteLostAction, markQuoteSentAction, voidQuoteAction } from "../actions";
+
+const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
+
+export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requirePagePermission("view");
+  const { id } = await params;
+  // Built on the server without cost fields for users who can't see costs.
+  const q = await getQuoteView(id, user);
+  if (!q) notFound();
+  const canEdit = can(user, "edit_data");
+  const openSo = q.salesOrders.find((s) => s.status === "OPEN");
+
+  return (
+    <>
+      <PageHeader
+        title={
+          <>
+            {q.number}
+            <Chip>Rev {q.revision}</Chip>
+            <QuoteStatusChip status={q.status} />
+            {q.status !== "VOID" && <ApprovalChip approval={q.approval} />}
+          </>
+        }
+        subtitle={`${q.customer.name}${q.contact ? ` · ${q.contact.name}` : ""} · Valid until ${day(q.validUntil)}`}
+        actions={
+          <QuoteActions
+            id={q.id}
+            number={q.number}
+            status={q.status}
+            canEdit={canEdit}
+            openSalesOrderId={openSo?.id ?? null}
+            customerAddress={q.customer.address ?? ""}
+            actions={{
+              markSent: markQuoteSentAction,
+              markLost: markQuoteLostAction,
+              void: voidQuoteAction,
+              convert: convertQuoteAction,
+              email: emailDraftAction,
+            }}
+          />
+        }
+      />
+      {q.status === "VOID" && (
+        <div className="alert error" role="status">
+          <b>Void.</b> {q.voidReason} This quote is read-only.
+        </div>
+      )}
+      {q.approval.needed && q.approval.reasons && q.status !== "VOID" && (
+        <div className="alert warn" role="status">
+          Needs approval: {q.approval.reasons.join(" · ")}.
+        </div>
+      )}
+      <div className="detail-grid">
+        <div>
+          <div className="card">
+            <dl className="kv kv-grid">
+              <dt>Customer</dt>
+              <dd>
+                <Link href={`/customers/${q.customer.id}`}>{q.customer.name}</Link>
+              </dd>
+              <dt>Contact</dt>
+              <dd>{q.contact ? `${q.contact.name}${q.contact.email ? ` · ${q.contact.email}` : ""}` : "—"}</dd>
+              <dt>Date</dt>
+              <dd>{day(q.date)}</dd>
+              <dt>Valid until</dt>
+              <dd>{day(q.validUntil)}</dd>
+              <dt>Terms</dt>
+              <dd>{q.terms ?? "—"}</dd>
+              <dt>Withholding</dt>
+              <dd>{q.withholding.length ? q.withholding.map((w) => w.label).join(", ") : "None"}</dd>
+              {q.salesOrders.length > 0 && (
+                <>
+                  <dt>Sales orders</dt>
+                  <dd>
+                    {q.salesOrders.map((s) => (
+                      <span key={s.id} style={{ marginRight: 10 }}>
+                        <Link href={`/sales-orders/${s.id}`}>{s.number}</Link> <SoStatusChip status={s.status} />
+                      </span>
+                    ))}
+                  </dd>
+                </>
+              )}
+              {q.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{q.notes}</dd>
+                </>
+              )}
+            </dl>
+          </div>
+          <div className="small faint">
+            Created by {q.createdBy} · last updated by {q.updatedBy}, {formatDateTime(q.updatedAt)}
+          </div>
+        </div>
+        <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
+      </div>
+      <div className="card">
+        <h2>Items</h2>
+        <ItemsTable items={q.items} showCosts={q.canSeeCosts} />
+        <div className="totals-wrap">
+          <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
+        </div>
+      </div>
+    </>
+  );
+}

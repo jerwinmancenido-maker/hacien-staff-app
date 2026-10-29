@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { can, type Permission } from "../permissions";
+import { can, ForbiddenError, type Permission } from "../permissions";
 import { clientIp } from "./client-ip";
 import { getSessionUser } from "./session";
 
@@ -24,12 +24,7 @@ export async function requirePagePermission(permission: Permission): Promise<Cur
   return user;
 }
 
-export class ForbiddenError extends Error {
-  constructor() {
-    super("You don't have permission to do that.");
-    this.name = "ForbiddenError";
-  }
-}
+export { ForbiddenError };
 
 /** For server actions: throws when signed out or lacking the permission. */
 export async function requireActionPermission(permission: Permission): Promise<CurrentUser> {

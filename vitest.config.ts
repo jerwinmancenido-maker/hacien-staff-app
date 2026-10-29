@@ -8,5 +8,11 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Database suites (tests/db) run only when TEST_DATABASE_URL is set; this
+    // applies the migrations to that database first.
+    globalSetup: ["tests/db/global-setup.ts"],
+    // The numbering tests open many connections at once.
+    testTimeout: 60_000,
+    hookTimeout: 120_000,
   },
 });
