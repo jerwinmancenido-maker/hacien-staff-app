@@ -190,6 +190,43 @@ textarea {
   font-weight: 600;
   margin: 4px 0 8px;
 }
+.tracker-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tracker-pct {
+  color: var(--text);
+  font-weight: 600;
+}
+.tracker-warning {
+  margin-top: 6px;
+  font-weight: 500;
+}
+.tracker-card.level-first {
+  background: var(--amber-bg);
+}
+.tracker-card.level-first .bar > span {
+  background: var(--amber);
+}
+.tracker-card.level-first .tracker-pct,
+.tracker-card.level-first .tracker-warning {
+  color: var(--amber);
+}
+.tracker-card.level-second,
+.tracker-card.level-over {
+  background: var(--red-bg);
+}
+.tracker-card.level-second .bar > span,
+.tracker-card.level-over .bar > span {
+  background: var(--red);
+}
+.tracker-card.level-second .tracker-pct,
+.tracker-card.level-second .tracker-warning,
+.tracker-card.level-over .tracker-pct,
+.tracker-card.level-over .tracker-warning {
+  color: var(--red);
+}
 .bar {
   height: 6px;
   background: var(--fill);

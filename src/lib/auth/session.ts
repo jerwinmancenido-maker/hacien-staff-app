@@ -8,6 +8,11 @@ import { hashToken, randomToken } from "./tokens";
 export const SESSION_COOKIE = "hacien_session";
 const SESSION_DAYS = 7;
 
+/** Secure cookie in production or whenever the app is served over HTTPS. Plain http://localhost works in dev. */
+export function cookieSecure(env: { NODE_ENV?: string; APP_URL?: string } = process.env): boolean {
+  return env.NODE_ENV === "production" || /^https:/i.test((env.APP_URL ?? "").trim());
+}
+
 export async function createSession(userId: string, meta: { ip?: string; userAgent?: string }) {
   const token = randomToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -23,8 +28,7 @@ export async function createSession(userId: string, meta: { ip?: string; userAge
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    // Always secure in production (HTTPS). Plain http://localhost works in dev.
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     expires: expiresAt,

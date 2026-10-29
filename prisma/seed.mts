@@ -1,19 +1,20 @@
-// Sample data: `npm run db:seed`. Safe to run more than once (it only adds
-// what's missing and never deletes). All people, TINs and bank numbers are fake.
+// Sample data: `SEED_SAMPLE=true npm run db:seed`. Safe to run more than once
+// (it only adds what's missing and never deletes). All people, TINs and bank
+// numbers are fake.
 //
-// Passwords: in development every sample user gets the clearly fake password
-// below (or SEED_PASSWORD), printed to the console. In production, random
-// passwords are set and NOT printed — use "Forgot password" to sign in.
+// Refuses to run unless SEED_SAMPLE=true, and always refuses when
+// NODE_ENV=production, so fake customers can never land in the real books.
+// (Settings version 1 is created automatically by the app on first use.)
+//
+// Passwords: sample users get SEED_PASSWORD if set, otherwise a random one.
+// Passwords are never printed — set SEED_PASSWORD or use "Forgot password".
 
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { noDeleteExtension } from "../src/lib/no-delete.ts";
 import { DEFAULT_SETTINGS } from "../src/lib/settings/defaults.ts";
-
-const db = new PrismaClient().$extends(noDeleteExtension);
-const isProd = process.env.NODE_ENV === "production";
-const DEV_PASSWORD = process.env.SEED_PASSWORD || "fake-dev-password-123";
+import { seedRefusal } from "../src/lib/seed-guard.ts";
 
 type SeedUser = {
   email: string;
@@ -140,18 +141,18 @@ function contactData(c: SeedContact) {
   };
 }
 
-async function main() {
+async function main(db: ReturnType<typeof connect>) {
   // Settings: version 1 from defaults, only if there is none yet.
   if ((await db.settingsVersion.count()) === 0) {
     await db.settingsVersion.create({ data: { version: 1, data: DEFAULT_SETTINGS } });
     console.log("Settings: created version 1 from defaults.");
   }
 
-  const passwords: { email: string; password: string }[] = [];
+  const created: string[] = [];
   for (const u of USERS) {
     const existing = await db.user.findUnique({ where: { email: u.email } });
     if (existing) continue;
-    const password = isProd ? randomBytes(24).toString("base64url") : DEV_PASSWORD;
+    const password = process.env.SEED_PASSWORD || randomBytes(24).toString("base64url");
     await db.user.create({
       data: {
         email: u.email,
@@ -164,7 +165,7 @@ async function main() {
         passwordHash: await bcrypt.hash(password, 12),
       },
     });
-    passwords.push({ email: u.email, password });
+    created.push(u.email);
   }
 
   for (const c of CUSTOMERS) {
@@ -180,17 +181,26 @@ async function main() {
   }
 
   console.log("Seed done.");
-  if (passwords.length && !isProd) {
-    console.log("\nSample sign-ins (development only, fake passwords):");
-    for (const p of passwords) console.log(`  ${p.email}  /  ${p.password}`);
-  } else if (passwords.length) {
-    console.log(`Created ${passwords.length} users with random passwords. Use "Forgot password" to sign in.`);
+  if (created.length) {
+    const how = process.env.SEED_PASSWORD ? "the password in SEED_PASSWORD" : 'a random password (use "Forgot password" to set one)';
+    console.log(`Sample users (${created.join(", ")}) were created with ${how}.`);
   }
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exitCode = 1;
-  })
-  .finally(() => db.$disconnect());
+function connect() {
+  return new PrismaClient().$extends(noDeleteExtension);
+}
+
+const refusal = seedRefusal(process.env);
+if (refusal) {
+  console.error(refusal);
+  process.exitCode = 1;
+} else {
+  const db = connect();
+  main(db)
+    .catch((e) => {
+      console.error(e);
+      process.exitCode = 1;
+    })
+    .finally(() => db.$disconnect());
+}

@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { can, roleLabel } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
+import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
@@ -12,10 +13,9 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const { settings } = await getSettingsSnapshot();
-  const limit = settings.taxYear.nonVatLimit;
-  // Sales tracking arrives with Billing; the tracker shows ₱0 until then.
-  const used = 0;
-  const pct = Math.min(100, (used / limit) * 100);
+  // Gross sales are ₱0 until Billing adds invoices (see src/lib/services/non-vat.ts).
+  const meter = await getNonVatMeter(settings.taxYear);
+  const warning = NON_VAT_MESSAGES[meter.level];
 
   return (
     <div className="frame">
@@ -26,17 +26,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <SidebarNav isAdmin={can(user, "manage_settings")} />
         <div className="sidebar-spacer" />
-        <div className="tracker-card" aria-label="Non-VAT limit tracker">
-          <div className="label">Non-VAT limit · {settings.taxYear.year}</div>
+        <div className={`tracker-card level-${meter.level}`} aria-label="Non-VAT limit tracker" data-level={meter.level}>
+          <div className="label tracker-head">
+            <span>Non-VAT limit · {meter.year}</span>
+            <b className="num tracker-pct">{meter.pctLabel}</b>
+          </div>
           <div className="value num" style={{ textAlign: "left" }}>
-            {formatPeso(used)} <span className="faint small">of {formatPeso(limit)}</span>
+            {formatPeso(meter.used)} <span className="faint small">of {formatPeso(meter.limit)}</span>
           </div>
-          <div className="bar">
-            <span style={{ width: `${pct}%` }} />
+          <div
+            className="bar"
+            role="meter"
+            aria-label="Share of the non-VAT limit used"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(meter.barPct)}
+            aria-valuetext={`${meter.pctLabel} of ${formatPeso(meter.limit)}`}
+          >
+            <span style={{ width: `${meter.barPct}%` }} />
           </div>
-          <div className="faint small" style={{ marginTop: 6 }}>
-            Warns at {settings.taxYear.warnFirstPct}% and {settings.taxYear.warnSecondPct}%
-          </div>
+          {warning ? (
+            <div className="tracker-warning small" role="status">
+              {warning}
+            </div>
+          ) : (
+            <div className="faint small" style={{ marginTop: 6 }}>
+              Warns at {meter.warnFirstPct}% and {meter.warnSecondPct}%
+            </div>
+          )}
         </div>
         <div className="user-row">
           <Avatar name={user.name} dark />

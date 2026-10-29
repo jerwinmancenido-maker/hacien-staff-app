@@ -88,6 +88,8 @@ model LoginAttempt {
   createdAt DateTime @default(now())
 
   @@index([email, ip, createdAt])
+  // Per-email failure cap (any IP).
+  @@index([email, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +149,8 @@ model Customer {
 model Supplier {
   id                String          @id @default(cuid())
   name              String          @db.VarChar(191)
-  tin               String?         @db.VarChar(20)
+  // Normalized like customer TINs. Unique among suppliers.
+  tin               String?         @unique @db.VarChar(20)
   address           String?         @db.Text
   taxType           SupplierTaxType
   defaultTerms      String?         @db.VarChar(100)
@@ -165,7 +168,6 @@ model Supplier {
   contacts Contact[]
 
   @@index([name])
-  @@index([tin])
 }
 
 // A contact belongs to exactly one customer OR one supplier.

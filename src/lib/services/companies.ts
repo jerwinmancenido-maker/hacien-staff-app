@@ -1,7 +1,7 @@
 // Customers and suppliers: create, update, mark inactive / active. Never deleted.
 
 import { Prisma, type WithholdingType, type SupplierTaxType } from "@prisma/client";
-import { db } from "../db";
+import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
 
@@ -39,18 +39,20 @@ export function getCustomer(id: string) {
   });
 }
 
-async function assertTinFree(tin: string | null, exceptId: string | null) {
+type TinOwnerLookup = (args: { where: Prisma.CustomerWhereInput & Prisma.SupplierWhereInput }) => Promise<{ name: string } | null>;
+
+/** TINs are unique among customers and, separately, among suppliers. Throws a friendly error naming the owner. */
+async function assertTinFree(find: TinOwnerLookup, tin: string | null, exceptId: string | null) {
   if (!tin) return;
-  const other = await db.customer.findFirst({ where: { tin, ...(exceptId ? { NOT: { id: exceptId } } : {}) } });
+  const other = await find({ where: { tin, ...(exceptId ? { NOT: { id: exceptId } } : {}) } });
   if (other) throw new CompanyRuleError(`This TIN belongs to ${other.name}.`, "tin");
 }
 
-function isUniqueViolation(e: unknown) {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
-}
+const customerTinOwner: TinOwnerLookup = (args) => db.customer.findFirst(args);
+const supplierTinOwner: TinOwnerLookup = (args) => db.supplier.findFirst(args);
 
 export async function saveCustomer(id: string | null, input: CustomerInput, actorId: string) {
-  await assertTinFree(input.tin, id);
+  await assertTinFree(customerTinOwner, input.tin, id);
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
@@ -65,7 +67,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
     });
   } catch (e) {
     if (isUniqueViolation(e)) {
-      await assertTinFree(input.tin, id); // re-throws with the owner's name
+      await assertTinFree(customerTinOwner, input.tin, id); // re-throws with the owner's name
     }
     throw e;
   }
@@ -107,17 +109,25 @@ export function getSupplier(id: string) {
 }
 
 export async function saveSupplier(id: string | null, input: SupplierInput, actorId: string) {
-  return db.$transaction(async (tx) => {
-    if (!id) {
-      const created = await tx.supplier.create({ data: input });
-      await writeAudit(tx, { userId: actorId, entityType: "Supplier", entityId: created.id, action: "create", after: created });
-      return created;
+  await assertTinFree(supplierTinOwner, input.tin, id);
+  try {
+    return await db.$transaction(async (tx) => {
+      if (!id) {
+        const created = await tx.supplier.create({ data: input });
+        await writeAudit(tx, { userId: actorId, entityType: "Supplier", entityId: created.id, action: "create", after: created });
+        return created;
+      }
+      const before = await tx.supplier.findUniqueOrThrow({ where: { id } });
+      const after = await tx.supplier.update({ where: { id }, data: input });
+      await writeAudit(tx, { userId: actorId, entityType: "Supplier", entityId: id, action: "update", before, after });
+      return after;
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      await assertTinFree(supplierTinOwner, input.tin, id); // re-throws with the owner's name
     }
-    const before = await tx.supplier.findUniqueOrThrow({ where: { id } });
-    const after = await tx.supplier.update({ where: { id }, data: input });
-    await writeAudit(tx, { userId: actorId, entityType: "Supplier", entityId: id, action: "update", before, after });
-    return after;
-  });
+    throw e;
+  }
 }
 
 export async function setSupplierActive(id: string, active: boolean, actorId: string) {

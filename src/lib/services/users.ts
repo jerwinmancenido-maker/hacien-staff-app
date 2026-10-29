@@ -1,6 +1,6 @@
 import type { TokenPurpose, User } from "@prisma/client";
 import { z } from "zod";
-import { db, type Tx } from "../db";
+import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { appUrl, getMailer } from "../mailer";
 import { hashPassword } from "../auth/password";
@@ -22,6 +22,8 @@ const TOKEN_TTL_MS: Record<TokenPurpose, number> = {
 
 export class UserRuleError extends Error {}
 
+export const DUPLICATE_EMAIL = "A user with this email already exists.";
+
 /** Public fields safe to put in an audit diff. */
 function auditable(u: User) {
   const { passwordHash: _p, ...rest } = u;
@@ -35,10 +37,13 @@ async function lockUsers(tx: Tx) {
   return tx.user.findMany({ select: { id: true, active: true, isAdmin: true, isApprover: true, isStaff: true, isViewer: true } });
 }
 
-async function issueToken(tx: Tx, userId: string, purpose: TokenPurpose): Promise<string> {
+/** New single-use link. Older unused links of the same kind for this user stop working. */
+export async function issueToken(tx: Tx, userId: string, purpose: TokenPurpose, now = new Date()): Promise<string> {
   const token = randomToken();
+  // Marked used (never deleted) so only the newest link works.
+  await tx.passwordResetToken.updateMany({ where: { userId, purpose, usedAt: null }, data: { usedAt: now } });
   await tx.passwordResetToken.create({
-    data: { userId, purpose, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + TOKEN_TTL_MS[purpose]) },
+    data: { userId, purpose, tokenHash: hashToken(token), expiresAt: new Date(now.getTime() + TOKEN_TTL_MS[purpose]) },
   });
   return token;
 }
@@ -52,16 +57,24 @@ async function sendInvite(email: string, name: string, token: string) {
 }
 
 export async function createUser(input: UserInput, actorId: string) {
-  const existing = await db.user.findUnique({ where: { email: input.email } });
-  if (existing) throw new UserRuleError("A user with this email already exists.");
-  const { user, token } = await db.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...roleFlags(input.roles) },
+  let created: { user: User; token: string };
+  try {
+    created = await db.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email: input.email } });
+      if (existing) throw new UserRuleError(DUPLICATE_EMAIL);
+      const user = await tx.user.create({
+        data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...roleFlags(input.roles) },
+      });
+      await writeAudit(tx, { userId: actorId, entityType: "User", entityId: user.id, action: "create", after: auditable(user) });
+      const token = await issueToken(tx, user.id, "INVITE");
+      return { user, token };
     });
-    await writeAudit(tx, { userId: actorId, entityType: "User", entityId: user.id, action: "create", after: auditable(user) });
-    const token = await issueToken(tx, user.id, "INVITE");
-    return { user, token };
-  });
+  } catch (e) {
+    // Two admins adding the same email at once: the unique index catches the second.
+    if (isUniqueViolation(e)) throw new UserRuleError(DUPLICATE_EMAIL);
+    throw e;
+  }
+  const { user, token } = created;
   await sendInvite(user.email, user.name, token);
   return user;
 }
@@ -73,21 +86,26 @@ export async function resendInvite(userId: string) {
 }
 
 export async function updateUser(id: string, input: UserInput, actorId: string) {
-  return db.$transaction(async (tx) => {
-    const all = await lockUsers(tx);
-    const before = await tx.user.findUniqueOrThrow({ where: { id } });
-    const flags = roleFlags(input.roles);
-    const err = lastRoleGuard(all, id, { active: before.active, ...flags });
-    if (err) throw new UserRuleError(err);
-    const clash = await tx.user.findFirst({ where: { email: input.email, NOT: { id } } });
-    if (clash) throw new UserRuleError("A user with this email already exists.");
-    const after = await tx.user.update({
-      where: { id },
-      data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...flags },
+  try {
+    return await db.$transaction(async (tx) => {
+      const all = await lockUsers(tx);
+      const before = await tx.user.findUniqueOrThrow({ where: { id } });
+      const flags = roleFlags(input.roles);
+      const err = lastRoleGuard(all, id, { active: before.active, ...flags });
+      if (err) throw new UserRuleError(err);
+      const clash = await tx.user.findFirst({ where: { email: input.email, NOT: { id } } });
+      if (clash) throw new UserRuleError(DUPLICATE_EMAIL);
+      const after = await tx.user.update({
+        where: { id },
+        data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...flags },
+      });
+      await writeAudit(tx, { userId: actorId, entityType: "User", entityId: id, action: "update", before: auditable(before), after: auditable(after) });
+      return after;
     });
-    await writeAudit(tx, { userId: actorId, entityType: "User", entityId: id, action: "update", before: auditable(before), after: auditable(after) });
-    return after;
-  });
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new UserRuleError(DUPLICATE_EMAIL);
+    throw e;
+  }
 }
 
 /** Turn off (blocks login, revokes sessions) or turn back on. Never deletes. */

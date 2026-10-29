@@ -2,6 +2,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { can, type Permission } from "../permissions";
+import { clientIp } from "./client-ip";
 import { getSessionUser } from "./session";
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getSessionUser>>>;
@@ -39,6 +40,5 @@ export async function requireActionPermission(permission: Permission): Promise<C
 
 export async function requestMeta(): Promise<{ ip: string; userAgent: string }> {
   const h = await headers();
-  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "unknown").trim();
-  return { ip: ip.slice(0, 64), userAgent: (h.get("user-agent") ?? "").slice(0, 255) };
+  return { ip: clientIp(h), userAgent: (h.get("user-agent") ?? "").slice(0, 255) };
 }
