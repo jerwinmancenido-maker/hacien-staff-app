@@ -15,31 +15,46 @@ const ACTION_LABELS: Record<string, string> = {
   settings_change: "changed settings",
 };
 
-export async function Activity({ targets }: { targets: { entityType: string; ids: string[] }[] }) {
-  const rows = await db.auditLog.findMany({
-    where: { OR: targets.filter((t) => t.ids.length).map((t) => ({ entityType: t.entityType, entityId: { in: t.ids } })) },
-    include: { user: { select: { name: true } } },
-    orderBy: { at: "desc" },
-    take: 30,
-  });
+export async function Activity({
+  targets,
+  title = "Activity",
+}: {
+  targets: { entityType: string; ids: string[] }[];
+  title?: string;
+}) {
+  const validTargets = targets.filter((t) => t.ids.length);
+  const rows = validTargets.length
+    ? await db.auditLog.findMany({
+        where: { OR: validTargets.map((t) => ({ entityType: t.entityType, entityId: { in: t.ids } })) },
+        include: { user: { select: { name: true } } },
+        orderBy: { at: "desc" },
+        take: 30,
+      })
+    : [];
   return (
-    <div className="card">
-      <h2>Activity</h2>
+    <div className="card activity-card">
+      <h2>{title}</h2>
       {rows.length === 0 ? (
         <div className="muted small">No activity yet.</div>
       ) : (
-        <ul className="activity">
-          {rows.map((r) => (
-            <li key={r.id}>
-              <div>
-                <b>{r.user?.name ?? "System"}</b> {ACTION_LABELS[r.action] ?? r.action}{" "}
-                {r.entityType === "Contact" ? "a contact" : ""}
+        <div className="activity-timeline">
+          {rows.map((r, i) => (
+            <div key={r.id} className="activity-timeline-item">
+              <div className="timeline-node">
+                <span className="timeline-dot" aria-hidden />
+                {i < rows.length - 1 && <span className="timeline-line" aria-hidden />}
               </div>
-              <div className="when">{formatDateTime(r.at)}</div>
-              {r.action === "update" && <DiffView before={r.before} after={r.after} />}
-            </li>
+              <div className="timeline-content">
+                <div className="timeline-heading">
+                  <b>{r.user?.name ?? "System"}</b> {ACTION_LABELS[r.action] ?? r.action}{" "}
+                  {r.entityType === "Contact" ? "a contact" : ""}
+                </div>
+                <div className="timeline-when">{formatDateTime(r.at)}</div>
+                {r.action === "update" && <DiffView before={r.before} after={r.after} />}
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

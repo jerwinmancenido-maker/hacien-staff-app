@@ -6,7 +6,7 @@ import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
-import { LogoutIcon } from "@/components/Icons";
+import { BellIcon, LogoutIcon, SearchIcon } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +67,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="topbar">
           <Breadcrumb />
           <div className="right">
+            <div className="topbar-search">
+              <SearchIcon size={14} />
+              <input type="text" placeholder="Search quotes, SOs, customers…" aria-label="Quick search" readOnly />
+              <span className="kbd-shortcut">⌘K</span>
+            </div>
+            <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
+              <BellIcon size={16} />
+            </button>
+            <Avatar name={user.name} small dark />
             <span className="user-name">{user.name}</span>
             <form action={signOut}>
               <button className="btn btn-secondary btn-sm" type="submit">

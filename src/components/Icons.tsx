@@ -55,3 +55,40 @@ export const InboxIcon = ({ size }: P) => (
 export const LogoutIcon = ({ size }: P) => (
   <svg {...base(size)}><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" /></svg>
 );
+export const CopyIcon = ({ size }: P) => (
+  <svg {...base(size)}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+);
+export const CheckIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M20 6 9 17l-5-5" /></svg>
+);
+export const MailIcon = ({ size }: P) => (
+  <svg {...base(size)}><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+);
+export const PhoneIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+);
+export const DotsHorizontalIcon = ({ size }: P) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /><circle cx="5" cy="12" r="1.5" /></svg>
+);
+export const ChevronDownIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="m6 9 6 6 6-6" /></svg>
+);
+export const CardViewIcon = ({ size }: P) => (
+  <svg {...base(size)}><rect width="18" height="6" x="3" y="4" rx="2" /><rect width="18" height="6" x="3" y="14" rx="2" /></svg>
+);
+export const CompactViewIcon = ({ size }: P) => (
+  <svg {...base(size)}><line x1="3" x2="21" y1="6" y2="6" /><line x1="3" x2="21" y1="12" y2="12" /><line x1="3" x2="21" y1="18" y2="18" /></svg>
+);
+export const GridViewIcon = ({ size }: P) => (
+  <svg {...base(size)}><rect width="7" height="7" x="3" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="14" rx="1.5" /><rect width="7" height="7" x="3" y="14" rx="1.5" /></svg>
+);
+export const BellIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+);
+export const AlertTriangleIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
+);
+export const ClockIcon = ({ size }: P) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+);
+
