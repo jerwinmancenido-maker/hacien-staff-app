@@ -10,7 +10,7 @@ import {
   REGISTER_CONFIGS,
 } from "@/lib/books/config";
 import { parseBooksPeriod } from "@/lib/books/period";
-import { SOURCE_LABELS } from "@/lib/books/registers";
+import { COLLECTED_TOTAL_LABEL, INVOICED_TOTAL_LABEL, SOURCE_LABELS } from "@/lib/books/registers";
 import { getBookRegister } from "@/lib/services/books";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -174,12 +174,33 @@ export default async function PrintBooksPage({
           })
         )}
 
-        {register.rowCount > 0 && (
+        {register.rowCount > 0 && register.salesPeriodTotals && (
+          <div className="books-period-total books-period-total-split">
+            <div>
+              <b>{INVOICED_TOTAL_LABEL}</b>
+              <span className="num">{formatPeso(register.salesPeriodTotals.invoicedAmount)}</span>
+              {config.columns.some((c) => c.key === "ewt") && (
+                <span className="num">EWT {formatPeso(register.salesPeriodTotals.invoicedEwt)}</span>
+              )}
+            </div>
+            <div>
+              <b>{COLLECTED_TOTAL_LABEL}</b>
+              <span className="num">{formatPeso(register.salesPeriodTotals.collectedAmount)}</span>
+              {config.columns.some((c) => c.key === "ewt") && (
+                <span className="num">EWT {formatPeso(register.salesPeriodTotals.collectedEwt)}</span>
+              )}
+            </div>
+            <p className="small muted" style={{ margin: "8px 0 0" }}>
+              Draft figures — not a tax basis; confirm with accountant/RDO.
+            </p>
+          </div>
+        )}
+        {register.rowCount > 0 && register.periodAmountTotal != null && (
           <div className="books-period-total">
             <b>Period total</b>
             <span className="num">{formatPeso(register.periodAmountTotal)}</span>
             {config.columns.some((c) => c.key === "ewt") && (
-              <span className="num">EWT {formatPeso(register.periodEwtTotal)}</span>
+              <span className="num">EWT {formatPeso(register.periodEwtTotal ?? "0.00")}</span>
             )}
           </div>
         )}

@@ -255,10 +255,11 @@ describe("CSV formats labelled UNVERIFIED; no VAT", () => {
     expect(csvCell("=1+1")).toBe("'=1+1");
     expect(csvCell("@SUM(A1)")).toBe("'@SUM(A1)");
     expect(csvCell("+cmd")).toBe("'+cmd");
-    expect(csvCell("-1+1")).toBe("'-1+1");
+    expect(csvCell("-1+1")).toBe("'-1+1"); // risky minus form — still escaped
+    expect(csvCell("-500.00")).toBe("-500.00"); // plain number — unescaped (shared csvCell rule)
     expect(csvCell("\tTAB")).toBe("'\tTAB");
-    // CR is also formula-dangerous and needs CSV quoting because of the CR byte
-    expect(csvCell("\rCR")).toBe("\"'\rCR\"");
+    // Shared csvCell (Books): CR gets the apostrophe prefix; quoting only for comma/quote/newline
+    expect(csvCell("\rCR")).toBe("'\rCR");
     // Normal values unchanged (aside from quoting when needed)
     expect(csvCell("100.00")).toBe("100.00");
     expect(csvCell("Fake Customer Co")).toBe("Fake Customer Co");

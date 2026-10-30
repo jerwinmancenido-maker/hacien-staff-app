@@ -30,6 +30,64 @@ export async function saveSettingsAction(key: string, _prev: FormState, form: Fo
   }, values);
 }
 
+/** Saves company letterhead + print options (and optional logo upload) as sequential settings versions. */
+export async function savePrintCompanyAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    let baseVersionId = str(form, "baseVersionId");
+    const get = (name: string) => {
+      const all = form.getAll(name);
+      const last = all[all.length - 1];
+      return typeof last === "string" ? last : null;
+    };
+
+    let logoStorageKey = get("logoStorageKey") ?? "";
+    const logo = form.get("logo");
+    if (logo && typeof logo !== "string" && "arrayBuffer" in logo && logo.size > 0) {
+      const { sniffLogoMime } = await import("@/lib/print/logo-sniff");
+      const { newStorageKey, saveFile, discardUnreferencedFile } = await import("@/lib/business-docs/storage");
+      const { uploadMaxBytes } = await import("@/lib/business-docs/sniff");
+      const bytes = new Uint8Array(await logo.arrayBuffer());
+      if (bytes.byteLength > uploadMaxBytes()) {
+        return { values, fieldErrors: { logo: `The file is too big. The limit is ${Math.round(uploadMaxBytes() / 1024 / 1024)} MB.` }, message: "Fix the fields marked below." };
+      }
+      if (!sniffLogoMime(bytes.subarray(0, 16))) {
+        return { values, fieldErrors: { logo: "Upload a PNG, JPEG or WebP logo." }, message: "Fix the fields marked below." };
+      }
+      const key = newStorageKey();
+      try {
+        await saveFile(key, bytes);
+        logoStorageKey = key;
+      } catch (err) {
+        await discardUnreferencedFile(key);
+        throw err;
+      }
+    }
+
+    const companyValue = {
+      ...(settingsValueFromForm("company", get) as Record<string, unknown>),
+      logoStorageKey,
+    };
+    const companyResult = await saveSettings({ key: "company", value: companyValue, userId: user.id, baseVersionId });
+    if (!companyResult.ok) return { values, fieldErrors: companyResult.fieldErrors, message: "Fix the fields marked below." };
+    baseVersionId = companyResult.version.id;
+
+    const printValue = settingsValueFromForm("print", get);
+    const printResult = await saveSettings({ key: "print", value: printValue, userId: user.id, baseVersionId });
+    if (!printResult.ok) return { values, fieldErrors: printResult.fieldErrors, message: "Fix the fields marked below." };
+
+    revalidatePath("/", "layout");
+    const changed = companyResult.changed || printResult.changed;
+    return {
+      ok: true,
+      message: changed
+        ? `Saved as version ${printResult.version.version}. New documents use it from now on.`
+        : "Nothing changed.",
+    };
+  }, values);
+}
+
 export async function saveWithholdingAction(_prev: FormState, form: FormData): Promise<FormState> {
   return runAction(async () => {
     const user = await requireActionPermission("manage_settings");

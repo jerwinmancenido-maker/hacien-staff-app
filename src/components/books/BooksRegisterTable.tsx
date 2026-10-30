@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { formatDate, formatPeso } from "@/lib/format";
 import type { RegisterConfig } from "@/lib/books/config";
-import { SOURCE_LABELS, type BookRegister } from "@/lib/books/registers";
+import {
+  COLLECTED_TOTAL_LABEL,
+  INVOICED_TOTAL_LABEL,
+  SOURCE_LABELS,
+  type BookRegister,
+} from "@/lib/books/registers";
 import { EmptyState } from "@/components/ui";
 
 const day = (ymdStr: string) => formatDate(new Date(`${ymdStr}T00:00:00.000Z`));
@@ -25,6 +30,47 @@ function cell(row: BookRegister["rows"][number], key: RegisterConfig["columns"][
   }
 }
 
+function TotalRow({
+  config,
+  label,
+  amount,
+  ewt,
+}: {
+  config: RegisterConfig;
+  label: string;
+  amount: string;
+  ewt: string;
+}) {
+  return (
+    <tr>
+      {config.columns.map((c) => {
+        if (c.key === "amount") {
+          return (
+            <td key={c.key} className="num strong">
+              {formatPeso(amount)}
+            </td>
+          );
+        }
+        if (c.key === "ewt") {
+          return (
+            <td key={c.key} className="num strong">
+              {formatPeso(ewt)}
+            </td>
+          );
+        }
+        if (c.key === "particulars") {
+          return (
+            <td key={c.key} className="strong">
+              {label}
+            </td>
+          );
+        }
+        return <td key={c.key} />;
+      })}
+    </tr>
+  );
+}
+
 export function BooksRegisterTable({
   config,
   register,
@@ -37,6 +83,7 @@ export function BooksRegisterTable({
   }
 
   const hasEwt = config.columns.some((c) => c.key === "ewt");
+  const sales = register.salesPeriodTotals;
 
   return (
     <>
@@ -73,37 +120,41 @@ export function BooksRegisterTable({
             ))}
           </tbody>
           <tfoot>
-            <tr>
-              {config.columns.map((c) => {
-                if (c.key === "amount") {
-                  return (
-                    <td key={c.key} className="num strong">
-                      {formatPeso(register.periodAmountTotal)}
-                    </td>
-                  );
-                }
-                if (c.key === "ewt") {
-                  return (
-                    <td key={c.key} className="num strong">
-                      {formatPeso(register.periodEwtTotal)}
-                    </td>
-                  );
-                }
-                if (c.key === "particulars") {
-                  return (
-                    <td key={c.key} className="strong">
-                      Period total
-                    </td>
-                  );
-                }
-                return <td key={c.key} />;
-              })}
-            </tr>
+            {sales ? (
+              <>
+                <TotalRow
+                  config={config}
+                  label={INVOICED_TOTAL_LABEL}
+                  amount={sales.invoicedAmount}
+                  ewt={sales.invoicedEwt}
+                />
+                <TotalRow
+                  config={config}
+                  label={COLLECTED_TOTAL_LABEL}
+                  amount={sales.collectedAmount}
+                  ewt={sales.collectedEwt}
+                />
+              </>
+            ) : register.periodAmountTotal != null ? (
+              <TotalRow
+                config={config}
+                label="Period total"
+                amount={register.periodAmountTotal}
+                ewt={register.periodEwtTotal ?? "0.00"}
+              />
+            ) : null}
           </tfoot>
         </table>
       </div>
+      {sales && (
+        <p className="faint small" style={{ marginTop: 8 }} role="note">
+          Draft figures under the banner above — Invoiced and Collected are listed separately on purpose. Neither is a tax
+          basis; confirm with accountant/RDO.
+        </p>
+      )}
       <p className="faint small" style={{ marginTop: 12 }}>
-        {register.rowCount} row{register.rowCount === 1 ? "" : "s"} · voided records are left out · each document no. opens the source record
+        {register.rowCount} row{register.rowCount === 1 ? "" : "s"} · voided records are left out · each document no. opens
+        the source record
         {hasEwt ? " · EWT is expanded withholding tax where recorded" : ""}.
       </p>
     </>

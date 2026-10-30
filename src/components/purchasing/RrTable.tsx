@@ -1,5 +1,6 @@
 // Receiving reports table (PO page and receiving page). Quantities only.
 
+import Link from "next/link";
 import type { FormState } from "@/lib/validation/forms";
 import { VoidButton } from "./DocButtons";
 import { AttachmentLinks, day, qtyText, RrStatusChip } from "./PoParts";
@@ -54,14 +55,19 @@ export function RrTable({
                 <RrStatusChip status={r.status} />
               </td>
               <td>
-                {canEdit && r.status === "POSTED" && (
-                  <VoidButton
-                    label="Void"
-                    docLabel="receiving report"
-                    body={`${r.number} will be marked Void and its quantities taken off the PO.`}
-                    onVoid={voidAction.bind(null, poId, r.id)}
-                  />
-                )}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                  <Link className="btn-link small" href={`/print/receiving-reports/${r.id}`} target="_blank">
+                    Print
+                  </Link>
+                  {canEdit && r.status === "POSTED" && (
+                    <VoidButton
+                      label="Void"
+                      docLabel="receiving report"
+                      body={`${r.number} will be marked Void and its quantities taken off the PO.`}
+                      onVoid={voidAction.bind(null, poId, r.id)}
+                    />
+                  )}
+                </div>
               </td>
             </tr>
           ))}
