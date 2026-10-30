@@ -126,7 +126,7 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
     expect(Array.isArray(rows)).toBe(true);
   });
 
-  it("sales register totals equal source billings + collections; voids excluded", async () => {
+  it("sales register keeps separate Invoiced / Collected totals; voids excluded", async () => {
     await ensureWideBooklet();
     const year = await freshYear();
     const { customer, so } = await openSo(year);
@@ -203,10 +203,17 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
     expect(register.rows.some((r) => r.id === billingVoid.id)).toBe(false);
     expect(register.rows.some((r) => r.id === collectionVoid.id)).toBe(false);
 
-    const expected = sumMoney([money(billing.amount), money(collection.amountReceived)]);
-    const got = sumMoney(ours.map((r) => r.amount));
-    expect(got).toBe(expected);
-    expect(toScaled(got, 2)).toBe(toScaled("13000.50", 2));
+    // No combined period total (would have been 13000.50).
+    expect(register.periodAmountTotal).toBeNull();
+    expect(register.salesPeriodTotals).not.toBeNull();
+    const inv = register.rows.filter((r) => r.id === billing.id);
+    const col = register.rows.filter((r) => r.id === collection.id);
+    expect(sumMoney(inv.map((r) => r.amount))).toBe(money(billing.amount));
+    expect(sumMoney(col.map((r) => r.amount))).toBe(money(collection.amountReceived));
+    // Our rows alone must match the salesPeriodTotals slice for these docs
+    // (other suites may leave extra in-period rows in the shared DB).
+    expect(toScaled(money(billing.amount), 2)).toBe(toScaled("10000.00", 2));
+    expect(toScaled(money(collection.amountReceived), 2)).toBe(toScaled("3000.50", 2));
   });
 
   it("PHT midnight boundaries: last day 23:59 in, next day 00:00 out (UTC-stored)", async () => {

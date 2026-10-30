@@ -574,8 +574,12 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: 6px 10px;
-  overflow: auto;
+  overflow: auto; /* vertical + horizontal (phone: sideways scroll) */
   max-height: calc(100vh - 260px);
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap table.list {
+  min-width: 640px; /* wider than 360px phone so .table-wrap scrolls sideways */
 }
 table.list {
   width: 100%;
