@@ -3,6 +3,7 @@
 // ± transfers. Voided rows contribute 0. Date cutoffs use PHT calendar days
 // stored as DATE (UTC midnight of that Manila day = YYYY-MM-DD).
 
+import { csvCell } from "../books/csv";
 import { fromScaled, toScaled } from "../quotes/calc";
 
 export type LedgerDirection = "IN" | "OUT" | "TRANSFER_IN" | "TRANSFER_OUT" | "OPENING";
@@ -176,7 +177,7 @@ export function prevYmd(ymd: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** CSV escape for ledger export. */
+/** CSV escape for ledger export (uses shared Books csvCell formula guard). */
 export function ledgerToCsv(rows: readonly LedgerRow[]): string {
   const header = ["Date", "Type", "Number", "Description", "In", "Out", "Balance"];
   const lines = [header.join(",")];
@@ -188,9 +189,4 @@ export function ledgerToCsv(rows: readonly LedgerRow[]): string {
     lines.push(cells.join(","));
   }
   return `${lines.join("\n")}\n`;
-}
-
-function csvCell(v: string): string {
-  if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
 }

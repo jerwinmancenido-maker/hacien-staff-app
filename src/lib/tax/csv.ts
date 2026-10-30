@@ -4,7 +4,7 @@
 // Formula injection: every data cell goes through Books `csvCell` (prefix '
 // when the value starts with =, +, -, @, tab, or CR).
 
-import { csvCell } from "../books/registers";
+import { csvCell } from "../books/csv";
 import {
   QAP_CSV_FORMAT_LABEL,
   SAWT_CSV_FORMAT_LABEL,

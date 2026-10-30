@@ -31,7 +31,7 @@ import {
 } from "@/lib/tax/quarters";
 import { customer2307ToSawtCsv, incomeTaxWorksheetToCsv, supplierEwtToQapCsv } from "@/lib/tax/csv";
 import { BOOKS_FORBIDDEN_VAT_KEYS, REGISTER_CONFIGS } from "@/lib/books/config";
-import { csvCell } from "@/lib/books/registers";
+import { csvCell } from "@/lib/books/csv";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 
 function user(roles: Role[]): PermissionUser {

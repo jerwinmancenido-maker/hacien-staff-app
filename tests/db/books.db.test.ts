@@ -325,56 +325,68 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
       admin,
     );
 
-    const account = await createCashAccount(
-      {
-        name: `Books cash ${t}`,
-        type: "CASH_ON_HAND",
-        bankName: null,
-        accountHintLast4: null,
-        openingBalance: "100000.00",
-        openingDate: new Date(Date.UTC(year, 0, 1)),
-        active: true,
-      },
-      admin,
-    );
-    let cats = await db.expenseCategory.findMany({ where: { active: true }, take: 1 });
-    if (!cats.length) {
-      await db.expenseCategory.create({
-        data: { code: `UTIL_${t.slice(0, 6)}`, label: "Utilities", sortOrder: 1 },
-      });
-      cats = await db.expenseCategory.findMany({ where: { active: true }, take: 1 });
+    // Cash mutations need CASH_ENABLED; scope the flag so the rest of the
+    // suite (and other files) are unaffected when the env omits it.
+    const prevCashEnabled = process.env.CASH_ENABLED;
+    process.env.CASH_ENABLED = "true";
+    let expense: Awaited<ReturnType<typeof recordExpense>>;
+    let expenseVoidId: string;
+    try {
+      const account = await createCashAccount(
+        {
+          name: `Books cash ${t}`,
+          type: "CASH_ON_HAND",
+          bankName: null,
+          accountHintLast4: null,
+          openingBalance: "100000.00",
+          openingDate: new Date(Date.UTC(year, 0, 1)),
+          active: true,
+        },
+        admin,
+      );
+      let cats = await db.expenseCategory.findMany({ where: { active: true }, take: 1 });
+      if (!cats.length) {
+        await db.expenseCategory.create({
+          data: { code: `UTIL_${t.slice(0, 6)}`, label: "Utilities", sortOrder: 1 },
+        });
+        cats = await db.expenseCategory.findMany({ where: { active: true }, take: 1 });
+      }
+      expense = await recordExpense(
+        {
+          date: new Date(Date.UTC(year, 2, 12)),
+          supplierId: null,
+          payeeText: `Meralco ${t}`,
+          categoryId: cats[0]!.id,
+          amount: "750.25",
+          withholdingApplied: "0",
+          cashAccountId: account.id,
+          receiptNo: null,
+          notes: null,
+        },
+        admin,
+        [],
+      );
+      const expenseVoid = await recordExpense(
+        {
+          date: new Date(Date.UTC(year, 2, 13)),
+          supplierId: null,
+          payeeText: `Void me ${t}`,
+          categoryId: cats[0]!.id,
+          amount: "99.00",
+          withholdingApplied: "0",
+          cashAccountId: account.id,
+          receiptNo: null,
+          notes: null,
+        },
+        admin,
+        [],
+      );
+      expenseVoidId = expenseVoid.id;
+      await voidExpense(expenseVoid.id, "void", admin);
+    } finally {
+      if (prevCashEnabled === undefined) delete process.env.CASH_ENABLED;
+      else process.env.CASH_ENABLED = prevCashEnabled;
     }
-    const expense = await recordExpense(
-      {
-        date: new Date(Date.UTC(year, 2, 12)),
-        supplierId: null,
-        payeeText: `Meralco ${t}`,
-        categoryId: cats[0]!.id,
-        amount: "750.25",
-        withholdingApplied: "0",
-        cashAccountId: account.id,
-        receiptNo: null,
-        notes: null,
-      },
-      admin,
-      [],
-    );
-    const expenseVoid = await recordExpense(
-      {
-        date: new Date(Date.UTC(year, 2, 13)),
-        supplierId: null,
-        payeeText: `Void me ${t}`,
-        categoryId: cats[0]!.id,
-        amount: "99.00",
-        withholdingApplied: "0",
-        cashAccountId: account.id,
-        receiptNo: null,
-        notes: null,
-      },
-      admin,
-      [],
-    );
-    await voidExpense(expenseVoid.id, "void", admin);
 
     const from = `${year}-03-01`;
     const to = `${year}-03-31`;
@@ -386,7 +398,7 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
 
     const disb = await getBookRegister(admin, "disbursements", from, to);
     const disbOurs = disb.register.rows.filter((r) => r.id === pay.id || r.id === expense.id);
-    expect(disbOurs.some((r) => r.id === expenseVoid.id)).toBe(false);
+    expect(disbOurs.some((r) => r.id === expenseVoidId)).toBe(false);
     expect(sumMoney(disbOurs.map((r) => r.amount))).toBe(sumMoney(["4500.00", "750.25"]));
 
     await voidSupplierPayment(pay.id, "void pay", admin);
