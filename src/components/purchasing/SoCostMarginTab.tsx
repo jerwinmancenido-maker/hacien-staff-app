@@ -29,7 +29,7 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
         {summary.rows.length === 0 ? (
           <p className="faint">No supplier POs linked to this sales order yet.</p>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap cost-margin-purchases">
             <table className="list" aria-label="Purchases for this order">
               <thead>
                 <tr>
@@ -86,7 +86,7 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
           <dd className="num">
             {formatPeso(summary.planned.margin)}
             <span className="muted"> ({summary.planned.marginPct}%)</span>
-            <div className="small faint">From the sales order / quote (after withholding)</div>
+            <div className="small faint">Contract − planned supplier cost (before withholding)</div>
           </dd>
         </dl>
       </div>

@@ -11,6 +11,7 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
+import { billingToday } from "../billing/dates";
 import { unappliedCash } from "../billing/status";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
@@ -176,6 +177,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
               billingId: a.billingId,
               cashApplied: cash,
               withholdingApplied: wh,
+              appliedOn: input.date,
             },
           });
           touched.add(a.billingId);
@@ -236,22 +238,27 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
       await lockCustomer(tx, input.customerId);
-      const collectionIds = [...new Set(input.allocations.map((a) => a.collectionId))];
+      const collectionIds = [...new Set(input.allocations.map((a) => a.collectionId))].sort();
       const billingIds = [...new Set(input.allocations.map((a) => a.billingId))];
-      for (const id of [...collectionIds].sort()) {
+      // Lock collections then their allocation rows (locking reads → latest committed)
+      // so concurrent applies cannot overdraw the same credit under REPEATABLE READ.
+      for (const id of collectionIds) {
         await tx.$queryRaw`SELECT \`id\` FROM \`Collection\` WHERE \`id\` = ${id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT \`id\` FROM \`CollectionAllocation\` WHERE \`collectionId\` = ${id} FOR UPDATE`;
       }
       await lockBillings(tx, billingIds);
 
       const collections = await tx.collection.findMany({
         where: { id: { in: collectionIds }, customerId: input.customerId, status: "POSTED" },
-        include: { allocations: true },
       });
       if (collections.length !== collectionIds.length) throw new DocRuleError("One of the collections isn't posted for this customer.");
 
       const creditLeft = new Map<string, bigint>();
       for (const c of collections) {
-        const applied = c.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+        // Locking read of cash applied (same snapshot as the FOR UPDATE above).
+        const appliedRows = await tx.$queryRaw<{ cashApplied: { toFixed(n: number): string } | string | number }[]>`
+          SELECT \`cashApplied\` FROM \`CollectionAllocation\` WHERE \`collectionId\` = ${c.id} FOR UPDATE`;
+        const applied = appliedRows.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
         creditLeft.set(c.id, toScaled(money(c.amountReceived), 2) - applied);
       }
 
@@ -298,27 +305,17 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
           );
         }
 
-        const existing = await tx.collectionAllocation.findUnique({
-          where: { collectionId_billingId: { collectionId: a.collectionId, billingId: a.billingId } },
+        // Always insert a new dated row (never merge) so statement "as of"
+        // opening credit can ignore applications on/after the period start.
+        await tx.collectionAllocation.create({
+          data: {
+            collectionId: a.collectionId,
+            billingId: a.billingId,
+            cashApplied: fromScaled(cash, 2),
+            withholdingApplied: "0.00",
+            appliedOn: billingToday(),
+          },
         });
-        if (existing) {
-          await tx.collectionAllocation.update({
-            where: { id: existing.id },
-            data: {
-              cashApplied: fromScaled(toScaled(money(existing.cashApplied), 2) + cash, 2),
-              // withholding unchanged — credit apply never creates/updates 2307
-            },
-          });
-        } else {
-          await tx.collectionAllocation.create({
-            data: {
-              collectionId: a.collectionId,
-              billingId: a.billingId,
-              cashApplied: fromScaled(cash, 2),
-              withholdingApplied: "0.00",
-            },
-          });
-        }
         creditLeft.set(a.collectionId, left - cash);
         billing.alreadyCash = fromScaled(toScaled(billing.alreadyCash, 2) + cash, 2);
         touched.add(a.billingId);
