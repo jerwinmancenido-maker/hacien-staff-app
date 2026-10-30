@@ -420,7 +420,9 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
 
       const list = await listTransactions({ kind: "supplier", id: a.id }, {}, admin);
       const kinds = list.rows.map((r) => r.kind);
-      expect(kinds).toEqual(expect.arrayContaining(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL", "QUOTE", "SALES_ORDER"]));
+      expect(kinds).toEqual(expect.arrayContaining(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"]));
+      expect(kinds.some((k) => k === "QUOTE" || k === "SALES_ORDER" || k === "BILLING" || k === "COLLECTION")).toBe(false);
+      expect(list.totals.some((t) => t.kind === "QUOTE" || t.kind === "SALES_ORDER")).toBe(false);
       const poTotals = list.totals.find((t) => t.kind === "PURCHASE_ORDER")!;
       expect(poTotals).toMatchObject({ count: 1, voidCount: 1, total: "455000.00" });
       expect(list.totals.find((t) => t.kind === "RECEIVING_REPORT")).toMatchObject({ count: 1, total: "90000.00" });
@@ -435,8 +437,10 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(customerStaff.rows.some((r) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(r.kind))).toBe(false);
       const customerAdmin = await listTransactions({ kind: "customer", id: customer.id }, {}, admin);
       expect(customerAdmin.rows.some((r) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(r.kind))).toBe(false);
+      expect(customerAdmin.rows.every((r) => ["QUOTE", "SALES_ORDER", "BILLING", "COLLECTION"].includes(r.kind))).toBe(true);
       expect(customerAdmin.totals.some((t) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(t.kind))).toBe(false);
       expect((await listTransactions({ kind: "customer", id: customer.id }, { type: "PURCHASE_ORDER" }, admin)).rows).toEqual([]);
+      expect((await listTransactions({ kind: "supplier", id: a.id }, { type: "QUOTE" }, admin)).rows).toEqual([]);
 
       // Linked POs live on the SO Cost & margin tab (cost users) / purchasing progress (everyone).
       const soPos = await db.purchaseOrder.findMany({ where: { salesOrderId: so.id, status: { not: "VOID" } }, select: { id: true, number: true, subtotal: true } });

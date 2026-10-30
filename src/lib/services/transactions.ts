@@ -52,6 +52,10 @@ export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = {
 export const PURCHASING_KINDS: TransactionKind[] = ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
 /** Customer-facing billing kinds (not cost data). */
 export const BILLING_KINDS: TransactionKind[] = ["BILLING", "COLLECTION"];
+/** Customer Transactions tab: quotes, SOs, billings, collections only. */
+export const CUSTOMER_TX_KINDS: TransactionKind[] = ["QUOTE", "SALES_ORDER", ...BILLING_KINDS];
+/** Supplier Transactions tab: POs, RRs, supplier bills (payments added in payables). */
+export const SUPPLIER_TX_KINDS: TransactionKind[] = [...PURCHASING_KINDS];
 export const RR_STATUSES: ReceivingReportStatus[] = ["POSTED", "VOID"];
 export const BILL_STATUSES: SupplierBillStatus[] = ["RECORDED", "VOID"];
 export const BILLING_TX_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
@@ -146,7 +150,33 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
   const withCosts = canSeeCosts(user);
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const empty: TransactionList = { rows: [], totals: [], page: 1, pages: 1, pageSize: TRANSACTIONS_PAGE_SIZE, totalRows: 0, canSeeCosts: withCosts, restricted: false };
+  // Supplier Transactions are cost data (POs / RRs / bills [/ payments]).
   if (owner.kind === "supplier" && !withCosts) return { ...empty, restricted: true };
+
+  // Page p of the merged list is within the first p × size rows of each list.
+  const take = page * TRANSACTIONS_PAGE_SIZE;
+
+  // Bidirectional separation for every role:
+  // - customer → quotes, SOs, billings, collections only
+  // - supplier → POs, RRs, supplier bills (payments on later stack) only
+  if (owner.kind === "supplier") {
+    const purchasing = await purchasingRows(owner, filters, take);
+    const merged = [...purchasing.rows].sort(newestFirst);
+    const rows = merged.slice((page - 1) * TRANSACTIONS_PAGE_SIZE, page * TRANSACTIONS_PAGE_SIZE).map(withoutCreatedAt);
+    return stripCosts(
+      {
+        rows,
+        totals: purchasing.totals,
+        page,
+        pages: Math.max(1, Math.ceil(purchasing.count / TRANSACTIONS_PAGE_SIZE)),
+        pageSize: TRANSACTIONS_PAGE_SIZE,
+        totalRows: purchasing.count,
+        canSeeCosts: withCosts,
+        restricted: false,
+      },
+      user,
+    );
+  }
 
   const qStatus = statusFilter<QuoteStatus>(filters.status, QUOTE_STATUSES);
   const soStatus = statusFilter<SalesOrderStatus>(filters.status, SALES_ORDER_STATUSES);
@@ -154,34 +184,22 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
   const wantSos = (!filters.type || filters.type === "SALES_ORDER") && soStatus !== null;
   const contact = filters.contactId ? { contactId: filters.contactId } : {};
 
-  const supplierId = owner.kind === "supplier" ? owner.id : null;
-  const quoteOwner: Prisma.QuoteWhereInput = supplierId ? { items: { some: { supplierId, removedAt: null } } } : { customerId: owner.id };
-  const soOwner: Prisma.SalesOrderWhereInput = supplierId ? { items: { some: { supplierId, removedAt: null } } } : { customerId: owner.id };
-  const quoteWhere: Prisma.QuoteWhereInput = { ...quoteOwner, ...contact, ...(qStatus ?? {}) };
-  const soWhere: Prisma.SalesOrderWhereInput = { ...soOwner, ...contact, ...(soStatus ?? {}) };
-
-  // Page p of the merged list is within the first p × size rows of each list.
-  const take = page * TRANSACTIONS_PAGE_SIZE;
+  const quoteWhere: Prisma.QuoteWhereInput = { customerId: owner.id, ...contact, ...(qStatus ?? {}) };
+  const soWhere: Prisma.SalesOrderWhereInput = { customerId: owner.id, ...contact, ...(soStatus ?? {}) };
   const orderBy = [{ date: "desc" }, { createdAt: "desc" }] as const;
-  const supplierItems = supplierId ? { items: { where: { supplierId, removedAt: null }, select: { total: true, supplierTotal: true, margin: true } } } : {};
 
   const [quotes, sos, quoteCount, soCount] = await Promise.all([
-    wantQuotes ? db.quote.findMany({ where: quoteWhere, orderBy: [...orderBy], take, include: { contact: { select: { name: true } }, ...supplierItems } }) : [],
-    wantSos ? db.salesOrder.findMany({ where: soWhere, orderBy: [...orderBy], take, include: { contact: { select: { name: true } }, ...supplierItems } }) : [],
+    wantQuotes ? db.quote.findMany({ where: quoteWhere, orderBy: [...orderBy], take, include: { contact: { select: { name: true } } } }) : [],
+    wantSos ? db.salesOrder.findMany({ where: soWhere, orderBy: [...orderBy], take, include: { contact: { select: { name: true } } } }) : [],
     wantQuotes ? db.quote.count({ where: quoteWhere }) : 0,
     wantSos ? db.salesOrder.count({ where: soWhere }) : 0,
   ]);
 
-  // Purchasing kinds belong on the supplier page (and on the SO "Purchases for this
-  // order" section). Customer Transactions only show quotes, SOs, billings, collections.
-  const purchasing =
-    owner.kind === "supplier" && withCosts ? await purchasingRows(owner, filters, take) : { rows: [], count: 0, totals: [] };
-  const billing = owner.kind === "customer" ? await billingRows(owner.id, filters, take) : { rows: [], count: 0, totals: [] };
+  const billing = await billingRows(owner.id, filters, take);
 
   type DocRow = (typeof quotes)[number] | (typeof sos)[number];
   const toRow = (kind: TransactionKind, d: DocRow): TransactionRow & { createdAt: Date } => {
-    const lines = "items" in d ? (d.items as { total: unknown; supplierTotal: unknown; margin: unknown }[]) : null;
-    const total = lines ? sumMoney(lines.map((l) => l.total as never)) : money(d.contractPrice);
+    const total = money(d.contractPrice);
     const base: TransactionRow & { createdAt: Date } = {
       kind,
       id: d.id,
@@ -194,27 +212,16 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
       createdAt: d.createdAt,
     };
     if (!withCosts) return base;
-    if (lines) {
-      const cost = sumMoney(lines.map((l) => l.supplierTotal as never));
-      const margin = sumMoney(lines.map((l) => l.margin as never));
-      return { ...base, supplierCost: cost, netMargin: margin, netMarginPct: pctOf(margin, total) };
-    }
     return { ...base, supplierCost: money(d.supplierCost), netMargin: money(d.netMargin), netMarginPct: money(d.netMarginPct) };
   };
 
-  const merged = [
-    ...quotes.map((q) => toRow("QUOTE", q)),
-    ...sos.map((s) => toRow("SALES_ORDER", s)),
-    ...purchasing.rows,
-    ...billing.rows,
-  ].sort(newestFirst);
-  const totalRows = quoteCount + soCount + purchasing.count + billing.count;
+  const merged = [...quotes.map((q) => toRow("QUOTE", q)), ...sos.map((s) => toRow("SALES_ORDER", s)), ...billing.rows].sort(newestFirst);
+  const totalRows = quoteCount + soCount + billing.count;
   const rows = merged.slice((page - 1) * TRANSACTIONS_PAGE_SIZE, page * TRANSACTIONS_PAGE_SIZE).map(withoutCreatedAt);
 
   const totals: TransactionTotals[] = [];
-  if (wantQuotes) totals.push(await kindTotals("QUOTE", quoteWhere, supplierId, withCosts));
-  if (wantSos) totals.push(await kindTotals("SALES_ORDER", soWhere, supplierId, withCosts));
-  totals.push(...purchasing.totals);
+  if (wantQuotes) totals.push(await kindTotals("QUOTE", quoteWhere, null, withCosts));
+  if (wantSos) totals.push(await kindTotals("SALES_ORDER", soWhere, null, withCosts));
   totals.push(...billing.totals);
 
   return stripCosts(

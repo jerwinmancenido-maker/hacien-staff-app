@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import { parseTransactionFilters } from "@/components/TransactionsTab";
 import {
   BILLING_KINDS,
+  CUSTOMER_TX_KINDS,
   PURCHASING_KINDS,
+  SUPPLIER_TX_KINDS,
   TRANSACTION_KINDS,
   __test,
 } from "@/lib/services/transactions";
@@ -30,12 +32,14 @@ describe("transaction totals", () => {
   });
 });
 
-describe("customer transaction kinds", () => {
-  it("keeps purchasing kinds out of the customer-facing set", () => {
-    const customerKinds = TRANSACTION_KINDS.filter((k) => !PURCHASING_KINDS.includes(k));
-    expect(customerKinds).toEqual(["QUOTE", "SALES_ORDER", "BILLING", "COLLECTION"]);
-    expect(PURCHASING_KINDS).toEqual(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"]);
+describe("transaction kind separation", () => {
+  it("splits customer vs supplier kinds both ways", () => {
+    expect(CUSTOMER_TX_KINDS).toEqual(["QUOTE", "SALES_ORDER", "BILLING", "COLLECTION"]);
+    expect(SUPPLIER_TX_KINDS).toEqual(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"]);
+    expect(PURCHASING_KINDS).toEqual(SUPPLIER_TX_KINDS);
     expect(BILLING_KINDS).toEqual(["BILLING", "COLLECTION"]);
+    expect(CUSTOMER_TX_KINDS.some((k) => SUPPLIER_TX_KINDS.includes(k))).toBe(false);
+    expect(TRANSACTION_KINDS).toEqual([...CUSTOMER_TX_KINDS.slice(0, 2), ...SUPPLIER_TX_KINDS, ...BILLING_KINDS]);
   });
 
   it("parses type filters including purchasing kinds (supplier tab)", () => {
