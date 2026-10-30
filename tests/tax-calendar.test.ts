@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvCell } from "@/lib/books/registers";
+import { csvCell } from "@/lib/books/csv";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { settingsValueFromForm } from "@/lib/settings/form";

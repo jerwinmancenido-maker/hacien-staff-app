@@ -1,6 +1,6 @@
 // Assemble tax calendar rows from catalog + owner settings + mark-as-done rows.
 
-import { csvCell } from "../books/registers";
+import { csvCell } from "../books/csv";
 import {
   TAX_CALENDAR_APPLIES,
   TAX_CALENDAR_STATUS,
