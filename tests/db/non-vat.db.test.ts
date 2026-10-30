@@ -132,6 +132,23 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
     expect(keep.status).not.toBe("VOID");
   });
 
+  it("still counts PAID and PARTIALLY_PAID billings toward gross sales", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year, "100000.00");
+    const open = await bill(so.id, "10000.00", new Date(Date.UTC(year, 2, 1)));
+    const partial = await bill(so.id, "20000.00", new Date(Date.UTC(year, 2, 2)));
+    const paid = await bill(so.id, "30000.00", new Date(Date.UTC(year, 2, 3)));
+    await db.billing.update({ where: { id: partial.id }, data: { status: "PARTIALLY_PAID" } });
+    await db.billing.update({ where: { id: paid.id }, data: { status: "PAID" } });
+    expect(open.status).toBe("OPEN");
+    expect((await db.billing.findUniqueOrThrow({ where: { id: partial.id } })).status).toBe("PARTIALLY_PAID");
+    expect((await db.billing.findUniqueOrThrow({ where: { id: paid.id } })).status).toBe("PAID");
+
+    const now = new Date(Date.UTC(year, 8, 1));
+    // status !== VOID only — payment progress must not shrink gross sales.
+    expect(await getGrossSalesYtd(year, now, billingsGrossSales)).toBe(60_000);
+  });
+
   it("counts a billing dated today when now is 01:00 PHT (DATE at 00:00 UTC)", async () => {
     // Billing.invoiceDate is @db.Date → stored as 00:00 UTC of that calendar day.
     // At 01:00 PHT, that DATE instant is still later than `now` on the UTC clock;
