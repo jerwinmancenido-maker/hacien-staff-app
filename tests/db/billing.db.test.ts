@@ -644,6 +644,92 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     }
   });
 
+  it("getStatement opening AR ignores credit applied after from to a prior billing", async () => {
+    // Guards views.ts opening-AR filter: appliedOn: { lt: from }.
+    // Collection before `from`, applied after `from` onto a billing dated before `from`:
+    // at `from` the billing is still fully owed (and the advance still fully credit).
+    const year = await freshYear();
+    const from = new Date(Date.UTC(year, 2, 1)); // Mar 1
+    const before = new Date(Date.UTC(year, 1, 10)); // Feb 10
+    const after = new Date(Date.UTC(year, 2, 15)); // Mar 15
+
+    const { customer, so } = await openSo(year, { unitPrice: "5000.00" });
+    const priorBilling = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: before,
+        dueDate: new Date(Date.UTC(year, 2, 10)),
+        notes: null,
+      },
+      admin,
+    );
+    const advance = await recordCollection(
+      {
+        customerId: customer.id,
+        date: before,
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-SOA-AR-${tag()}`,
+        amountReceived: "500.00",
+        notes: null,
+        allocations: [],
+      },
+      admin,
+    );
+    const periodBilling = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "300.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: after,
+        dueDate: new Date(Date.UTC(year, 3, 14)),
+        notes: null,
+      },
+      admin,
+    );
+    await applyCustomerCredit(
+      {
+        customerId: customer.id,
+        allocations: [
+          {
+            collectionId: advance.id,
+            billingId: priorBilling.id,
+            cashApplied: "200.00",
+            withholdingApplied: "0.00",
+          },
+        ],
+      },
+      admin,
+    );
+    await db.collectionAllocation.updateMany({
+      where: { collectionId: advance.id, billingId: priorBilling.id },
+      data: { appliedOn: after },
+    });
+
+    const doc = await getStatement(customer.id, from, null);
+    expect(doc).not.toBeNull();
+
+    // Opening AR 1000 (prior billing still owed at from) − opening credit 500 = 500.
+    // Without appliedOn on the opening-AR query, late apply would drop AR to 800 → opening 300.
+    expect(doc!.openingBalance).toBe("500.00");
+
+    // In-period movement: period billing +300; advance (before from) is not a period line.
+    expect(doc!.lines.filter((l) => l.kind === "collection")).toHaveLength(0);
+    const periodLines = doc!.lines.filter((l) => l.kind === "billing");
+    expect(periodLines).toHaveLength(1);
+    expect(periodLines[0]!.amount).toBe("300.00");
+    expect(periodLines[0]!.id).toBe(periodBilling.id);
+    expect(periodLines[0]!.runningBalance).toBe("800.00");
+    expect(doc!.closingBalance).toBe("800.00");
+
+    // Apply did happen after from (today's balances), just not in opening.
+    expect(await customerCreditBalance(customer.id)).toBe("300.00");
+  });
+
   it("voiding a collection clears pending 2307 from list and totals", async () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
