@@ -20,6 +20,7 @@ import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
 import { customerArSnapshot, listBillings, listCollections } from "@/lib/billing/views";
+import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
 import { resolveCompanyTab } from "@/lib/company-tabs";
@@ -220,6 +221,13 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
     listBillings({ customerId }),
     listCollections({ customerId }),
   ]);
+  const openForCredit = billings
+    .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
+    .map((b) => ({
+      id: b.id,
+      label: `Booklet #${b.invoiceNo} (${b.number})`,
+      balance: b.balance,
+    }));
   return (
     <div className="details-stack">
       <div className="card">
@@ -250,6 +258,9 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
               Record collection
             </Link>
           </div>
+        )}
+        {canManage && (
+          <ApplyCreditForm customerId={customerId} availableCredit={ar.credit} billings={openForCredit} />
         )}
       </div>
       <div className="card">
