@@ -1,0 +1,212 @@
+import Link from "next/link";
+import type { Contact, Customer, WithholdingType } from "@prisma/client";
+import { formatDateTime, formatPeso, initials } from "@/lib/format";
+import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
+import { Avatar, Chip, type ChipTone } from "./ui";
+import { Activity } from "./Activity";
+import { PlusIcon } from "./Icons";
+
+const TONE: Record<WithholdingType, ChipTone> = {
+  GOVERNMENT: "green",
+  TOP_WITHHOLDING_AGENT: "amber",
+  NONE: "grey",
+};
+
+export async function CustomerOverview({
+  customer,
+  contacts,
+  canEdit,
+  lastActivityDate,
+}: {
+  customer: Customer;
+  contacts: Contact[];
+  canEdit?: boolean;
+  lastActivityDate?: Date | null;
+}) {
+  const activeContacts = contacts.filter((c) => c.active);
+  const mainContact = contacts.find((c) => c.isMain && c.active) ?? activeContacts[0];
+
+  return (
+    <div className="overview-dashboard">
+      {/* 1. Header Profile Card */}
+      <div className="card overview-profile-card">
+        <div className="overview-profile-header">
+          <div className="overview-avatar" aria-hidden>
+            {initials(customer.name)}
+          </div>
+          <div className="overview-identity">
+            <div className="overview-name-row">
+              <h2 className="overview-title">{customer.name}</h2>
+              <Chip tone={TONE[customer.withholdingType]}>
+                {WITHHOLDING_LABELS[customer.withholdingType]}
+              </Chip>
+              {!customer.active ? (
+                <Chip tone="red">Inactive</Chip>
+              ) : (
+                <Chip tone="green">Active</Chip>
+              )}
+            </div>
+            <div className="overview-meta-grid">
+              <div>
+                <div className="meta-label">TIN</div>
+                <div className="meta-val num" style={{ textAlign: "left" }}>
+                  {customer.tin ?? <span className="faint">—</span>}
+                </div>
+              </div>
+              <div>
+                <div className="meta-label">Default terms</div>
+                <div className="meta-val">{customer.defaultTerms ?? <span className="faint">—</span>}</div>
+              </div>
+              <div>
+                <div className="meta-label">Address</div>
+                <div className="meta-val">{customer.address?.split("\n")[0] ?? <span className="faint">—</span>}</div>
+              </div>
+              <div>
+                <div className="meta-label">Main contact</div>
+                <div className="meta-val">
+                  {mainContact ? (
+                    <span>
+                      <strong>{mainContact.name}</strong>
+                      {mainContact.role ? ` · ${mainContact.role}` : ""}
+                    </span>
+                  ) : (
+                    <span className="faint">No contact set</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Stat Cards Grid */}
+      <div className="stat-grid">
+        <div className="card stat">
+          <div className="label">Balance due</div>
+          <div className="value num">{formatPeso(0)}</div>
+          <div className="foot">Gross outstanding</div>
+        </div>
+        <div className="card stat">
+          <div className="label">Open quotes</div>
+          <div className="value num faint">—</div>
+          <div className="foot faint">Needs backend</div>
+        </div>
+        <div className="card stat">
+          <div className="label">Open SOs</div>
+          <div className="value num faint">—</div>
+          <div className="foot faint">Needs backend</div>
+        </div>
+        <div className="card stat">
+          <div className="label">Last activity</div>
+          <div className="value" style={{ fontSize: 16, marginTop: 10 }}>
+            {lastActivityDate ? formatDateTime(lastActivityDate) : "—"}
+          </div>
+          <div className="foot">From audit log</div>
+        </div>
+      </div>
+
+      {/* 3. AR aging (gross) & Notes */}
+      <div className="overview-split-grid">
+        <div className="card">
+          <div className="card-head">
+            <h2>AR aging (gross)</h2>
+            <div className="right">
+              <span className="faint small">₱0.00 total</span>
+            </div>
+          </div>
+          <div className="aging-bar-track" aria-hidden>
+            <div className="aging-bar-fill empty" />
+          </div>
+          <div className="aging-buckets-grid">
+            <div className="aging-bucket">
+              <div className="aging-dot-label">
+                <span className="aging-dot green" /> Current
+              </div>
+              <div className="aging-amt num">₱0.00</div>
+            </div>
+            <div className="aging-bucket">
+              <div className="aging-dot-label">
+                <span className="aging-dot amber" /> 1–30 d
+              </div>
+              <div className="aging-amt num">₱0.00</div>
+            </div>
+            <div className="aging-bucket">
+              <div className="aging-dot-label">
+                <span className="aging-dot orange" /> 31–60 d
+              </div>
+              <div className="aging-amt num">₱0.00</div>
+            </div>
+            <div className="aging-bucket">
+              <div className="aging-dot-label">
+                <span className="aging-dot red" /> 61–90 d
+              </div>
+              <div className="aging-amt num">₱0.00</div>
+            </div>
+            <div className="aging-bucket">
+              <div className="aging-dot-label">
+                <span className="aging-dot dark-red" /> 90+ d
+              </div>
+              <div className="aging-amt num">₱0.00</div>
+            </div>
+          </div>
+          <div className="aging-note faint small" style={{ marginTop: 14 }}>
+            Nothing billed yet. Open bills and collections will show here once billing is built.
+          </div>
+        </div>
+
+        {/* Contacts Strip */}
+        <div className="card">
+          <div className="card-head">
+            <h2>Contacts ({activeContacts.length})</h2>
+            <div className="right">
+              <Link className="btn-link small" href={`/customers/${customer.id}?tab=contacts`}>
+                View all →
+              </Link>
+            </div>
+          </div>
+          {activeContacts.length === 0 ? (
+            <div className="empty-strip">
+              <span className="faint small">No contacts yet.</span>
+              {canEdit && (
+                <Link
+                  className="btn btn-secondary btn-sm"
+                  href={`/contacts/new?customer=${customer.id}`}
+                  style={{ marginLeft: 8 }}
+                >
+                  <PlusIcon size={12} /> Add contact
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="contacts-strip-list">
+              {activeContacts.slice(0, 3).map((c) => (
+                <div key={c.id} className="contacts-strip-item">
+                  <Avatar name={c.name} small />
+                  <div className="strip-info">
+                    <div className="strip-name">
+                      <strong>{c.name}</strong>
+                      {c.isMain && <Chip tone="dark">Main</Chip>}
+                    </div>
+                    <div className="strip-sub faint small">
+                      {c.role ? `${c.role} · ` : ""}
+                      {c.email || c.phone || "No details"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Recent Activity */}
+      <Activity
+        targets={[
+          { entityType: "Customer", ids: [customer.id] },
+          { entityType: "Contact", ids: contacts.map((c) => c.id) },
+        ]}
+        title="Recent activity"
+      />
+    </div>
+  );
+}

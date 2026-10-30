@@ -5,13 +5,18 @@ import { can } from "@/lib/permissions";
 import { listCustomers } from "@/lib/services/companies";
 import { WITHHOLDING_LABELS, WITHHOLDING_TYPES } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
-import { DataTable } from "@/components/DataTable";
-import { Chip, EmptyState, PageHeader, PrimaryCell, type ChipTone } from "@/components/ui";
+import { RecordList, type RecordItem } from "@/components/RecordList";
+import { PillTabs } from "@/components/PillTabs";
+import { PageHeader, type ChipTone } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 
-const TONE: Record<WithholdingType, ChipTone> = { GOVERNMENT: "green", TOP_WITHHOLDING_AGENT: "amber", NONE: "grey" };
+const TONE: Record<WithholdingType, ChipTone> = {
+  GOVERNMENT: "green",
+  TOP_WITHHOLDING_AGENT: "amber",
+  NONE: "grey",
+};
 
-type Search = { q?: string; wh?: string; inactive?: string };
+type Search = { q?: string; wh?: string; inactive?: string; view?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -29,6 +34,63 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const customers = await listCustomers({ q: s.q, withholding: wh, showInactive });
   const filtered = !!(s.q || wh);
 
+  const filterTabs = [
+    { key: "all", label: "All", href: href(s, { wh: undefined }) },
+    ...WITHHOLDING_TYPES.map((t) => ({
+      key: t,
+      label: WITHHOLDING_LABELS[t],
+      href: href(s, { wh: t }),
+    })),
+  ];
+
+  const items: RecordItem[] = customers.map((c) => ({
+    id: c.id,
+    href: `/customers/${c.id}`,
+    inactive: !c.active,
+    avatarName: c.name,
+    title: c.name,
+    subtitle: c.tin ? (
+      <span className="num" style={{ textAlign: "left" }}>
+        {c.tin}
+      </span>
+    ) : c.active ? (
+      c.address?.split("\n")[0] || "No address"
+    ) : (
+      "Inactive"
+    ),
+    chips: [
+      {
+        label: WITHHOLDING_LABELS[c.withholdingType],
+        tone: c.active ? TONE[c.withholdingType] : "grey",
+      },
+      ...(c.defaultTerms ? [{ label: c.defaultTerms, tone: "grey" as ChipTone }] : []),
+      ...(!c.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
+    ],
+    meta: [
+      { label: "TIN", value: c.tin ?? "—" },
+      { label: "Terms", value: c.defaultTerms ?? "—" },
+      { label: "Address", value: c.address?.split("\n")[0] ?? "—" },
+    ],
+    amount: {
+      label: "Balance due",
+      value: formatPeso(0),
+      strong: true,
+    },
+    menuItems: [
+      { label: "Open customer", href: `/customers/${c.id}` },
+      ...(can(user, "edit_data")
+        ? [{ label: "Add contact", href: `/contacts/new?customer=${c.id}` }]
+        : []),
+    ],
+    sortValues: {
+      name: c.name,
+      tin: c.tin ?? "",
+      wh: WITHHOLDING_LABELS[c.withholdingType],
+      terms: c.defaultTerms ?? "",
+      balance: 0,
+    },
+  }));
+
   return (
     <>
       <PageHeader
@@ -42,6 +104,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           )
         }
       />
+
       <div className="toolbar">
         <form className="search-pill" action="/customers" role="search">
           <SearchIcon />
@@ -51,54 +114,45 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
           {wh && <input type="hidden" name="wh" value={wh} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
+          {s.view && <input type="hidden" name="view" value={s.view} />}
         </form>
-        <Link className={`filter-chip${!wh ? " active" : ""}`} href={href(s, { wh: undefined })}>
-          All
-        </Link>
-        {WITHHOLDING_TYPES.map((t) => (
-          <Link key={t} className={`filter-chip${wh === t ? " active" : ""}`} href={href(s, { wh: t })}>
-            {WITHHOLDING_LABELS[t]}
-          </Link>
-        ))}
+
+        <PillTabs
+          ariaLabel="Withholding filter"
+          tabs={filterTabs}
+          active={wh ?? "all"}
+          size="sm"
+        />
+
         <div className="right">
-          <Link className={`filter-chip${showInactive ? " active" : ""}`} href={href(s, { inactive: showInactive ? undefined : "1" })} aria-pressed={showInactive}>
+          <Link
+            className={`filter-chip${showInactive ? " active" : ""}`}
+            href={href(s, { inactive: showInactive ? undefined : "1" })}
+            aria-pressed={showInactive}
+          >
             {showInactive ? "Showing inactive" : "Show inactive"}
           </Link>
         </div>
       </div>
-      {customers.length === 0 ? (
-        <div className="card">
-          {filtered ? (
-            <EmptyState title="No matches" line="Try another name or TIN, or clear the filter." />
-          ) : (
-            <EmptyState title="All clear here" line="No customers yet. Add your first customer." />
-          )}
-        </div>
-      ) : (
-        <DataTable
-          label="Customers"
-          columns={[
-            { key: "name", label: "Name" },
-            { key: "tin", label: "TIN" },
-            { key: "wh", label: "Withholding type" },
-            { key: "terms", label: "Default terms" },
-            { key: "balance", label: "Balance due", numeric: true },
-          ]}
-          rows={customers.map((c) => ({
-            id: c.id,
-            href: `/customers/${c.id}`,
-            inactive: !c.active,
-            cells: {
-              name: <PrimaryCell name={c.name} sub={c.active ? c.address?.split("\n")[0] : "Inactive"} />,
-              tin: <span className="num" style={{ textAlign: "left" }}>{c.tin ?? <span className="faint">—</span>}</span>,
-              wh: <Chip tone={c.active ? TONE[c.withholdingType] : "grey"}>{WITHHOLDING_LABELS[c.withholdingType]}</Chip>,
-              terms: c.defaultTerms ?? <span className="faint">—</span>,
-              balance: <span className="strong">{formatPeso(0)}</span>,
-            },
-            sort: { name: c.name, tin: c.tin, wh: WITHHOLDING_LABELS[c.withholdingType], terms: c.defaultTerms, balance: 0 },
-          }))}
-        />
-      )}
+
+      <RecordList
+        listKey="customers"
+        label="Customers"
+        items={items}
+        emptyTitle={filtered ? "No matches" : "All clear here"}
+        emptyLine={
+          filtered
+            ? "Try another name or TIN, or clear the filter."
+            : "No customers yet. Add your first customer."
+        }
+        sortColumns={[
+          { key: "name", label: "Name" },
+          { key: "tin", label: "TIN" },
+          { key: "terms", label: "Terms" },
+          { key: "balance", label: "Balance", numeric: true },
+        ]}
+        defaultSortKey="name"
+      />
     </>
   );
 }

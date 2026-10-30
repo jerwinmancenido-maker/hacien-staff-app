@@ -5,13 +5,18 @@ import { can } from "@/lib/permissions";
 import { listSuppliers } from "@/lib/services/companies";
 import { missingBankDetails, SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
-import { DataTable } from "@/components/DataTable";
-import { Chip, EmptyState, PageHeader, PrimaryCell, type ChipTone } from "@/components/ui";
+import { RecordList, type RecordItem } from "@/components/RecordList";
+import { PillTabs } from "@/components/PillTabs";
+import { PageHeader, type ChipTone } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 
-const TONE: Record<SupplierTaxType, ChipTone> = { VAT: "green", NON_VAT: "grey", NO_RECEIPT: "amber" };
+const TONE: Record<SupplierTaxType, ChipTone> = {
+  VAT: "green",
+  NON_VAT: "grey",
+  NO_RECEIPT: "amber",
+};
 
-type Search = { q?: string; tax?: string; inactive?: string };
+type Search = { q?: string; tax?: string; inactive?: string; view?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -28,6 +33,74 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const suppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive });
   const filtered = !!(s.q || tax);
 
+  const filterTabs = [
+    { key: "all", label: "All", href: href(s, { tax: undefined }) },
+    ...SUPPLIER_TAX_TYPES.map((t) => ({
+      key: t,
+      label: TAX_TYPE_LABELS[t],
+      href: href(s, { tax: t }),
+    })),
+  ];
+
+  const items: RecordItem[] = suppliers.map((x) => {
+    const isMissingBank = missingBankDetails(x);
+    return {
+      id: x.id,
+      href: `/suppliers/${x.id}`,
+      inactive: !x.active,
+      avatarName: x.name,
+      title: x.name,
+      subtitle: x.tin ? (
+        <span className="num" style={{ textAlign: "left" }}>
+          {x.tin}
+        </span>
+      ) : !x.active ? (
+        "Inactive"
+      ) : isMissingBank ? (
+        "No bank details"
+      ) : (
+        x.bankBranch || "Supplier"
+      ),
+      chips: [
+        {
+          label: TAX_TYPE_LABELS[x.taxType],
+          tone: x.active ? TONE[x.taxType] : "grey",
+        },
+        ...(x.defaultTerms ? [{ label: x.defaultTerms, tone: "grey" as ChipTone }] : []),
+        ...(isMissingBank && x.active ? [{ label: "No bank details", tone: "amber" as ChipTone }] : []),
+        ...(!x.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
+      ],
+      meta: [
+        { label: "TIN", value: x.tin ?? "—" },
+        { label: "Terms", value: x.defaultTerms ?? "—" },
+        {
+          label: "Bank",
+          value: isMissingBank
+            ? "No bank details"
+            : `UnionBank · ${x.bankAccountNumber ?? "Account set"}`,
+        },
+      ],
+      amount: {
+        label: "We owe",
+        value: formatPeso(0),
+        strong: true,
+      },
+      menuItems: [
+        { label: "Open supplier", href: `/suppliers/${x.id}` },
+        ...(can(user, "edit_data")
+          ? [{ label: "Add contact", href: `/contacts/new?supplier=${x.id}` }]
+          : []),
+      ],
+      sortValues: {
+        name: x.name,
+        tin: x.tin ?? "",
+        tax: TAX_TYPE_LABELS[x.taxType],
+        terms: x.defaultTerms ?? "",
+        owe: 0,
+      },
+    };
+  });
+
   return (
     <>
       <PageHeader
@@ -41,6 +114,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           )
         }
       />
+
       <div className="toolbar">
         <form className="search-pill" action="/suppliers" role="search">
           <SearchIcon />
@@ -50,50 +124,46 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
           {tax && <input type="hidden" name="tax" value={tax} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
+          {s.view && <input type="hidden" name="view" value={s.view} />}
         </form>
-        <Link className={`filter-chip${!tax ? " active" : ""}`} href={href(s, { tax: undefined })}>
-          All
-        </Link>
-        {SUPPLIER_TAX_TYPES.map((t) => (
-          <Link key={t} className={`filter-chip${tax === t ? " active" : ""}`} href={href(s, { tax: t })}>
-            {TAX_TYPE_LABELS[t]}
-          </Link>
-        ))}
+
+        <PillTabs
+          ariaLabel="Tax type filter"
+          tabs={filterTabs}
+          active={tax ?? "all"}
+          size="sm"
+        />
+
         <div className="right">
-          <Link className={`filter-chip${showInactive ? " active" : ""}`} href={href(s, { inactive: showInactive ? undefined : "1" })} aria-pressed={showInactive}>
+          <Link
+            className={`filter-chip${showInactive ? " active" : ""}`}
+            href={href(s, { inactive: showInactive ? undefined : "1" })}
+            aria-pressed={showInactive}
+          >
             {showInactive ? "Showing inactive" : "Show inactive"}
           </Link>
         </div>
       </div>
-      {suppliers.length === 0 ? (
-        <div className="card">
-          {filtered ? <EmptyState title="No matches" line="Try another name or TIN, or clear the filter." /> : <EmptyState line="No suppliers yet." />}
-        </div>
-      ) : (
-        <DataTable
-          label="Suppliers"
-          columns={[
-            { key: "name", label: "Name" },
-            { key: "tin", label: "TIN" },
-            { key: "tax", label: "Tax type" },
-            { key: "terms", label: "Default terms" },
-            { key: "owe", label: "We owe", numeric: true },
-          ]}
-          rows={suppliers.map((x) => ({
-            id: x.id,
-            href: `/suppliers/${x.id}`,
-            inactive: !x.active,
-            cells: {
-              name: <PrimaryCell name={x.name} sub={!x.active ? "Inactive" : missingBankDetails(x) ? "No bank details" : x.bankBranch ?? undefined} />,
-              tin: x.tin ?? <span className="faint">—</span>,
-              tax: <Chip tone={x.active ? TONE[x.taxType] : "grey"}>{TAX_TYPE_LABELS[x.taxType]}</Chip>,
-              terms: x.defaultTerms ?? <span className="faint">—</span>,
-              owe: <span className="strong">{formatPeso(0)}</span>,
-            },
-            sort: { name: x.name, tin: x.tin, tax: TAX_TYPE_LABELS[x.taxType], terms: x.defaultTerms, owe: 0 },
-          }))}
-        />
-      )}
+
+      <RecordList
+        listKey="suppliers"
+        label="Suppliers"
+        items={items}
+        emptyTitle={filtered ? "No matches" : "All clear here"}
+        emptyLine={
+          filtered
+            ? "Try another name or TIN, or clear the filter."
+            : "No suppliers yet. Add your first supplier."
+        }
+        sortColumns={[
+          { key: "name", label: "Name" },
+          { key: "tin", label: "TIN" },
+          { key: "tax", label: "Tax type" },
+          { key: "terms", label: "Terms" },
+          { key: "owe", label: "We owe", numeric: true },
+        ]}
+        defaultSortKey="name"
+      />
     </>
   );
 }

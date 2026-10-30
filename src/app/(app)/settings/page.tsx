@@ -6,9 +6,10 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { changedLeaves, NUMBERED_DOCS } from "@/lib/settings/form";
 import { formatDocNumber } from "@/lib/settings/numbering";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
-import { formatDate, formatDateTime, formatPeso } from "@/lib/format";
-import { DataTable } from "@/components/DataTable";
-import { Chip, EmptyState, PageHeader, PrimaryCell, Tabs } from "@/components/ui";
+import { formatDateTime, formatPeso } from "@/lib/format";
+import { RecordList, type RecordItem } from "@/components/RecordList";
+import { PillTabs } from "@/components/PillTabs";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
 import { saveSettingsAction } from "./actions";
@@ -30,7 +31,7 @@ function show(v: unknown): string {
   return String(v);
 }
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
   await requirePagePermission("manage_settings");
   const { tab: raw } = await searchParams;
   const tab: Tab = TABS.some((t) => t.key === raw) ? (raw as Tab) : "users";
@@ -51,8 +52,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           )
         }
       />
-      <Tabs active={tab} tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))} />
-      <div style={{ maxWidth: 860 }}>
+      <PillTabs
+        active={tab}
+        tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
+      />
+      <div style={{ maxWidth: 880 }}>
         {tab === "users" && <UsersTab />}
 
         {tab === "approval" && (
@@ -82,7 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             title="Numbering"
             label={SETTINGS_LABELS.numbering}
             versionId={snap.versionId}
-              action={save("numbering")}
+            action={save("numbering")}
             fields={NUMBERED_DOCS.flatMap((d) => {
               const f = s.numbering[d.key];
               return [
@@ -99,7 +103,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             title="Tax year"
             label={SETTINGS_LABELS.taxYear}
             versionId={snap.versionId}
-              action={save("taxYear")}
+            action={save("taxYear")}
             fields={[
               { name: "year", label: "Tax year", kind: "number", value: s.taxYear.year },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
@@ -114,7 +118,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             title="Company"
             label={SETTINGS_LABELS.company}
             versionId={snap.versionId}
-              action={save("company")}
+            action={save("company")}
             fields={[
               { name: "name", label: "Business name", kind: "text", value: s.company.name },
               { name: "tin", label: "TIN", kind: "text", value: s.company.tin, hint: "000-000-000-000" },
@@ -128,7 +132,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             title="Lists"
             label={SETTINGS_LABELS.lists}
             versionId={snap.versionId}
-              action={save("lists")}
+            action={save("lists")}
             fields={[
               { name: "paymentTerms", label: "Payment terms options", kind: "lines", value: s.lists.paymentTerms, hint: "One per line." },
               { name: "contactRoles", label: "Contact roles", kind: "lines", value: s.lists.contactRoles, hint: "One per line." },
@@ -144,28 +148,59 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
 async function UsersTab() {
   const users = await db.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
-  if (!users.length) return <div className="card"><EmptyState line="No users yet." /></div>;
+  if (!users.length) {
+    return (
+      <div className="card">
+        <EmptyState line="No users yet." />
+      </div>
+    );
+  }
+
+  const items: RecordItem[] = users.map((u) => ({
+    id: u.id,
+    href: `/settings/users/${u.id}`,
+    inactive: !u.active,
+    avatarName: u.name,
+    title: u.name,
+    subtitle: u.email,
+    chips: [
+      { label: roleLabel(u), tone: "grey" },
+      {
+        label: u.canSeeCosts ? "Can see costs" : "Cost hidden",
+        tone: u.canSeeCosts ? "dark" : "grey",
+      },
+      ...(!u.active
+        ? [{ label: "Turned off", tone: "red" as const }]
+        : u.passwordHash
+        ? [{ label: "Active", tone: "green" as const }]
+        : [{ label: "Invited", tone: "amber" as const }]),
+    ],
+    meta: [
+      { label: "Role", value: roleLabel(u) },
+      { label: "Email", value: u.email },
+      { label: "Costs", value: u.canSeeCosts ? "Yes" : "No" },
+    ],
+    menuItems: [{ label: "Edit user", href: `/settings/users/${u.id}` }],
+    sortValues: {
+      name: u.name,
+      roles: roleLabel(u),
+      costs: u.canSeeCosts ? 0 : 1,
+      status: u.active ? 0 : 1,
+    },
+  }));
+
   return (
-    <DataTable
+    <RecordList
+      listKey="users"
       label="Users"
-      columns={[
+      items={items}
+      sortColumns={[
         { key: "name", label: "Name" },
-        { key: "roles", label: "Roles" },
-        { key: "costs", label: "Can see costs" },
+        { key: "roles", label: "Role" },
+        { key: "costs", label: "Costs" },
         { key: "status", label: "Status" },
       ]}
-      rows={users.map((u) => ({
-        id: u.id,
-        href: `/settings/users/${u.id}`,
-        inactive: !u.active,
-        cells: {
-          name: <PrimaryCell name={u.name} sub={u.email} />,
-          roles: roleLabel(u),
-          costs: u.canSeeCosts ? <Chip tone="dark">Yes</Chip> : <Chip>No</Chip>,
-          status: !u.active ? <Chip tone="red">Turned off</Chip> : u.passwordHash ? <Chip tone="green">Active</Chip> : <Chip tone="amber">Invited</Chip>,
-        },
-        sort: { name: u.name, roles: roleLabel(u), costs: u.canSeeCosts ? 0 : 1, status: u.active ? 0 : 1 },
-      }))}
+      defaultSortKey="name"
     />
   );
 }
@@ -176,43 +211,60 @@ async function ChangeLog() {
     include: { createdBy: { select: { name: true } } },
     take: 200,
   });
-  if (!versions.length) return <div className="card"><EmptyState line="No settings changes yet." /></div>;
+  if (!versions.length) {
+    return (
+      <div className="card">
+        <EmptyState line="No settings changes yet." />
+      </div>
+    );
+  }
+
   return (
-    <DataTable
-      label="Settings change log"
-      columns={[
-        { key: "version", label: "Version", numeric: true },
-        { key: "when", label: "Effective from" },
-        { key: "who", label: "Who" },
-        { key: "setting", label: "Setting" },
-        { key: "change", label: "Old → new", sortable: false },
-      ]}
-      rows={versions.map((v) => ({
-        id: v.id,
-        cells: {
-          version: <span className="strong">v{v.version}</span>,
-          when: (
-            <>
-              <div>{formatDate(v.effectiveFrom)}</div>
-              <div className="small muted">{formatDateTime(v.effectiveFrom).split(", ").pop()}</div>
-            </>
-          ),
-          who: v.createdBy?.name ?? "Seed",
-          setting: v.changedKey && isSettingsKey(v.changedKey) ? SETTINGS_LABELS[v.changedKey] : "Defaults",
-          change: v.changedKey ? (
-            <div className="diff">
-              {changedLeaves(v.before, v.after).map((c) => (
-                <div key={c.key}>
-                  {c.key}: <span className="old">{show(c.before)}</span> → <span>{show(c.after)}</span>
-                </div>
-              ))}
+    <div className="card changelog-card">
+      <div className="card-head">
+        <h2>Settings change log</h2>
+        <div className="right">
+          <span className="faint small">{versions.length} versions recorded</span>
+        </div>
+      </div>
+      <div className="activity-timeline changelog-timeline">
+        {versions.map((v, i) => (
+          <div key={v.id} className="activity-timeline-item">
+            <div className="timeline-node">
+              <span className="timeline-dot" aria-hidden />
+              {i < versions.length - 1 && <span className="timeline-line" aria-hidden />}
             </div>
-          ) : (
-            <span className="muted small">First version from seed defaults</span>
-          ),
-        },
-        sort: { version: v.version, when: v.effectiveFrom.getTime(), who: v.createdBy?.name ?? "", setting: v.changedKey ?? "" },
-      }))}
-    />
+            <div className="timeline-content">
+              <div className="changelog-item-head">
+                <span className="chip dark">v{v.version}</span>
+                <span className="strong">{v.createdBy?.name ?? "Seed defaults"}</span>
+                <span className="faint small">{formatDateTime(v.effectiveFrom)}</span>
+                <Chip tone="grey">
+                  {v.changedKey && isSettingsKey(v.changedKey)
+                    ? SETTINGS_LABELS[v.changedKey]
+                    : "Defaults"}
+                </Chip>
+              </div>
+              <div className="changelog-item-body">
+                {v.changedKey ? (
+                  <div className="changelog-diff-list">
+                    {changedLeaves(v.before, v.after).map((c) => (
+                      <div key={c.key} className="changelog-diff-row">
+                        <span className="diff-key strong">{c.key}:</span>
+                        <span className="diff-old">{show(c.before)}</span>
+                        <span className="diff-arrow faint">→</span>
+                        <span className="diff-new">{show(c.after)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="muted small">First version loaded from seed defaults</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
