@@ -429,7 +429,6 @@ export async function getReceivingReportPrintModel(
   id: string,
   viewer: PermissionUser,
 ): Promise<{ doc: ProfessionalPrintModel; missing: string[]; purchaseOrderId: string } | null> {
-  assertCosts(viewer);
   const rr = await db.receivingReport.findUnique({
     where: { id },
     include: {
@@ -447,12 +446,14 @@ export async function getReceivingReportPrintModel(
   });
   if (!rr) return null;
   const letter = await letterhead();
+  // Costs only when the print setting is ON *and* the viewer may see costs.
+  const showCosts = !!letter.print.showReceivingReportCosts && canSeeCosts(viewer);
   const byId = new Map(rr.purchaseOrder.items.map((i) => [i.id, i]));
   const items = rr.items.map((x) => {
     const poItem = byId.get(x.purchaseOrderItemId);
     const qty = money(x.qtyReceived);
-    const unitCost = poItem ? money(poItem.unitCost) : "0.00";
-    const amount = (Number(qty) * Number(unitCost)).toFixed(2);
+    const unitCost = showCosts && poItem ? money(poItem.unitCost) : "0.00";
+    const amount = showCosts ? (Number(qty) * Number(unitCost)).toFixed(2) : "0.00";
     return itemRow({
       description: poItem?.description ?? "(removed line)",
       qty,
@@ -488,9 +489,10 @@ export async function getReceivingReportPrintModel(
       { label: "Received by", value: rr.receivedBy.name },
     ],
     items,
-    unitPriceLabel: "Unit cost",
-    totals: moneyTotals(subtotal),
-    totalInWords: amountInWords(subtotal),
+    hideLineAmounts: !showCosts,
+    unitPriceLabel: showCosts ? "Unit cost" : undefined,
+    totals: showCosts ? moneyTotals(subtotal) : undefined,
+    totalInWords: showCosts ? amountInWords(subtotal) : undefined,
     notes: rr.notes,
     signatories: [
       { role: "Prepared by", name: rr.createdBy.name },

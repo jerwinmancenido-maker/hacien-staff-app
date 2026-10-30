@@ -50,7 +50,8 @@ describe("professional print documents", () => {
       const markup = html(fixture());
       expect(markup).toContain(NON_VAT_LABEL);
       expect(markup).toContain("TIN 123-456-789-000");
-      expect(markup).toContain("₱");
+      // Default RR print is qty-only (no peso columns) unless the costs setting is ON.
+      if (kind !== "receiving_report") expect(markup).toContain("₱");
       expect(markup).toMatchSnapshot();
     });
   }

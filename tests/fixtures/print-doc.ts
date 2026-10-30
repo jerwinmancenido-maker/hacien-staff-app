@@ -129,12 +129,27 @@ export const poPrintFixture = (): ProfessionalPrintModel =>
     totalInWords: "Four hundred thousand pesos only",
   });
 
+/** Default RR print: qty only (costs hidden). */
 export const rrPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "receiving_report",
     title: "Receiving Report",
     number: "RR-2026-0001",
     party: supplierParty,
+    hideLineAmounts: true,
+    items: [{ description: "Laptop i5 (sample)", qty: "10.00", unit: "pc", unitPrice: "0.00", amount: "0.00" }],
+    totals: undefined,
+    totalInWords: undefined,
+  });
+
+/** RR print with costs (setting ON + cost-view user). */
+export const rrPrintWithCostsFixture = (): ProfessionalPrintModel =>
+  base({
+    kind: "receiving_report",
+    title: "Receiving Report",
+    number: "RR-2026-0001",
+    party: supplierParty,
+    hideLineAmounts: false,
     unitPriceLabel: "Unit cost",
     items: [{ description: "Laptop i5 (sample)", qty: "10.00", unit: "pc", unitPrice: "40000.00", amount: "400000.00" }],
     totals: [

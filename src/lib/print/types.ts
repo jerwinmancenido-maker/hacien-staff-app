@@ -82,6 +82,8 @@ export type ProfessionalPrintModel = {
   items?: PrintLineItem[];
   /** Unit price column header (e.g. "Unit price" vs "Unit cost"). */
   unitPriceLabel?: string;
+  /** When true, omit unit-price and amount columns (e.g. RR qty-only). */
+  hideLineAmounts?: boolean;
   totals?: PrintMoneyLine[];
   totalInWords?: string;
   /** Statement of account ledger. */

@@ -133,6 +133,11 @@ export const settingsSections = {
     paperSize: z.enum(["A4", "Letter"]),
     /** UNVERIFIED BIR rule — default ON for billing / collection prints. */
     showInputTaxDisclaimer: z.boolean(),
+    /**
+     * When ON, receiving-report prints may show unit cost / amount — but only
+     * for users with cost-view permission. Default OFF (qty-only).
+     */
+    showReceivingReportCosts: z.boolean(),
     quoteTerms: z.string().trim().max(2000).optional().or(z.literal("")),
     deliveryNotes: z.string().trim().max(2000).optional().or(z.literal("")),
     warrantyNotes: z.string().trim().max(2000).optional().or(z.literal("")),

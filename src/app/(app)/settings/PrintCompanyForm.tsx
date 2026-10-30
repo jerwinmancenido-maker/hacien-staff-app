@@ -165,6 +165,20 @@ export function PrintCompanyForm({
             </label>
             <div className="hint">UNVERIFIED BIR rule. Default ON. HACIEN is NON-VAT — no VAT lines are ever printed.</div>
           </div>
+          <div className="field full">
+            <label className="check" htmlFor="showReceivingReportCosts">
+              <input type="hidden" name="showReceivingReportCosts" value="false" />
+              <input
+                id="showReceivingReportCosts"
+                name="showReceivingReportCosts"
+                type="checkbox"
+                value="true"
+                defaultChecked={!!print.showReceivingReportCosts}
+              />
+              Show costs on receiving report prints (internal copies)
+            </label>
+            <div className="hint">OFF by default (qty only). Even when ON, only users with cost-view permission see unit costs.</div>
+          </div>
 
           <h3 className="section-title">Quote / delivery notes</h3>
           <div className={`field full${e.quoteTerms ? " has-error" : ""}`}>

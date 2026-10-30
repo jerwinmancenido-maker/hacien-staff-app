@@ -59,6 +59,8 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       print: {
         ...DEFAULT_SETTINGS.print,
         ...(v.data as Partial<Settings>).print,
+        showReceivingReportCosts:
+          (v.data as Partial<Settings>).print?.showReceivingReportCosts ?? DEFAULT_SETTINGS.print.showReceivingReportCosts,
         banks: (v.data as Partial<Settings>).print?.banks ?? DEFAULT_SETTINGS.print.banks,
         eWallets: (v.data as Partial<Settings>).print?.eWallets ?? DEFAULT_SETTINGS.print.eWallets,
       },

@@ -56,6 +56,7 @@ function SignatoryBlock({ signatories }: { signatories: NonNullable<Professional
 
 export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel }) {
   const unitLabel = doc.unitPriceLabel ?? "Unit price";
+  const hideAmounts = !!doc.hideLineAmounts;
   return (
     <article
       className={`pp-page pp-paper-${doc.paperSize.toLowerCase()}`}
@@ -129,8 +130,8 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
               <th>Item / Description</th>
               <th className="num">Qty</th>
               <th>Unit</th>
-              <th className="num">{unitLabel}</th>
-              <th className="num">Amount</th>
+              {!hideAmounts && <th className="num">{unitLabel}</th>}
+              {!hideAmounts && <th className="num">Amount</th>}
             </tr>
           </thead>
           <tbody>
@@ -140,8 +141,8 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
                 <td className="pp-pre">{i.description}</td>
                 <td className="num">{qty(i.qty)}</td>
                 <td>{i.unit}</td>
-                <td className="num">{formatPeso(i.unitPrice)}</td>
-                <td className="num">{formatPeso(i.amount)}</td>
+                {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
+                {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
               </tr>
             ))}
           </tbody>

@@ -97,6 +97,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return {
         paperSize: get("paperSize") ?? "A4",
         showInputTaxDisclaimer: checked(get("showInputTaxDisclaimer")),
+        showReceivingReportCosts: checked(get("showReceivingReportCosts")),
         quoteTerms: get("quoteTerms") ?? "",
         deliveryNotes: get("deliveryNotes") ?? "",
         warrantyNotes: get("warrantyNotes") ?? "",
