@@ -72,7 +72,15 @@ async function withQr<T extends ProfessionalPrintModel>(doc: T): Promise<T> {
 
 const itemRow = (i: { description: string; qty: string; unit: string; unitPrice: string; amount: string }): PrintLineItem => i;
 
-function moneyTotals(subtotal: string, extra: PrintMoneyLine[] = [], totalLabel = "Total"): PrintMoneyLine[] {
+/**
+ * Subtotal + optional mid-lines + Total.
+ * The Total amount always equals `subtotal` — amounts in `extra` are listed but do not change Total.
+ */
+export function moneyTotals(
+  subtotal: string,
+  extra: PrintMoneyLine[] = [],
+  totalLabel = "Total",
+): PrintMoneyLine[] {
   return [{ label: "Subtotal", amount: subtotal }, ...extra, { label: totalLabel, amount: subtotal, emphasize: true }];
 }
 
