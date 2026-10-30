@@ -72,22 +72,24 @@ describe("cash gating inside books rows", () => {
 });
 
 describe("CSV formula injection (csvCell)", () => {
-  it("prefixes formula-risky leading characters with a single quote", () => {
-    expect(csvCell("=1+1")).toBe("'=1+1");
-    expect(csvCell("@SUM(A1)")).toBe("'@SUM(A1)");
-    expect(csvCell("+cmd")).toBe("'+cmd");
-    expect(csvCell("\tTAB")).toBe("'\tTAB");
-    expect(csvCell("\rCR")).toBe("'\rCR");
+  it("leaves plain numeric negatives unescaped", () => {
+    expect(csvCell("-500.00")).toBe("-500.00");
   });
 
-  it("handles a normal negative number by prefixing ' (leading - is formula-risky)", () => {
-    // Negatives start with "-", so they get the apostrophe. Positive money does not.
-    expect(csvCell("-100.00")).toBe("'-100.00");
-    expect(csvCell("100.00")).toBe("100.00");
+  it("prefixes formula-risky cells with a leading apostrophe", () => {
+    expect(csvCell("-1+1")).toBe("'-1+1");
+    expect(csvCell("=SUM(A1)")).toBe("'=SUM(A1)");
+    expect(csvCell("@cmd")).toBe("'@cmd");
+    expect(csvCell("\tx")).toBe("'\tx");
+    expect(csvCell("-cmd")).toBe("'-cmd");
+    // Still cover + and CR (existing formula-risk prefixes)
+    expect(csvCell("+cmd")).toBe("'+cmd");
+    expect(csvCell("\rCR")).toBe("'\rCR");
   });
 
   it("leaves normal text alone; still quotes commas and embedded quotes", () => {
     expect(csvCell("Sample Corp")).toBe("Sample Corp");
+    expect(csvCell("100.00")).toBe("100.00");
     expect(csvCell("a,b")).toBe('"a,b"');
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
     // Formula risk + comma → apostrophe first, then quote the whole cell

@@ -177,18 +177,21 @@ export function buildRegister(
 
 /**
  * CSV cell escape. Neutralizes spreadsheet formula injection by prefixing a
- * leading apostrophe when the value starts with = + - @ tab or CR, then applies
- * normal RFC-style quoting for comma / quote / newline.
+ * leading apostrophe when the value starts with = + @ tab CR, or a leading
+ * minus that is *not* a plain number, then applies normal RFC-style quoting
+ * for comma / quote / newline.
  * Shared by Books registers and tax worksheets (single helper — do not duplicate).
  *
- * Note on negatives: a value like "-100.00" starts with "-", so it gets the
- * apostrophe prefix ('-100.00). That is intentional — same rule as other
- * formula-risky prefixes — and keeps Excel/Sheets from treating the cell as a
- * formula. Positive money strings ("100.00") are unchanged.
+ * Plain numeric cells matching /^-?\d+(\.\d+)?$/ (including negatives like
+ * "-500.00") stay unescaped so spreadsheet apps keep them as numbers.
+ * Risky minus forms ("-cmd", "-1+1") still get the apostrophe.
  */
 export function csvCell(v: string): string {
   let out = String(v);
-  if (/^[=+\-@\t\r]/.test(out)) out = `'${out}`;
+  const plainNumber = /^-?\d+(\.\d+)?$/.test(out);
+  if (/^[=+@\t\r]/.test(out) || (/^-/.test(out) && !plainNumber)) {
+    out = `'${out}`;
+  }
   if (/[",\n]/.test(out)) return `"${out.replace(/"/g, '""')}"`;
   return out;
 }
