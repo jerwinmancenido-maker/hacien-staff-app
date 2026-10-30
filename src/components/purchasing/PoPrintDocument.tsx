@@ -9,6 +9,11 @@ import { TERMS_URL } from "@/lib/print/qr";
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 const qty = (q: string) => q.replace(/\.00$/, "");
 
+/** Company details missing from Company settings ("TIN", "address"). */
+export function missingCompanyDetails(company: PoPrintDoc["company"]): string[] {
+  return [!company.tin.trim() && "TIN", !company.address.trim() && "address"].filter((v): v is string => !!v);
+}
+
 export function PoPrintDocument({ doc, qrSvg }: { doc: PoPrintDoc; qrSvg: string }) {
   return (
     <article className="print-page" aria-label={`Purchase order ${doc.number}`}>
@@ -16,8 +21,13 @@ export function PoPrintDocument({ doc, qrSvg }: { doc: PoPrintDoc; qrSvg: string
         <div>
           <div className="print-company">{doc.company.name}</div>
           <div className="print-nonvat">NON-VAT</div>
-          {doc.company.tin && <div>TIN {doc.company.tin}</div>}
-          {doc.company.address && <div className="print-pre">{doc.company.address}</div>}
+          {/* Blank Company settings print a visible placeholder instead of silently omitting the line. */}
+          {doc.company.tin.trim() ? <div>TIN {doc.company.tin}</div> : <div className="print-missing">TIN: [not set in Company settings]</div>}
+          {doc.company.address.trim() ? (
+            <div className="print-pre">{doc.company.address}</div>
+          ) : (
+            <div className="print-missing">Address: [not set in Company settings]</div>
+          )}
         </div>
         <div className="print-title">
           <h1>Purchase Order</h1>

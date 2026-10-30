@@ -10,7 +10,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot, getSettingsVersion } from "../settings";
+import { getSettingsSnapshot } from "../settings";
 import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
@@ -462,14 +462,16 @@ export async function getPurchaseOrderPrint(id: string, viewer: PermissionUser):
     },
   });
   if (!po) return null;
-  const snap = (await getSettingsVersion(po.settingsVersionId)) ?? (await getSettingsSnapshot());
+  // Our letterhead (name, TIN, address) always comes from the current Company
+  // settings, so a TIN or address added after the PO was created still prints.
+  const { settings } = await getSettingsSnapshot();
   return {
     number: po.number,
     revision: po.revision,
     status: po.status,
     date: ymd(po.date)!,
     expectedDate: ymd(po.expectedDate),
-    company: snap.settings.company,
+    company: settings.company,
     supplier: { name: po.supplier.name, tin: po.supplier.tin, address: po.supplierAddressText },
     contact: po.supplierContact,
     deliveryAddress: po.deliveryAddressText,

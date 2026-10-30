@@ -121,7 +121,8 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
       items: itemsInclude,
       customer: { select: { id: true, name: true, address: true, tin: true, active: true } },
       contact: { select: contactSelect },
-      salesOrders: { select: { id: true, number: true, status: true }, orderBy: { createdAt: "desc" } },
+      // Every SO made from this quote, voided ones included.
+      salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
       createdBy: { select: { name: true } },
       updatedBy: { select: { name: true } },
     },
@@ -145,7 +146,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     items: q.items.map((i) => itemView(i, withCosts)),
     totals,
     approval: await approvalFor(q.settingsVersionId, money(q.contractPrice), money(q.netMarginPct), withCosts),
-    salesOrders: q.salesOrders,
+    salesOrders: q.salesOrders.map((s) => ({ ...s, date: ymd(s.date)! })),
     createdBy: q.createdBy.name,
     updatedBy: q.updatedBy.name,
     updatedAt: q.updatedAt,

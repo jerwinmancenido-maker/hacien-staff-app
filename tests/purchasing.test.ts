@@ -18,13 +18,13 @@ import {
 } from "@/lib/purchasing/status";
 import { planPurchaseOrders, qtyMismatch, type SoLineForPo } from "@/lib/purchasing/plan";
 import { applyReceipt, checkReceipt, remainingQty } from "@/lib/purchasing/receipt";
-import { threeWayMatch } from "@/lib/purchasing/match";
+import { priceDifferenceText, threeWayMatch } from "@/lib/purchasing/match";
 import { allocateDocNumber, formatDocNumber, seriesYear } from "@/lib/documents/series";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { getSettingsSnapshot, type SettingsStore, type SettingsVersionRecord } from "@/lib/settings/service";
 import { NUMBERED_DOCS } from "@/lib/settings/form";
 import { stripCosts, roleFlags } from "@/lib/permissions";
-import { PoPrintDocument } from "@/components/purchasing/PoPrintDocument";
+import { missingCompanyDetails, PoPrintDocument } from "@/components/purchasing/PoPrintDocument";
 import { qrSvg } from "@/lib/print/qr";
 import type { PoPrintDoc } from "@/lib/purchasing/views";
 
@@ -205,7 +205,8 @@ describe("3-way match", () => {
     const a = m.lines[0]!;
     expect(a.flags).toContain("PRICE_DIFFERS");
     expect(a.status).toBe("PRICE_MISMATCH");
-    expect(a.priceDifference).toBe("2500.00");
+    expect(a.priceDifferenceTotal).toBe("2500.00");
+    expect(a.unitPriceDifference).toBe("250.00");
     expect(a.billedUnitPrice).toBe("45250.00");
     expect(m.status).toBe("MISMATCH");
     expect(m.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
@@ -223,6 +224,88 @@ describe("3-way match", () => {
     const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-3", amount: "452600.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45000" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "500" }] }]);
     expect(m.headerFlags.map((f) => f.code)).toEqual(["BILL_LINES_DIFFER", "BILLED_DIFFERS_FROM_RECEIVED"]);
     expect(m.headerFlags[0]!.amount).toBe("100.00");
+  });
+
+  it("shows the price difference per unit (₱50), with the line total (₱500) second", () => {
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-5", amount: "452750.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45000" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "550" }] }]);
+    const b = m.lines[1]!;
+    expect(b.flags).toEqual(["PRICE_DIFFERS"]);
+    expect(b.unitPriceDifference).toBe("50.00");
+    expect(b.priceDifferenceTotal).toBe("250.00");
+    const ten = threeWayMatch([{ ...po[1]!, qty: "10.00", receivedQty: "10.00" }], [{ id: "1", billNumber: "SI-6", amount: "5500.00", items: [{ purchaseOrderItemId: "b", qty: "10", unitPrice: "550" }] }]).lines[0]!;
+    expect(ten.unitPriceDifference).toBe("50.00");
+    expect(ten.priceDifferenceTotal).toBe("500.00");
+    const text = priceDifferenceText(ten)!;
+    expect(text.perUnit).toBe("+₱50.00 / pc");
+    expect(text.perUnit).not.toContain("500");
+    expect(text.lineTotal).toBe("+₱500.00 on the line");
+  });
+
+  it("shows a negative per-unit difference and averages mixed billed prices", () => {
+    const under = threeWayMatch([po[1]!], [{ id: "1", billNumber: "SI-7", amount: "2400.00", items: [{ purchaseOrderItemId: "b", qty: "5", unitPrice: "480" }] }]).lines[0]!;
+    expect(under.unitPriceDifference).toBe("-20.00");
+    expect(priceDifferenceText(under)!.perUnit).toBe("-₱20.00 / pc");
+    // 2 @ 510 and 3 @ 520 against a PO cost of 500: +80 on 5 units = +16 per unit.
+    const mixed = threeWayMatch([po[1]!], [
+      { id: "1", billNumber: "SI-8", amount: "1020.00", items: [{ purchaseOrderItemId: "b", qty: "2", unitPrice: "510" }] },
+      { id: "2", billNumber: "SI-9", amount: "1560.00", items: [{ purchaseOrderItemId: "b", qty: "3", unitPrice: "520" }] },
+    ]).lines[0]!;
+    expect(mixed.mixedBilledPrices).toBe(true);
+    expect(mixed.unitPriceDifference).toBe("16.00");
+    expect(mixed.priceDifferenceTotal).toBe("80.00");
+    expect(priceDifferenceText(mixed)!.perUnit).toBe("+₱16.00 / pc (average)");
+    // Nothing billed on the line: no price text.
+    expect(threeWayMatch([po[1]!], []).lines[0]!.unitPriceDifference).toBeNull();
+    expect(priceDifferenceText(threeWayMatch([po[1]!], []).lines[0]!)).toBeNull();
+  });
+
+  it("lists every problem on a line: qty and price together, not just the price mismatch", () => {
+    const partial = [{ ...po[0]!, receivedQty: "6.00" }];
+    const m = threeWayMatch(partial, [{ id: "1", billNumber: "SI-10", amount: "364000.00", items: [{ purchaseOrderItemId: "a", qty: "8", unitPrice: "45500" }] }]);
+    const l = m.lines[0]!;
+    expect(l.flags).toEqual(["BILLED_MORE_THAN_RECEIVED", "RECEIVED_LESS_THAN_ORDERED", "PRICE_DIFFERS"]);
+    expect(l.issues).toEqual(["QTY_MISMATCH", "PRICE_MISMATCH"]);
+    expect(l.status).toBe("PRICE_MISMATCH");
+    expect(l.unitPriceDifference).toBe("500.00");
+  });
+
+  it("flags billing less than received (qty only) and has no issues on a matched line", () => {
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-11", amount: "452000.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45000" }, { purchaseOrderItemId: "b", qty: "4", unitPrice: "500" }] }]);
+    expect(m.lines[0]!.issues).toEqual([]);
+    expect(m.lines[0]!.status).toBe("MATCHED");
+    expect(m.lines[1]!.flags).toEqual(["BILLED_LESS_THAN_RECEIVED"]);
+    expect(m.lines[1]!.issues).toEqual(["QTY_MISMATCH"]);
+    expect(m.lines[1]!.status).toBe("QTY_MISMATCH");
+  });
+
+  it("an exact-match total-only bill is matched, with no line bill flags", () => {
+    // PO 10 × 100, fully received, a 1,000 bill with no line items.
+    const one = [{ id: "c", description: "Cable", unit: "pc", qty: "10.00", unitCost: "100.00", receivedQty: "10.00" }];
+    const m = threeWayMatch(one, [{ id: "1", billNumber: "SI-12", amount: "1000.00", items: [] }]);
+    expect(m.status).toBe("MATCHED");
+    expect(m.headerFlags).toEqual([]);
+    expect(m.lines[0]!.flags).toEqual([]);
+    expect(m.lines[0]!.issues).toEqual([]);
+    expect(m.lines[0]!.status).toBe("MATCHED");
+    // A total-only bill that is off is caught by the total check only.
+    const off = threeWayMatch(one, [{ id: "1", billNumber: "SI-13", amount: "900.00", items: [] }]);
+    expect(off.status).toBe("MISMATCH");
+    expect(off.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
+    expect(off.lines[0]!.flags).toEqual([]);
+  });
+
+  it("a PO with no bills shows no bill flags", () => {
+    const m = threeWayMatch(po, []);
+    expect(m.status).toBe("NOT_BILLED");
+    expect(m.headerFlags).toEqual([]);
+    for (const l of m.lines) {
+      expect(l.flags).toEqual([]);
+      expect(l.issues).toEqual([]);
+      expect(l.status).toBe("MATCHED");
+    }
+    // Received < ordered is still shown; it is not a bill flag.
+    const partial = threeWayMatch([{ ...po[0]!, receivedQty: "6.00" }], []);
+    expect(partial.lines[0]!.flags).toEqual(["RECEIVED_LESS_THAN_ORDERED"]);
   });
 
   it("matches a header-only bill against the received value; not billed when no bills", () => {
@@ -303,5 +386,22 @@ describe("PO print", () => {
     }
     const lower = html.toLowerCase();
     for (const w of ["margin", "contract price", "unit price", "withholding", "signature over", "approved by"]) expect(lower, w).not.toContain(w);
+  });
+
+  it("shows HACIEN's TIN and address from Company settings", async () => {
+    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc, qrSvg: await qrSvg() }));
+    expect(html).toContain("TIN 123-456-789-000");
+    expect(html).toContain("Quezon City");
+    expect(html).not.toContain("not set in Company settings");
+    expect(missingCompanyDetails(doc.company)).toEqual([]);
+  });
+
+  it("prints a clear placeholder when the company TIN or address is blank", async () => {
+    const blank = { ...doc, company: { name: "HACIEN", tin: "", address: " " } };
+    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc: blank, qrSvg: await qrSvg() }));
+    expect(html).toContain("TIN: [not set in Company settings]");
+    expect(html).toContain("Address: [not set in Company settings]");
+    expect(missingCompanyDetails(blank.company)).toEqual(["TIN", "address"]);
+    expect(missingCompanyDetails({ ...doc.company, tin: "" })).toEqual(["TIN"]);
   });
 });

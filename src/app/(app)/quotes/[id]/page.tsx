@@ -94,18 +94,6 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               <dd>{q.terms ?? "—"}</dd>
               <dt>Withholding</dt>
               <dd>{q.withholding.length ? q.withholding.map((w) => w.label).join(", ") : "None"}</dd>
-              {q.salesOrders.length > 0 && (
-                <>
-                  <dt>Sales orders</dt>
-                  <dd>
-                    {q.salesOrders.map((s) => (
-                      <span key={s.id} style={{ marginRight: 10 }}>
-                        <Link href={`/sales-orders/${s.id}`}>{s.number}</Link> <SoStatusChip status={s.status} />
-                      </span>
-                    ))}
-                  </dd>
-                </>
-              )}
               {q.notes && (
                 <>
                   <dt>Notes</dt>
@@ -114,6 +102,38 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               )}
             </dl>
           </div>
+          {q.salesOrders.length > 0 && (
+            <div className="card">
+              <h2>Sales orders from this quote</h2>
+              <div className="table-wrap">
+                <table className="list" aria-label="Sales orders from this quote">
+                  <thead>
+                    <tr>
+                      <th>Number</th>
+                      <th>Date</th>
+                      <th>Buyer PO</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {q.salesOrders.map((s) => (
+                      <tr key={s.id}>
+                        <td>
+                          <Link href={`/sales-orders/${s.id}`}>{s.number}</Link>
+                        </td>
+                        <td>{day(s.date)}</td>
+                        <td>{s.buyerPoNo ?? "—"}</td>
+                        <td>
+                          <SoStatusChip status={s.status} />
+                          {s.status === "VOID" && s.voidReason && <div className="small muted">{s.voidReason}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <div className="small faint">
             Created by {q.createdBy} · last updated by {q.updatedBy}, {formatDateTime(q.updatedAt)}
           </div>
