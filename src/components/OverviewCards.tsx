@@ -1,5 +1,6 @@
 // Stat cards shared by the customer and supplier overviews: open quotes / SOs
-// (real counts) and business-document expiry.
+// (customer only) and business-document expiry. Supplier pages hide Open quotes
+// and Open SOs — those belong on the customer overview.
 
 import Link from "next/link";
 import { formatPeso } from "@/lib/format";
@@ -15,29 +16,59 @@ export type OpenDocStats = {
   awaitingReceipt?: number;
 } | null;
 
-export function OpenDocsCards({ stats, basePath, showTotals }: { stats: OpenDocStats; basePath: string; showTotals: boolean }) {
-  if (!stats) {
-    return (
-      <div className="card stat">
-        <div className="label">Open quotes / SOs</div>
-        <div className="value num faint">—</div>
-        <div className="foot faint">Needs “Can see costs”</div>
-      </div>
-    );
+/** Which open-doc cards to show. Suppliers never get Open quotes / Open SOs. */
+export function openDocCardIds(
+  stats: OpenDocStats,
+  showQuotesAndSos: boolean,
+): Array<"restricted" | "openQuotes" | "openSalesOrders" | "openPos"> {
+  if (!stats) return showQuotesAndSos ? ["restricted"] : [];
+  const ids: Array<"openQuotes" | "openSalesOrders" | "openPos"> = [];
+  if (showQuotesAndSos) {
+    ids.push("openQuotes", "openSalesOrders");
   }
+  if (stats.openPos !== undefined) ids.push("openPos");
+  return ids;
+}
+
+export function OpenDocsCards({
+  stats,
+  basePath,
+  showTotals,
+  showQuotesAndSos = true,
+}: {
+  stats: OpenDocStats;
+  basePath: string;
+  showTotals: boolean;
+  /** Customer overview only. Suppliers pass false. */
+  showQuotesAndSos?: boolean;
+}) {
+  const cards = openDocCardIds(stats, showQuotesAndSos);
+  if (cards.length === 0) return null;
+
   return (
     <>
-      <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=QUOTE`}>
-        <div className="label">Open quotes</div>
-        <div className="value num">{stats.openQuotes}</div>
-        <div className="foot">{showTotals ? `${formatPeso(stats.openQuotesTotal)} · Draft + Sent` : "Draft + Sent"}</div>
-      </Link>
-      <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=SALES_ORDER&status=OPEN`}>
-        <div className="label">Open SOs</div>
-        <div className="value num">{stats.openSalesOrders}</div>
-        <div className="foot">{showTotals ? formatPeso(stats.openSalesOrdersTotal) : "Open sales orders"}</div>
-      </Link>
-      {stats.openPos !== undefined && (
+      {cards.includes("restricted") && (
+        <div className="card stat">
+          <div className="label">Open quotes / SOs</div>
+          <div className="value num faint">—</div>
+          <div className="foot faint">Needs “Can see costs”</div>
+        </div>
+      )}
+      {cards.includes("openQuotes") && stats && (
+        <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=QUOTE`}>
+          <div className="label">Open quotes</div>
+          <div className="value num">{stats.openQuotes}</div>
+          <div className="foot">{showTotals ? `${formatPeso(stats.openQuotesTotal)} · Draft + Sent` : "Draft + Sent"}</div>
+        </Link>
+      )}
+      {cards.includes("openSalesOrders") && stats && (
+        <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=SALES_ORDER&status=OPEN`}>
+          <div className="label">Open SOs</div>
+          <div className="value num">{stats.openSalesOrders}</div>
+          <div className="foot">{showTotals ? formatPeso(stats.openSalesOrdersTotal) : "Open sales orders"}</div>
+        </Link>
+      )}
+      {cards.includes("openPos") && stats && stats.openPos !== undefined && (
         <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=PURCHASE_ORDER`}>
           <div className="label">Open POs</div>
           <div className="value num">{stats.openPos}</div>

@@ -577,6 +577,18 @@ textarea {
   overflow: auto;
   max-height: calc(100vh - 260px);
 }
+/* Cost & margin purchases: keep money columns readable on narrow viewports. */
+.table-wrap.cost-margin-purchases {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap.cost-margin-purchases table.list {
+  min-width: 640px;
+}
+.table-wrap.cost-margin-purchases table.list th,
+.table-wrap.cost-margin-purchases table.list td {
+  white-space: nowrap;
+}
 table.list {
   width: 100%;
   border-collapse: separate;
