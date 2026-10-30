@@ -1,7 +1,7 @@
 "use client";
 
-// "Addresses" section on the customer / supplier Details tab: cards like
-// ContactCards, with add / edit (modal form), make default, archive / restore.
+// "Addresses" tab on the customer / supplier page: cards like ContactCards,
+// with add / edit (modal form), make default, archive / restore.
 // The server re-checks every action and writes the audit rows.
 
 import { useState, useTransition } from "react";

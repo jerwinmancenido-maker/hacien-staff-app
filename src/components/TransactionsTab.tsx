@@ -10,13 +10,13 @@ import type { PermissionUser } from "@/lib/permissions";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
 import {
   BILL_STATUSES,
-  BILLING_KINDS,
   BILLING_TX_STATUSES,
   COLLECTION_TX_STATUSES,
+  CUSTOMER_TX_KINDS,
   listTransactions,
   PO_STATUSES,
-  PURCHASING_KINDS,
   RR_STATUSES,
+  SUPPLIER_TX_KINDS,
   TRANSACTION_KIND_LABELS,
   TRANSACTION_KINDS,
   type TransactionFilters,
@@ -136,7 +136,7 @@ export async function TransactionsTab({
       <div className="card">
         <EmptyState
           title="Cost access needed"
-          line="Which quotes, sales orders, supplier POs and bills involve this supplier is cost information. Ask an admin to turn on “Can see costs” for you. Received quantities are on the Receiving page."
+          line="Supplier POs, receiving reports and bills are cost information. Ask an admin to turn on “Can see costs” for you. Received quantities are on the Receiving page."
         />
       </div>
     );
@@ -176,7 +176,11 @@ export async function TransactionsTab({
         { label: "Contact", value: r.contactName ?? "—" },
         ...cost,
       ],
-      amount: { label: AMOUNT_LABEL[r.kind] ?? (owner.kind === "supplier" ? "This supplier's lines" : "Contract total"), value: formatPeso(r.total), strong: true },
+      amount: {
+        label: AMOUNT_LABEL[r.kind] ?? (owner.kind === "supplier" ? "Amount" : "Contract total"),
+        value: formatPeso(r.total),
+        strong: true,
+      },
       sortValues: { date: r.date, number: r.number, total: Number(r.total) },
     };
   });
@@ -202,11 +206,7 @@ export async function TransactionsTab({
         </label>
         <select id="txn-type" name="type" defaultValue={filters.type ?? ""} className="input">
           <option value="">All types</option>
-          {TRANSACTION_KINDS.filter(
-            (k) =>
-              (list.canSeeCosts || !PURCHASING_KINDS.includes(k)) &&
-              (owner.kind === "customer" || !BILLING_KINDS.includes(k)),
-          ).map((k) => (
+          {(owner.kind === "customer" ? CUSTOMER_TX_KINDS : SUPPLIER_TX_KINDS).map((k) => (
             <option key={k} value={k}>
               {TRANSACTION_KIND_LABELS[k]}
             </option>
@@ -217,37 +217,40 @@ export async function TransactionsTab({
         </label>
         <select id="txn-status" name="status" defaultValue={filters.status ?? ""} className="input">
           <option value="">All statuses</option>
-          <optgroup label="Quotes">
-            {QUOTE_STATUSES.map((s) => (
-              <option key={`q-${s}`} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Sales orders">
-            {SALES_ORDER_STATUSES.filter((s) => !(QUOTE_STATUSES as string[]).includes(s)).map((s) => (
-              <option key={`so-${s}`} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </optgroup>
-          {list.canSeeCosts && (
-            <optgroup label="Supplier POs">
-              {PO_STATUSES.filter((s) => !(["DRAFT", "SENT", "VOID"] as string[]).includes(s)).map((s) => (
-                <option key={`po-${s}`} value={s}>
-                  {STATUS_LABEL[s]}
-                </option>
-              ))}
-            </optgroup>
+          {owner.kind === "customer" && (
+            <>
+              <optgroup label="Quotes">
+                {QUOTE_STATUSES.map((s) => (
+                  <option key={`q-${s}`} value={s}>
+                    {STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Sales orders">
+                {SALES_ORDER_STATUSES.filter((s) => !(QUOTE_STATUSES as string[]).includes(s)).map((s) => (
+                  <option key={`so-${s}`} value={s}>
+                    {STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </optgroup>
+            </>
           )}
-          {list.canSeeCosts && (
-            <optgroup label="Receiving / bills">
-              <option value="POSTED">Posted</option>
-              <option value="RECORDED">Unpaid</option>
-              <option value="PARTIALLY_PAID">Partially paid</option>
-              <option value="PAID">Paid</option>
-              <option value="POSTED">Posted payment</option>
-            </optgroup>
+          {owner.kind === "supplier" && (
+            <>
+              <optgroup label="Supplier POs">
+                {PO_STATUSES.filter((s) => !(["DRAFT", "SENT", "VOID"] as string[]).includes(s)).map((s) => (
+                  <option key={`po-${s}`} value={s}>
+                    {STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Receiving / bills / payments">
+                <option value="POSTED">Posted</option>
+                <option value="RECORDED">Unpaid</option>
+                <option value="PARTIALLY_PAID">Partially paid</option>
+                <option value="PAID">Paid</option>
+              </optgroup>
+            </>
           )}
         </select>
         <button type="submit" className="btn btn-secondary btn-sm">
@@ -263,7 +266,7 @@ export async function TransactionsTab({
       {contactName && (
         <div className="small muted txn-contact-note">
           Showing transactions with <strong>{contactName}</strong>.
-          {owner.kind === "supplier" && " Supplier contacts aren't linked to quote or SO lines; supplier POs, receiving reports and bills are filtered by the PO's contact."}
+          {owner.kind === "supplier" && " Supplier POs, receiving reports, bills and payments are filtered by the PO's contact."}
         </div>
       )}
 
@@ -276,8 +279,8 @@ export async function TransactionsTab({
           filters.contactId || filters.type || filters.status
             ? "Nothing matches these filters."
             : owner.kind === "customer"
-              ? "Quotes and sales orders for this customer will show here."
-              : "Quotes and sales orders with lines from this supplier will show here."
+              ? "Quotes, sales orders, billings and collections for this customer will show here."
+              : "Supplier POs, receiving reports, bills and payments for this supplier will show here."
         }
       />
 
@@ -315,9 +318,9 @@ export async function TransactionsTab({
                 <tr>
                   <th>Type</th>
                   <th className="num">Documents</th>
-                  <th className="num">{owner.kind === "supplier" ? "This supplier's lines" : "Contract total"}</th>
-                  {list.canSeeCosts && <th className="num">Supplier cost</th>}
-                  {list.canSeeCosts && <th className="num">Net margin</th>}
+                  <th className="num">{owner.kind === "supplier" ? "Amount" : "Contract total"}</th>
+                  {owner.kind === "customer" && list.canSeeCosts && <th className="num">Supplier cost</th>}
+                  {owner.kind === "customer" && list.canSeeCosts && <th className="num">Net margin</th>}
                   <th className="num">Void</th>
                 </tr>
               </thead>
@@ -329,8 +332,12 @@ export async function TransactionsTab({
                     </td>
                     <td className="num">{t.count}</td>
                     <td className="num strong">{formatPeso(t.total)}</td>
-                    {list.canSeeCosts && <td className="num">{t.supplierCost !== undefined ? formatPeso(t.supplierCost) : "—"}</td>}
-                    {list.canSeeCosts && <td className="num">{t.netMargin !== undefined ? formatPeso(t.netMargin) : "—"}</td>}
+                    {owner.kind === "customer" && list.canSeeCosts && (
+                      <td className="num">{t.supplierCost !== undefined ? formatPeso(t.supplierCost) : "—"}</td>
+                    )}
+                    {owner.kind === "customer" && list.canSeeCosts && (
+                      <td className="num">{t.netMargin !== undefined ? formatPeso(t.netMargin) : "—"}</td>
+                    )}
                     <td className="num">{t.voidCount > 0 ? `${t.voidCount} void` : "—"}</td>
                   </tr>
                 ))}
