@@ -23,6 +23,7 @@ const TABS = [
   { key: "numbering", label: "Numbering" },
   { key: "tax", label: "Tax year" },
   { key: "withholding", label: "Withholding" },
+  { key: "billing", label: "Billing" },
   { key: "company", label: "Company" },
   { key: "lists", label: "Lists" },
   { key: "changelog", label: "Change log" },
@@ -118,6 +119,47 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}
+
+        {tab === "billing" && (
+          <>
+            <SettingsForm
+              title="Invoice booklet"
+              label={SETTINGS_LABELS.invoiceBooklet}
+              versionId={snap.versionId}
+              action={save("invoiceBooklet")}
+              fields={[
+                {
+                  name: "seriesFrom",
+                  label: "Series from",
+                  kind: "number",
+                  value: s.invoiceBooklet.seriesFrom,
+                  hint: "Pre-printed booklet start. The app only records these numbers.",
+                },
+                { name: "seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.seriesTo },
+                { name: "label", label: "Label", kind: "text", value: s.invoiceBooklet.label ?? "", hint: "e.g. Booklet 1" },
+              ]}
+            />
+            <p className="faint small" style={{ margin: "8px 0 16px" }}>
+              <Link href="/billing/booklet">Open booklet usage grid →</Link> Voided invoice numbers are never reused.
+            </p>
+            <SettingsForm
+              title="Collections"
+              label={SETTINGS_LABELS.collections}
+              versionId={snap.versionId}
+              action={save("collections")}
+              fields={[
+                {
+                  name: "overdueGraceDays",
+                  label: "Overdue grace days",
+                  kind: "number",
+                  value: s.collections.overdueGraceDays,
+                  hint: "Days after due date before a balance is marked overdue.",
+                  suffix: "days",
+                },
+              ]}
+            />
+          </>
+        )}
 
         {tab === "company" && (
           <SettingsForm

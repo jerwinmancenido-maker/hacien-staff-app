@@ -10,6 +10,9 @@ import type { PermissionUser } from "@/lib/permissions";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
 import {
   BILL_STATUSES,
+  BILLING_KINDS,
+  BILLING_TX_STATUSES,
+  COLLECTION_TX_STATUSES,
   listTransactions,
   PO_STATUSES,
   PURCHASING_KINDS,
@@ -36,6 +39,10 @@ const STATUS_TONE: Record<string, ChipTone> = {
   CLOSED: "grey",
   POSTED: "green",
   RECORDED: "green",
+  PARTIALLY_PAID: "amber",
+  PAID: "green",
+  "OPEN|OVERDUE": "red",
+  "PARTIALLY_PAID|OVERDUE": "red",
 };
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Draft",
@@ -50,16 +57,42 @@ const STATUS_LABEL: Record<string, string> = {
   CLOSED: "Closed",
   POSTED: "Posted",
   RECORDED: "Recorded",
+  PARTIALLY_PAID: "Partially paid",
+  PAID: "Paid",
+  "OPEN|OVERDUE": "Overdue",
+  "PARTIALLY_PAID|OVERDUE": "Overdue",
 };
-const AVATAR: Record<TransactionKind, string> = { QUOTE: "Q T", SALES_ORDER: "S O", PURCHASE_ORDER: "P O", RECEIVING_REPORT: "R R", SUPPLIER_BILL: "B L" };
-const AMOUNT_LABEL: Partial<Record<TransactionKind, string>> = { PURCHASE_ORDER: "PO total", RECEIVING_REPORT: "Value received", SUPPLIER_BILL: "Bill amount" };
+const AVATAR: Record<TransactionKind, string> = {
+  QUOTE: "Q T",
+  SALES_ORDER: "S O",
+  PURCHASE_ORDER: "P O",
+  RECEIVING_REPORT: "R R",
+  SUPPLIER_BILL: "B L",
+  BILLING: "B L",
+  COLLECTION: "C R",
+};
+const AMOUNT_LABEL: Partial<Record<TransactionKind, string>> = {
+  PURCHASE_ORDER: "PO total",
+  RECEIVING_REPORT: "Value received",
+  SUPPLIER_BILL: "Bill amount",
+  BILLING: "Balance",
+  COLLECTION: "Received",
+};
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
 export type TransactionsSearch = { contact?: string; type?: string; status?: string; page?: string };
 
 export function parseTransactionFilters(s: TransactionsSearch, contacts: Pick<Contact, "id">[]): TransactionFilters {
   const type = TRANSACTION_KINDS.includes(s.type as TransactionKind) ? (s.type as TransactionKind) : null;
-  const statuses: string[] = [...QUOTE_STATUSES, ...SALES_ORDER_STATUSES, ...PO_STATUSES, ...RR_STATUSES, ...BILL_STATUSES];
+  const statuses: string[] = [
+    ...QUOTE_STATUSES,
+    ...SALES_ORDER_STATUSES,
+    ...PO_STATUSES,
+    ...RR_STATUSES,
+    ...BILL_STATUSES,
+    ...BILLING_TX_STATUSES,
+    ...COLLECTION_TX_STATUSES,
+  ];
   return {
     // Only this owner's contacts.
     contactId: contacts.some((c) => c.id === s.contact) ? s.contact! : null,
@@ -168,7 +201,11 @@ export async function TransactionsTab({
         </label>
         <select id="txn-type" name="type" defaultValue={filters.type ?? ""} className="input">
           <option value="">All types</option>
-          {TRANSACTION_KINDS.filter((k) => list.canSeeCosts || !PURCHASING_KINDS.includes(k)).map((k) => (
+          {TRANSACTION_KINDS.filter(
+            (k) =>
+              (list.canSeeCosts || !PURCHASING_KINDS.includes(k)) &&
+              (owner.kind === "customer" || !BILLING_KINDS.includes(k)),
+          ).map((k) => (
             <option key={k} value={k}>
               {TRANSACTION_KIND_LABELS[k]}
             </option>

@@ -50,13 +50,15 @@ export async function discardUploads(uploads: readonly PreparedUpload[]): Promis
   for (const u of uploads) await discardUnreferencedFile(u.storageKey);
 }
 
+export type AttachmentOwner =
+  | { receivingReportId: string }
+  | { supplierBillId: string }
+  | { billingId: string }
+  | { collectionId: string }
+  | { withholding2307Id: string };
+
 /** Create the attachment rows (inside the document's transaction) with their audit rows. */
-export async function createAttachments(
-  tx: Tx,
-  uploads: readonly PreparedUpload[],
-  owner: { receivingReportId: string } | { supplierBillId: string },
-  actorId: string,
-) {
+export async function createAttachments(tx: Tx, uploads: readonly PreparedUpload[], owner: AttachmentOwner, actorId: string) {
   for (const u of uploads) {
     const row = await tx.documentAttachment.create({ data: { ...u, ...owner, uploadedById: actorId } });
     await writeAudit(tx, {

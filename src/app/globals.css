@@ -2475,3 +2475,47 @@ button.contact-card-add {
   color: var(--red);
   font-weight: 600;
 }
+
+/* Billing booklet grid */
+.booklet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+.booklet-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border, #e5e5e0);
+}
+.booklet-cell a { color: inherit; text-decoration: none; font-weight: 600; }
+.booklet-free { background: #f7f7f4; color: var(--text-3); }
+.booklet-used { background: #e8f5e9; border-color: #a5d6a7; }
+.booklet-voided { background: #fce8e6; border-color: #f5c2c0; text-decoration: line-through; opacity: 0.85; }
+.booklet-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.booklet-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border, #e5e5e0);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.aging-bar-fill.amber { background: var(--amber, #b45309); }
+.aging-bar-fill.red { background: var(--red); }
+.aging-bar-fill:not(.empty) { height: 100%; background: #4ade80; border-radius: inherit; }
+.statement-doc .print-doc-title h1 { font-size: 1.35rem; margin: 0; }
+.statement-aging { margin-top: 1.5rem; page-break-inside: avoid; }
+.print-placeholder { color: var(--red); font-weight: 600; }
+.plain-list { list-style: none; padding: 0; margin: 0; }
+.plain-list li { padding: 6px 0; border-bottom: 1px solid var(--border, #eee); }
+@media print {
+  .statement-doc { font-size: 11pt; }
+  .statement-doc table { page-break-inside: auto; }
+  .statement-doc tr { page-break-inside: avoid; }
+}

@@ -33,6 +33,8 @@ export const settingsSections = {
     salesOrder: numberingFormat,
     supplierPo: numberingFormat,
     receivingReport: numberingFormat,
+    billing: numberingFormat,
+    collection: numberingFormat,
   }),
   taxYear: z
     .object({
@@ -65,6 +67,20 @@ export const settingsSections = {
     // Business documents (DTI, BIR 2303 …) show "Expires in N days" this many days ahead.
     expiryWarningDays: z.coerce.number().int().min(1, "At least 1 day.").max(365, "At most 365 days."),
   }),
+  // Pre-printed sales-invoice booklet range. The app only *records* these numbers.
+  invoiceBooklet: z
+    .object({
+      seriesFrom: z.coerce.number().int().min(1, "At least 1."),
+      seriesTo: z.coerce.number().int().min(1, "At least 1."),
+      label: z.string().trim().max(100).optional().or(z.literal("")),
+    })
+    .refine((v) => v.seriesTo >= v.seriesFrom, {
+      message: "Series end must be at or after the start.",
+      path: ["seriesTo"],
+    }),
+  collections: z.object({
+    overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),
+  }),
 } as const;
 
 export const settingsSchema = z.object(settingsSections);
@@ -83,6 +99,8 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   company: "company details",
   lists: "lists",
   documents: "business documents",
+  invoiceBooklet: "invoice booklet",
+  collections: "collections",
 };
 
 export function isSettingsKey(key: string): key is SettingsKey {

@@ -19,6 +19,8 @@ import { TransactionsTab, type TransactionsSearch } from "@/components/Transacti
 import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
+import { customerArSnapshot, listBillings, listCollections } from "@/lib/billing/views";
+import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
 import { CustomerForm } from "../CustomerForm";
 import { saveCustomerAction, setCustomerActiveAction } from "../actions";
@@ -48,12 +50,14 @@ export default async function CustomerPage({
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "customer", id } as const;
   const warnDays = await expiryWarningDays();
-  const [addresses, docCounts, docStats] = await Promise.all([
+  const [addresses, docCounts, docStats, ar] = await Promise.all([
     listAddresses(owner, { includeArchived: true }),
     documentExpiryCounts(owner, warnDays),
     openDocumentStats(owner, user),
+    customerArSnapshot(id),
   ]);
   const docIds = (await db.businessDocument.findMany({ where: { customerId: id }, select: { id: true } })).map((d) => d.id);
+  const overdueLabel = ar.anyOverdue ? `Overdue ${formatPeso(ar.overdue)}` : null;
 
   // Fetch latest audit activity timestamp for overview stat card
   const lastActivity = await db.auditLog.findFirst({
@@ -94,6 +98,7 @@ export default async function CustomerPage({
             ) : (
               <Chip tone="green">Active</Chip>
             )}
+            {ar.anyOverdue && <OverdueBadge label="Overdue" />}
           </>
         }
         subtitle={
@@ -165,6 +170,7 @@ export default async function CustomerPage({
           docCounts={docCounts}
           docStats={docStats}
           warnDays={warnDays}
+          ar={{ ...ar, overdueLabel }}
         />
       )}
 
@@ -199,17 +205,81 @@ export default async function CustomerPage({
 
       {tab === "transactions" && <TransactionsTab owner={owner} user={user} contacts={contacts} search={search} />}
 
-      {tab === "balances" && (
-        <div className="card">
-          <dl className="kv">
-            <dt>Balance due</dt>
-            <dd className="num strong" style={{ textAlign: "left" }}>
-              {formatPeso(0)}
-            </dd>
-          </dl>
-          <EmptyState line="Open bills and collections will show here once billing is built." />
-        </div>
-      )}
+      {tab === "balances" && <CustomerBalances customerId={id} canManage={can(user, "manage_billing")} />}
     </>
+  );
+}
+
+async function CustomerBalances({ customerId, canManage }: { customerId: string; canManage: boolean }) {
+  const [ar, billings, collections] = await Promise.all([
+    customerArSnapshot(customerId),
+    listBillings({ customerId }),
+    listCollections({ customerId }),
+  ]);
+  return (
+    <div className="details-stack">
+      <div className="card">
+        <div className="card-head">
+          <h2>Balances</h2>
+          <div className="right">
+            <Link className="btn-link small" href={`/print/statements/${customerId}`}>
+              Print statement →
+            </Link>
+          </div>
+        </div>
+        <dl className="kv kv-grid">
+          <dt>Balance due</dt>
+          <dd className="num strong">{formatPeso(ar.balanceDue)}</dd>
+          <dt>Overdue</dt>
+          <dd className="num">
+            {formatPeso(ar.overdue)} {ar.anyOverdue && <OverdueBadge label="Overdue" />}
+          </dd>
+          <dt>Customer credit</dt>
+          <dd className="num">{formatPeso(ar.credit)}</dd>
+        </dl>
+        {canManage && (
+          <div className="form-actions" style={{ marginTop: 12 }}>
+            <Link className="btn btn-secondary" href={`/billing/billings/new`}>
+              Record billing
+            </Link>
+            <Link className="btn" href={`/billing/collections/new?customerId=${customerId}`}>
+              Record collection
+            </Link>
+          </div>
+        )}
+      </div>
+      <div className="card">
+        <h2>Open billings</h2>
+        {billings.filter((b) => b.status !== "VOID" && Number(b.balance) > 0).length === 0 ? (
+          <EmptyState line="No open billing balances." />
+        ) : (
+          <ul className="plain-list">
+            {billings
+              .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
+              .map((b) => (
+                <li key={b.id}>
+                  <Link href={`/billing/billings/${b.id}`}>Booklet #{b.invoiceNo}</Link> · {formatPeso(b.balance)} balance{" "}
+                  <OverdueBadge label={b.overdue.label} />
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
+      <div className="card">
+        <h2>Recent collections</h2>
+        {collections.length === 0 ? (
+          <EmptyState line="No collections yet." />
+        ) : (
+          <ul className="plain-list">
+            {collections.slice(0, 10).map((c) => (
+              <li key={c.id}>
+                <Link href={`/billing/collections/${c.id}`}>{c.number}</Link> · {formatPeso(c.amountReceived)}
+                {Number(c.unappliedCredit) > 0 ? ` · credit ${formatPeso(c.unappliedCredit)}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }

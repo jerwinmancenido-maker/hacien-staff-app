@@ -59,6 +59,9 @@ model User {
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
+  billingsCreated        Billing[]            @relation("BillingCreatedBy")
+  billingsUpdated        Billing[]            @relation("BillingUpdatedBy")
+  collectionsCreated     Collection[]         @relation("CollectionCreatedBy")
 }
 
 model Session {
@@ -161,11 +164,14 @@ model Customer {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  contacts    Contact[]
-  quotes      Quote[]
-  salesOrders SalesOrder[]
-  addresses   Address[]
-  documents   BusinessDocument[]
+  contacts     Contact[]
+  quotes       Quote[]
+  salesOrders  SalesOrder[]
+  addresses    Address[]
+  documents    BusinessDocument[]
+  billings     Billing[]
+  collections  Collection[]
+  withholdings Withholding2307[]
 
   @@index([name])
 }
@@ -389,6 +395,8 @@ enum DocType {
   PURCHASE_ORDER
   RECEIVING_REPORT
   SUPPLIER_BILL
+  BILLING
+  COLLECTION
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -556,6 +564,7 @@ model SalesOrder {
 
   items          SalesOrderItem[]
   purchaseOrders PurchaseOrder[]
+  billings       Billing[]
 
   @@index([quoteId])
   @@index([customerId])
@@ -796,15 +805,22 @@ model SupplierBillItem {
   @@index([purchaseOrderItemId])
 }
 
-// Files attached to a receiving report (delivery receipt photo) or a supplier
-// bill (invoice scan). Same storage as business documents: random key under
-// UPLOAD_DIR, magic-byte sniffed, never deleted (archivedAt instead).
+// Files attached to a receiving report (delivery receipt photo), a supplier
+// bill (invoice scan), a billing (filled-in booklet copy), a collection, or a
+// BIR 2307. Same storage as business documents: random key under UPLOAD_DIR,
+// magic-byte sniffed, never deleted (archivedAt instead).
 model DocumentAttachment {
   id                String           @id @default(cuid())
   receivingReportId String?
   receivingReport   ReceivingReport? @relation(fields: [receivingReportId], references: [id])
   supplierBillId    String?
   supplierBill      SupplierBill?    @relation(fields: [supplierBillId], references: [id])
+  billingId         String?
+  billing           Billing?         @relation(fields: [billingId], references: [id])
+  collectionId      String?
+  collection        Collection?      @relation(fields: [collectionId], references: [id])
+  withholding2307Id String?
+  withholding2307   Withholding2307? @relation(fields: [withholding2307Id], references: [id])
   fileName          String           @db.VarChar(255)
   mimeType          String           @db.VarChar(100)
   sizeBytes         Int
@@ -817,4 +833,164 @@ model DocumentAttachment {
 
   @@index([receivingReportId])
   @@index([supplierBillId])
+  @@index([billingId])
+  @@index([collectionId])
+  @@index([withholding2307Id])
+}
+
+// ---------------------------------------------------------------------------
+// Customer billing & collections (records of pre-printed booklet invoices;
+// the app never generates official invoices or official receipts)
+// ---------------------------------------------------------------------------
+
+// Derived from posted CollectionAllocation rows; stored for querying.
+enum BillingStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum CollectionStatus {
+  POSTED
+  VOID
+}
+
+enum CollectionMethod {
+  CASH
+  CHECK
+  BANK_TRANSFER
+  GCASH
+}
+
+enum Withholding2307Status {
+  PENDING
+  RECEIVED
+}
+
+// Internal BL-YYYY-####. `invoiceNo` is the hand-written booklet number (unique
+// forever — voided numbers are never reused). Status is recomputed from posted
+// allocations whenever a collection is posted or voided.
+model Billing {
+  id                   String        @id @default(cuid())
+  number               String        @unique @db.VarChar(40)
+  salesOrderId         String
+  salesOrder           SalesOrder    @relation(fields: [salesOrderId], references: [id])
+  customerId           String
+  customer             Customer      @relation(fields: [customerId], references: [id])
+  // Hand-written booklet invoice number. Unique among all billings (incl. void).
+  invoiceNo            Int
+  invoiceDate          DateTime      @db.Date
+  dueDate              DateTime      @db.Date
+  // Gross billed (≤ SO remaining to bill).
+  amount               Decimal       @db.Decimal(15, 2)
+  // Pro-rata of SO.withholdingTotal for this billing amount.
+  withholdingExpected  Decimal       @default(0) @db.Decimal(15, 2)
+  // amount − withholdingExpected.
+  netExpected          Decimal       @db.Decimal(15, 2)
+  status               BillingStatus @default(OPEN)
+  notes                String?       @db.Text
+  voidedAt             DateTime?
+  voidReason           String?       @db.Text
+  createdById          String
+  createdBy            User          @relation("BillingCreatedBy", fields: [createdById], references: [id])
+  updatedById          String
+  updatedBy            User          @relation("BillingUpdatedBy", fields: [updatedById], references: [id])
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  allocations  CollectionAllocation[]
+  withholdings Withholding2307[]
+  attachments  DocumentAttachment[]
+
+  @@unique([invoiceNo])
+  @@index([customerId])
+  @@index([salesOrderId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([invoiceNo])
+  @@index([invoiceDate])
+}
+
+// Internal CR-YYYY-####. A payment (or advance/downpayment) from a customer.
+// `amountReceived` may exceed allocated cash (unapplied = customer credit).
+// Allocations to billings are optional at create time and can be applied later.
+model Collection {
+  id             String             @id @default(cuid())
+  number         String             @unique @db.VarChar(40)
+  customerId     String
+  customer       Customer           @relation(fields: [customerId], references: [id])
+  date           DateTime           @db.Date
+  method         CollectionMethod
+  reference      String?            @db.VarChar(100)
+  checkBank      String?            @db.VarChar(100)
+  checkDate      DateTime?          @db.Date
+  // Hand-written OR / acknowledgment receipt number (manual text).
+  receiptNo      String?            @db.VarChar(64)
+  amountReceived Decimal            @db.Decimal(15, 2)
+  notes          String?            @db.Text
+  status         CollectionStatus   @default(POSTED)
+  voidedAt       DateTime?
+  voidReason     String?            @db.Text
+  createdById    String
+  createdBy      User               @relation("CollectionCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  allocations  CollectionAllocation[]
+  withholdings Withholding2307[]
+  attachments  DocumentAttachment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([date])
+}
+
+// Links cash (and optional 2307 withholding) from a collection onto a billing.
+// Sum of cashApplied across a collection's allocations ≤ amountReceived
+// (remainder is unapplied customer credit). Per billing, cash + withholding
+// applied ≤ billing.amount.
+model CollectionAllocation {
+  id                 String     @id @default(cuid())
+  collectionId       String
+  collection         Collection @relation(fields: [collectionId], references: [id])
+  billingId          String
+  billing            Billing    @relation(fields: [billingId], references: [id])
+  cashApplied        Decimal    @db.Decimal(15, 2)
+  withholdingApplied Decimal    @default(0) @db.Decimal(15, 2)
+
+  @@unique([collectionId, billingId])
+  @@index([collectionId])
+  @@index([billingId])
+}
+
+// BIR Form 2307 (Certificate of Creditable Tax Withheld at Source). Created when
+// a collection applies withholding to a billing; PENDING until marked received
+// with date + attachment (PDF/JPG/PNG).
+model Withholding2307 {
+  id           String                @id @default(cuid())
+  billingId    String?
+  billing      Billing?              @relation(fields: [billingId], references: [id])
+  collectionId String?
+  collection   Collection?           @relation(fields: [collectionId], references: [id])
+  customerId   String
+  customer     Customer              @relation(fields: [customerId], references: [id])
+  // Fraction, e.g. 0.0100 = 1%. Prefill from SO withholding snapshot; editable.
+  rate         Decimal               @db.Decimal(5, 4)
+  atcCode      String?               @db.VarChar(20)
+  amount       Decimal               @db.Decimal(15, 2)
+  periodFrom   DateTime?             @db.Date
+  periodTo     DateTime?             @db.Date
+  status       Withholding2307Status @default(PENDING)
+  receivedAt   DateTime?             @db.Date
+  notes        String?               @db.Text
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  attachments DocumentAttachment[]
+
+  @@index([customerId])
+  @@index([billingId])
+  @@index([collectionId])
+  @@index([status])
 }

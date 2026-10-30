@@ -8,28 +8,54 @@
 // COST_FIELDS: supplierId / supplierName), so a supplier's quote/SO lines are
 // only listed for cost users; others get `restricted: true` and no rows.
 
-import type { Prisma, PurchaseOrderStatus, QuoteStatus, ReceivingReportStatus, SalesOrderStatus, SupplierBillStatus } from "@prisma/client";
+import type {
+  BillingStatus,
+  CollectionStatus,
+  Prisma,
+  PurchaseOrderStatus,
+  QuoteStatus,
+  ReceivingReportStatus,
+  SalesOrderStatus,
+  SupplierBillStatus,
+} from "@prisma/client";
 import { db } from "../db";
 import { canSeeCosts, stripCosts, type PermissionUser } from "../permissions";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { money, ymd } from "../documents/common";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "../quotes/views";
 import { PO_STATUSES } from "../purchasing/status";
+import { billingBalance } from "../billing/status";
+import { overdueInfo } from "../billing/views";
+import { getSettingsSnapshot } from "../settings";
 import type { ContactOwner } from "./contacts";
 
-export type TransactionKind = "QUOTE" | "SALES_ORDER" | "PURCHASE_ORDER" | "RECEIVING_REPORT" | "SUPPLIER_BILL";
-export const TRANSACTION_KINDS: TransactionKind[] = ["QUOTE", "SALES_ORDER", "PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
+export type TransactionKind = "QUOTE" | "SALES_ORDER" | "PURCHASE_ORDER" | "RECEIVING_REPORT" | "SUPPLIER_BILL" | "BILLING" | "COLLECTION";
+export const TRANSACTION_KINDS: TransactionKind[] = [
+  "QUOTE",
+  "SALES_ORDER",
+  "PURCHASE_ORDER",
+  "RECEIVING_REPORT",
+  "SUPPLIER_BILL",
+  "BILLING",
+  "COLLECTION",
+];
 export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = {
   QUOTE: "Quote",
   SALES_ORDER: "Sales order",
   PURCHASE_ORDER: "Supplier PO",
   RECEIVING_REPORT: "Receiving report",
   SUPPLIER_BILL: "Supplier bill",
+  BILLING: "Billing",
+  COLLECTION: "Collection",
 };
 /** Purchasing kinds are cost data: only listed for users with "Can see costs". */
 export const PURCHASING_KINDS: TransactionKind[] = ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
+/** Customer-facing billing kinds (not cost data). */
+export const BILLING_KINDS: TransactionKind[] = ["BILLING", "COLLECTION"];
 export const RR_STATUSES: ReceivingReportStatus[] = ["POSTED", "VOID"];
 export const BILL_STATUSES: SupplierBillStatus[] = ["RECORDED", "VOID"];
+export const BILLING_TX_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
+export const COLLECTION_TX_STATUSES: CollectionStatus[] = ["POSTED", "VOID"];
 export { PO_STATUSES };
 
 export const TRANSACTIONS_PAGE_SIZE = 50;
@@ -147,6 +173,7 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
   ]);
 
   const purchasing = withCosts ? await purchasingRows(owner, filters, take) : { rows: [], count: 0, totals: [] };
+  const billing = owner.kind === "customer" ? await billingRows(owner.id, filters, take) : { rows: [], count: 0, totals: [] };
 
   type DocRow = (typeof quotes)[number] | (typeof sos)[number];
   const toRow = (kind: TransactionKind, d: DocRow): TransactionRow & { createdAt: Date } => {
@@ -172,14 +199,20 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
     return { ...base, supplierCost: money(d.supplierCost), netMargin: money(d.netMargin), netMarginPct: money(d.netMarginPct) };
   };
 
-  const merged = [...quotes.map((q) => toRow("QUOTE", q)), ...sos.map((s) => toRow("SALES_ORDER", s)), ...purchasing.rows].sort(newestFirst);
-  const totalRows = quoteCount + soCount + purchasing.count;
+  const merged = [
+    ...quotes.map((q) => toRow("QUOTE", q)),
+    ...sos.map((s) => toRow("SALES_ORDER", s)),
+    ...purchasing.rows,
+    ...billing.rows,
+  ].sort(newestFirst);
+  const totalRows = quoteCount + soCount + purchasing.count + billing.count;
   const rows = merged.slice((page - 1) * TRANSACTIONS_PAGE_SIZE, page * TRANSACTIONS_PAGE_SIZE).map(withoutCreatedAt);
 
   const totals: TransactionTotals[] = [];
   if (wantQuotes) totals.push(await kindTotals("QUOTE", quoteWhere, supplierId, withCosts));
   if (wantSos) totals.push(await kindTotals("SALES_ORDER", soWhere, supplierId, withCosts));
   totals.push(...purchasing.totals);
+  totals.push(...billing.totals);
 
   return stripCosts(
     {
@@ -197,10 +230,101 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
 }
 
 // ---------------------------------------------------------------------------
-// Supplier POs, receiving reports and supplier bills (cost users only)
+// Customer billings & collections (not cost data; shown to all roles with view)
 // ---------------------------------------------------------------------------
 
 type Row = TransactionRow & { createdAt: Date };
+
+async function billingRows(customerId: string, filters: TransactionFilters, take: number): Promise<{ rows: Row[]; count: number; totals: TransactionTotals[] }> {
+  const want = (k: TransactionKind) => !filters.type || filters.type === k;
+  // Contact filter: billings/collections aren't tied to a contact; skip when a contact is selected.
+  if (filters.contactId) return { rows: [], count: 0, totals: [] };
+  const bStatus = statusFilter<BillingStatus>(filters.status, BILLING_TX_STATUSES);
+  const cStatus = statusFilter<CollectionStatus>(filters.status, COLLECTION_TX_STATUSES);
+  const wantBilling = want("BILLING") && bStatus !== null;
+  const wantCollection = want("COLLECTION") && cStatus !== null;
+  const orderBy = [{ createdAt: "desc" }] as const;
+
+  const billingWhere: Prisma.BillingWhereInput = { customerId, ...(bStatus ?? {}) };
+  const collectionWhere: Prisma.CollectionWhereInput = { customerId, ...(cStatus ?? {}) };
+
+  const [billings, collections, billingCount, collectionCount] = await Promise.all([
+    wantBilling
+      ? db.billing.findMany({
+          where: billingWhere,
+          orderBy: [{ invoiceDate: "desc" }, ...orderBy],
+          take,
+          include: { allocations: { where: { collection: { status: "POSTED" } } }, salesOrder: { select: { contact: { select: { name: true } } } } },
+        })
+      : [],
+    wantCollection
+      ? db.collection.findMany({ where: collectionWhere, orderBy: [{ date: "desc" }, ...orderBy], take })
+      : [],
+    wantBilling ? db.billing.count({ where: billingWhere }) : 0,
+    wantCollection ? db.collection.count({ where: collectionWhere }) : 0,
+  ]);
+
+  const snap = await getSettingsSnapshot();
+  const grace = snap.settings.collections.overdueGraceDays;
+
+  const rows: Row[] = [
+    ...billings.map((b) => {
+      const cash = b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+      const wh = b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
+      const balance = billingBalance(money(b.amount), { cashApplied: fromScaled(cash, 2), withholdingApplied: fromScaled(wh, 2) });
+      const od = overdueInfo(b.dueDate, balance, grace);
+      const status = od.overdue && b.status !== "VOID" && b.status !== "PAID" ? `${b.status}|OVERDUE` : b.status;
+      return {
+        kind: "BILLING" as const,
+        id: b.id,
+        number: `Inv ${b.invoiceNo} · ${b.number}`,
+        date: ymd(b.invoiceDate)!,
+        status,
+        contactName: b.salesOrder.contact?.name ?? null,
+        total: balance,
+        href: `/billing/billings/${b.id}`,
+        createdAt: b.createdAt,
+      };
+    }),
+    ...collections.map((c) => ({
+      kind: "COLLECTION" as const,
+      id: c.id,
+      number: c.receiptNo ? `${c.number} · ${c.receiptNo}` : c.number,
+      date: ymd(c.date)!,
+      status: c.status,
+      contactName: null,
+      total: money(c.amountReceived),
+      href: `/billing/collections/${c.id}`,
+      createdAt: c.createdAt,
+    })),
+  ];
+
+  const totals: TransactionTotals[] = [];
+  if (wantBilling) {
+    const notVoid = { AND: [billingWhere, { status: { not: "VOID" as const } }] };
+    const [count, voidCount, sum] = await Promise.all([
+      db.billing.count({ where: notVoid }),
+      db.billing.count({ where: { AND: [billingWhere, { status: "VOID" }] } }),
+      db.billing.aggregate({ where: notVoid, _sum: { amount: true } }),
+    ]);
+    totals.push({ kind: "BILLING", count, voidCount, total: sumMoney([sum._sum.amount]) });
+  }
+  if (wantCollection) {
+    const notVoid = { AND: [collectionWhere, { status: "POSTED" as const }] };
+    const [count, voidCount, sum] = await Promise.all([
+      db.collection.count({ where: notVoid }),
+      db.collection.count({ where: { AND: [collectionWhere, { status: "VOID" }] } }),
+      db.collection.aggregate({ where: notVoid, _sum: { amountReceived: true } }),
+    ]);
+    totals.push({ kind: "COLLECTION", count, voidCount, total: sumMoney([sum._sum.amountReceived]) });
+  }
+  return { rows, count: billingCount + collectionCount, totals };
+}
+
+// ---------------------------------------------------------------------------
+// Supplier POs, receiving reports and supplier bills (cost users only)
+// ---------------------------------------------------------------------------
+
 
 /** qty (2 dp) × unit cost (2 dp) summed to cents. */
 function valueReceived(items: readonly { qtyReceived: { toFixed(n: number): string }; purchaseOrderItem: { unitCost: { toFixed(n: number): string } } }[]): string {

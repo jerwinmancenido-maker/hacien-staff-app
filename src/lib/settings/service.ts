@@ -46,11 +46,13 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
     version: v.version,
     effectiveFrom: v.effectiveFrom,
     // Parse so older snapshots missing a newer section (or a newer numbering
-    // format, e.g. receivingReport) still get a full shape.
+    // format, e.g. receivingReport / billing) still get a full shape.
     settings: settingsSchema.parse({
       ...DEFAULT_SETTINGS,
       ...v.data,
       numbering: { ...DEFAULT_SETTINGS.numbering, ...(v.data as Partial<Settings>).numbering },
+      invoiceBooklet: { ...DEFAULT_SETTINGS.invoiceBooklet, ...(v.data as Partial<Settings>).invoiceBooklet },
+      collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
     }),
   };
 }

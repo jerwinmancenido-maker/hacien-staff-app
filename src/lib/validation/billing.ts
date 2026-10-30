@@ -1,0 +1,198 @@
+import { z } from "zod";
+
+const moneyStr = z
+  .string()
+  .trim()
+  .regex(/^\d{1,13}(\.\d{1,2})?$/, "Enter an amount with up to 2 decimals.");
+
+const optionalMoney = z
+  .string()
+  .trim()
+  .transform((v) => (v === "" ? "0" : v))
+  .pipe(moneyStr);
+
+const ymd = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date.")
+  .transform((s) => new Date(`${s}T00:00:00.000Z`));
+
+export const COLLECTION_METHODS = ["CASH", "CHECK", "BANK_TRANSFER", "GCASH"] as const;
+export type CollectionMethodInput = (typeof COLLECTION_METHODS)[number];
+
+export const COLLECTION_METHOD_LABELS: Record<CollectionMethodInput, string> = {
+  CASH: "Cash",
+  CHECK: "Check",
+  BANK_TRANSFER: "Bank transfer",
+  GCASH: "GCash",
+};
+
+export const billingInputSchema = z.object({
+  salesOrderId: z.string().min(1, "Sales order is required."),
+  amount: moneyStr,
+  invoiceNo: z.coerce.number().int("Enter a whole number.").min(1, "Enter a booklet invoice number."),
+  invoiceDate: ymd,
+  dueDate: ymd,
+  notes: z
+    .string()
+    .trim()
+    .max(5000)
+    .transform((v) => v || null),
+});
+
+export type BillingInput = z.infer<typeof billingInputSchema>;
+
+export const allocationRowSchema = z.object({
+  billingId: z.string().min(1),
+  cashApplied: optionalMoney,
+  withholdingApplied: optionalMoney,
+  /** Optional override; blank = use SO / rate table default. */
+  withholdingRate: z
+    .string()
+    .trim()
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
+  atcCode: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
+});
+
+export const collectionInputSchema = z
+  .object({
+    customerId: z.string().min(1, "Customer is required."),
+    date: ymd,
+    method: z.enum(COLLECTION_METHODS, { message: "Pick a payment method." }),
+    reference: z
+      .string()
+      .trim()
+      .max(100)
+      .transform((v) => v || null),
+    checkBank: z
+      .string()
+      .trim()
+      .max(100)
+      .transform((v) => v || null),
+    checkDate: z
+      .string()
+      .trim()
+      .transform((v) => (v ? v : null))
+      .pipe(z.union([ymd, z.null()])),
+    receiptNo: z
+      .string()
+      .trim()
+      .max(64)
+      .transform((v) => v || null),
+    amountReceived: moneyStr,
+    notes: z
+      .string()
+      .trim()
+      .max(5000)
+      .transform((v) => v || null),
+    allocations: z.array(allocationRowSchema).default([]),
+  })
+  .superRefine((v, ctx) => {
+    if (v.method === "CHECK") {
+      if (!v.reference) ctx.addIssue({ code: "custom", message: "Check number is required.", path: ["reference"] });
+      if (!v.checkBank) ctx.addIssue({ code: "custom", message: "Bank is required for checks.", path: ["checkBank"] });
+    }
+    if ((v.method === "BANK_TRANSFER" || v.method === "GCASH") && !v.reference) {
+      ctx.addIssue({ code: "custom", message: "Reference number is required.", path: ["reference"] });
+    }
+  });
+
+export type CollectionInput = z.infer<typeof collectionInputSchema>;
+export type AllocationRowInput = z.infer<typeof allocationRowSchema>;
+
+/** Apply unapplied customer credit from existing collections onto open billings. */
+export const applyCreditInputSchema = z.object({
+  customerId: z.string().min(1),
+  allocations: z
+    .array(
+      z.object({
+        collectionId: z.string().min(1),
+        billingId: z.string().min(1),
+        cashApplied: moneyStr,
+        withholdingApplied: optionalMoney,
+        withholdingRate: z
+          .string()
+          .trim()
+          .transform((v) => v || null)
+          .nullable()
+          .optional(),
+        atcCode: z
+          .string()
+          .trim()
+          .max(20)
+          .transform((v) => v || null)
+          .nullable()
+          .optional(),
+      }),
+    )
+    .min(1, "Allocate at least one amount."),
+});
+
+export type ApplyCreditInput = z.infer<typeof applyCreditInputSchema>;
+
+export const mark2307ReceivedSchema = z.object({
+  receivedAt: ymd,
+  notes: z
+    .string()
+    .trim()
+    .max(5000)
+    .transform((v) => v || null),
+});
+
+export type Mark2307ReceivedInput = z.infer<typeof mark2307ReceivedSchema>;
+
+export function parseBillingForm(form: FormData): { ok: true; data: BillingInput } | { ok: false; fieldErrors: Record<string, string>; values: Record<string, string> } {
+  const values = {
+    salesOrderId: String(form.get("salesOrderId") ?? ""),
+    amount: String(form.get("amount") ?? ""),
+    invoiceNo: String(form.get("invoiceNo") ?? ""),
+    invoiceDate: String(form.get("invoiceDate") ?? ""),
+    dueDate: String(form.get("dueDate") ?? ""),
+    notes: String(form.get("notes") ?? ""),
+  };
+  const parsed = billingInputSchema.safeParse(values);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;
+    return { ok: false, fieldErrors, values };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+export function parseCollectionForm(form: FormData): { ok: true; data: CollectionInput } | { ok: false; fieldErrors: Record<string, string>; values: Record<string, string> } {
+  const allocationBillingIds = form.getAll("allocBillingId").map(String);
+  const allocations = allocationBillingIds.map((billingId, i) => ({
+    billingId,
+    cashApplied: String(form.getAll("allocCash")[i] ?? "0"),
+    withholdingApplied: String(form.getAll("allocWithholding")[i] ?? "0"),
+    withholdingRate: String(form.getAll("allocRate")[i] ?? "") || null,
+    atcCode: String(form.getAll("allocAtc")[i] ?? "") || null,
+  })).filter((a) => a.billingId && (Number(a.cashApplied) > 0 || Number(a.withholdingApplied) > 0));
+
+  const values: Record<string, string> = {
+    customerId: String(form.get("customerId") ?? ""),
+    date: String(form.get("date") ?? ""),
+    method: String(form.get("method") ?? ""),
+    reference: String(form.get("reference") ?? ""),
+    checkBank: String(form.get("checkBank") ?? ""),
+    checkDate: String(form.get("checkDate") ?? ""),
+    receiptNo: String(form.get("receiptNo") ?? ""),
+    amountReceived: String(form.get("amountReceived") ?? ""),
+    notes: String(form.get("notes") ?? ""),
+  };
+  const parsed = collectionInputSchema.safeParse({ ...values, allocations });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;
+    return { ok: false, fieldErrors, values };
+  }
+  return { ok: true, data: parsed.data };
+}

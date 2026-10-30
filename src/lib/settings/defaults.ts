@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
     salesOrder: { prefix: "SO", padding: 4, resetYearly: true },
     supplierPo: { prefix: "PO", padding: 4, resetYearly: true },
     receivingReport: { prefix: "RR", padding: 4, resetYearly: true },
+    billing: { prefix: "BL", padding: 4, resetYearly: true },
+    collection: { prefix: "CR", padding: 4, resetYearly: true },
   },
   taxYear: { year: 2026, nonVatLimit: 3_000_000, warnFirstPct: 70, warnSecondPct: 90 },
   company: { name: "HACIEN", tin: "", address: "" },
@@ -17,4 +19,6 @@ export const DEFAULT_SETTINGS: Settings = {
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
   },
   documents: { expiryWarningDays: 30 },
+  invoiceBooklet: { seriesFrom: 1, seriesTo: 500, label: "Booklet 1" },
+  collections: { overdueGraceDays: 0 },
 };

@@ -4,12 +4,16 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoPurchasing } from "@/lib/purchasing/views";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
+import { listBillings } from "@/lib/billing/views";
+import { soBillingSummary } from "@/lib/services/billings";
 import { Activity } from "@/components/Activity";
+import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PageHeader } from "@/components/ui";
 import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { SalesOrderActions } from "@/components/docs/QuoteActions";
 import { PoStatusChip, ProgressChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
+import { PlusIcon } from "@/components/Icons";
 import { voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
@@ -25,6 +29,9 @@ export default async function SalesOrderPage({ params, searchParams }: { params:
   const purchasing = await getSoPurchasing(so.id, user);
   const progress = new Map(purchasing.lines.map((l) => [l.id, l]));
   const canCreatePos = so.canSeeCosts && can(user, "edit_data") && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
+  const [billingSummary, billings] = await Promise.all([soBillingSummary(so.id), listBillings({ salesOrderId: so.id })]);
+  const canBill = can(user, "manage_billing") && so.status === "OPEN" && billingSummary && Number(billingSummary.remainingToBill) > 0;
+  const overdueOnSo = billings.find((b) => b.overdue.overdue);
 
   return (
     <>
@@ -35,9 +42,18 @@ export default async function SalesOrderPage({ params, searchParams }: { params:
             <SoStatusChip status={so.status} />
           </>
         }
-        subtitle={`${so.customer.name} · Buyer PO ${so.buyerPoNo ?? "—"}`}
+        subtitle={
+          <>
+            {so.customer.name} · Buyer PO {so.buyerPoNo ?? "—"} {overdueOnSo && <OverdueBadge label={overdueOnSo.overdue.label} />}
+          </>
+        }
         actions={
           <>
+            {canBill && (
+              <Link className="btn btn-secondary" href={`/billing/billings/new?salesOrderId=${so.id}`}>
+                <PlusIcon /> Record billing
+              </Link>
+            )}
             {canCreatePos && (
               <Link className="btn btn-secondary" href={`/sales-orders/${so.id}/purchase-orders`}>
                 Create POs
@@ -101,6 +117,53 @@ export default async function SalesOrderPage({ params, searchParams }: { params:
           <TotalsBox totals={so.totals} showCosts={so.canSeeCosts} />
         </div>
       </div>
+      {billingSummary && (
+        <div className="card" aria-label="Billing">
+          <div className="card-head">
+            <h2>Billing</h2>
+            <div className="right small muted">
+              Billed {formatPeso(billingSummary.billed)} · Remaining {formatPeso(billingSummary.remainingToBill)} · Collected{" "}
+              {formatPeso(billingSummary.collected)} · Balance {formatPeso(billingSummary.balance)}
+            </div>
+          </div>
+          {billings.length === 0 ? (
+            <p className="faint">No billings yet. Booklet invoices are recorded here (not generated).</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="list" aria-label="Billings on this SO">
+                <thead>
+                  <tr>
+                    <th>Booklet</th>
+                    <th>Internal</th>
+                    <th>Date</th>
+                    <th>Due</th>
+                    <th className="num">Amount</th>
+                    <th className="num">Balance</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billings.map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        <Link href={`/billing/billings/${b.id}`}>#{b.invoiceNo}</Link>
+                      </td>
+                      <td className="faint">{b.number}</td>
+                      <td>{day(b.invoiceDate)}</td>
+                      <td>{day(b.dueDate)}</td>
+                      <td className="num">{formatPeso(b.amount)}</td>
+                      <td className="num">{formatPeso(b.balance)}</td>
+                      <td>
+                        <BillingStatusChip status={b.status} /> <OverdueBadge label={b.overdue.label} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       <div className="card" aria-label="Purchasing">
         <div className="card-head">
           <h2>Purchasing</h2>
