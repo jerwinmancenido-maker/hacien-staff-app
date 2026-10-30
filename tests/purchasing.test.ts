@@ -278,6 +278,36 @@ describe("3-way match", () => {
     expect(m.lines[1]!.status).toBe("QTY_MISMATCH");
   });
 
+  it("an exact-match total-only bill is matched, with no line bill flags", () => {
+    // PO 10 × 100, fully received, a 1,000 bill with no line items.
+    const one = [{ id: "c", description: "Cable", unit: "pc", qty: "10.00", unitCost: "100.00", receivedQty: "10.00" }];
+    const m = threeWayMatch(one, [{ id: "1", billNumber: "SI-12", amount: "1000.00", items: [] }]);
+    expect(m.status).toBe("MATCHED");
+    expect(m.headerFlags).toEqual([]);
+    expect(m.lines[0]!.flags).toEqual([]);
+    expect(m.lines[0]!.issues).toEqual([]);
+    expect(m.lines[0]!.status).toBe("MATCHED");
+    // A total-only bill that is off is caught by the total check only.
+    const off = threeWayMatch(one, [{ id: "1", billNumber: "SI-13", amount: "900.00", items: [] }]);
+    expect(off.status).toBe("MISMATCH");
+    expect(off.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
+    expect(off.lines[0]!.flags).toEqual([]);
+  });
+
+  it("a PO with no bills shows no bill flags", () => {
+    const m = threeWayMatch(po, []);
+    expect(m.status).toBe("NOT_BILLED");
+    expect(m.headerFlags).toEqual([]);
+    for (const l of m.lines) {
+      expect(l.flags).toEqual([]);
+      expect(l.issues).toEqual([]);
+      expect(l.status).toBe("MATCHED");
+    }
+    // Received < ordered is still shown; it is not a bill flag.
+    const partial = threeWayMatch([{ ...po[0]!, receivedQty: "6.00" }], []);
+    expect(partial.lines[0]!.flags).toEqual(["RECEIVED_LESS_THAN_ORDERED"]);
+  });
+
   it("matches a header-only bill against the received value; not billed when no bills", () => {
     expect(threeWayMatch(po, []).status).toBe("NOT_BILLED");
     const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-4", amount: "452500.00", items: [] }]);

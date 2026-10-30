@@ -117,15 +117,19 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
     const ordered = toScaled(l.qty, Q);
     const received = toScaled(l.receivedQty, Q);
     const cost = toScaled(l.unitCost, C);
-    const b = billed.get(l.id) ?? { qty: 0n, amount: 0n, prices: new Set<bigint>() };
+    // Only bill line items say anything about a line's billed qty/price. A line
+    // with none (no bills, or total-only bills) gets no bill flags; total-only
+    // bills are checked against the received total in the header flags below.
+    const lineBilled = billed.get(l.id);
+    const b = lineBilled ?? { qty: 0n, amount: 0n, prices: new Set<bigint>() };
     const orderedAmount = mul(ordered, cost);
     const receivedAmount = mul(received, cost);
     orderedTotal += orderedAmount;
     receivedTotal += receivedAmount;
     const priceDifference = b.amount - mul(b.qty, cost);
     const flags: LineFlag[] = [];
-    if (b.qty > received) flags.push("BILLED_MORE_THAN_RECEIVED");
-    if (b.qty < received) flags.push("BILLED_LESS_THAN_RECEIVED");
+    if (lineBilled && b.qty > received) flags.push("BILLED_MORE_THAN_RECEIVED");
+    if (lineBilled && b.qty < received) flags.push("BILLED_LESS_THAN_RECEIVED");
     if (received < ordered) flags.push("RECEIVED_LESS_THAN_ORDERED");
     if ([...b.prices].some((p) => p !== cost)) flags.push("PRICE_DIFFERS");
     const issues: LineIssue[] = [];
