@@ -9,6 +9,8 @@ import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/w
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
+import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
+import { TAX_CALENDAR_PROVISIONAL_BANNER } from "@/lib/tax/calendar-constants";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
@@ -22,6 +24,7 @@ const TABS = [
   { key: "approval", label: "Approval rules" },
   { key: "numbering", label: "Numbering" },
   { key: "tax", label: "Tax year" },
+  { key: "tax-calendar", label: "Tax calendar" },
   { key: "withholding", label: "Withholding" },
   { key: "billing", label: "Billing" },
   { key: "features", label: "Features" },
@@ -117,6 +120,66 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               { name: "warnSecondPct", label: "Second warning at", kind: "number", value: s.taxYear.warnSecondPct, suffix: "% of the limit" },
             ]}
           />
+        )}
+
+        {tab === "tax-calendar" && (
+          <>
+            <p className="faint small" style={{ marginTop: 0 }}>
+              Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is
+              uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee.
+            </p>
+            <SettingsForm
+              title="Tax calendar"
+              label={SETTINGS_LABELS.taxCalendar}
+              versionId={snap.versionId}
+              action={save("taxCalendar")}
+              fields={[
+                {
+                  name: "corUploadedAndChecked",
+                  label: "COR uploaded and checked",
+                  kind: "checkbox" as const,
+                  value: s.taxCalendar.corUploadedAndChecked,
+                  hint: `When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`,
+                  group: "COR",
+                },
+                ...TAX_CALENDAR_OBLIGATIONS.flatMap((def) => {
+                  const o = s.taxCalendar.obligations[def.key];
+                  const group = `${def.form} — ${def.description}`;
+                  return [
+                    {
+                      name: `obligations.${def.key}.enabled`,
+                      label: `Show ${def.form} on the calendar`,
+                      kind: "checkbox" as const,
+                      value: o.enabled,
+                      hint: def.sourceNote,
+                      group,
+                    },
+                    {
+                      name: `obligations.${def.key}.dueDay`,
+                      label: "Due day of month",
+                      kind: "number" as const,
+                      value: o.dueDay ?? "",
+                      hint:
+                        def.schedule.kind === "undated_year_end"
+                          ? "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms."
+                          : def.schedule.kind === "quarterly_last_day_after"
+                            ? "Leave blank to use the last day of the month after the quarter."
+                            : "1–31. Used with the catalog month rule for this form.",
+                      group,
+                    },
+                    {
+                      name: `obligations.${def.key}.dueMonth`,
+                      label: "Due month (annual / year-end)",
+                      kind: "number" as const,
+                      value: o.dueMonth ?? "",
+                      hint: "1–12. Used for 1701 annual and year-end items; leave blank otherwise.",
+                      group,
+                    },
+                  ];
+                }),
+              ]}
+            />
+          </>
         )}
 
         {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}

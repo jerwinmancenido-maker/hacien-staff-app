@@ -69,6 +69,36 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         cashEnabled: checked(get("cashEnabled")),
         booksEnabled: checked(get("booksEnabled")),
       };
+    case "taxCalendar": {
+      const keys = [
+        "1701q",
+        "1701",
+        "2551q",
+        "2550q",
+        "0619e",
+        "1601eq",
+        "books_accounts",
+        "inventory_list",
+      ] as const;
+      const optionalInt = (raw: string | null) => {
+        const t = (raw ?? "").trim();
+        if (!t) return null;
+        return Number(t);
+      };
+      return {
+        corUploadedAndChecked: checked(get("corUploadedAndChecked")),
+        obligations: Object.fromEntries(
+          keys.map((k) => [
+            k,
+            {
+              enabled: checked(get(`obligations.${k}.enabled`)),
+              dueDay: optionalInt(get(`obligations.${k}.dueDay`)),
+              dueMonth: optionalInt(get(`obligations.${k}.dueMonth`)),
+            },
+          ]),
+        ),
+      };
+    }
   }
 }
 
