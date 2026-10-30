@@ -5,11 +5,13 @@ import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { getBillingView } from "@/lib/billing/views";
 import { Activity } from "@/components/Activity";
+import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingStatusChip, MethodLabel, OverdueBadge, PRINTABLE_DISCLAIMER } from "@/components/billing/BillingParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
+import { customerCreditBalance } from "@/lib/services/collections";
 import { voidBillingAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
@@ -29,6 +31,8 @@ export default async function BillingDetailPage({
   if (!b) notFound();
   const canManage = can(user, "manage_billing");
   const canVoid = canManage && b.status !== "VOID" && b.allocations.length === 0;
+  const credit =
+    canManage && b.status !== "VOID" ? await customerCreditBalance(b.customer.id) : "0.00";
 
   return (
     <>
@@ -126,6 +130,14 @@ export default async function BillingDetailPage({
                 ))}
               </ul>
             </>
+          )}
+          {canManage && b.status !== "VOID" && (
+            <ApplyCreditForm
+              customerId={b.customer.id}
+              availableCredit={credit}
+              lockedBillingId={b.id}
+              billings={[{ id: b.id, label: `Booklet #${b.invoiceNo}`, balance: b.balance }]}
+            />
           )}
         </div>
       )}
