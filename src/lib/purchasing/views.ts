@@ -18,6 +18,13 @@ import { qtyMismatch } from "./plan";
 import { remainingQty } from "./receipt";
 import { approverError, canPo, PO_STATUSES, soLineProgress, type PoStatus, type ProgressState } from "./status";
 import { planPurchaseOrders } from "./plan";
+import {
+  buildCostMarginSummary,
+  lineNeedsMorePo,
+  sumMoney,
+  valueReceived,
+  type CostMarginSummary,
+} from "./cost-margin";
 
 type Viewer = PermissionUser & { id: string; isAdmin: boolean };
 
@@ -331,6 +338,90 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
     ordered: lines.filter((l) => l.state !== "NOT_ORDERED").length,
     canSeeCosts: withCosts,
   };
+}
+
+/**
+ * Cost & margin tab on a sales order. Cost data only — returns null when the
+ * viewer cannot see costs. Void POs / RRs / bills are excluded.
+ */
+export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUser): Promise<CostMarginSummary | null> {
+  if (!canSeeCosts(viewer)) return null;
+  const so = await db.salesOrder.findUnique({
+    where: { id: salesOrderId },
+    select: {
+      contractPrice: true,
+      netMargin: true,
+      netMarginPct: true,
+      items: {
+        where: { removedAt: null },
+        select: {
+          id: true,
+          qty: true,
+          purchaseOrderItems: {
+            where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+            select: { qty: true },
+          },
+        },
+      },
+    },
+  });
+  if (!so) return null;
+
+  const pos = await db.purchaseOrder.findMany({
+    where: { salesOrderId, status: { not: "VOID" } },
+    orderBy: [{ date: "desc" }, { number: "desc" }],
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      subtotal: true,
+      supplier: { select: { name: true } },
+      receivingReports: {
+        where: { status: "POSTED" },
+        select: {
+          items: {
+            select: { qtyReceived: true, purchaseOrderItem: { select: { unitCost: true } } },
+          },
+        },
+      },
+      bills: {
+        where: { status: "RECORDED" },
+        select: { amount: true },
+      },
+    },
+  });
+
+  let uncoveredLineCount = 0;
+  for (const item of so.items) {
+    const ordered = sumMoney(item.purchaseOrderItems.map((x) => money(x.qty)));
+    if (lineNeedsMorePo(money(item.qty), ordered)) uncoveredLineCount += 1;
+  }
+
+  const poInputs = pos.map((po) => {
+    const receivedItems = po.receivingReports.flatMap((r) =>
+      r.items.map((i) => ({ qtyReceived: money(i.qtyReceived), unitCost: money(i.purchaseOrderItem.unitCost) })),
+    );
+    const billedAmount = sumMoney(po.bills.map((b) => money(b.amount)));
+    return {
+      id: po.id,
+      number: po.number,
+      status: po.status,
+      supplierName: po.supplier.name,
+      poTotal: money(po.subtotal),
+      receivedValue: valueReceived(receivedItems),
+      billedAmount,
+      hasBills: po.bills.length > 0,
+      hasReceipts: po.receivingReports.length > 0,
+    };
+  });
+
+  return buildCostMarginSummary({
+    contractPrice: money(so.contractPrice),
+    plannedMargin: money(so.netMargin),
+    plannedMarginPct: money(so.netMarginPct),
+    pos: poInputs,
+    uncoveredLineCount,
+  });
 }
 
 // ---------------------------------------------------------------------------

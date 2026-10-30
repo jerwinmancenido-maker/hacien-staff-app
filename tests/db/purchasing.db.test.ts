@@ -35,6 +35,7 @@ import {
   getPurchaseOrderPrint,
   getPurchaseOrderView,
   getReceivingView,
+  getSoCostMargin,
   getSoPurchasing,
   listPurchaseOrdersView,
   listReceivingView,
@@ -437,7 +438,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(customerAdmin.totals.some((t) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(t.kind))).toBe(false);
       expect((await listTransactions({ kind: "customer", id: customer.id }, { type: "PURCHASE_ORDER" }, admin)).rows).toEqual([]);
 
-      // Linked POs (with totals for cost users) live on the SO "Purchases for this order" section.
+      // Linked POs live on the SO Cost & margin tab (cost users) / purchasing progress (everyone).
       const soPos = await db.purchaseOrder.findMany({ where: { salesOrderId: so.id, status: { not: "VOID" } }, select: { id: true, number: true, subtotal: true } });
       expect(soPos.length).toBeGreaterThanOrEqual(1);
       const soPurchasesAdmin = await getSoPurchasing(so.id, admin);
@@ -446,6 +447,14 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const soPurchasesStaff = await getSoPurchasing(so.id, staff);
       expect(soPurchasesStaff.purchaseOrders.map((p) => p.number).sort()).toEqual(soPos.map((p) => p.number).sort());
       expect(soPurchasesStaff.purchaseOrders.every((p) => p.id === undefined && p.total === undefined)).toBe(true);
+
+      const margin = await getSoCostMargin(so.id, admin);
+      expect(margin).not.toBeNull();
+      expect(margin!.rows.map((r) => r.number).sort()).toEqual(soPos.map((p) => p.number).sort());
+      expect(margin!.rows.every((r) => r.basis === "PO_TOTAL" || r.basis === "RECEIVED" || r.basis === "BILLED")).toBe(true);
+      // Void PO (extra) is excluded from Cost & margin.
+      expect(margin!.rows.map((r) => r.id)).not.toContain(extra!.id);
+      expect(await getSoCostMargin(so.id, staff)).toBeNull();
     });
   });
 
