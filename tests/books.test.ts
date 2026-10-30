@@ -69,6 +69,9 @@ describe("cash gating inside books rows", () => {
 describe("CSV formula injection (csvCell)", () => {
   it("leaves plain numeric negatives unescaped", () => {
     expect(csvCell("-500.00")).toBe("-500.00");
+    // Plain positives / zero decimals stay unescaped (not formula-prefixed)
+    expect(csvCell("500")).toBe("500");
+    expect(csvCell("0.00")).toBe("0.00");
   });
 
   it("prefixes formula-risky cells with a leading apostrophe", () => {
@@ -80,6 +83,9 @@ describe("CSV formula injection (csvCell)", () => {
     // Still cover + and CR (existing formula-risk prefixes)
     expect(csvCell("+cmd")).toBe("'+cmd");
     expect(csvCell("\rCR")).toBe("'\rCR");
+    // Leading + with digits, and scientific-ish minus (not plain decimal) → escaped
+    expect(csvCell("+1+1")).toBe("'+1+1");
+    expect(csvCell("-5e3")).toBe("'-5e3");
   });
 
   it("leaves normal text alone; still quotes commas and embedded quotes", () => {
@@ -89,6 +95,8 @@ describe("CSV formula injection (csvCell)", () => {
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
     // Formula risk + comma → apostrophe first, then quote the whole cell
     expect(csvCell("=1,2")).toBe('"\'=1,2"');
+    // Comma in an otherwise numeric-looking value → quoted
+    expect(csvCell("1,000")).toBe('"1,000"');
   });
 });
 
