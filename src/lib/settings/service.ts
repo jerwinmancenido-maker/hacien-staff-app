@@ -45,8 +45,13 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
     versionId: v.id,
     version: v.version,
     effectiveFrom: v.effectiveFrom,
-    // Parse so older snapshots missing a newer section still get a full shape.
-    settings: settingsSchema.parse({ ...DEFAULT_SETTINGS, ...v.data }),
+    // Parse so older snapshots missing a newer section (or a newer numbering
+    // format, e.g. receivingReport) still get a full shape.
+    settings: settingsSchema.parse({
+      ...DEFAULT_SETTINGS,
+      ...v.data,
+      numbering: { ...DEFAULT_SETTINGS.numbering, ...(v.data as Partial<Settings>).numbering },
+    }),
   };
 }
 

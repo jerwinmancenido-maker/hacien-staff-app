@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { can, ForbiddenError, type Permission } from "../permissions";
+import { can, canSeeCosts, ForbiddenError, type Permission } from "../permissions";
 import { clientIp } from "./client-ip";
 import { getSessionUser } from "./session";
 
@@ -24,12 +24,26 @@ export async function requirePagePermission(permission: Permission): Promise<Cur
   return user;
 }
 
+/** For cost pages (supplier POs, bills, match): the permission plus "Can see costs", else /no-access. */
+export async function requireCostPage(permission: Permission = "view"): Promise<CurrentUser> {
+  const user = await requirePagePermission(permission);
+  if (!canSeeCosts(user)) redirect("/no-access");
+  return user;
+}
+
 export { ForbiddenError };
 
 /** For server actions: throws when signed out or lacking the permission. */
 export async function requireActionPermission(permission: Permission): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user || !can(user, permission)) throw new ForbiddenError();
+  return user;
+}
+
+/** For cost actions: the permission plus "Can see costs". */
+export async function requireCostAction(permission: Permission = "edit_data"): Promise<CurrentUser> {
+  const user = await requireActionPermission(permission);
+  if (!canSeeCosts(user)) throw new ForbiddenError();
   return user;
 }
 

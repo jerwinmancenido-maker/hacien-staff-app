@@ -7,7 +7,7 @@ function user(roles: Role[], extra: Partial<PermissionUser> = {}): PermissionUse
 
 describe("role permissions", () => {
   const matrix: [Role, Permission[], Permission[]][] = [
-    ["ADMIN", ["view", "edit_data", "manage_settings", "manage_users", "view_audit"], ["approve"]],
+    ["ADMIN", ["view", "edit_data", "approve", "manage_settings", "manage_users", "view_audit"], []],
     ["APPROVER", ["view", "edit_data", "approve"], ["manage_settings", "manage_users", "view_audit"]],
     ["STAFF", ["view", "edit_data"], ["approve", "manage_settings", "manage_users", "view_audit"]],
     ["VIEWER", ["view"], ["edit_data", "approve", "manage_settings", "manage_users", "view_audit"]],

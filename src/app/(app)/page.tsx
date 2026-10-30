@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
-import { formatDate, manilaHour } from "@/lib/format";
+import { formatDate, formatPeso, manilaHour } from "@/lib/format";
+import { canSeeCosts } from "@/lib/permissions";
+import { purchasingStats } from "@/lib/purchasing/views";
 import { PageHeader } from "@/components/ui";
 
 function greeting(hour: number) {
@@ -17,6 +19,8 @@ export default async function HomePage() {
     db.supplier.count({ where: { active: true } }),
     db.contact.count({ where: { active: true } }),
   ]);
+  const po = await purchasingStats();
+  const withCosts = canSeeCosts(user);
   const first = user.name.split(" ")[0];
   return (
     <>
@@ -35,6 +39,18 @@ export default async function HomePage() {
           <div className="label">Active suppliers</div>
           <div className="value">{suppliers}</div>
           <div className="foot">Open the supplier list →</div>
+        </Link>
+        {withCosts && (
+          <Link href="/purchase-orders" className="card stat">
+            <div className="label">Open supplier POs</div>
+            <div className="value">{po.openPos}</div>
+            <div className="foot">{formatPeso(po.openPosTotal)} · approved, sent or partly received</div>
+          </Link>
+        )}
+        <Link href="/receiving" className="card stat">
+          <div className="label">Awaiting receipt</div>
+          <div className="value">{po.awaitingReceipt}</div>
+          <div className="foot">POs sent to suppliers, not fully received →</div>
         </Link>
         <div className="card stat">
           <div className="label">Active contacts</div>

@@ -14,7 +14,11 @@ export type AuditEntityType =
   | "Quote"
   | "SalesOrder"
   | "Address"
-  | "BusinessDocument";
+  | "BusinessDocument"
+  | "PurchaseOrder"
+  | "ReceivingReport"
+  | "SupplierBill"
+  | "DocumentAttachment";
 
 type Plain = Record<string, unknown>;
 

@@ -32,6 +32,7 @@ export const settingsSections = {
     quote: numberingFormat,
     salesOrder: numberingFormat,
     supplierPo: numberingFormat,
+    receivingReport: numberingFormat,
   }),
   taxYear: z
     .object({
