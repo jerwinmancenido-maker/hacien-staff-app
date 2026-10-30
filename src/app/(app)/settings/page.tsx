@@ -134,6 +134,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               label={SETTINGS_LABELS.taxCalendar}
               versionId={snap.versionId}
               action={save("taxCalendar")}
+              showDocumentsOnlyFooter={false}
               fields={[
                 {
                   name: "corUploadedAndChecked",

@@ -143,6 +143,11 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         }
       }
 
+      // Until COR is checked, never show the "Confirmed" Applies chip — reuse the
+      // existing "Unverified: ask RDO" label (seeds like 1701Q/1701 stay confirmed in catalog).
+      const applies: TaxCalendarAppliesKey =
+        !input.settings.corUploadedAndChecked && def.applies === "confirmed" ? "unverified" : def.applies;
+
       rows.push({
         obligationKey: def.key,
         occurrenceKey: occ.occurrenceKey,
@@ -157,8 +162,8 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         fileByHint: occ.fileByHint,
         status,
         statusLabel: TAX_CALENDAR_STATUS[status],
-        applies: def.applies,
-        appliesLabel: TAX_CALENDAR_APPLIES[def.applies],
+        applies,
+        appliesLabel: TAX_CALENDAR_APPLIES[applies],
         appliesNote: def.appliesNote,
         sourceNote: def.sourceNote,
         worksheetHref: def.worksheetHref,

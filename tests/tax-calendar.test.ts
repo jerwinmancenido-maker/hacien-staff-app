@@ -264,6 +264,29 @@ describe("calendar build views", () => {
     expect(q3?.statusLabel).toBe("Marked done");
     expect(q3?.doneNote).toBe("paid at bank");
   });
+
+  it("hides Confirmed Applies chip until COR uploaded and checked (1701Q / 1701)", () => {
+    const now = new Date("2026-10-30T08:00:00.000Z");
+    const off = defaultTaxCalendarSettings();
+    expect(off.corUploadedAndChecked).toBe(false);
+    const provisional = buildTaxCalendarRows({ settings: off, view: "all", now, fromYear: 2026, toYear: 2026 });
+    for (const key of ["1701q", "1701"] as const) {
+      const row = provisional.find((r) => r.obligationKey === key);
+      expect(row).toBeTruthy();
+      expect(row?.applies).toBe("unverified");
+      expect(row?.appliesLabel).toBe(TAX_CALENDAR_APPLIES.unverified);
+      expect(row?.appliesLabel).toBe("Unverified: ask RDO");
+    }
+
+    const on = { ...off, corUploadedAndChecked: true };
+    const confirmed = buildTaxCalendarRows({ settings: on, view: "all", now, fromYear: 2026, toYear: 2026 });
+    for (const key of ["1701q", "1701"] as const) {
+      const row = confirmed.find((r) => r.obligationKey === key);
+      expect(row?.applies).toBe("confirmed");
+      expect(row?.appliesLabel).toBe(TAX_CALENDAR_APPLIES.confirmed);
+      expect(row?.appliesLabel).toBe("Confirmed");
+    }
+  });
 });
 
 describe("ICS and CSV injection safety (no customer data)", () => {

@@ -26,6 +26,7 @@ export function SettingsForm({
   fields,
   versionId,
   action,
+  showDocumentsOnlyFooter = true,
 }: {
   title: string;
   /** Used in the confirm question: "Change {label}?" */
@@ -34,6 +35,8 @@ export function SettingsForm({
   /** Settings version the form was rendered from; refreshed after each save. */
   versionId: string;
   action: (state: FormState, form: FormData) => Promise<FormState>;
+  /** Hide on Tax calendar (not document settings). Default true. */
+  showDocumentsOnlyFooter?: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const [confirming, setConfirming] = useState(false);
@@ -106,7 +109,9 @@ export function SettingsForm({
           <button className="btn" type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save changes"}
           </button>
-          <span className="small faint">Changes apply to new documents only.</span>
+          {showDocumentsOnlyFooter && (
+            <span className="small faint">Changes apply to new documents only.</span>
+          )}
         </div>
       </form>
       <ConfirmDialog
