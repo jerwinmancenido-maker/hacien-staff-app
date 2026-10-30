@@ -1,24 +1,48 @@
 // ₱3M non-VAT threshold meter: gross sales so far this tax year vs the limit in
 // Settings → Tax year, with warnings at the two configured percentages.
 //
-// Gross sales come from a pluggable source so the meter can be tested (and so
-// Billing can plug in invoices later). Until invoices exist the source is
-// `noInvoicesYet`, which always returns 0.
+// Gross sales = sum of non-voided Part 5 billing `amount` values (booklet totals),
+// dated by `invoiceDate` in the tax year [Jan 1 00:00 PHT, Jan 1 next year).
+// Withholding (2307) does not reduce gross; collections are not counted again.
 
 import type { Settings } from "../settings/schema";
+import { db } from "../db";
+import { money } from "../documents/common";
+import { addDays, manilaToday } from "../format";
+import { fromScaled, toScaled } from "../quotes/calc";
 
 /** Asia/Manila is UTC+8 all year (no daylight saving). */
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 export interface GrossSalesSource {
-  /** Gross sales (₱, VAT-exclusive invoice totals, not voided) dated in [from, to). */
+  /** Gross sales (₱, booklet billing totals, not voided) dated in [from, to). */
   grossSalesBetween(from: Date, to: Date): Promise<number>;
 }
 
-// TODO(Billing): replace with a source that sums non-voided invoices.
-export const noInvoicesYet: GrossSalesSource = {
-  async grossSalesBetween() {
-    return 0;
+/**
+ * Sum billing amount strings with exact cent math. Convert to number only here
+ * (once) for the meter — never float-accumulate.
+ */
+export function sumGrossSalesAmounts(amounts: readonly string[]): number {
+  let cents = 0n;
+  for (const a of amounts) {
+    cents += toScaled(a, 2);
+  }
+  if (cents <= 0n) return 0;
+  return Number(fromScaled(cents, 2));
+}
+
+/** Live source: non-voided Billing.amount rows whose invoiceDate is in [from, to). */
+export const billingsGrossSales: GrossSalesSource = {
+  async grossSalesBetween(from, to) {
+    const rows = await db.billing.findMany({
+      where: {
+        status: { not: "VOID" },
+        invoiceDate: { gte: from, lt: to },
+      },
+      select: { amount: true },
+    });
+    return sumGrossSalesAmounts(rows.map((r) => money(r.amount)));
   },
 };
 
@@ -27,12 +51,27 @@ export function taxYearStart(year: number): Date {
   return new Date(Date.UTC(year, 0, 1) - MANILA_OFFSET_MS);
 }
 
-/** Gross sales from Jan 1 of the tax year up to `now` (or the year's end, if it's over). */
-export async function getGrossSalesYtd(year: number, now: Date = new Date(), source: GrossSalesSource = noInvoicesYet): Promise<number> {
+/**
+ * Upper bound for YTD queries against `@db.Date` invoiceDate values (stored as
+ * 00:00 UTC of the calendar day). Caps at the start of the next Asia/Manila
+ * calendar day so a billing dated "today" still counts before 08:00 PHT, when
+ * `now` is still on the previous UTC calendar day.
+ */
+export function grossSalesYtdEnd(now: Date, taxYearEnd: Date): Date {
+  const endOfCurrentPhtDay = addDays(manilaToday(now), 1);
+  return endOfCurrentPhtDay < taxYearEnd ? endOfCurrentPhtDay : taxYearEnd;
+}
+
+/** Gross sales from Jan 1 of the tax year through the current PHT day (or the year's end). */
+export async function getGrossSalesYtd(
+  year: number,
+  now: Date = new Date(),
+  source: GrossSalesSource = billingsGrossSales,
+): Promise<number> {
   const from = taxYearStart(year);
   const end = taxYearStart(year + 1);
   if (now <= from) return 0;
-  const to = now < end ? now : end;
+  const to = grossSalesYtdEnd(now, end);
   const total = await source.grossSalesBetween(from, to);
   return Number.isFinite(total) && total > 0 ? total : 0;
 }
@@ -72,7 +111,11 @@ export function nonVatMeter(used: number, taxYear: Settings["taxYear"]): NonVatM
   };
 }
 
-export async function getNonVatMeter(taxYear: Settings["taxYear"], now: Date = new Date(), source: GrossSalesSource = noInvoicesYet): Promise<NonVatMeter> {
+export async function getNonVatMeter(
+  taxYear: Settings["taxYear"],
+  now: Date = new Date(),
+  source: GrossSalesSource = billingsGrossSales,
+): Promise<NonVatMeter> {
   return nonVatMeter(await getGrossSalesYtd(taxYear.year, now, source), taxYear);
 }
 

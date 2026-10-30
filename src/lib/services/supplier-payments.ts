@@ -10,6 +10,7 @@ import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
+import { assertCashEnabled } from "../cash/features";
 import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationInput } from "../payables/allocations";
 import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
@@ -187,6 +188,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         if (issue) throw new DocRuleError(issue.message, issue.field);
 
         if (input.cashAccountId) {
+          await assertCashEnabled();
           const acct = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
           if (!acct || !acct.active) {
             throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");

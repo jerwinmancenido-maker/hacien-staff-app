@@ -94,6 +94,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           supplierId={supplier.id}
           supplierName={supplier.name}
           defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
+          cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({
             id: a.id,
             name: a.name,

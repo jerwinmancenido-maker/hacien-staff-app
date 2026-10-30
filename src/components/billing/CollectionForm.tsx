@@ -26,6 +26,7 @@ export function CollectionForm({
   defaults,
   openBillings,
   cashAccounts = [],
+  cashEnabled = false,
   canEdit,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -34,6 +35,8 @@ export function CollectionForm({
   defaults: { date: string; amountReceived: string; method: string; receiptNo: string; cashAccountId?: string };
   openBillings: OpenBillingRow[];
   cashAccounts?: CashAccountOption[];
+  /** When false (CASH_ENABLED off), hide the deposited-to account selector. */
+  cashEnabled?: boolean;
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
@@ -126,15 +129,17 @@ export function CollectionForm({
           <div className="hint">Manual — the app does not issue official receipts.</div>
           {e.receiptNo && <div className="error">{e.receiptNo}</div>}
         </div>
-        <CashAccountSelect
-          accounts={cashAccounts}
-          defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
-          allowBlank
-          blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
-          error={e.cashAccountId}
-          label="Deposited to"
-          hint="Which cash or bank account received this money. Leave blank if you are not sure yet."
-        />
+        {cashEnabled && (
+          <CashAccountSelect
+            accounts={cashAccounts}
+            defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
+            allowBlank
+            blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
+            error={e.cashAccountId}
+            label="Deposited to"
+            hint="Which cash or bank account received this money. Leave blank if you are not sure yet."
+          />
+        )}
         {(method === "CHECK" || method === "BANK_TRANSFER" || method === "GCASH") && (
           <div className={`field${e.reference ? " has-error" : ""}`}>
             <label htmlFor="reference">{method === "CHECK" ? "Check no." : "Reference no."}</label>

@@ -3,6 +3,7 @@
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
+import { assertCashEnabled } from "../cash/features";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { accountBalanceAsOf, type LedgerSourceRow } from "../cash/balance";
@@ -60,6 +61,7 @@ export async function defaultCashAccountId(): Promise<string | null> {
 
 export async function createCashAccount(input: CashAccountInput, actor: CashActor) {
   assertManageCash(actor);
+  await assertCashEnabled();
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
       const row = await tx.cashAccount.create({
@@ -97,6 +99,7 @@ export async function createCashAccount(input: CashAccountInput, actor: CashActo
 
 export async function updateCashAccount(id: string, input: CashAccountInput, actor: CashActor) {
   assertManageCash(actor);
+  await assertCashEnabled();
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT \`id\` FROM \`CashAccount\` WHERE \`id\` = ${id} FOR UPDATE`;

@@ -6,7 +6,7 @@ import {
   prevYmd,
   ymdCmp,
 } from "@/lib/cash/balance";
-import { cashEnabledFromEnv } from "@/lib/cash/features";
+import { CASH_OFF_MESSAGE, cashEnabledFromEnv } from "@/lib/cash/features";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { formatDocNumber } from "@/lib/settings/numbering";
@@ -31,6 +31,7 @@ describe("cash feature flag", () => {
     expect(cashEnabledFromEnv({ CASH_ENABLED: "true" })).toBe(true);
     expect(cashEnabledFromEnv({ CASH_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.cashEnabled).toBe(false);
+    expect(CASH_OFF_MESSAGE).toMatch(/Cash is turned off/);
   });
 });
 

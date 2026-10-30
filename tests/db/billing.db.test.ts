@@ -36,29 +36,39 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     approver = await db.user.create({
       data: { email: `approver-bill-${t}@test.example.com`, name: `Approver ${t}`, isApprover: true, canSeeCosts: true },
     });
-    const snap = await getSettingsSnapshot();
-    // Wide booklet range so parallel suites don't collide on invoiceNo (unique forever).
-    const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
-    await db.settingsVersion.create({
-      data: {
-        version: latest.version + 1,
-        data: {
-          ...snap.settings,
-          invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        } as never,
-        changedKey: "invoiceBooklet",
-        before: snap.settings.invoiceBooklet,
-        after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        createdById: admin.id,
-      },
-    });
   });
 
   afterAll(async () => {
     await db.$disconnect();
   });
 
+  /** Parallel suites can republish settings with the default 1–500 booklet. */
+  async function ensureWideBooklet() {
+    const wide = { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet billing" };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      if (snap.settings.invoiceBooklet.seriesTo >= 9_999_999) return;
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...(latest.data as object), invoiceBooklet: wide } as never,
+            changedKey: "invoiceBooklet",
+            before: snap.settings.invoiceBooklet,
+            after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race with another suite — retry.
+      }
+    }
+  }
+
   async function openSo(year: number, contractExtra?: { unitPrice?: string }) {
+    await ensureWideBooklet();
     const customer = await makeCustomer(["GOODS_1"]);
     const supplier = await makeSupplier();
     // Ensure GOODS_1 rate exists for snapshot.
@@ -296,6 +306,122 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
 
     const tx = await listTransactions({ kind: "customer", id: customer.id }, { type: "BILLING" }, admin);
     expect(tx.rows.some((r) => r.kind === "BILLING")).toBe(true);
+  });
+
+  it("credit apply rejects withholding-only (no phantom 2307 / AR shrink)", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "5000.00" });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "2000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const advance = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 3)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-CREDIT-WH-1",
+        amountReceived: "1000.00",
+        notes: null,
+        allocations: [],
+      },
+      admin,
+    );
+    expect(await customerCreditBalance(customer.id)).toBe("1000.00");
+
+    await expect(
+      applyCustomerCredit(
+        {
+          customerId: customer.id,
+          allocations: [
+            {
+              collectionId: advance.id,
+              billingId: billing.id,
+              cashApplied: "0.00",
+              withholdingApplied: "50.00",
+              withholdingRate: "0.0100",
+              atcCode: "WC010",
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/Withholding can't be applied from customer credit/i);
+
+    expect(await customerCreditBalance(customer.id)).toBe("1000.00");
+    const bal = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+    expect(bal.status).toBe("OPEN");
+    const wh = await db.withholding2307.findFirst({ where: { billingId: billing.id } });
+    expect(wh).toBeNull();
+    const allocs = await db.collectionAllocation.findMany({ where: { billingId: billing.id } });
+    expect(allocs).toHaveLength(0);
+  });
+
+  it("concurrent collection allocations on one billing respect the remaining balance", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "1000.00" });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+
+    const mk = (receiptNo: string) =>
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo,
+          amountReceived: "600.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "600.00",
+              withholdingApplied: "0.00",
+            },
+          ],
+        },
+        admin,
+      );
+
+    const results = await Promise.allSettled([mk("OR-CONC-A"), mk("OR-CONC-B"), mk("OR-CONC-C")]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok.length).toBe(1);
+    expect(bad.length).toBe(2);
+    for (const r of bad) {
+      expect(r.status).toBe("rejected");
+      if (r.status === "rejected") expect(r.reason).toBeInstanceOf(DocRuleError);
+    }
+
+    const allocs = await db.collectionAllocation.findMany({
+      where: { billingId: billing.id, collection: { status: "POSTED" } },
+    });
+    const applied = allocs.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+    expect(applied).toBe(toScaled("600.00", 2));
+    const row = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+    expect(row.status).toBe("PARTIALLY_PAID");
   });
 
   it("voiding a collection clears pending 2307 from list and totals", async () => {
