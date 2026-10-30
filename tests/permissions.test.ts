@@ -7,10 +7,10 @@ function user(roles: Role[], extra: Partial<PermissionUser> = {}): PermissionUse
 
 describe("role permissions", () => {
   const matrix: [Role, Permission[], Permission[]][] = [
-    ["ADMIN", ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "manage_settings", "manage_users", "view_audit"], []],
-    ["APPROVER", ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash"], ["manage_settings", "manage_users", "view_audit"]],
-    ["STAFF", ["view", "edit_data"], ["approve", "manage_billing", "manage_payables", "manage_cash", "manage_settings", "manage_users", "view_audit"]],
-    ["VIEWER", ["view"], ["edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "manage_settings", "manage_users", "view_audit"]],
+    ["ADMIN", ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "view_books", "manage_settings", "manage_users", "view_audit"], []],
+    ["APPROVER", ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "view_books"], ["manage_settings", "manage_users", "view_audit"]],
+    ["STAFF", ["view", "edit_data"], ["approve", "manage_billing", "manage_payables", "manage_cash", "view_books", "manage_settings", "manage_users", "view_audit"]],
+    ["VIEWER", ["view"], ["edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "view_books", "manage_settings", "manage_users", "view_audit"]],
   ];
 
   it.each(matrix)("%s has exactly its permissions", (role, allowed, denied) => {

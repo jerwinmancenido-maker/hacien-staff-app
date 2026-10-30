@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { can, canSeeCosts, roleLabel } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
+import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Gross sales are ₱0 until Billing adds invoices (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
+  const booksEnabled = await isBooksEnabled();
 
   return (
     <div className="frame">
@@ -24,7 +26,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="brand-logo">H</span>
           <span>HACIEN</span>
         </div>
-        <SidebarNav isAdmin={can(user, "manage_settings")} canSeeCosts={canSeeCosts(user)} canEdit={can(user, "edit_data")} />
+        <SidebarNav
+          isAdmin={can(user, "manage_settings")}
+          canSeeCosts={canSeeCosts(user)}
+          canEdit={can(user, "edit_data")}
+          canViewBooks={can(user, "view_books")}
+          booksEnabled={booksEnabled}
+        />
         <div className="sidebar-spacer" />
         <div className={`tracker-card level-${meter.level}`} aria-label="Non-VAT limit tracker" data-level={meter.level}>
           <div className="label tracker-head">

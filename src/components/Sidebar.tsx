@@ -5,7 +5,16 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BookIcon, BoxIcon, CartIcon, CoinIcon, FileIcon, GearIcon, HomeIcon, ListIcon, TruckIcon, UsersIcon } from "./Icons";
 
-type Item = { href: string; label: string; icon: ReactNode; soon?: boolean; adminOnly?: boolean; costsOnly?: boolean; editOnly?: boolean };
+type Item = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  soon?: boolean;
+  adminOnly?: boolean;
+  costsOnly?: boolean;
+  editOnly?: boolean;
+  booksOnly?: boolean;
+};
 
 const MAIN: Item[] = [
   { href: "/", label: "Home", icon: <HomeIcon /> },
@@ -21,7 +30,7 @@ const LATER: Item[] = [
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
   { href: "/payables", label: "Payables", icon: <CoinIcon /> },
   { href: "/cash", label: "Cash", icon: <CoinIcon /> },
-  { href: "/books", label: "Books", icon: <BookIcon />, soon: true },
+  { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
 ];
 
 const ADMIN: Item[] = [
@@ -29,7 +38,19 @@ const ADMIN: Item[] = [
   { href: "/audit", label: "Audit log", icon: <ListIcon />, adminOnly: true },
 ];
 
-export function SidebarNav({ isAdmin, canSeeCosts = false, canEdit = false }: { isAdmin: boolean; canSeeCosts?: boolean; canEdit?: boolean }) {
+export function SidebarNav({
+  isAdmin,
+  canSeeCosts = false,
+  canEdit = false,
+  canViewBooks = false,
+  booksEnabled = false,
+}: {
+  isAdmin: boolean;
+  canSeeCosts?: boolean;
+  canEdit?: boolean;
+  canViewBooks?: boolean;
+  booksEnabled?: boolean;
+}) {
   const path = usePathname();
   const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
   const render = (i: Item) => (
@@ -43,7 +64,12 @@ export function SidebarNav({ isAdmin, canSeeCosts = false, canEdit = false }: { 
     <nav aria-label="Main">
       {MAIN.map(render)}
       <div className="nav-label">Deals</div>
-      {LATER.filter((i) => (!i.costsOnly || canSeeCosts) && (!i.editOnly || canEdit)).map(render)}
+      {LATER.filter(
+        (i) =>
+          (!i.costsOnly || canSeeCosts) &&
+          (!i.editOnly || canEdit) &&
+          (!i.booksOnly || (booksEnabled && canViewBooks)),
+      ).map(render)}
       {isAdmin && (
         <>
           <div className="nav-label">Admin</div>
@@ -81,6 +107,10 @@ const CRUMB_LABELS: Record<string, string> = {
   transfers: "Transfers",
   ledger: "Ledger",
   books: "Books",
+  sales: "Sales",
+  disbursements: "Cash disbursements",
+  purchases: "Purchases",
+  journal: "General journal",
   new: "New",
   edit: "Edit",
 };

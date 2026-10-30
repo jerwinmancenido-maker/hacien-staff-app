@@ -67,6 +67,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return {
         payablesEnabled: checked(get("payablesEnabled")),
         cashEnabled: checked(get("cashEnabled")),
+        booksEnabled: checked(get("booksEnabled")),
       };
   }
 }
