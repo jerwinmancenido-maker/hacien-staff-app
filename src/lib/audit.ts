@@ -4,7 +4,17 @@
 import type { AuditAction, Prisma } from "@prisma/client";
 import type { Tx, Db } from "./db";
 
-export type AuditEntityType = "User" | "Customer" | "Supplier" | "Contact" | "Settings" | "Session" | "Quote" | "SalesOrder";
+export type AuditEntityType =
+  | "User"
+  | "Customer"
+  | "Supplier"
+  | "Contact"
+  | "Settings"
+  | "Session"
+  | "Quote"
+  | "SalesOrder"
+  | "Address"
+  | "BusinessDocument";
 
 type Plain = Record<string, unknown>;
 

@@ -23,7 +23,6 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     const parsed = customerSchema(settings.lists.paymentTerms, allowedRates).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),
-      address: str(form, "address"),
       withholdingType: str(form, "withholdingType") || undefined,
       defaultWithholding: form.getAll("defaultWithholding").filter((v): v is string => typeof v === "string"),
       defaultTerms: str(form, "defaultTerms"),

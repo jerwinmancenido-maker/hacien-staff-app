@@ -3,6 +3,8 @@ import type { SupplierTaxType } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { listSuppliers } from "@/lib/services/companies";
+import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
+import { formatAddress } from "@/lib/addresses/format";
 import { missingBankDetails, SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
 import { RecordList, type RecordItem } from "@/components/RecordList";
@@ -16,7 +18,7 @@ const TONE: Record<SupplierTaxType, ChipTone> = {
   NO_RECEIPT: "amber",
 };
 
-type Search = { q?: string; tax?: string; inactive?: string; view?: string };
+type Search = { q?: string; tax?: string; inactive?: string; docs?: string; view?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -30,8 +32,11 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const s = await searchParams;
   const tax = SUPPLIER_TAX_TYPES.includes(s.tax as SupplierTaxType) ? (s.tax as SupplierTaxType) : undefined;
   const showInactive = s.inactive === "1";
-  const suppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive });
-  const filtered = !!(s.q || tax);
+  const expiringOnly = s.docs === "expiring";
+  const warnDays = await expiryWarningDays();
+  const expiringIds = await ownersWithExpiringDocuments("supplier", warnDays);
+  const suppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
+  const filtered = !!(s.q || tax || expiringOnly);
 
   const filterTabs = [
     { key: "all", label: "All", href: href(s, { tax: undefined }) },
@@ -68,11 +73,13 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
         },
         ...(x.defaultTerms ? [{ label: x.defaultTerms, tone: "grey" as ChipTone }] : []),
         ...(isMissingBank && x.active ? [{ label: "No bank details", tone: "amber" as ChipTone }] : []),
+        ...(expiringIds.includes(x.id) ? [{ label: "Documents expiring", tone: "amber" as ChipTone }] : []),
         ...(!x.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
       ],
       meta: [
         { label: "TIN", value: x.tin ?? "—" },
         { label: "Terms", value: x.defaultTerms ?? "—" },
+        { label: "Address", value: x.addresses[0] ? formatAddress(x.addresses[0]) : "—" },
         {
           label: "Bank",
           value: isMissingBank
@@ -124,6 +131,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
           {tax && <input type="hidden" name="tax" value={tax} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
+          {expiringOnly && <input type="hidden" name="docs" value="expiring" />}
           {s.view && <input type="hidden" name="view" value={s.view} />}
         </form>
 
@@ -135,6 +143,14 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
         />
 
         <div className="right">
+          <Link
+            className={`filter-chip${expiringOnly ? " active" : ""}`}
+            href={href(s, { docs: expiringOnly ? undefined : "expiring" })}
+            aria-pressed={expiringOnly}
+            title={`Documents expired or expiring within ${warnDays} days`}
+          >
+            Expiring documents{expiringIds.length ? ` (${expiringIds.length})` : ""}
+          </Link>
           <Link
             className={`filter-chip${showInactive ? " active" : ""}`}
             href={href(s, { inactive: showInactive ? undefined : "1" })}

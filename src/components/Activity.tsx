@@ -15,9 +15,24 @@ const ACTION_LABELS: Record<string, string> = {
   login_failed: "failed sign-in",
   settings_change: "changed settings",
   email_draft: "drafted an email",
+  download: "downloaded",
 };
 
-const ENTITY_LABELS: Record<string, string> = { Contact: "a contact", Quote: "the quote", SalesOrder: "the sales order" };
+const ENTITY_LABELS: Record<string, string> = {
+  Contact: "a contact",
+  Quote: "the quote",
+  SalesOrder: "the sales order",
+  Address: "an address",
+  BusinessDocument: "a document",
+};
+
+// Addresses and documents are archived (kept in history), not "marked inactive".
+const ARCHIVED_ENTITIES = ["Address", "BusinessDocument"];
+function actionLabel(action: string, entityType: string): string {
+  if (ARCHIVED_ENTITIES.includes(entityType) && action === "archive") return "archived";
+  if (ARCHIVED_ENTITIES.includes(entityType) && action === "restore") return "restored";
+  return ACTION_LABELS[action] ?? action;
+}
 
 /**
  * `viewer`: pass on pages whose audit rows can hold costs (quotes, sales
@@ -56,12 +71,8 @@ export async function Activity({
               </div>
               <div className="timeline-content">
                 <div className="timeline-heading">
-                  <b>{r.user?.name ?? "System"}</b> {ACTION_LABELS[r.action] ?? r.action}{" "}
-                  {ENTITY_LABELS[r.entityType] && targets.length > 1
-                    ? ENTITY_LABELS[r.entityType]
-                    : r.entityType === "Contact"
-                      ? "a contact"
-                      : ""}
+                  <b>{r.user?.name ?? "System"}</b> {actionLabel(r.action, r.entityType)}{" "}
+                  {targets.length > 1 || !["Quote", "SalesOrder"].includes(r.entityType) ? (ENTITY_LABELS[r.entityType] ?? "") : ""}
                 </div>
                 <div className="timeline-when">{formatDateTime(r.at)}</div>
                 {(r.action === "update" || r.action === "void") &&

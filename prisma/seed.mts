@@ -16,6 +16,7 @@ import { noDeleteExtension } from "../src/lib/no-delete.ts";
 import { DEFAULT_SETTINGS } from "../src/lib/settings/defaults.ts";
 import { seedRefusal } from "../src/lib/seed-guard.ts";
 import { manilaToday } from "../src/lib/format.ts";
+import { formatAddress } from "../src/lib/addresses/format.ts";
 import { docTotals, lineAmounts, type WithholdingSnapshot } from "../src/lib/quotes/calc.ts";
 import { allocateDocNumber, ensureSeries, type NumberFormat } from "../src/lib/documents/series.ts";
 
@@ -35,12 +36,23 @@ const USERS: SeedUser[] = [
   { email: "viewer@example.com", name: "Paolo Reyes", isViewer: true, canSeeCosts: false },
 ];
 
+type SeedAddress = {
+  kind: "BILLING" | "DELIVERY" | "OFFICE" | "WAREHOUSE" | "OTHER";
+  label?: string;
+  street: string;
+  barangay: string;
+  cityMunicipality: string;
+  province: string;
+  zip: string;
+};
+
 type SeedContact = { name: string; role: string; email?: string; phone?: string; isMain?: boolean; active?: boolean };
 
 const CUSTOMERS: {
   name: string;
   tin: string;
-  address: string;
+  /** The first of each kind becomes that kind's default. */
+  addresses: SeedAddress[];
   withholdingType: "GOVERNMENT" | "TOP_WITHHOLDING_AGENT" | "NONE";
   /** Default withholding rate codes copied onto new quotes (examples only). */
   defaultWithholding: string[];
@@ -50,7 +62,10 @@ const CUSTOMERS: {
   {
     name: "TESDA Regional Office",
     tin: "000-111-222-000",
-    address: "Sample Regional Office, Quezon City, Metro Manila",
+    addresses: [
+      { kind: "BILLING", label: "Regional office", street: "Sample Regional Office Bldg., 12 Sample Ave.", barangay: "Central", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1100" },
+      { kind: "DELIVERY", label: "Training center", street: "Sample Training Center, 45 Sample Rd.", barangay: "Bagumbayan", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1110" },
+    ],
     withholdingType: "GOVERNMENT",
     defaultWithholding: ["GOODS_1", "GOV_PT_3"],
     defaultTerms: "Net 30",
@@ -63,7 +78,10 @@ const CUSTOMERS: {
   {
     name: "Sample Corp",
     tin: "000-333-444-000",
-    address: "Sample Tower, Ortigas Center, Pasig City",
+    addresses: [
+      { kind: "BILLING", street: "18F Sample Tower, Ortigas Center", barangay: "San Antonio", cityMunicipality: "Pasig City", province: "Metro Manila", zip: "1605" },
+      { kind: "DELIVERY", label: "Warehouse", street: "Sample Warehouse 3, 7 Sample St.", barangay: "Ugong", cityMunicipality: "Pasig City", province: "Metro Manila", zip: "1604" },
+    ],
     withholdingType: "TOP_WITHHOLDING_AGENT",
     defaultWithholding: ["GOODS_1"],
     defaultTerms: "Net 60",
@@ -75,7 +93,7 @@ const CUSTOMERS: {
   {
     name: "Juan Dela Cruz Trading",
     tin: "000-555-666-000",
-    address: "Sample St., Makati City",
+    addresses: [{ kind: "BILLING", street: "88 Sample St.", barangay: "Poblacion", cityMunicipality: "Makati City", province: "Metro Manila", zip: "1210" }],
     withholdingType: "NONE",
     defaultWithholding: [],
     defaultTerms: "COD",
@@ -89,7 +107,7 @@ const CUSTOMERS: {
 const SUPPLIERS: {
   name: string;
   tin?: string;
-  address: string;
+  addresses: SeedAddress[];
   taxType: "VAT" | "NON_VAT" | "NO_RECEIPT";
   defaultTerms: string;
   bank?: { bankAccountName: string; bankAccountNumber: string; bankBranch: string; bankNotes?: string };
@@ -98,7 +116,7 @@ const SUPPLIERS: {
   {
     name: "UNO Computer Supply",
     tin: "000-777-888-000",
-    address: "Sample Building, Gilmore Ave., Quezon City",
+    addresses: [{ kind: "OFFICE", street: "Unit 5, Sample Building, Gilmore Ave.", barangay: "Valencia", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1112" }],
     taxType: "VAT",
     defaultTerms: "Net 30",
     bank: {
@@ -116,7 +134,7 @@ const SUPPLIERS: {
   {
     name: "Metro IT Parts",
     tin: "000-999-000-000",
-    address: "Sample Mall, Manila",
+    addresses: [{ kind: "OFFICE", street: "Stall 21, Sample Mall, Sample Blvd.", barangay: "Barangay 659", cityMunicipality: "Manila", province: "Metro Manila", zip: "1000" }],
     taxType: "NON_VAT",
     defaultTerms: "COD",
     contacts: [
@@ -126,7 +144,7 @@ const SUPPLIERS: {
   },
   {
     name: "Gilmore Street Seller",
-    address: "Gilmore Ave., Quezon City",
+    addresses: [{ kind: "OFFICE", street: "Gilmore Ave. corner Sample St.", barangay: "Valencia", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1112" }],
     taxType: "NO_RECEIPT",
     defaultTerms: "COD",
     contacts: [
@@ -135,6 +153,16 @@ const SUPPLIERS: {
     ],
   },
 ];
+
+/** First address of each kind is the default. */
+function addressData(list: SeedAddress[]) {
+  const seen = new Set<string>();
+  return list.map((a) => {
+    const isDefault = !seen.has(a.kind);
+    seen.add(a.kind);
+    return { ...a, label: a.label ?? null, isDefault };
+  });
+}
 
 function contactData(c: SeedContact) {
   const active = c.active ?? true;
@@ -189,16 +217,28 @@ async function main(db: ReturnType<typeof connect>) {
       if (existing.defaultWithholding === null) {
         await db.customer.update({ where: { id: existing.id }, data: { defaultWithholding: c.defaultWithholding } });
       }
+      // Seeded before structured addresses (the migration copied the old text, flagged "needs review").
+      if (!(await db.address.findFirst({ where: { customerId: existing.id, needsReview: false } }))) {
+        await db.address.createMany({ data: addressData(c.addresses).map((a) => ({ ...a, customerId: existing.id })) });
+        await db.address.updateMany({ where: { customerId: existing.id, needsReview: true }, data: { archivedAt: new Date(), isDefault: false } });
+      }
       continue;
     }
-    const { contacts, ...data } = c;
-    await db.customer.create({ data: { ...data, contacts: { create: contacts.map(contactData) } } });
+    const { contacts, addresses, ...data } = c;
+    await db.customer.create({ data: { ...data, contacts: { create: contacts.map(contactData) }, addresses: { create: addressData(addresses) } } });
   }
 
   for (const s of SUPPLIERS) {
-    if (await db.supplier.findFirst({ where: { name: s.name } })) continue;
-    const { contacts, bank, ...data } = s;
-    await db.supplier.create({ data: { ...data, ...bank, contacts: { create: contacts.map(contactData) } } });
+    const existing = await db.supplier.findFirst({ where: { name: s.name } });
+    if (existing) {
+      if (!(await db.address.findFirst({ where: { supplierId: existing.id, needsReview: false } }))) {
+        await db.address.createMany({ data: addressData(s.addresses).map((a) => ({ ...a, supplierId: existing.id })) });
+        await db.address.updateMany({ where: { supplierId: existing.id, needsReview: true }, data: { archivedAt: new Date(), isDefault: false } });
+      }
+      continue;
+    }
+    const { contacts, bank, addresses, ...data } = s;
+    await db.supplier.create({ data: { ...data, ...bank, contacts: { create: contacts.map(contactData) }, addresses: { create: addressData(addresses) } } });
   }
 
   await seedQuotes(db);
@@ -329,7 +369,7 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
         status: "OPEN",
         buyerPoNo: "SC-PO-2026-0042",
         buyerPoDate: today,
-        deliveryAddress: sampleCorp.address,
+        deliveryAddress: formatAddress(CUSTOMERS[1]!.addresses.find((a) => a.kind === "DELIVERY")!, { multiline: true }),
         terms: won.terms,
         notes: won.notes,
         settingsVersionId: won.settingsVersionId,

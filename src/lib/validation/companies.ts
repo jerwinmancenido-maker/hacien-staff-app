@@ -52,7 +52,6 @@ export function customerSchema(allowedTerms: readonly string[], allowedWithholdi
   return z.object({
     name: z.string().trim().min(1, "Name is required.").max(191),
     tin: tinField,
-    address: optionalText(1000),
     withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
     // Default withholding rates copied onto new quotes (may be empty).
     defaultWithholding: z
@@ -71,7 +70,6 @@ export function supplierSchema(allowedTerms: readonly string[]) {
   return z.object({
     name: z.string().trim().min(1, "Name is required.").max(191),
     tin: tinField,
-    address: optionalText(1000),
     taxType: z.enum(SUPPLIER_TAX_TYPES, { error: "Pick a tax type." }),
     defaultTerms: termsField(allowedTerms),
     bankAccountName: optionalText(191),

@@ -12,6 +12,7 @@ import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
 import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { snapshotList } from "../services/withholding";
+import { customerBlockAddress } from "../services/addresses";
 
 type Dec = { toFixed(n: number): string };
 
@@ -300,7 +301,7 @@ export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
     buyerPoDate: null,
     deliveryAddress: null,
     company: await companyFor(q.settingsVersionId),
-    customer: { name: q.customer.name, address: q.customer.address, tin: q.customer.tin },
+    customer: { name: q.customer.name, address: await customerBlockAddress(q.customer), tin: q.customer.tin },
     contact: q.contact ? { name: q.contact.name, email: q.contact.email, phone: q.contact.phone } : null,
     items: q.items.map(printItem),
     contractPrice: money(q.contractPrice),
@@ -325,7 +326,7 @@ export async function getSalesOrderPrint(id: string): Promise<PrintDoc | null> {
     buyerPoDate: ymd(so.buyerPoDate),
     deliveryAddress: so.deliveryAddress,
     company: await companyFor(so.settingsVersionId),
-    customer: { name: so.customer.name, address: so.customer.address, tin: so.customer.tin },
+    customer: { name: so.customer.name, address: await customerBlockAddress(so.customer), tin: so.customer.tin },
     contact: so.contact ? { name: so.contact.name, email: so.contact.email, phone: so.contact.phone } : null,
     items: so.items.map(printItem),
     contractPrice: money(so.contractPrice),

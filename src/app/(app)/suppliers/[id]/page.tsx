@@ -12,11 +12,17 @@ import { ContactCards } from "@/components/ContactCards";
 import { SupplierOverview } from "@/components/SupplierOverview";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
+import { AddressCards } from "@/components/AddressCards";
+import { DocumentsTab } from "@/components/DocumentsTab";
+import { TransactionsTab, type TransactionsSearch } from "@/components/TransactionsTab";
+import { listAddresses } from "@/lib/services/addresses";
+import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
+import { openDocumentStats } from "@/lib/services/transactions";
 import { PlusIcon } from "@/components/Icons";
 import { SupplierForm } from "../SupplierForm";
 import { saveSupplierAction, setSupplierActiveAction } from "../actions";
 
-const TABS = ["overview", "details", "contacts", "history", "balances"] as const;
+const TABS = ["overview", "details", "contacts", "documents", "transactions", "balances"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SupplierPage({
@@ -24,11 +30,13 @@ export default async function SupplierPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; archived?: string } & TransactionsSearch>;
 }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const search = await searchParams;
+  // "history" was the old name of the Transactions tab.
+  const rawTab = search.tab === "history" ? "transactions" : search.tab;
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
@@ -36,20 +44,31 @@ export default async function SupplierPage({
   const canEdit = can(user, "edit_data");
   const { contacts, ...record } = supplier;
   const main = contacts.find((c) => c.isMain && c.active);
+  const owner = { kind: "supplier", id } as const;
+  const warnDays = await expiryWarningDays();
+  const [addresses, docCounts, docStats] = await Promise.all([
+    listAddresses(owner, { includeArchived: true }),
+    documentExpiryCounts(owner, warnDays),
+    openDocumentStats(owner, user),
+  ]);
+  const docIds = (await db.businessDocument.findMany({ where: { supplierId: id }, select: { id: true } })).map((d) => d.id);
 
   // Fetch latest audit activity timestamp for overview stat card
   const lastActivity = await db.auditLog.findFirst({
     where: {
       OR: [
         { entityType: "Supplier", entityId: id },
-        ...(contacts.length > 0
-          ? [{ entityType: "Contact", entityId: { in: contacts.map((c) => c.id) } }]
-          : []),
+        { entityType: "Contact", entityId: { in: contacts.map((c) => c.id) } },
+        { entityType: "Address", entityId: { in: addresses.map((a) => a.id) } },
+        { entityType: "BusinessDocument", entityId: { in: docIds } },
       ],
     },
     orderBy: { at: "desc" },
     select: { at: true },
   });
+  // Latest of the audit log and the last quote / SO change.
+  const lastActivityAt =
+    [lastActivity?.at, docStats?.lastDocAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
   return (
     <>
@@ -117,7 +136,14 @@ export default async function SupplierPage({
             count: contacts.filter((c) => c.active).length,
             href: `/suppliers/${id}?tab=contacts`,
           },
-          { key: "history", label: "History", href: `/suppliers/${id}?tab=history` },
+          {
+            key: "documents",
+            label: "Documents",
+            count: docCounts.active,
+            dot: docCounts.expired ? "red" : docCounts.expiring ? "amber" : undefined,
+            href: `/suppliers/${id}?tab=documents`,
+          },
+          { key: "transactions", label: "Transactions", href: `/suppliers/${id}?tab=transactions` },
           { key: "balances", label: "Balances", href: `/suppliers/${id}?tab=balances` },
         ]}
       />
@@ -127,18 +153,26 @@ export default async function SupplierPage({
           supplier={supplier}
           contacts={contacts}
           canEdit={canEdit}
-          lastActivityDate={lastActivity?.at}
+          lastActivityDate={lastActivityAt}
+          addresses={addresses}
+          docIds={docIds}
+          docCounts={docCounts}
+          docStats={docStats}
+          warnDays={warnDays}
         />
       )}
 
       {tab === "details" && (
-        <div className="card">
-          <SupplierForm
-            supplier={record}
-            terms={settings.lists.paymentTerms}
-            action={saveSupplierAction.bind(null, id)}
-            canEdit={canEdit}
-          />
+        <div className="details-stack">
+          <div className="card">
+            <SupplierForm
+              supplier={record}
+              terms={settings.lists.paymentTerms}
+              action={saveSupplierAction.bind(null, id)}
+              canEdit={canEdit}
+            />
+          </div>
+          <AddressCards addresses={addresses} ownerKind="supplier" ownerId={id} canEdit={canEdit} />
         </div>
       )}
 
@@ -152,11 +186,11 @@ export default async function SupplierPage({
         />
       )}
 
-      {tab === "history" && (
-        <div className="card">
-          <EmptyState line="Supplier POs, receiving and payments will show here." />
-        </div>
+      {tab === "documents" && (
+        <DocumentsTab owner={owner} canEdit={canEdit} showArchived={search.archived === "1"} warnDays={warnDays} />
       )}
+
+      {tab === "transactions" && <TransactionsTab owner={owner} user={user} contacts={contacts} search={search} />}
 
       {tab === "balances" && (
         <div className="card">

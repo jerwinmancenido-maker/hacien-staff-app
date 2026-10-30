@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
+import { formatAddress } from "@/lib/addresses/format";
+import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { Activity } from "@/components/Activity";
 import { Chip, PageHeader } from "@/components/ui";
@@ -20,6 +23,17 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   if (!q) notFound();
   const canEdit = can(user, "edit_data");
   const openSo = q.salesOrders.find((s) => s.status === "OPEN");
+  // Convert to SO: pick one of the customer's saved addresses (delivery first) or type one.
+  const editable = canEdit && (q.status === "DRAFT" || q.status === "SENT");
+  const saved = editable ? await listAddresses({ kind: "customer", id: q.customer.id }) : [];
+  const addressOptions = [...saved]
+    .sort((a, b) => Number(b.kind === "DELIVERY") - Number(a.kind === "DELIVERY"))
+    .map((a) => ({
+      id: a.id,
+      label: `${ADDRESS_KIND_LABELS[a.kind]}${a.label ? ` · ${a.label}` : ""}${a.isDefault ? " (default)" : ""}: ${formatAddress(a)}`,
+      text: formatAddress(a, { multiline: true }),
+    }));
+  const suggestedAddress = editable ? ((await suggestedDeliveryAddress(q.customer)) ?? "") : "";
 
   return (
     <>
@@ -40,7 +54,8 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             status={q.status}
             canEdit={canEdit}
             openSalesOrderId={openSo?.id ?? null}
-            customerAddress={q.customer.address ?? ""}
+            customerAddress={suggestedAddress}
+            addressOptions={addressOptions}
             actions={{
               markSent: markQuoteSentAction,
               markLost: markQuoteLostAction,
