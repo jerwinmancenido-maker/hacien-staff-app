@@ -5,6 +5,8 @@ import { roleLabel } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { changedLeaves, NUMBERED_DOCS } from "@/lib/settings/form";
 import { formatDocNumber } from "@/lib/settings/numbering";
+import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/withholding";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import { RecordList, type RecordItem } from "@/components/RecordList";
@@ -12,13 +14,15 @@ import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
-import { saveSettingsAction } from "./actions";
+import { WithholdingForm } from "./WithholdingForm";
+import { saveSettingsAction, saveWithholdingAction } from "./actions";
 
 const TABS = [
   { key: "users", label: "Users" },
   { key: "approval", label: "Approval rules" },
   { key: "numbering", label: "Numbering" },
   { key: "tax", label: "Tax year" },
+  { key: "withholding", label: "Withholding" },
   { key: "company", label: "Company" },
   { key: "lists", label: "Lists" },
   { key: "changelog", label: "Change log" },
@@ -56,7 +60,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         active={tab}
         tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
       />
-      <div style={{ maxWidth: 880 }}>
+      <div style={{ maxWidth: tab === "withholding" ? 1100 : 880 }}>
         {tab === "users" && <UsersTab />}
 
         {tab === "approval" && (
@@ -113,6 +117,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
+        {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}
+
         {tab === "company" && (
           <SettingsForm
             title="Company"
@@ -143,6 +149,27 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         {tab === "changelog" && <ChangeLog />}
       </div>
     </>
+  );
+}
+
+async function WithholdingTab({ versionId }: { versionId: string }) {
+  const rates = await listWithholdingRates();
+  return (
+    <WithholdingForm
+      versionId={versionId}
+      action={saveWithholdingAction}
+      rows={rates.map((r) => ({
+        id: r.id,
+        code: r.code,
+        label: r.label,
+        lineKind: r.lineKind,
+        atcCode: r.atcCode ?? "",
+        // 0.0150 → "1.5"
+        ratePct: fromScaled(toScaled(Number(r.rate).toFixed(4), 4), 2).replace(/\.?0+$/, ""),
+        active: r.active,
+        note: r.note ?? "",
+      }))}
+    />
   );
 }
 
@@ -240,9 +267,11 @@ async function ChangeLog() {
                 <span className="strong">{v.createdBy?.name ?? "Seed defaults"}</span>
                 <span className="faint small">{formatDateTime(v.effectiveFrom)}</span>
                 <Chip tone="grey">
-                  {v.changedKey && isSettingsKey(v.changedKey)
-                    ? SETTINGS_LABELS[v.changedKey]
-                    : "Defaults"}
+                  {v.changedKey === WITHHOLDING_SETTINGS_KEY
+                    ? "Withholding rates"
+                    : v.changedKey && isSettingsKey(v.changedKey)
+                      ? SETTINGS_LABELS[v.changedKey]
+                      : "Defaults"}
                 </Chip>
               </div>
               <div className="changelog-item-body">

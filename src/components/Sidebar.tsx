@@ -14,8 +14,8 @@ const MAIN: Item[] = [
 ];
 
 const LATER: Item[] = [
-  { href: "/quotes", label: "Quotes", icon: <FileIcon />, soon: true },
-  { href: "/sales-orders", label: "Sales Orders", icon: <CartIcon />, soon: true },
+  { href: "/quotes", label: "Quotes", icon: <FileIcon /> },
+  { href: "/sales-orders", label: "Sales Orders", icon: <CartIcon /> },
   { href: "/supplier-pos", label: "Supplier POs", icon: <BoxIcon />, soon: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon />, soon: true },
   { href: "/books", label: "Books", icon: <BookIcon />, soon: true },
@@ -64,6 +64,7 @@ const CRUMB_LABELS: Record<string, string> = {
   billing: "Billing & Collections",
   books: "Books",
   new: "New",
+  edit: "Edit",
 };
 
 export function Breadcrumb() {

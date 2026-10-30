@@ -3,12 +3,14 @@ import type { AuditAction, Prisma } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { stripCosts } from "@/lib/permissions";
 import { DataTable } from "@/components/DataTable";
 import { DiffView } from "@/components/DiffView";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 
-const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change"];
-const ENTITIES = ["Customer", "Supplier", "Contact", "User", "Settings", "Session"];
+const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft"];
+const ENTITIES = ["Customer", "Supplier", "Contact", "User", "Settings", "Session", "Quote", "SalesOrder"];
+const COST_ENTITIES = ["Quote", "SalesOrder"];
 const PAGE_SIZE = 50;
 
 type Search = { entity?: string; action?: string; user?: string; page?: string };
@@ -26,12 +28,16 @@ function linkFor(entityType: string, entityId: string | null): string | undefine
       return `/settings/users/${entityId}`;
     case "Settings":
       return "/settings?tab=changelog";
+    case "Quote":
+      return `/quotes/${entityId}`;
+    case "SalesOrder":
+      return `/sales-orders/${entityId}`;
   }
   return undefined;
 }
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requirePagePermission("view_audit");
+  const viewer = await requirePagePermission("view_audit");
   const s = await searchParams;
   const page = Math.max(1, Number(s.page) || 1);
   const where: Prisma.AuditLogWhereInput = {
@@ -115,7 +121,12 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                   <div className="small faint">{r.entityId}</div>
                 </>
               ),
-              change: <DiffView before={r.before} after={r.after} />,
+              // Quote/SO rows hold supplier costs: only "Can see costs" users get them.
+              change: COST_ENTITIES.includes(r.entityType) ? (
+                <DiffView before={stripCosts(r.before, viewer)} after={stripCosts(r.after, viewer)} />
+              ) : (
+                <DiffView before={r.before} after={r.after} />
+              ),
             },
             sort: { when: r.at.getTime(), who: r.user?.name ?? "", action: r.action, record: r.entityType },
           }))}

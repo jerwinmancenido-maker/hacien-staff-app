@@ -2,9 +2,9 @@
 
 HACIEN staff app: quotes, sales orders, supplier POs, billing, collections and simple BIR books for a small Philippine IT supplier. AGPL-3.0.
 
-**Phase 1, Part 1** (this code) covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. Quotes, SOs, POs, billing and books come later.
+**Phase 1, Part 1** covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. **Part 2** adds quotes, sales orders, document numbering, withholding rates and print-to-PDF. Supplier POs, billing and books come later.
 
-Stack: Next.js 16 (App Router, TypeScript strict), Prisma 6, MySQL 8, zod, bcryptjs, nodemailer, Vitest. Plain CSS following `docs/design-brief.md`.
+Stack: Next.js 16 (App Router, TypeScript strict), Prisma 6, MySQL 8, zod, bcryptjs, nodemailer, qrcode, Vitest. Plain CSS following `docs/design-brief.md`.
 
 ---
 
@@ -17,7 +17,7 @@ npm install                      # also runs `prisma generate`
 cp .env.example .env             # then fill in DATABASE_URL and SESSION_SECRET
                                  # (e.g. SESSION_SECRET=$(openssl rand -hex 32))
 npm run db:migrate               # prisma migrate dev: creates tables
-SEED_SAMPLE=true SEED_PASSWORD='pick-one' npm run db:seed   # fake sample users, customers, suppliers, contacts
+SEED_SAMPLE=true SEED_PASSWORD='pick-one' npm run db:seed   # fake sample users, customers, suppliers, contacts, 2 quotes + 1 SO
 npm run dev                      # http://localhost:3000
 ```
 
@@ -38,7 +38,8 @@ The seed is safe to run again: it only adds what's missing and never deletes.
 ```bash
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (no database needed)
+npm test            # vitest; the database suites in tests/db are skipped unless TEST_DATABASE_URL is set
+TEST_DATABASE_URL=mysql://USER:PASS@127.0.0.1:3306/hacien_test npm test   # also runs the MySQL suites
 npm run build       # prisma generate + next build
 ```
 
@@ -47,6 +48,10 @@ The Vitest suites (`tests/`) cover:
 - settings versioning, including a test that an old version stays readable after a change
 - the no-delete rules: the Prisma extension throws on `delete` / `deleteMany`, and a source scan finds no DELETE routes or delete calls
 - TIN, customer, supplier and contact validation; main-contact rules; audit diffs; the login rate limit; peso and Manila date formatting
+- quote math (line totals, supplier total = supplier unit × buyer qty, withholding by line kind, net received, net margin ₱ and %, rounding) and the print page (NON-VAT, QR, no costs)
+- **against MySQL** (`tests/db`, needs `TEST_DATABASE_URL`): 20 parallel creates get 20 consecutive numbers, QT and SO counters are separate, a new year restarts at 0001, voided numbers are never reissued, failed transactions don't use a number; customer default withholding is copied, overrides are saved, and a Settings change doesn't alter an existing quote; non-cost users' quote/SO payloads have no cost or margin fields; convert / void rules and the DocumentVoid log; deletes still throw
+
+The database suites apply migrations to `TEST_DATABASE_URL` first and refuse a database whose name doesn't contain `test`. They never clean up (nothing is deleted); each run uses its own records and unused years.
 
 ## Deploying to Hostinger (Node.js app)
 
@@ -92,14 +97,32 @@ Each save creates a new `SettingsVersion` row holding the **full** settings snap
 ### Audit log
 Every create, update, archive and restore, plus sign-ins, failed sign-ins and settings changes, writes an `AuditLog` row with the changed fields before and after. The row is written **in the same transaction** as the change. Admins see everything under **Audit log**, and each record page has an **Activity** section.
 
+### Quotes and sales orders
+- **Numbers:** `QT-2026-0001`, `SO-2026-0001`. Prefix and digits come from **Settings → Numbering**; there is one counter per document type per year (`DocumentSeries`), restarting each year (untick "Restart the counter every year" for one running counter). The number is taken inside the same transaction that creates the document, with `SELECT … FOR UPDATE` on the series row, so parallel creates queue up and a failed create rolls the counter back. Numbers are never reused: voided documents keep theirs, and `DocumentVoid` records the reason, who, when and a snapshot.
+- **Math** (`src/lib/quotes/calc.ts`, exact decimals): line total = qty × HACIEN unit price; supplier total = supplier unit cost × buyer qty; contract price = sum of line totals; withholding is on the **gross** contract price (non-VAT, never ÷ 1.12): goods rates on goods lines, services rates on services lines, government percentage tax / VAT rates on the whole total; net received = contract price − withholding; net margin = net received − supplier cost, and net margin % = net margin ÷ contract price. Each line and each withholding amount is rounded to 2 decimals (half-up). Totals are stored on the document.
+- **Costs:** supplier, supplier cost and margins are left out by the server (`src/lib/quotes/views.ts`) for users without **Can see costs**: not just hidden. Those users' edits keep the existing costs. Audit diffs on quotes/SOs are stripped the same way.
+- **Statuses:** quotes go Draft → Sent → Won (by **Convert to SO**) or Lost; any quote can be voided (reason required), except a Won quote with an open SO ("Void the sales order first."). Sales orders are made only by converting a quote and are Open or Void; voiding an SO puts its quote back to Sent. Voided documents are read-only. Removed item lines are marked `removedAt`, never deleted.
+- **Needs approval** (display only for now): shown when net margin % is below, or the total above, the approval rules in the settings version the quote was made under.
+- **Email** builds a draft (to the quote's contact or the main contact) to copy or open with `mailto:`. The app **never sends** it; each draft is logged as `email_draft`.
+- The ₱3M non-VAT meter is **not** fed from quotes or SOs; it will use invoices in a later part.
+
+### Withholding rates (Settings → Withholding)
+An editable table (code, label, applies to, ATC code, rate %, active, note). The defaults (Goods 1%, Services 2%, Government percentage tax 3%, Government VAT 5%) are inserted by the migration with the note "verify with BIR"; **every rate must be verified with the BIR / accountant**, and the tab says so. Saving writes a new settings version (shown in the change log) and an audit row. Rates are never deleted; untick Active instead.
+
+Each customer has a **default withholding** (any set of rate codes, possibly none), set on the customer form. A new quote copies it, staff can change it per quote, and the quote stores a snapshot of the rate values, so editing a rate later never changes existing quotes.
+
+### Print / Save PDF
+**Actions → Print / Save PDF** opens `/print/quotes/:id` (or `/print/sales-orders/:id`) in a new tab: a server-rendered A4 page with print CSS. Click **Print / Save PDF** and pick **Save as PDF** in the browser's print dialog; the file name defaults to the document number and customer. The page shows HACIEN's name, TIN and address from **Settings → Company** (as of the document's settings version), a **NON-VAT** label, the number and dates, the customer and contact, items with qty, unit, unit price and total, the contract price and terms, and a footer: "This is a system-generated document. No signature required." with a QR code to https://haciensolutions.com/terms (generated on the server with the `qrcode` package, MIT). It never shows supplier costs, margins or the withholding breakdown, and has no signature lines. Viewers can print.
+
 ## Project layout
 
 ```
 prisma/              schema, migrations, seed.mts
 src/proxy.ts         cookie presence check → /login
-src/app/             routes (login, (app)/customers, suppliers, contacts, settings, audit, …)
+src/app/             routes (login, (app)/customers, suppliers, contacts, quotes, sales-orders, settings, audit, print/…)
 src/components/      shell, DataTable (clickable rows, sorting), dialogs, form helpers
-src/lib/             db, auth, permissions, settings, services, validation, audit, mailer, format
-tests/               vitest
+src/lib/             db, auth, permissions, settings, services, validation, audit, mailer, format,
+                     quotes (calc, items, views), documents (number series, shared helpers), print (QR)
+tests/               vitest (tests/db: MySQL suites)
 docs/                design brief, screenshots
 ```

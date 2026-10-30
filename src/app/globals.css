@@ -1997,3 +1997,328 @@ pre.json {
   }
 }
 
+/* ---------- Quotes & sales orders ---------- */
+
+.neg {
+  color: var(--red);
+}
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 6px 0;
+}
+.kv-grid {
+  grid-template-columns: 140px 1fr;
+}
+.modal.wide {
+  width: min(600px, calc(100vw - 32px));
+}
+.modal .field + .buttons,
+.modal form .buttons,
+.modal .form-grid + .buttons {
+  margin-top: 16px;
+}
+
+/* Actions ▾ dropdown */
+.menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-frame);
+  padding: 6px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+.menu-item {
+  all: unset;
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--hover);
+}
+.menu-item.danger {
+  color: var(--red);
+}
+
+/* Items + totals */
+.items-table {
+  max-height: none;
+  padding: 0;
+  border: none;
+}
+.totals-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.totals-box {
+  width: min(380px, 100%);
+  background: var(--hover);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 13px;
+}
+.totals-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+.totals-row.strong {
+  font-weight: 600;
+  font-size: 14px;
+}
+.totals-row.sub {
+  padding-left: 12px;
+  color: var(--text-2);
+}
+.totals-sep {
+  border-top: 1px dashed var(--border);
+  margin: 6px 0;
+}
+
+/* Editable tables (editor items, withholding rates) */
+.edit-table {
+  overflow-x: auto;
+}
+.edit-table table.list td {
+  height: auto;
+  padding: 6px 6px;
+  vertical-align: top;
+}
+.edit-table input,
+.edit-table select,
+.edit-table textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--card);
+  min-width: 0;
+}
+.edit-table textarea {
+  width: 100%;
+  min-width: 200px;
+  resize: vertical;
+}
+.edit-table select {
+  max-width: 170px;
+}
+.edit-table input[type="text"],
+.edit-table input:not([type]) {
+  width: 100%;
+  min-width: 60px;
+}
+.edit-table .w-num {
+  width: 100px;
+  text-align: right;
+}
+.edit-table .w-num-s {
+  width: 70px;
+  text-align: right;
+}
+.edit-table .w-unit {
+  width: 60px;
+}
+.edit-table .error {
+  color: var(--red);
+}
+.line-actions {
+  white-space: nowrap;
+}
+.line-actions .btn-link {
+  text-decoration: none;
+  padding: 2px 4px;
+}
+.btn-link.danger {
+  color: var(--red);
+}
+.btn-link:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ---------- Print (A4, customer-facing) ---------- */
+
+.print-shell {
+  background: var(--bg);
+  min-height: 100vh;
+  padding: 20px 0 40px;
+}
+.print-toolbar {
+  width: 210mm;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.print-page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  padding: 16mm 14mm;
+  box-shadow: var(--shadow-frame);
+  font-size: 11pt;
+  color: #111;
+  display: flex;
+  flex-direction: column;
+}
+.print-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 10px;
+}
+.print-company {
+  font-size: 18pt;
+  font-weight: 700;
+}
+.print-nonvat {
+  display: inline-block;
+  border: 1px solid #111;
+  font-weight: 700;
+  font-size: 9pt;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  margin: 4px 0;
+}
+.print-title {
+  text-align: right;
+}
+.print-title h1 {
+  margin: 0 0 6px;
+  font-size: 18pt;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.print-meta {
+  margin-left: auto;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.print-meta th {
+  text-align: left;
+  font-weight: 400;
+  color: #555;
+  padding: 1px 10px 1px 0;
+}
+.print-meta td {
+  text-align: right;
+  font-weight: 600;
+}
+.print-void {
+  color: var(--red);
+  font-weight: 700;
+  font-size: 16pt;
+  margin-top: 6px;
+}
+.print-parties {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 14px 0;
+  font-size: 10pt;
+}
+.print-label {
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #555;
+}
+.print-pre {
+  white-space: pre-wrap;
+}
+.print-items {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.print-items th,
+.print-items td {
+  padding: 6px 6px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: top;
+}
+.print-items thead th {
+  border-bottom: 1.5px solid #111;
+  font-size: 9pt;
+  text-transform: uppercase;
+}
+.print-items .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.print-items tfoot th {
+  border-bottom: none;
+  border-top: 1.5px solid #111;
+  font-size: 11pt;
+}
+.print-terms {
+  margin-top: 14px;
+  font-size: 10pt;
+}
+.print-foot {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 9pt;
+}
+.print-qr {
+  width: 22mm;
+  height: 22mm;
+}
+.print-qr svg {
+  width: 100%;
+  height: 100%;
+}
+
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+@media print {
+  html,
+  body,
+  .print-shell {
+    background: #fff;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    box-shadow: none;
+    margin: 0;
+    width: auto;
+    padding: 0;
+    min-height: calc(297mm - 28mm - 1px);
+  }
+  .print-items tr {
+    break-inside: avoid;
+  }
+}
+.detail-grid + .card {
+  margin-top: 14px;
+}

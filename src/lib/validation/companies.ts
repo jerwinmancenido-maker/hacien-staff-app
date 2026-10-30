@@ -44,12 +44,23 @@ function termsField(allowedTerms: readonly string[]) {
     .transform((v) => (v ? v : null));
 }
 
-export function customerSchema(allowedTerms: readonly string[]) {
+/**
+ * `allowedWithholdingCodes`: rate codes from Settings → Withholding the customer
+ * may default to (omit to skip the check, e.g. in tests).
+ */
+export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
   return z.object({
     name: z.string().trim().min(1, "Name is required.").max(191),
     tin: tinField,
     address: optionalText(1000),
     withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
+    // Default withholding rates copied onto new quotes (may be empty).
+    defaultWithholding: z
+      .array(z.string().trim().min(1).max(32))
+      .max(20)
+      .default([])
+      .refine((codes) => !allowedWithholdingCodes || codes.every((c) => allowedWithholdingCodes.includes(c)), "Pick rates from the list.")
+      .transform((codes) => [...new Set(codes)]),
     defaultTerms: termsField(allowedTerms),
     notes: optionalText(5000),
   });

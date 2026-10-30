@@ -39,7 +39,7 @@ describe("settings defaults", () => {
     expect(DEFAULT_SETTINGS.quotes.defaultValidityDays).toBe(30);
     expect(DEFAULT_SETTINGS.taxYear).toEqual({ year: 2026, nonVatLimit: 3000000, warnFirstPct: 70, warnSecondPct: 90 });
     const y = DEFAULT_SETTINGS.taxYear.year;
-    expect(formatDocNumber(DEFAULT_SETTINGS.numbering.quote, y, 1)).toBe("Q-2026-0001");
+    expect(formatDocNumber(DEFAULT_SETTINGS.numbering.quote, y, 1)).toBe("QT-2026-0001");
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.salesOrder, y, 1)).toBe("SO-2026-0001");
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.supplierPo, y, 12)).toBe("PO-2026-0012");
   });

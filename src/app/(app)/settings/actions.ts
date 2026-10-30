@@ -8,6 +8,7 @@ import { ROLES, type Role } from "@/lib/permissions";
 import { saveSettings } from "@/lib/settings";
 import { settingsValueFromForm } from "@/lib/settings/form";
 import { isSettingsKey } from "@/lib/settings/schema";
+import { saveWithholdingRates } from "@/lib/services/withholding";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
 import { bool, formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -27,6 +28,22 @@ export async function saveSettingsAction(key: string, _prev: FormState, form: Fo
     revalidatePath("/", "layout");
     return { ok: true, message: result.changed ? `Saved as version ${result.version.version}. New documents use it from now on.` : "Nothing changed." };
   }, values);
+}
+
+export async function saveWithholdingAction(_prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    let rows: unknown;
+    try {
+      rows = JSON.parse(str(form, "rows"));
+    } catch {
+      return { message: "Couldn't read the table. Reload the page and try again." };
+    }
+    const result = await saveWithholdingRates(rows, user.id, str(form, "baseVersionId"));
+    if (!result.ok) return { fieldErrors: result.fieldErrors, message: result.fieldErrors._ ?? "Fix the rows marked below." };
+    revalidatePath("/settings");
+    return { ok: true, message: result.changed ? `Saved as version ${result.version}. New quotes use these rates from now on.` : "Nothing changed." };
+  });
 }
 
 function userInput(form: FormData) {

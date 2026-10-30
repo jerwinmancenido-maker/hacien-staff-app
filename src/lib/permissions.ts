@@ -78,8 +78,25 @@ export function canSeeCosts(user: PermissionUser | null | undefined): boolean {
   return !!user && user.active && user.canSeeCosts === true;
 }
 
-/** Field names that count as cost data. Extend as quotes/POs arrive. */
-export const COST_FIELDS = ["cost", "unitCost", "supplierCost", "totalCost", "margin", "marginPct"] as const;
+/**
+ * Field names that count as cost data. Quote/SO views are built without these
+ * for non-cost users (src/lib/quotes/views.ts); stripCosts() is the backstop
+ * for anything else that may hold them (e.g. audit diffs).
+ */
+export const COST_FIELDS = [
+  "cost",
+  "unitCost",
+  "supplierCost",
+  "totalCost",
+  "margin",
+  "marginPct",
+  "supplierId",
+  "supplierName",
+  "supplierUnitCost",
+  "supplierTotal",
+  "netMargin",
+  "netMarginPct",
+] as const;
 
 /**
  * Remove cost fields (recursively) from data before it leaves the server, unless
@@ -101,6 +118,18 @@ function strip(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+export class ForbiddenError extends Error {
+  constructor() {
+    super("You don't have permission to do that.");
+    this.name = "ForbiddenError";
+  }
+}
+
+/** Server-side check for services: throws ForbiddenError unless the user has the permission. */
+export function assertCan(user: PermissionUser | null | undefined, permission: Permission): void {
+  if (!can(user, permission)) throw new ForbiddenError();
 }
 
 // ---------------------------------------------------------------------------

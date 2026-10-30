@@ -1,0 +1,100 @@
+import { z } from "zod";
+
+export const ITEM_KINDS = ["GOODS", "SERVICES"] as const;
+export const ITEM_KIND_LABELS: Record<(typeof ITEM_KINDS)[number], string> = { GOODS: "Goods", SERVICES: "Services" };
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Keep this under ${max} characters.`)
+    .transform((v) => (v ? v : null));
+
+const optionalId = z
+  .string()
+  .trim()
+  .max(64)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null));
+
+/** Peso amount or quantity as typed: up to 10 whole digits and 2 decimals, commas allowed. */
+const amount = (label: string, opts: { positive?: boolean } = {}) =>
+  z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/,/g, ""))
+    .refine((v) => /^\d{1,10}(\.\d{1,2})?$/.test(v), `${label}: enter a number with up to 2 decimals.`)
+    .refine((v) => !opts.positive || Number(v) > 0, `${label} must be more than 0.`);
+
+/** YYYY-MM-DD → Date at 00:00 UTC (stored in DATE columns). */
+export const dateOnly = (label: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `${label}: pick a date.`)
+    .transform((v, ctx) => {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
+        ctx.addIssue({ code: "custom", message: `${label}: pick a valid date.` });
+        return z.NEVER;
+      }
+      return d;
+    });
+
+export const itemSchema = z.object({
+  id: optionalId,
+  description: z.string().trim().min(1, "Description is required.").max(2000),
+  kind: z.enum(ITEM_KINDS, { error: "Pick goods or services." }),
+  qty: amount("Qty", { positive: true }),
+  unit: z.string().trim().min(1, "Unit is required.").max(30),
+  supplierId: optionalId,
+  supplierUnitCost: amount("Supplier unit cost").optional().default("0"),
+  unitPrice: amount("Unit price"),
+});
+export type ItemInput = z.infer<typeof itemSchema>;
+
+const items = z.array(itemSchema).min(1, "Add at least one item.").max(200, "At most 200 items.");
+
+export const quoteInputSchema = z
+  .object({
+    customerId: z.string().trim().min(1, "Pick a customer."),
+    contactId: optionalId,
+    date: dateOnly("Date"),
+    /** Empty → date + Settings → Quote defaults validity days. */
+    validUntil: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined)
+      .pipe(dateOnly("Valid until").optional()),
+    terms: optionalText(100),
+    notes: optionalText(5000),
+    /** Withholding rate codes. Omitted → copy the customer's default. */
+    withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).optional(),
+    items,
+  })
+  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
+export type QuoteInput = z.infer<typeof quoteInputSchema>;
+
+export const convertInputSchema = z.object({
+  buyerPoNo: optionalText(64),
+  buyerPoDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(dateOnly("Buyer PO date").optional()),
+  deliveryAddress: optionalText(1000),
+});
+export type ConvertInput = z.infer<typeof convertInputSchema>;
+
+export const salesOrderInputSchema = convertInputSchema.extend({
+  contactId: optionalId,
+  terms: optionalText(100),
+  notes: optionalText(5000),
+  items,
+});
+export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;
+
+export const voidReasonSchema = z.string().trim().min(3, "Give a reason (at least 3 characters).").max(1000);

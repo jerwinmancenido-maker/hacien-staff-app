@@ -50,3 +50,18 @@ export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "")).toUpperCase() || "?";
 }
+
+/** Today's date in Manila as a date-only value (00:00 UTC of that calendar day), for DATE columns. */
+export function manilaToday(now: Date = new Date()): Date {
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return new Date(`${ymd}T00:00:00.000Z`);
+}
+
+/** A date-only value as YYYY-MM-DD (for <input type="date">). */
+export function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}

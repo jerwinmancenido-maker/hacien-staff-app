@@ -44,6 +44,12 @@ model User {
   resetTokens   PasswordResetToken[]
   auditLogs     AuditLog[]
   settingsSaves SettingsVersion[]
+
+  quotesCreated      Quote[]        @relation("QuoteCreatedBy")
+  quotesUpdated      Quote[]        @relation("QuoteUpdatedBy")
+  salesOrdersCreated SalesOrder[]   @relation("SalesOrderCreatedBy")
+  salesOrdersUpdated SalesOrder[]   @relation("SalesOrderUpdatedBy")
+  voids              DocumentVoid[]
 }
 
 model Session {
@@ -128,20 +134,25 @@ enum SupplierTaxType {
 }
 
 model Customer {
-  id              String          @id @default(cuid())
-  name            String          @db.VarChar(191)
+  id                 String          @id @default(cuid())
+  name               String          @db.VarChar(191)
   // Normalized 000-000-000-000 (branch code defaults to 000). Unique among customers.
-  tin             String?         @unique @db.VarChar(20)
-  address         String?         @db.Text
-  withholdingType WithholdingType
-  defaultTerms    String?         @db.VarChar(100)
-  notes           String?         @db.Text
-  active          Boolean         @default(true)
-  archivedAt      DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  tin                String?         @unique @db.VarChar(20)
+  address            String?         @db.Text
+  withholdingType    WithholdingType
+  // Default withholding for new quotes: a JSON array of WithholdingRate codes
+  // (e.g. ["GOODS_1","GOV_PT_3"]). Null or [] means none.
+  defaultWithholding Json?
+  defaultTerms       String?         @db.VarChar(100)
+  notes              String?         @db.Text
+  active             Boolean         @default(true)
+  archivedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
-  contacts Contact[]
+  contacts    Contact[]
+  quotes      Quote[]
+  salesOrders SalesOrder[]
 
   @@index([name])
 }
@@ -165,7 +176,9 @@ model Supplier {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  contacts Contact[]
+  contacts        Contact[]
+  quoteItems      QuoteItem[]
+  salesOrderItems SalesOrderItem[]
 
   @@index([name])
 }
@@ -187,6 +200,9 @@ model Contact {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  quotes      Quote[]
+  salesOrders SalesOrder[]
+
   @@index([customerId])
   @@index([supplierId])
 }
@@ -204,6 +220,7 @@ enum AuditAction {
   login
   login_failed
   settings_change
+  email_draft
 }
 
 model AuditLog {
@@ -222,4 +239,239 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([at])
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Withholding rates (Settings → Withholding)
+// ---------------------------------------------------------------------------
+
+// Which quote lines a rate applies to: goods lines, services lines, or (for the
+// government percentage tax / VAT withholding) the whole contract price.
+enum WithholdingLineKind {
+  GOODS
+  SERVICES
+  GOV_PT
+  GOV_VAT
+}
+
+// Editable table. Every save also writes a SettingsVersion (changedKey
+// "withholding") and an AuditLog row, like the other settings. Rows are never
+// deleted; turn one off with `active`. Quotes snapshot the values they use.
+model WithholdingRate {
+  id        String              @id @default(cuid())
+  // Stable key used by customer defaults and quote snapshots, e.g. GOODS_1.
+  code      String              @unique @db.VarChar(32)
+  label     String              @db.VarChar(100)
+  lineKind  WithholdingLineKind
+  atcCode   String?             @db.VarChar(20)
+  // Fraction, e.g. 0.0100 = 1%.
+  rate      Decimal             @db.Decimal(5, 4)
+  active    Boolean             @default(true)
+  note      String?             @db.VarChar(255)
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Document numbering
+// ---------------------------------------------------------------------------
+
+enum DocType {
+  QUOTE
+  SALES_ORDER
+}
+
+// One counter per document type per year (year 0 = a counter that never resets).
+// Numbers are allocated with SELECT … FOR UPDATE on this row inside the same
+// transaction that creates the document, so a failed create rolls the counter
+// back with it. Numbers are never reused: voided documents keep theirs.
+model DocumentSeries {
+  id         String  @id @default(cuid())
+  docType    DocType
+  year       Int
+  prefix     String  @db.VarChar(10)
+  nextNumber Int     @default(1)
+  padding    Int     @default(4)
+
+  @@unique([docType, year])
+}
+
+// Written in the same transaction that voids a document. `snapshot` is the
+// document (header + items) as it was just before the void.
+model DocumentVoid {
+  id         String   @id @default(cuid())
+  docType    DocType
+  docNumber  String   @db.VarChar(40)
+  docId      String   @db.VarChar(64)
+  reason     String   @db.Text
+  snapshot   Json
+  voidedById String
+  voidedBy   User     @relation(fields: [voidedById], references: [id])
+  voidedAt   DateTime @default(now())
+
+  @@index([docType, docId])
+}
+
+// ---------------------------------------------------------------------------
+// Quotes and sales orders
+// ---------------------------------------------------------------------------
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  WON
+  LOST
+  VOID
+}
+
+enum SalesOrderStatus {
+  OPEN
+  VOID
+}
+
+enum ItemKind {
+  GOODS
+  SERVICES
+}
+
+// Money is Decimal(15,2) pesos. Line and document totals are computed on the
+// server (src/lib/quotes/calc.ts) and stored. `withholding` is a snapshot of the
+// selected WithholdingRate rows ([{ code, label, lineKind, rate, atcCode }]), so
+// later Settings edits never change an existing quote.
+model Quote {
+  id                String      @id @default(cuid())
+  number            String      @unique @db.VarChar(40)
+  revision          Int         @default(1)
+  customerId        String
+  customer          Customer    @relation(fields: [customerId], references: [id])
+  contactId         String?
+  contact           Contact?    @relation(fields: [contactId], references: [id])
+  date              DateTime    @db.Date
+  validUntil        DateTime    @db.Date
+  status            QuoteStatus @default(DRAFT)
+  terms             String?     @db.VarChar(100)
+  notes             String?     @db.Text
+  settingsVersionId String
+  withholding       Json
+
+  contractPrice    Decimal @default(0) @db.Decimal(15, 2)
+  withholdingTotal Decimal @default(0) @db.Decimal(15, 2)
+  netReceived      Decimal @default(0) @db.Decimal(15, 2)
+  supplierCost     Decimal @default(0) @db.Decimal(15, 2)
+  netMargin        Decimal @default(0) @db.Decimal(15, 2)
+  // Net margin as % of the contract price, 2 dp.
+  netMarginPct     Decimal @default(0) @db.Decimal(7, 2)
+
+  voidedAt    DateTime?
+  voidReason  String?   @db.Text
+  createdById String
+  createdBy   User      @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  updatedById String
+  updatedBy   User      @relation("QuoteUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       QuoteItem[]
+  salesOrders SalesOrder[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([date])
+}
+
+// Items are never deleted: a line removed in the editor gets `removedAt`.
+model QuoteItem {
+  id               String    @id @default(cuid())
+  quoteId          String
+  quote            Quote     @relation(fields: [quoteId], references: [id])
+  sortOrder        Int
+  description      String    @db.Text
+  kind             ItemKind
+  qty              Decimal   @db.Decimal(12, 2)
+  unit             String    @db.VarChar(30)
+  supplierId       String?
+  supplier         Supplier? @relation(fields: [supplierId], references: [id])
+  supplierUnitCost Decimal   @default(0) @db.Decimal(15, 2)
+  // HACIEN (buyer-facing) unit price.
+  unitPrice        Decimal   @db.Decimal(15, 2)
+  // qty × unitPrice
+  total            Decimal   @db.Decimal(15, 2)
+  // supplierUnitCost × buyer qty
+  supplierTotal    Decimal   @default(0) @db.Decimal(15, 2)
+  // total − supplierTotal
+  margin           Decimal   @default(0) @db.Decimal(15, 2)
+  removedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([quoteId])
+}
+
+// Created only by converting a quote. Copies the quote's header, items (with
+// costs), withholding snapshot and settings version.
+model SalesOrder {
+  id                String           @id @default(cuid())
+  number            String           @unique @db.VarChar(40)
+  quoteId           String
+  quote             Quote            @relation(fields: [quoteId], references: [id])
+  customerId        String
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  contactId         String?
+  contact           Contact?         @relation(fields: [contactId], references: [id])
+  date              DateTime         @db.Date
+  status            SalesOrderStatus @default(OPEN)
+  buyerPoNo         String?          @db.VarChar(64)
+  buyerPoDate       DateTime?        @db.Date
+  deliveryAddress   String?          @db.Text
+  terms             String?          @db.VarChar(100)
+  notes             String?          @db.Text
+  settingsVersionId String
+  withholding       Json
+
+  contractPrice    Decimal @default(0) @db.Decimal(15, 2)
+  withholdingTotal Decimal @default(0) @db.Decimal(15, 2)
+  netReceived      Decimal @default(0) @db.Decimal(15, 2)
+  supplierCost     Decimal @default(0) @db.Decimal(15, 2)
+  netMargin        Decimal @default(0) @db.Decimal(15, 2)
+  netMarginPct     Decimal @default(0) @db.Decimal(7, 2)
+
+  voidedAt    DateTime?
+  voidReason  String?   @db.Text
+  createdById String
+  createdBy   User      @relation("SalesOrderCreatedBy", fields: [createdById], references: [id])
+  updatedById String
+  updatedBy   User      @relation("SalesOrderUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items SalesOrderItem[]
+
+  @@index([quoteId])
+  @@index([customerId])
+  @@index([status])
+  @@index([date])
+}
+
+model SalesOrderItem {
+  id               String     @id @default(cuid())
+  salesOrderId     String
+  salesOrder       SalesOrder @relation(fields: [salesOrderId], references: [id])
+  sortOrder        Int
+  description      String     @db.Text
+  kind             ItemKind
+  qty              Decimal    @db.Decimal(12, 2)
+  unit             String     @db.VarChar(30)
+  supplierId       String?
+  supplier         Supplier?  @relation(fields: [supplierId], references: [id])
+  supplierUnitCost Decimal    @default(0) @db.Decimal(15, 2)
+  unitPrice        Decimal    @db.Decimal(15, 2)
+  total            Decimal    @db.Decimal(15, 2)
+  supplierTotal    Decimal    @default(0) @db.Decimal(15, 2)
+  margin           Decimal    @default(0) @db.Decimal(15, 2)
+  removedAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([salesOrderId])
 }
