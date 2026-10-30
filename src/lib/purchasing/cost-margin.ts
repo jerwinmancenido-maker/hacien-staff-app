@@ -1,6 +1,9 @@
 // Cost & margin for a sales order: pure scaled-decimal math (no floats).
 // Used by the Cost & margin tab — which PO cost basis to use, actual vs planned
 // margin, and the two plain-language warnings.
+//
+// Both Planned and Actual use the same basis: contract (before withholding) − cost.
+// Withholding is a tax credit, not a cost.
 
 import { fromScaled, toScaled } from "../quotes/calc";
 
@@ -50,8 +53,9 @@ export const COST_BASIS_LABELS: Record<CostBasis, string> = {
 };
 
 /**
- * Prefer billed (when any non-void bill exists), else received (when any posted
- * RR exists), else the PO total. Amounts are already 2-dp strings.
+ * Prefer billed (when any non-void bill exists with a non-zero amount), else
+ * received (when any posted RR exists), else the PO total. A recorded bill of
+ * ₱0.00 falls back to the PO total — zero billed is not a useful cost.
  */
 export function chooseCostBasis(input: {
   poTotal: string;
@@ -61,6 +65,10 @@ export function chooseCostBasis(input: {
   hasReceipts: boolean;
 }): { basis: CostBasis; cost: string; basisLabel: string } {
   if (input.hasBills) {
+    // ₱0.00 billed is not a useful cost — fall back to the PO total.
+    if (toScaled(input.billedAmount, CENTS) === 0n) {
+      return { basis: "PO_TOTAL", cost: input.poTotal, basisLabel: COST_BASIS_LABELS.PO_TOTAL };
+    }
     return { basis: "BILLED", cost: input.billedAmount, basisLabel: COST_BASIS_LABELS.BILLED };
   }
   if (input.hasReceipts) {
@@ -69,7 +77,7 @@ export function chooseCostBasis(input: {
   return { basis: "PO_TOTAL", cost: input.poTotal, basisLabel: COST_BASIS_LABELS.PO_TOTAL };
 }
 
-/** Contract − cost; % of contract (2 dp). */
+/** Contract − cost; % of contract (2 dp). Same basis for Planned and Actual. */
 export function actualMargin(
   contractPrice: string,
   totalCost: string,
@@ -127,8 +135,8 @@ export type CostMarginSummary = {
 
 export function buildCostMarginSummary(input: {
   contractPrice: string;
-  plannedMargin: string;
-  plannedMarginPct: string;
+  /** Planned supplier cost from the SO / quote (before withholding). */
+  plannedCost: string;
   pos: readonly CostMarginPoInput[];
   /** SO lines still short of PO coverage (ordered < SO qty). */
   uncoveredLineCount: number;
@@ -142,7 +150,9 @@ export function buildCostMarginSummary(input: {
     };
   });
   const totalCost = sumMoney(rows.map((r) => r.cost));
+  // Same basis for both: contract − cost (withholding is a tax credit, not a cost).
   const actual = actualMargin(input.contractPrice, totalCost);
+  const planned = actualMargin(input.contractPrice, input.plannedCost);
   const warnings: CostMarginWarning[] = [];
   if (input.uncoveredLineCount > 0) {
     warnings.push({
@@ -163,7 +173,7 @@ export function buildCostMarginSummary(input: {
     totalCost,
     contractPrice: input.contractPrice,
     actual,
-    planned: { margin: input.plannedMargin, marginPct: input.plannedMarginPct },
+    planned,
     warnings,
   };
 }

@@ -346,22 +346,23 @@ function valueReceived(items: readonly { qtyReceived: { toFixed(n: number): stri
   return fromScaled(cents, 2);
 }
 
+/** Supplier Transactions only — never called for customers after the both-ways split. */
 async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, take: number): Promise<{ rows: Row[]; count: number; totals: TransactionTotals[] }> {
   const want = (k: TransactionKind) => !filters.type || filters.type === k;
   const poStatus = statusFilter<PurchaseOrderStatus>(filters.status, PO_STATUSES);
   const rrStatus = statusFilter<ReceivingReportStatus>(filters.status, RR_STATUSES);
   const billStatus = statusFilter<SupplierBillStatus>(filters.status, BILL_STATUSES);
-  const supplier = owner.kind === "supplier";
-  // Which POs belong to the owner (customers: through their sales orders), and the contact filter.
-  const poOwner: Prisma.PurchaseOrderWhereInput = supplier ? { supplierId: owner.id } : { salesOrder: { is: { customerId: owner.id } } };
-  const poContact: Prisma.PurchaseOrderWhereInput = filters.contactId ? (supplier ? { supplierContactId: filters.contactId } : { salesOrder: { is: { contactId: filters.contactId } } }) : {};
+  const poOwner: Prisma.PurchaseOrderWhereInput = { supplierId: owner.id };
+  const poContact: Prisma.PurchaseOrderWhereInput = filters.contactId ? { supplierContactId: filters.contactId } : {};
   const poScope: Prisma.PurchaseOrderWhereInput = { AND: [poOwner, poContact] };
 
   const poWhere: Prisma.PurchaseOrderWhereInput = { ...poScope, ...(poStatus ?? {}) };
   const rrWhere: Prisma.ReceivingReportWhereInput = { purchaseOrder: { is: poScope }, ...(rrStatus ?? {}) };
-  const billWhere: Prisma.SupplierBillWhereInput = supplier
-    ? { supplierId: owner.id, ...(filters.contactId ? { purchaseOrder: { is: { supplierContactId: filters.contactId } } } : {}), ...(billStatus ?? {}) }
-    : { purchaseOrder: { is: poScope }, ...(billStatus ?? {}) };
+  const billWhere: Prisma.SupplierBillWhereInput = {
+    supplierId: owner.id,
+    ...(filters.contactId ? { purchaseOrder: { is: { supplierContactId: filters.contactId } } } : {}),
+    ...(billStatus ?? {}),
+  };
   const wantPo = want("PURCHASE_ORDER") && poStatus !== null;
   const wantRr = want("RECEIVING_REPORT") && rrStatus !== null;
   const wantBill = want("SUPPLIER_BILL") && billStatus !== null;
@@ -369,7 +370,7 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
 
   const rrItems = { items: { select: { qtyReceived: true, purchaseOrderItem: { select: { unitCost: true } } } } } as const;
   const [pos, rrs, bills, poCount, rrCount, billCount] = await Promise.all([
-    wantPo ? db.purchaseOrder.findMany({ where: poWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplierContact: { select: { name: true } }, supplier: { select: { name: true } } } }) : [],
+    wantPo ? db.purchaseOrder.findMany({ where: poWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplierContact: { select: { name: true } } } }) : [],
     wantRr
       ? db.receivingReport.findMany({
           where: rrWhere,
@@ -391,7 +392,7 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
       number: p.number,
       date: ymd(p.date)!,
       status: p.status,
-      contactName: supplier ? (p.supplierContact?.name ?? null) : p.supplier.name,
+      contactName: p.supplierContact?.name ?? null,
       total: money(p.subtotal),
       href: `/purchase-orders/${p.id}`,
       createdAt: p.createdAt,
@@ -495,33 +496,44 @@ async function kindTotals(
   return withCosts ? { ...base, supplierCost: sumMoney([sums.cost as never]), netMargin: sumMoney([sums.margin as never]) } : base;
 }
 
-/** Overview stat cards: open quotes (Draft/Sent) and open sales orders, with their contract totals. */
+/**
+ * Overview stat cards.
+ * - Customer: open quotes (Draft/Sent) and open sales orders, with contract totals.
+ * - Supplier: Open POs only (quotes/SOs cards are hidden on supplier overview).
+ */
 export async function openDocumentStats(owner: ContactOwner, user: PermissionUser) {
-  if (owner.kind === "supplier" && !canSeeCosts(user)) return null;
-  const quoteOwner: Prisma.QuoteWhereInput =
-    owner.kind === "supplier" ? { items: { some: { supplierId: owner.id, removedAt: null } } } : { customerId: owner.id };
-  const soOwner: Prisma.SalesOrderWhereInput =
-    owner.kind === "supplier" ? { items: { some: { supplierId: owner.id, removedAt: null } } } : { customerId: owner.id };
+  if (owner.kind === "supplier") {
+    if (!canSeeCosts(user)) return null;
+    const [openPos, awaitingReceipt, lastPo] = await Promise.all([
+      db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } }),
+      db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["SENT", "PARTIALLY_RECEIVED"] } } }),
+      db.purchaseOrder.findFirst({ where: { supplierId: owner.id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    ]);
+    return {
+      openQuotes: 0,
+      openQuotesTotal: "0.00",
+      openSalesOrders: 0,
+      openSalesOrdersTotal: "0.00",
+      openPos,
+      awaitingReceipt,
+      lastDocAt: lastPo?.updatedAt ?? null,
+    };
+  }
+
+  const quoteOwner: Prisma.QuoteWhereInput = { customerId: owner.id };
+  const soOwner: Prisma.SalesOrderWhereInput = { customerId: owner.id };
   const [q, so, lastQuote, lastSo] = await Promise.all([
     db.quote.aggregate({ where: { ...quoteOwner, status: { in: ["DRAFT", "SENT"] } }, _count: true, _sum: { contractPrice: true } }),
     db.salesOrder.aggregate({ where: { ...soOwner, status: "OPEN" }, _count: true, _sum: { contractPrice: true } }),
     db.quote.findFirst({ where: quoteOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     db.salesOrder.findFirst({ where: soOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
-  const poStats =
-    owner.kind === "supplier" && canSeeCosts(user)
-      ? await Promise.all([
-          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } }),
-          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["SENT", "PARTIALLY_RECEIVED"] } } }),
-        ])
-      : null;
   const lastDocAt = [lastQuote?.updatedAt, lastSo?.updatedAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   return {
     openQuotes: q._count,
     openQuotesTotal: sumMoney([q._sum.contractPrice]),
     openSalesOrders: so._count,
     openSalesOrdersTotal: sumMoney([so._sum.contractPrice]),
-    ...(poStats ? { openPos: poStats[0], awaitingReceipt: poStats[1] } : {}),
     lastDocAt,
   };
 }

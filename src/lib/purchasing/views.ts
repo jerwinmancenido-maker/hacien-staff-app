@@ -350,8 +350,7 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
     where: { id: salesOrderId },
     select: {
       contractPrice: true,
-      netMargin: true,
-      netMarginPct: true,
+      supplierCost: true,
       items: {
         where: { removedAt: null },
         select: {
@@ -417,8 +416,7 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
 
   return buildCostMarginSummary({
     contractPrice: money(so.contractPrice),
-    plannedMargin: money(so.netMargin),
-    plannedMarginPct: money(so.netMarginPct),
+    plannedCost: money(so.supplierCost),
     pos: poInputs,
     uncoveredLineCount,
   });
