@@ -42,14 +42,19 @@ export default async function BillingDetailPage({
         }
         subtitle={`${b.number} · ${b.customer.name} · ${PRINTABLE_DISCLAIMER}`}
         actions={
-          canVoid && (
-            <VoidButton
-              label="Void"
-              docLabel={`billing ${b.number} (booklet #${b.invoiceNo})`}
-              body="The booklet invoice number stays used and will never be reused."
-              onVoid={voidBillingAction.bind(null, id)}
-            />
-          )
+          <>
+            <Link className="btn btn-secondary" href={`/print/billings/${id}`} target="_blank">
+              Print / Save PDF
+            </Link>
+            {canVoid && (
+              <VoidButton
+                label="Void"
+                docLabel={`billing ${b.number} (booklet #${b.invoiceNo})`}
+                body="The booklet invoice number stays used and will never be reused."
+                onVoid={voidBillingAction.bind(null, id)}
+              />
+            )}
+          </>
         }
       />
       <BillingNav active="billings" />

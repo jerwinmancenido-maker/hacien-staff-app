@@ -41,14 +41,19 @@ export default async function CollectionDetailPage({
         }
         subtitle={`${c.customer.name} · ${PRINTABLE_DISCLAIMER}`}
         actions={
-          canVoid && (
-            <VoidButton
-              label="Void"
-              docLabel={`collection ${c.number}`}
-              body="Voiding reverses allocations and billing statuses."
-              onVoid={voidCollectionAction.bind(null, id)}
-            />
-          )
+          <>
+            <Link className="btn btn-secondary" href={`/print/collections/${id}`} target="_blank">
+              Print / Save PDF
+            </Link>
+            {canVoid && (
+              <VoidButton
+                label="Void"
+                docLabel={`collection ${c.number}`}
+                body="Voiding reverses allocations and billing statuses."
+                onVoid={voidCollectionAction.bind(null, id)}
+              />
+            )}
+          </>
         }
       />
       <BillingNav active="collections" />

@@ -54,6 +54,13 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       invoiceBooklet: { ...DEFAULT_SETTINGS.invoiceBooklet, ...(v.data as Partial<Settings>).invoiceBooklet },
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
+      company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
+      print: {
+        ...DEFAULT_SETTINGS.print,
+        ...(v.data as Partial<Settings>).print,
+        banks: (v.data as Partial<Settings>).print?.banks ?? DEFAULT_SETTINGS.print.banks,
+        eWallets: (v.data as Partial<Settings>).print?.eWallets ?? DEFAULT_SETTINGS.print.eWallets,
+      },
     }),
   };
 }

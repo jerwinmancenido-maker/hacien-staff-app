@@ -2347,6 +2347,10 @@ td.has-error input {
   size: A4;
   margin: 14mm 12mm;
 }
+@page letter {
+  size: letter;
+  margin: 0.5in;
+}
 @media print {
   html,
   body,
@@ -2360,7 +2364,8 @@ td.has-error input {
   .no-print {
     display: none !important;
   }
-  .print-page {
+  .print-page,
+  .pp-page {
     box-shadow: none;
     margin: 0;
     width: auto;
@@ -2369,17 +2374,26 @@ td.has-error input {
     height: auto;
     break-after: auto;
   }
+  .print-shell-letter .pp-page {
+    min-height: 9.5in;
+  }
   .print-page > :last-child,
-  .print-foot {
+  .print-foot,
+  .pp-foot {
     margin-bottom: 0;
     break-after: avoid;
     break-inside: avoid;
   }
-  .print-items tr {
+  .print-items tr,
+  .pp-items tr {
     break-inside: avoid;
   }
-  .print-items thead {
+  .print-items thead,
+  .pp-items thead {
     display: table-header-group;
+  }
+  .pp-page-num::after {
+    content: "Page " counter(page);
   }
 }
 .detail-grid + .card {
@@ -2518,4 +2532,322 @@ button.contact-card-add {
   .statement-doc { font-size: 11pt; }
   .statement-doc table { page-break-inside: auto; }
   .statement-doc tr { page-break-inside: avoid; }
+}
+
+/* ---------- Professional print layout (shared) ---------- */
+.print-shell-letter .print-toolbar,
+.print-shell-letter .print-toolbar-alert {
+  width: 8.5in;
+}
+.pp-page {
+  position: relative;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  padding: 14mm 12mm;
+  box-shadow: var(--shadow-frame);
+  font-size: 10.5pt;
+  color: #111;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-source-serif), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+.print-shell-letter .pp-page {
+  width: 8.5in;
+  min-height: 11in;
+  padding: 0.5in 0.55in;
+}
+.pp-watermark {
+  position: absolute;
+  inset: 35% 10%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(180, 40, 40, 0.12);
+  transform: rotate(-28deg);
+  pointer-events: none;
+  z-index: 0;
+  text-transform: uppercase;
+}
+.pp-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 2.5px solid #111;
+  padding-bottom: 12px;
+}
+.pp-letterhead {
+  max-width: 58%;
+  font-size: 9.5pt;
+  line-height: 1.35;
+}
+.pp-logo {
+  max-height: 18mm;
+  max-width: 55mm;
+  object-fit: contain;
+  margin-bottom: 4px;
+}
+.pp-company-name {
+  font-size: 16pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+.pp-company-name-sm {
+  font-size: 11pt;
+  margin-top: 2px;
+}
+.pp-trade-name {
+  font-style: italic;
+  color: #333;
+  margin-bottom: 2px;
+}
+.pp-nonvat {
+  display: inline-block;
+  border: 1.5px solid #111;
+  font-weight: 700;
+  font-size: 8.5pt;
+  letter-spacing: 0.1em;
+  padding: 1px 7px;
+  margin: 5px 0 4px;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.pp-contact-bits {
+  margin-top: 3px;
+  color: #333;
+}
+.pp-missing {
+  color: #b91c1c;
+  font-style: italic;
+}
+.pp-title-block {
+  text-align: right;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.pp-title-block h1 {
+  margin: 0 0 8px;
+  font-size: 17pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+.pp-meta {
+  margin-left: auto;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+.pp-meta th {
+  text-align: left;
+  font-weight: 400;
+  color: #555;
+  padding: 1px 12px 1px 0;
+}
+.pp-meta td {
+  text-align: right;
+  font-weight: 600;
+}
+.pp-party {
+  position: relative;
+  z-index: 1;
+  margin: 14px 0 12px;
+  font-size: 10pt;
+  line-height: 1.4;
+}
+.pp-label {
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+  margin-bottom: 2px;
+}
+.pp-label-inline {
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+  font-size: 9pt;
+  font-weight: 600;
+  color: #444;
+}
+.pp-strong {
+  font-weight: 700;
+  font-size: 11pt;
+}
+.pp-pre {
+  white-space: pre-wrap;
+}
+.pp-party-contact {
+  margin-top: 6px;
+}
+.pp-items {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.pp-items th,
+.pp-items td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: top;
+}
+.pp-items thead th {
+  border-bottom: 1.5px solid #111;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f7f7f4;
+}
+.pp-items .num,
+.pp-totals .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pp-items tfoot th {
+  border-bottom: none;
+  border-top: 1.5px solid #111;
+}
+.pp-totals {
+  margin-left: auto;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+  font-size: 10pt;
+  min-width: 55%;
+}
+.pp-totals th {
+  text-align: right;
+  font-weight: 500;
+  padding: 3px 14px 3px 0;
+  color: #333;
+}
+.pp-totals td {
+  text-align: right;
+  padding: 3px 0;
+}
+.pp-total-emph th,
+.pp-total-emph td {
+  font-weight: 700;
+  font-size: 11pt;
+  border-top: 1.5px solid #111;
+  padding-top: 6px;
+}
+.pp-words {
+  margin: 10px 0 0;
+  font-size: 9.5pt;
+  font-style: italic;
+}
+.pp-notes,
+.pp-pay,
+.pp-aging,
+.pp-ewt-note {
+  margin-top: 12px;
+  font-size: 9.5pt;
+  position: relative;
+  z-index: 1;
+}
+.pp-pay ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.pp-aging-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.pp-signatories {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 28px;
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+  font-size: 9pt;
+}
+.pp-sign-line {
+  border-bottom: 1px solid #111;
+  height: 28px;
+  margin-bottom: 6px;
+}
+.pp-sign-role {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 8pt;
+  color: #444;
+}
+.pp-sign-name,
+.pp-sign-date {
+  color: #555;
+  margin-top: 2px;
+}
+.pp-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #ccc;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  font-size: 8.5pt;
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.pp-thank-you {
+  font-family: var(--font-source-serif), Georgia, serif;
+  font-style: italic;
+  font-size: 11pt;
+  margin-bottom: 4px;
+}
+.pp-tax-line {
+  font-weight: 600;
+  color: #333;
+}
+.pp-contact-line {
+  margin-top: 4px;
+  color: #444;
+}
+.pp-faint {
+  color: #777;
+  margin-top: 2px;
+}
+.pp-qr {
+  width: 20mm;
+  height: 20mm;
+  flex-shrink: 0;
+}
+.pp-qr svg {
+  width: 100%;
+  height: 100%;
+}
+.pp-page-num {
+  position: absolute;
+  right: 0;
+  bottom: -2mm;
+  font-size: 8pt;
+  color: #666;
+  font-family: var(--font-ibm-plex-sans), "Segoe UI", sans-serif;
+}
+.print-preview-card {
+  border: 1px solid var(--border, #e5e5e0);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fafaf7;
+  font-size: 13px;
+  max-width: 420px;
+}
+.print-preview-card .pp-nonvat {
+  margin: 4px 0;
 }

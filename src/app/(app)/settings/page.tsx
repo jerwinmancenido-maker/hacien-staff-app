@@ -14,8 +14,9 @@ import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
+import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
-import { saveSettingsAction, saveWithholdingAction } from "./actions";
+import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
 
 const TABS = [
   { key: "users", label: "Users" },
@@ -25,7 +26,7 @@ const TABS = [
   { key: "withholding", label: "Withholding" },
   { key: "billing", label: "Billing" },
   { key: "features", label: "Features" },
-  { key: "company", label: "Company" },
+  { key: "print", label: "Print & company" },
   { key: "lists", label: "Lists" },
   { key: "changelog", label: "Change log" },
 ] as const;
@@ -187,17 +188,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "company" && (
-          <SettingsForm
-            title="Company"
-            label={SETTINGS_LABELS.company}
+        {tab === "print" && (
+          <PrintCompanyForm
+            company={s.company}
+            print={s.print}
             versionId={snap.versionId}
-            action={save("company")}
-            fields={[
-              { name: "name", label: "Business name", kind: "text", value: s.company.name },
-              { name: "tin", label: "TIN", kind: "text", value: s.company.tin, hint: "000-000-000-000" },
-              { name: "address", label: "Address", kind: "textarea", value: s.company.address },
-            ]}
+            action={savePrintCompanyAction}
           />
         )}
 

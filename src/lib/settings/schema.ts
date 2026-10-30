@@ -51,7 +51,10 @@ export const settingsSections = {
       path: ["warnSecondPct"],
     }),
   company: z.object({
+    /** Registered business name (letterhead). */
     name: z.string().trim().min(1, "Company name is required.").max(191),
+    /** Trade / doing-business-as name shown under the registered name when set. */
+    tradeName: z.string().trim().max(191).optional().or(z.literal("")),
     tin: z.string().transform((v, ctx) => {
       const tin = normalizeTin(v);
       if (tin === "invalid") {
@@ -61,6 +64,11 @@ export const settingsSections = {
       return tin ?? "";
     }),
     address: z.string().trim().max(500),
+    phone: z.string().trim().max(40).optional().or(z.literal("")),
+    email: z.string().trim().max(191).optional().or(z.literal("")),
+    website: z.string().trim().max(191).optional().or(z.literal("")),
+    /** Storage key for the uploaded logo (empty = show name). Served at /files/company-logo. */
+    logoStorageKey: z.string().trim().max(64).optional().or(z.literal("")),
   }),
   lists: z.object({
     paymentTerms: listOfNames,
@@ -89,6 +97,40 @@ export const settingsSections = {
     payablesEnabled: z.boolean(),
     cashEnabled: z.boolean(),
   }),
+  // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
+  print: z.object({
+    paperSize: z.enum(["A4", "Letter"]),
+    /** UNVERIFIED BIR rule — default ON for billing / collection prints. */
+    showInputTaxDisclaimer: z.boolean(),
+    quoteTerms: z.string().trim().max(2000).optional().or(z.literal("")),
+    deliveryNotes: z.string().trim().max(2000).optional().or(z.literal("")),
+    warrantyNotes: z.string().trim().max(2000).optional().or(z.literal("")),
+    banks: z
+      .array(
+        z.object({
+          bankName: z.string().trim().min(1).max(100),
+          accountName: z.string().trim().min(1).max(100),
+          /** Last 4 digits only. */
+          accountLast4: z
+            .string()
+            .trim()
+            .regex(/^\d{4}$/, "Enter the last 4 digits only."),
+        }),
+      )
+      .max(5),
+    eWallets: z
+      .array(
+        z.object({
+          provider: z.string().trim().min(1).max(100),
+          accountName: z.string().trim().min(1).max(100),
+          accountLast4: z
+            .string()
+            .trim()
+            .regex(/^\d{4}$/, "Enter the last 4 digits only."),
+        }),
+      )
+      .max(5),
+  }),
 } as const;
 
 export const settingsSchema = z.object(settingsSections);
@@ -110,6 +152,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   invoiceBooklet: "invoice booklet",
   collections: "collections",
   features: "features",
+  print: "print & company details",
 };
 
 export function isSettingsKey(key: string): key is SettingsKey {

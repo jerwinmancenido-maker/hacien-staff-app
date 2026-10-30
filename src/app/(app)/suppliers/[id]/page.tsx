@@ -266,6 +266,12 @@ export default async function SupplierPage({
 
       {tab === "balances" && (
         <div className="card">
+          <div className="card-head">
+            <h2>Balances</h2>
+            <Link className="btn btn-secondary" href={`/print/supplier-statements/${id}`} target="_blank">
+              Print statement
+            </Link>
+          </div>
           <dl className="kv">
             <dt>We owe</dt>
             <dd className="num strong" style={{ textAlign: "left" }}>
