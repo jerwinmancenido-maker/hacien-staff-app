@@ -24,4 +24,14 @@ describe("sniffLogoMime", () => {
     expect(sniffLogoMime(Uint8Array.of(0x25, 0x50, 0x44, 0x46))).toBeNull(); // PDF
     expect(sniffLogoMime(new Uint8Array(0))).toBeNull();
   });
+
+  it("rejects SVG logo upload bytes (no image magic → 415 / form reject)", () => {
+    const svg = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>',
+    );
+    expect(sniffLogoMime(svg.subarray(0, 16))).toBeNull();
+    // XML-prefixed SVG is also rejected.
+    const xmlSvg = new TextEncoder().encode('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>');
+    expect(sniffLogoMime(xmlSvg.subarray(0, 16))).toBeNull();
+  });
 });

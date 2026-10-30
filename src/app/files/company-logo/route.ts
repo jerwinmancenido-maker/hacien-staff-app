@@ -40,6 +40,7 @@ export async function GET() {
   return new NextResponse(stream, {
     headers: {
       "Content-Type": mime,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=300",
     },
   });
