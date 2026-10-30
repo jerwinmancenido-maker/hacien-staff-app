@@ -5,7 +5,7 @@ import { can } from "@/lib/permissions";
 import { getSupplier } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { TAX_TYPE_LABELS } from "@/lib/validation/companies";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { db } from "@/lib/db";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { ContactCards } from "@/components/ContactCards";
@@ -18,11 +18,14 @@ import { TransactionsTab, type TransactionsSearch } from "@/components/Transacti
 import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
+import { isPayablesEnabled } from "@/lib/payables/features";
+import { listSupplierPayments, supplierPayableBalance } from "@/lib/payables/views";
+import { PaymentMethodLabel, PaymentStatusChip } from "@/components/payables/PayablesParts";
 import { PlusIcon } from "@/components/Icons";
 import { SupplierForm } from "../SupplierForm";
 import { saveSupplierAction, setSupplierActiveAction } from "../actions";
 
-const TABS = ["overview", "details", "contacts", "documents", "transactions", "balances"] as const;
+const TABS = ["overview", "details", "contacts", "documents", "transactions", "payments", "balances"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SupplierPage({
@@ -52,6 +55,9 @@ export default async function SupplierPage({
     openDocumentStats(owner, user),
   ]);
   const docIds = (await db.businessDocument.findMany({ where: { supplierId: id }, select: { id: true } })).map((d) => d.id);
+  const payablesOn = await isPayablesEnabled();
+  const payableBalance = payablesOn ? await supplierPayableBalance(id) : "0.00";
+  const supplierPayments = payablesOn && (tab === "payments" || tab === "balances") ? await listSupplierPayments({ supplierId: id }) : [];
 
   // Fetch latest audit activity timestamp for overview stat card
   const lastActivity = await db.auditLog.findFirst({
@@ -144,6 +150,9 @@ export default async function SupplierPage({
             href: `/suppliers/${id}?tab=documents`,
           },
           { key: "transactions", label: "Transactions", href: `/suppliers/${id}?tab=transactions` },
+          ...(payablesOn
+            ? [{ key: "payments", label: "Payments", count: supplierPayments.length || undefined, href: `/suppliers/${id}?tab=payments` }]
+            : []),
           { key: "balances", label: "Balances", href: `/suppliers/${id}?tab=balances` },
         ]}
       />
@@ -192,15 +201,77 @@ export default async function SupplierPage({
 
       {tab === "transactions" && <TransactionsTab owner={owner} user={user} contacts={contacts} search={search} />}
 
+      {tab === "payments" && payablesOn && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Supplier payments</h2>
+            {can(user, "manage_payables") && (
+              <Link className="btn" href={`/payables/payments/new?supplierId=${id}`}>
+                <PlusIcon /> Record payment
+              </Link>
+            )}
+          </div>
+          {supplierPayments.length === 0 ? (
+            <EmptyState
+              title="No payments yet"
+              line={
+                can(user, "manage_payables")
+                  ? "When you pay this supplier at the bank, record it here."
+                  : "Payments recorded for this supplier will show here."
+              }
+            />
+          ) : (
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
+                  <tr>
+                    <th>Number</th>
+                    <th>Date</th>
+                    <th>Method</th>
+                    <th className="num">Paid</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierPayments.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <Link href={`/payables/payments/${p.id}`}>{p.number}</Link>
+                      </td>
+                      <td>{formatDate(new Date(`${p.date}T00:00:00.000Z`))}</td>
+                      <td>
+                        <PaymentMethodLabel method={p.method} />
+                      </td>
+                      <td className="num">{formatPeso(p.amountPaid)}</td>
+                      <td>
+                        <PaymentStatusChip status={p.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "balances" && (
         <div className="card">
           <dl className="kv">
             <dt>We owe</dt>
             <dd className="num strong" style={{ textAlign: "left" }}>
-              {formatPeso(0)}
+              {formatPeso(payableBalance)}
             </dd>
           </dl>
-          <EmptyState line="Unpaid supplier bills will show here once POs are built." />
+          {!payablesOn ? (
+            <EmptyState line="Turn on Payables in Settings → Features to track unpaid supplier bills." />
+          ) : Number(payableBalance) === 0 ? (
+            <EmptyState line="Nothing outstanding for this supplier." />
+          ) : (
+            <p className="faint small">
+              <Link href={`/payables/aging`}>View AP aging →</Link>
+            </p>
+          )}
         </div>
       )}
     </>

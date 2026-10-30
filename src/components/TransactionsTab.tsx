@@ -56,7 +56,7 @@ const STATUS_LABEL: Record<string, string> = {
   RECEIVED: "Received",
   CLOSED: "Closed",
   POSTED: "Posted",
-  RECORDED: "Recorded",
+  RECORDED: "Unpaid",
   PARTIALLY_PAID: "Partially paid",
   PAID: "Paid",
   "OPEN|OVERDUE": "Overdue",
@@ -70,6 +70,7 @@ const AVATAR: Record<TransactionKind, string> = {
   SUPPLIER_BILL: "B L",
   BILLING: "B L",
   COLLECTION: "C R",
+  SUPPLIER_PAYMENT: "P Y",
 };
 const AMOUNT_LABEL: Partial<Record<TransactionKind, string>> = {
   PURCHASE_ORDER: "PO total",
@@ -242,7 +243,10 @@ export async function TransactionsTab({
           {list.canSeeCosts && (
             <optgroup label="Receiving / bills">
               <option value="POSTED">Posted</option>
-              <option value="RECORDED">Recorded</option>
+              <option value="RECORDED">Unpaid</option>
+              <option value="PARTIALLY_PAID">Partially paid</option>
+              <option value="PAID">Paid</option>
+              <option value="POSTED">Posted payment</option>
             </optgroup>
           )}
         </select>

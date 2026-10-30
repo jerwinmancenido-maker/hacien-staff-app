@@ -1,10 +1,11 @@
 // Supplier bills (the supplier's invoice) recorded against a PO, for the 3-way
 // match. Cost data: needs edit_data + "Can see costs". Bill numbers are unique
-// per supplier among non-void bills (SupplierBill.activeKey). No payments yet.
+// per supplier among non-void bills (SupplierBill.activeKey).
 
 import type { Prisma } from "@prisma/client";
 import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
+import { dueDateFromTerms } from "../billing/dates";
 import { DocRuleError, money, ymd } from "../documents/common";
 import { fromScaled, lineAmounts, toScaled } from "../quotes/calc";
 import { poActionError } from "../purchasing/status";
@@ -43,6 +44,7 @@ export async function recordSupplierBill(purchaseOrderId: string, input: BillInp
       const err = poActionError(po.status, "bill");
       if (err) throw new DocRuleError(err);
       const lines = billLines(input.lines, new Set(po.items.map((i) => i.id)));
+      const dueDate = dueDateFromTerms(input.billDate, po.terms);
       const bill = await tx.supplierBill.create({
         data: {
           supplierId: po.supplierId,
@@ -50,6 +52,7 @@ export async function recordSupplierBill(purchaseOrderId: string, input: BillInp
           billNumber: input.billNumber,
           activeKey: billKey(po.supplierId, input.billNumber),
           billDate: input.billDate,
+          dueDate,
           amount: input.amount,
           notes: input.notes,
           createdById: actor.id,
@@ -88,9 +91,18 @@ export async function voidSupplierBill(id: string, reason: string, actor: PoActo
   if (!why) throw new DocRuleError("A reason is required.", "reason");
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT \`id\` FROM \`SupplierBill\` WHERE \`id\` = ${id} FOR UPDATE`;
-    const before = await tx.supplierBill.findUnique({ where: { id }, include: { items: true } });
+    const before = await tx.supplierBill.findUnique({
+      where: { id },
+      include: {
+        items: true,
+        allocations: { where: { supplierPayment: { status: "POSTED" } } },
+      },
+    });
     if (!before) throw new DocRuleError("Bill not found.");
     if (before.status === "VOID") throw new DocRuleError("This bill is already void.");
+    if (before.allocations.length) {
+      throw new DocRuleError("This bill has posted supplier payments. Void those payments first.");
+    }
     const now = new Date();
     const after = await tx.supplierBill.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, activeKey: null } });
     await tx.documentVoid.create({
@@ -104,7 +116,15 @@ export async function voidSupplierBill(id: string, reason: string, actor: PoActo
         voidedAt: now,
       },
     });
-    await writeAudit(tx, { userId: actor.id, entityType: "SupplierBill", entityId: id, action: "void", before: { status: "RECORDED" }, after: { status: "VOID", voidReason: why }, diff: false });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "SupplierBill",
+      entityId: id,
+      action: "void",
+      before: { status: before.status },
+      after: { status: "VOID", voidReason: why },
+      diff: false,
+    });
     return after;
   });
 }

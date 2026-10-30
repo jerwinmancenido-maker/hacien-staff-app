@@ -24,7 +24,10 @@ export function RrStatusChip({ status }: { status: string }) {
 }
 
 export function BillStatusChip({ status }: { status: string }) {
-  return <Chip tone={status === "VOID" ? "red" : "green"}>{status === "VOID" ? "Void" : "Recorded"}</Chip>;
+  const tone = status === "VOID" ? "red" : status === "PAID" ? "green" : status === "PARTIALLY_PAID" ? "amber" : "amber";
+  const label =
+    status === "VOID" ? "Void" : status === "PAID" ? "Paid" : status === "PARTIALLY_PAID" ? "Partially paid" : "Unpaid";
+  return <Chip tone={tone}>{label}</Chip>;
 }
 
 const PROGRESS_TONES: Record<ProgressState, ChipTone> = { NOT_ORDERED: "grey", ORDERED: "dark", PARTIALLY_RECEIVED: "amber", RECEIVED: "green" };

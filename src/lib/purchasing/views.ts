@@ -168,6 +168,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       id: b.id,
       billNumber: b.billNumber,
       billDate: ymd(b.billDate)!,
+      dueDate: ymd(b.dueDate)!,
       amount: money(b.amount),
       status: b.status,
       notes: b.notes,

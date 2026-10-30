@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
     receivingReport: { prefix: "RR", padding: 4, resetYearly: true },
     billing: { prefix: "BL", padding: 4, resetYearly: true },
     collection: { prefix: "CR", padding: 4, resetYearly: true },
+    supplierPayment: { prefix: "PAY", padding: 4, resetYearly: true },
   },
   taxYear: { year: 2026, nonVatLimit: 3_000_000, warnFirstPct: 70, warnSecondPct: 90 },
   company: { name: "HACIEN", tin: "", address: "" },
@@ -21,4 +22,5 @@ export const DEFAULT_SETTINGS: Settings = {
   documents: { expiryWarningDays: 30 },
   invoiceBooklet: { seriesFrom: 1, seriesTo: 500, label: "Booklet 1" },
   collections: { overdueGraceDays: 0 },
+  features: { payablesEnabled: false },
 };

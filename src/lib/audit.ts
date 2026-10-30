@@ -21,7 +21,9 @@ export type AuditEntityType =
   | "DocumentAttachment"
   | "Billing"
   | "Collection"
-  | "Withholding2307";
+  | "Withholding2307"
+  | "SupplierPayment"
+  | "SupplierWithholding2307";
 
 type Plain = Record<string, unknown>;
 

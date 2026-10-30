@@ -53,6 +53,7 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       numbering: { ...DEFAULT_SETTINGS.numbering, ...(v.data as Partial<Settings>).numbering },
       invoiceBooklet: { ...DEFAULT_SETTINGS.invoiceBooklet, ...(v.data as Partial<Settings>).invoiceBooklet },
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
+      features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
     }),
   };
 }
