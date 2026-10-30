@@ -113,30 +113,52 @@ export const applyCreditInputSchema = z.object({
   customerId: z.string().min(1),
   allocations: z
     .array(
-      z.object({
-        collectionId: z.string().min(1),
-        billingId: z.string().min(1),
-        cashApplied: moneyStr,
-        withholdingApplied: optionalMoney,
-        withholdingRate: z
-          .string()
-          .trim()
-          .transform((v) => v || null)
-          .nullable()
-          .optional(),
-        atcCode: z
-          .string()
-          .trim()
-          .max(20)
-          .transform((v) => v || null)
-          .nullable()
-          .optional(),
-      }),
+      z
+        .object({
+          collectionId: z.string().min(1),
+          billingId: z.string().min(1),
+          cashApplied: moneyStr,
+          withholdingApplied: optionalMoney,
+          withholdingRate: z
+            .string()
+            .trim()
+            .transform((v) => v || null)
+            .nullable()
+            .optional(),
+          atcCode: z
+            .string()
+            .trim()
+            .max(20)
+            .transform((v) => v || null)
+            .nullable()
+            .optional(),
+        })
+        .superRefine((row, ctx) => {
+          // Credit is cash-only; any withholding would shrink AR without consuming credit.
+          const wh = (row.withholdingApplied ?? "0").trim();
+          if (!/^0+(\.0+)?$/.test(wh)) {
+            ctx.addIssue({
+              code: "custom",
+              message:
+                "Withholding can't be applied from customer credit. Record 2307 when you collect the payment, then apply cash credit only.",
+              path: ["withholdingApplied"],
+            });
+          }
+        }),
     )
     .min(1, "Allocate at least one amount."),
 });
 
 export type ApplyCreditInput = z.infer<typeof applyCreditInputSchema>;
+
+/** Simple UI shape: apply this much credit onto one open billing (FIFO across credit sources). */
+export const applyCreditSimpleSchema = z.object({
+  customerId: z.string().min(1, "Customer is required."),
+  billingId: z.string().min(1, "Pick an open billing."),
+  amount: moneyStr,
+});
+
+export type ApplyCreditSimpleInput = z.infer<typeof applyCreditSimpleSchema>;
 
 export const mark2307ReceivedSchema = z.object({
   receivedAt: ymd,

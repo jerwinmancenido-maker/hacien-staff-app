@@ -128,6 +128,18 @@ export async function voidReceivingReport(id: string, reason: string, actor: RrA
       if (!["SENT", "PARTIALLY_RECEIVED", "RECEIVED"].includes(po.status)) {
         throw new DocRuleError(po.status === "CLOSED" ? "The PO is closed; its receiving reports can't be voided." : "The PO is void.");
       }
+      // Non-void supplier bills sit on the PO's received qty — void the bill before reversing receipt.
+      const liveBills = await tx.supplierBill.findMany({
+        where: { purchaseOrderId: head.purchaseOrderId, status: { not: "VOID" } },
+        select: { id: true, billNumber: true },
+        orderBy: { id: "asc" },
+      });
+      for (const bill of liveBills) {
+        await tx.$queryRaw`SELECT \`id\` FROM \`SupplierBill\` WHERE \`id\` = ${bill.id} FOR UPDATE`;
+      }
+      if (liveBills[0]) {
+        throw new DocRuleError("Void the supplier bill first.");
+      }
       const byId = new Map(po.lines.map((l) => [l.id, l]));
       for (const item of rr.items) {
         const line = byId.get(item.purchaseOrderItemId);

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/format";
 import { agingBucket, sumAging } from "@/lib/billing/aging";
-import { autoAllocateOldestFirst, validateAllocations, wouldExceedCredit } from "@/lib/billing/allocations";
+import {
+  autoAllocateOldestFirst,
+  minMoney,
+  planCreditApplication,
+  validateAllocations,
+  wouldExceedCredit,
+} from "@/lib/billing/allocations";
+import { applyCreditInputSchema } from "@/lib/validation/billing";
 import { bookletGrid, bookletRangeError, inBookletRange } from "@/lib/billing/booklet";
 import { calendarDaysBetween, daysPastDue, dueDateFromTerms, isOverdue } from "@/lib/billing/dates";
 import {
@@ -161,6 +168,43 @@ describe("allocation rules", () => {
       billings,
     );
     expect(err?.message).toMatch(/remaining balance/);
+  });
+  it("plans credit apply FIFO across sources (cash only)", () => {
+    const planned = planCreditApplication(
+      "150.00",
+      [
+        { collectionId: "c1", unappliedCredit: "100.00" },
+        { collectionId: "c2", unappliedCredit: "80.00" },
+      ],
+      "b1",
+    );
+    expect(planned).toEqual([
+      { collectionId: "c1", billingId: "b1", cashApplied: "100.00", withholdingApplied: "0.00" },
+      { collectionId: "c2", billingId: "b1", cashApplied: "50.00", withholdingApplied: "0.00" },
+    ]);
+  });
+  it("planCreditApplication fails when credit is short", () => {
+    expect(() =>
+      planCreditApplication("50.00", [{ collectionId: "c1", unappliedCredit: "20.00" }], "b1"),
+    ).toThrow(/Not enough customer credit/);
+  });
+  it("minMoney picks the smaller scaled amount", () => {
+    expect(minMoney("100.00", "40.50")).toBe("40.50");
+    expect(minMoney("10.00", "10.00")).toBe("10.00");
+  });
+  it("applyCreditInputSchema rejects withholding on credit apply", () => {
+    const bad = applyCreditInputSchema.safeParse({
+      customerId: "cust",
+      allocations: [
+        {
+          collectionId: "c1",
+          billingId: "b1",
+          cashApplied: "0.00",
+          withholdingApplied: "50.00",
+        },
+      ],
+    });
+    expect(bad.success).toBe(false);
   });
 });
 
