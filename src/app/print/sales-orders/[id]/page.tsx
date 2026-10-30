@@ -1,37 +1,30 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requirePagePermission } from "@/lib/auth/current-user";
-import { getSalesOrderPrint } from "@/lib/quotes/views";
-import { qrSvg } from "@/lib/print/qr";
-import { PrintDocument } from "@/components/docs/PrintDocument";
-import { PrintButton } from "@/components/docs/PrintButton";
+import { getCurrentUser, requirePagePermission } from "@/lib/auth/current-user";
+import { can } from "@/lib/permissions";
+import { getSalesOrderPrintModel } from "@/lib/print/views";
+import { PrintShell } from "@/components/docs/PrintShell";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const doc = await getSalesOrderPrint(id);
-  // The browser uses the title as the default PDF file name.
-  return { title: doc ? `${doc.number} ${doc.customer.name}` : "Print" };
+  const result = await getSalesOrderPrintModel(id);
+  return { title: result ? `${result.doc.number} ${result.doc.party.name}` : "Print" };
 }
 
-export default async function PrintPage({ params }: { params: Promise<{ id: string }> }) {
-  // Everyone who can view (including Viewers) can print.
+export default async function PrintSalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePagePermission("view");
+  const user = await getCurrentUser();
   const { id } = await params;
-  const doc = await getSalesOrderPrint(id);
-  if (!doc) notFound();
+  const result = await getSalesOrderPrintModel(id);
+  if (!result) notFound();
   return (
-    <div className="print-shell">
-      <div className="print-toolbar no-print">
-        <Link className="btn btn-secondary" href={`/sales-orders/${id}`}>
-          Back
-        </Link>
-        <span className="small muted">Choose &quot;Save as PDF&quot; in the print dialog. Paper: A4.</span>
-        <PrintButton />
-      </div>
-      <PrintDocument doc={doc} qrSvg={await qrSvg()} />
-    </div>
+    <PrintShell
+      backHref={`/sales-orders/${id}`}
+      doc={result.doc}
+      missing={result.missing}
+      canManageSettings={!!user && can(user, "manage_settings")}
+    />
   );
 }
