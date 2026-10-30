@@ -1,8 +1,8 @@
 // CSV exporters for tax worksheets. Column orders are labelled UNVERIFIED —
 // not official BIR SAWT / QAP files. Confirm with accountant before upload.
 //
-// Formula injection: every data cell goes through Books `csvCell` (prefix '
-// when the value starts with =, +, -, @, tab, or CR).
+// Formula injection: every data cell goes through Books `csvCell`. Plain numbers
+// like -500.00 are NOT escaped; =/+/@/tab/CR and non-numeric leading "-" are.
 
 import { csvCell } from "../books/csv";
 import {

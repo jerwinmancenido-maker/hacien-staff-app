@@ -15,9 +15,11 @@ import {
   billingBalance,
   deriveBillingStatus,
   netExpected,
+  openingCreditAsOf,
   proRataWithholding,
   remainingToBill,
   unappliedCash,
+  unappliedCashAsOf,
 } from "@/lib/billing/status";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { formatDocNumber } from "@/lib/settings/numbering";
@@ -240,5 +242,76 @@ describe("statement running balance (unit)", () => {
       bals.push((Number(running) / 100).toFixed(2));
     }
     expect(bals).toEqual(["1000.00", "580.00", "480.00"]);
+  });
+});
+
+describe("filtered SOA opening credit as of from (unit)", () => {
+  const from = d("2026-02-01");
+
+  it("collection before from, applied inside the period, still counts as opening credit", () => {
+    // ₱1000 collected Jan 15 (unapplied). ₱400 applied Feb 10 — after `from`.
+    // As of Feb 1 the full ₱1000 is still opening credit (not today's ₱600).
+    const u = unappliedCashAsOf(
+      "1000.00",
+      [
+        { cashApplied: "400.00", date: d("2026-02-10") },
+      ],
+      from,
+    );
+    expect(u).toBe("1000.00");
+    expect(
+      openingCreditAsOf(
+        [
+          {
+            amountReceived: "1000.00",
+            applications: [{ cashApplied: "400.00", date: d("2026-02-10") }],
+          },
+        ],
+        from,
+      ),
+    ).toBe("1000.00");
+  });
+
+  it("application before from reduces opening credit", () => {
+    // ₱1000 collected Jan 10; ₱300 applied Jan 10 (before `from`) → ₱700 opening credit.
+    expect(
+      openingCreditAsOf(
+        [
+          {
+            amountReceived: "1000.00",
+            applications: [{ cashApplied: "300.00", date: d("2026-01-10") }],
+          },
+        ],
+        from,
+      ),
+    ).toBe("700.00");
+    // Mixed: prior apply reduces; in-period apply does not.
+    expect(
+      openingCreditAsOf(
+        [
+          {
+            amountReceived: "1000.00",
+            applications: [
+              { cashApplied: "300.00", date: d("2026-01-10") },
+              { cashApplied: "200.00", date: d("2026-02-15") },
+            ],
+          },
+        ],
+        from,
+      ),
+    ).toBe("700.00");
+  });
+
+  it("application on from does not reduce opening credit (strict lt)", () => {
+    // Helpers use `date < asOf`; getStatement filters `appliedOn: { lt: from }`.
+    // So appliedOn === from is inside the period (not opening), matching collections
+    // with date >= from that appear on period lines rather than in opening credit.
+    expect(unappliedCashAsOf("1000.00", [{ cashApplied: "400.00", date: from }], from)).toBe("1000.00");
+    expect(
+      openingCreditAsOf(
+        [{ amountReceived: "1000.00", applications: [{ cashApplied: "400.00", date: from }] }],
+        from,
+      ),
+    ).toBe("1000.00");
   });
 });

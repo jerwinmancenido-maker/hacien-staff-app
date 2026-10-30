@@ -428,6 +428,19 @@ describe.skipIf(!env.hasDb)("addresses, business documents, transactions (MySQL)
       expect(stats?.lastDocAt).toBeInstanceOf(Date);
     });
 
+    it("supplier overview stats omit open quotes/SOs (Open POs only)", async () => {
+      const { supplier } = await setup();
+      const stats = await openDocumentStats({ kind: "supplier", id: supplier.id }, admin);
+      expect(stats).toMatchObject({
+        openQuotes: 0,
+        openQuotesTotal: "0.00",
+        openSalesOrders: 0,
+        openSalesOrdersTotal: "0.00",
+        openPos: 0,
+        awaitingReceipt: 0,
+      });
+    });
+
     it("paginates 50 per page across quotes and SOs", async () => {
       const c = await makeCustomer();
       const year = await freshYear();
