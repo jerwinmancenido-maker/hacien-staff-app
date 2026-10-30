@@ -4,6 +4,7 @@ import { can } from "@/lib/permissions";
 import { formatPeso } from "@/lib/format";
 import { arAgingSummary, taxYearBillingMeter } from "@/lib/billing/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
+import { formatNonVatPctLabel } from "@/lib/services/non-vat";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
@@ -61,7 +62,7 @@ export default async function BillingHomePage() {
           <div className="card-head">
             <h2>Tax year {meter.year} (gross billings)</h2>
             <div className="right small muted">
-              {formatPeso(meter.gross)} of {formatPeso(meter.limit)} non-VAT limit ({meter.pct.toFixed(1)}%)
+              {formatPeso(meter.gross)} of {formatPeso(meter.limit)} non-VAT limit ({formatNonVatPctLabel(meter.pct)})
             </div>
           </div>
           <div className="aging-bar-track" aria-hidden>
