@@ -49,3 +49,39 @@ export function unappliedCash(amountReceived: string, cashAppliedSums: readonly 
   const applied = cashAppliedSums.reduce((acc, a) => acc + toScaled(a, 2), 0n);
   return fromScaled(toScaled(amountReceived, 2) - applied, 2);
 }
+
+export type DatedCashApplication = { cashApplied: string; date: Date };
+
+/**
+ * Unapplied cash as of a cutoff date: only applications dated strictly before
+ * `asOf` reduce the credit. A collection before `asOf` that is applied on or
+ * after `asOf` still counts as unapplied opening credit.
+ */
+export function unappliedCashAsOf(
+  amountReceived: string,
+  applications: readonly DatedCashApplication[],
+  asOf: Date,
+): string {
+  return unappliedCash(
+    amountReceived,
+    applications.filter((a) => a.date < asOf).map((a) => a.cashApplied),
+  );
+}
+
+/**
+ * Total customer credit from prior-period collections as of `from`
+ * (collections dated before `from`, minus applications dated before `from`).
+ */
+export function openingCreditAsOf(
+  priorCollections: readonly {
+    amountReceived: string;
+    applications: readonly DatedCashApplication[];
+  }[],
+  from: Date,
+): string {
+  let credit = 0n;
+  for (const c of priorCollections) {
+    credit += toScaled(unappliedCashAsOf(c.amountReceived, c.applications, from), 2);
+  }
+  return fromScaled(credit, 2);
+}

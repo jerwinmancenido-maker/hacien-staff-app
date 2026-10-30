@@ -535,33 +535,44 @@ async function kindTotals(
   return withCosts ? { ...base, supplierCost: sumMoney([sums.cost as never]), netMargin: sumMoney([sums.margin as never]) } : base;
 }
 
-/** Overview stat cards: open quotes (Draft/Sent) and open sales orders, with their contract totals. */
+/**
+ * Overview stat cards.
+ * - Customer: open quotes (Draft/Sent) and open sales orders, with contract totals.
+ * - Supplier: Open POs only (quotes/SOs cards are hidden on supplier overview).
+ */
 export async function openDocumentStats(owner: ContactOwner, user: PermissionUser) {
-  if (owner.kind === "supplier" && !canSeeCosts(user)) return null;
-  const quoteOwner: Prisma.QuoteWhereInput =
-    owner.kind === "supplier" ? { items: { some: { supplierId: owner.id, removedAt: null } } } : { customerId: owner.id };
-  const soOwner: Prisma.SalesOrderWhereInput =
-    owner.kind === "supplier" ? { items: { some: { supplierId: owner.id, removedAt: null } } } : { customerId: owner.id };
+  if (owner.kind === "supplier") {
+    if (!canSeeCosts(user)) return null;
+    const [openPos, awaitingReceipt, lastPo] = await Promise.all([
+      db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } }),
+      db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["SENT", "PARTIALLY_RECEIVED"] } } }),
+      db.purchaseOrder.findFirst({ where: { supplierId: owner.id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    ]);
+    return {
+      openQuotes: 0,
+      openQuotesTotal: "0.00",
+      openSalesOrders: 0,
+      openSalesOrdersTotal: "0.00",
+      openPos,
+      awaitingReceipt,
+      lastDocAt: lastPo?.updatedAt ?? null,
+    };
+  }
+
+  const quoteOwner: Prisma.QuoteWhereInput = { customerId: owner.id };
+  const soOwner: Prisma.SalesOrderWhereInput = { customerId: owner.id };
   const [q, so, lastQuote, lastSo] = await Promise.all([
     db.quote.aggregate({ where: { ...quoteOwner, status: { in: ["DRAFT", "SENT"] } }, _count: true, _sum: { contractPrice: true } }),
     db.salesOrder.aggregate({ where: { ...soOwner, status: "OPEN" }, _count: true, _sum: { contractPrice: true } }),
     db.quote.findFirst({ where: quoteOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     db.salesOrder.findFirst({ where: soOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
-  const poStats =
-    owner.kind === "supplier" && canSeeCosts(user)
-      ? await Promise.all([
-          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } }),
-          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["SENT", "PARTIALLY_RECEIVED"] } } }),
-        ])
-      : null;
   const lastDocAt = [lastQuote?.updatedAt, lastSo?.updatedAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   return {
     openQuotes: q._count,
     openQuotesTotal: sumMoney([q._sum.contractPrice]),
     openSalesOrders: so._count,
     openSalesOrdersTotal: sumMoney([so._sum.contractPrice]),
-    ...(poStats ? { openPos: poStats[0], awaitingReceipt: poStats[1] } : {}),
     lastDocAt,
   };
 }
