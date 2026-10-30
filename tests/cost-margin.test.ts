@@ -1,4 +1,5 @@
 // Cost & margin tab: basis choice, margin math, voids stay out of inputs, warnings.
+// Planned and Actual share one basis: contract (before withholding) − cost.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -26,19 +27,23 @@ const po = (extra: Partial<CostMarginPoInput> = {}): CostMarginPoInput => ({
 });
 
 describe("chooseCostBasis", () => {
-  it("uses billed when any non-void bill exists (even if amount is 0)", () => {
-    expect(chooseCostBasis({ ...po({ billedAmount: "0.00", hasBills: true, hasReceipts: true, receivedValue: "50.00" }) })).toEqual({
-      basis: "BILLED",
-      cost: "0.00",
-      basisLabel: "Billed",
-    });
+  it("uses billed when a non-zero bill exists", () => {
     expect(chooseCostBasis(po({ billedAmount: "88000.00", hasBills: true, receivedValue: "50000.00", hasReceipts: true }))).toMatchObject({
       basis: "BILLED",
       cost: "88000.00",
+      basisLabel: "Billed",
     });
   });
 
-  it("falls back to received, then PO total", () => {
+  it("falls back to PO total when hasBills but billed amount is ₱0.00", () => {
+    expect(chooseCostBasis(po({ billedAmount: "0.00", hasBills: true, hasReceipts: true, receivedValue: "50.00", poTotal: "100000.00" }))).toEqual({
+      basis: "PO_TOTAL",
+      cost: "100000.00",
+      basisLabel: "PO total",
+    });
+  });
+
+  it("falls back to received, then PO total when there are no bills", () => {
     expect(chooseCostBasis(po({ receivedValue: "45000.00", hasReceipts: true }))).toEqual({
       basis: "RECEIVED",
       cost: "45000.00",
@@ -81,11 +86,10 @@ describe("warnings helpers", () => {
 });
 
 describe("buildCostMarginSummary", () => {
-  it("sums row costs by basis and compares actual vs planned margin", () => {
+  it("sums row costs by basis; Planned and Actual both use contract − cost", () => {
     const summary = buildCostMarginSummary({
       contractPrice: "540000.00",
-      plannedMargin: "70000.00",
-      plannedMarginPct: "12.96",
+      plannedCost: "470000.00",
       uncoveredLineCount: 0,
       pos: [
         po({ id: "a", poTotal: "200000.00", hasBills: true, billedAmount: "190000.00" }),
@@ -99,11 +103,33 @@ describe("buildCostMarginSummary", () => {
     expect(summary.warnings).toEqual([]);
   });
 
+  it("with ₱695 withholding and matching costs, Planned equals Actual (withholding is not a cost)", () => {
+    // Contract 100_000, planned supplier cost 40_000, actual PO cost 40_000.
+    // Old netMargin would be (100_000 − 695) − 40_000 = 59_305 — that must NOT be used.
+    const contract = "100000.00";
+    const plannedCost = "40000.00";
+    const withholding = "695.00"; // tax credit only; ignored by Cost & margin
+    expect(withholding).toBe("695.00");
+
+    const summary = buildCostMarginSummary({
+      contractPrice: contract,
+      plannedCost,
+      uncoveredLineCount: 0,
+      pos: [po({ poTotal: "40000.00", hasBills: true, billedAmount: "40000.00" })],
+    });
+
+    expect(summary.totalCost).toBe("40000.00");
+    expect(summary.planned).toEqual({ margin: "60000.00", marginPct: "60.00" });
+    expect(summary.actual).toEqual({ margin: "60000.00", marginPct: "60.00" });
+    expect(summary.planned).toEqual(summary.actual);
+    // Sanity: the withholding-based net margin differs — we must not have used it.
+    expect(summary.planned.margin).not.toBe("59305.00");
+  });
+
   it("emits both warnings with hints; void docs are simply never passed in", () => {
     const summary = buildCostMarginSummary({
       contractPrice: "100000.00",
-      plannedMargin: "20000.00",
-      plannedMarginPct: "20.00",
+      plannedCost: "80000.00",
       uncoveredLineCount: 2,
       pos: [po({ billedAmount: "150000.00", hasBills: true })],
     });

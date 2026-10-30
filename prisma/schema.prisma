@@ -985,6 +985,8 @@ model Collection {
 // Sum of cashApplied across a collection's allocations ≤ amountReceived
 // (remainder is unapplied customer credit). Per billing, cash + withholding
 // applied ≤ billing.amount.
+// Multiple rows per collection+billing are allowed so each application keeps
+// its own business date (`appliedOn`) for statement "as of" math.
 model CollectionAllocation {
   id                 String     @id @default(cuid())
   collectionId       String
@@ -993,10 +995,14 @@ model CollectionAllocation {
   billing            Billing    @relation(fields: [billingId], references: [id])
   cashApplied        Decimal    @db.Decimal(15, 2)
   withholdingApplied Decimal    @default(0) @db.Decimal(15, 2)
+  // Business date of this application (collection date at post, or credit-apply day).
+  // DB default covers deploy gap (old build after migrate); app still sets it explicitly.
+  // Expression default requires MySQL 8.0.13+.
+  appliedOn          DateTime   @default(dbgenerated("(curdate())")) @db.Date
 
-  @@unique([collectionId, billingId])
   @@index([collectionId])
   @@index([billingId])
+  @@index([appliedOn])
 }
 
 // BIR Form 2307 (Certificate of Creditable Tax Withheld at Source). Created when
