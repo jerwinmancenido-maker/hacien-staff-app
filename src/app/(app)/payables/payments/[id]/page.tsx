@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
+import { isCashEnabled } from "@/lib/cash/features";
 import { formatDate, formatPeso } from "@/lib/format";
 import { getSupplierPaymentView } from "@/lib/payables/views";
 import { Activity } from "@/components/Activity";
@@ -28,6 +29,7 @@ export default async function PaymentDetailPage({
   const p = await getSupplierPaymentView(id);
   if (!p) notFound();
   const canManage = can(user, "manage_payables");
+  const cashOn = await isCashEnabled();
   const canVoid = canManage && p.status === "POSTED" && !p.withholdings.some((w) => w.status === "ISSUED");
 
   return (
@@ -84,7 +86,11 @@ export default async function PaymentDetailPage({
             <dt>Paid from</dt>
             <dd>
               {p.cashAccount ? (
-                <Link href={`/cash/accounts/${p.cashAccount.id}`}>{p.cashAccount.name}</Link>
+                cashOn ? (
+                  <Link href={`/cash/accounts/${p.cashAccount.id}`}>{p.cashAccount.name}</Link>
+                ) : (
+                  p.cashAccount.name
+                )
               ) : (
                 <span className="faint">Not assigned</span>
               )}

@@ -12,6 +12,7 @@ import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/comm
 import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
 import { unappliedCash } from "../billing/status";
+import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
@@ -150,6 +151,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
 
         const number = await allocateDocNumber(tx, "COLLECTION", year, format);
         if (input.cashAccountId) {
+          await assertCashEnabled();
           const acct = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
           if (!acct || !acct.active) {
             throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");
@@ -274,19 +276,37 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
         const wh = toScaled(a.withholdingApplied || "0", 2);
         if (cash < 0n || wh < 0n) throw new DocRuleError("Applied amounts can't be negative.", "allocations");
         if (cash === 0n && wh === 0n) continue;
+        // Credit is unapplied *cash* only. Withholding-only (or any new 2307) on
+        // a credit apply would shrink AR without consuming credit.
+        if (wh > 0n) {
+          throw new DocRuleError(
+            "Withholding can't be applied from customer credit. Record 2307 when you collect the payment, then apply cash credit only.",
+            "allocations",
+          );
+        }
+        if (cash === 0n) continue;
         const left = creditLeft.get(a.collectionId) ?? 0n;
         if (cash > left) {
           throw new DocRuleError(
-            `Cash applied exceeds the unapplied credit on a collection (₱${fromScaled(left, 2)} left).`,
+            `Cash applied exceeds the unapplied credit on a collection (₱${fromScaled(left, 2)} left). Reduce the amount or pick another collection with credit.`,
             "allocations",
           );
         }
         const billing = sim.get(a.billingId);
-        if (!billing) throw new DocRuleError("One of the billings isn't open for this customer.", "allocations");
+        if (!billing) {
+          throw new DocRuleError(
+            "One of the billings isn't open for this customer. Refresh the page and pick an open billing.",
+            "allocations",
+          );
+        }
         const rem =
           toScaled(billing.amount, 2) - toScaled(billing.alreadyCash, 2) - toScaled(billing.alreadyWithholding, 2);
-        if (cash + wh > rem) {
-          throw new DocRuleError(`Allocation exceeds the remaining balance on a billing (₱${fromScaled(rem, 2)} left).`, "allocations");
+        // Applied amount is cash-only; credit consumed must equal applied amount.
+        if (cash > rem) {
+          throw new DocRuleError(
+            `Allocation exceeds the remaining balance on a billing (₱${fromScaled(rem, 2)} left). Lower the amount to at most the open balance.`,
+            "allocations",
+          );
         }
 
         const existing = await tx.collectionAllocation.findUnique({
@@ -297,7 +317,7 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
             where: { id: existing.id },
             data: {
               cashApplied: fromScaled(toScaled(money(existing.cashApplied), 2) + cash, 2),
-              withholdingApplied: fromScaled(toScaled(money(existing.withholdingApplied), 2) + wh, 2),
+              // withholding unchanged — credit apply never creates/updates 2307
             },
           });
         } else {
@@ -306,26 +326,13 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
               collectionId: a.collectionId,
               billingId: a.billingId,
               cashApplied: fromScaled(cash, 2),
-              withholdingApplied: fromScaled(wh, 2),
+              withholdingApplied: "0.00",
             },
           });
         }
         creditLeft.set(a.collectionId, left - cash);
         billing.alreadyCash = fromScaled(toScaled(billing.alreadyCash, 2) + cash, 2);
-        billing.alreadyWithholding = fromScaled(toScaled(billing.alreadyWithholding, 2) + wh, 2);
         touched.add(a.billingId);
-
-        if (wh > 0n) {
-          const defaults = await withholdingDefaults(tx, billing.salesOrderId);
-          await upsert2307(tx, {
-            billingId: a.billingId,
-            collectionId: a.collectionId,
-            customerId: input.customerId,
-            amount: fromScaled(wh, 2),
-            rate: a.withholdingRate || defaults.rate,
-            atcCode: a.atcCode !== undefined && a.atcCode !== null ? a.atcCode : defaults.atcCode,
-          });
-        }
       }
 
       for (const billingId of touched) await recomputeBillingStatus(tx, billingId, actor.id);

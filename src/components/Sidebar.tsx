@@ -14,6 +14,7 @@ type Item = {
   costsOnly?: boolean;
   editOnly?: boolean;
   booksOnly?: boolean;
+  cashOnly?: boolean;
 };
 
 const MAIN: Item[] = [
@@ -29,7 +30,7 @@ const LATER: Item[] = [
   { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
   { href: "/payables", label: "Payables", icon: <CoinIcon /> },
-  { href: "/cash", label: "Cash", icon: <CoinIcon /> },
+  { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
   { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
 ];
 
@@ -44,12 +45,14 @@ export function SidebarNav({
   canEdit = false,
   canViewBooks = false,
   booksEnabled = false,
+  cashEnabled = false,
 }: {
   isAdmin: boolean;
   canSeeCosts?: boolean;
   canEdit?: boolean;
   canViewBooks?: boolean;
   booksEnabled?: boolean;
+  cashEnabled?: boolean;
 }) {
   const path = usePathname();
   const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
@@ -68,7 +71,8 @@ export function SidebarNav({
         (i) =>
           (!i.costsOnly || canSeeCosts) &&
           (!i.editOnly || canEdit) &&
-          (!i.booksOnly || (booksEnabled && canViewBooks)),
+          (!i.booksOnly || (booksEnabled && canViewBooks)) &&
+          (!i.cashOnly || cashEnabled),
       ).map(render)}
       {isAdmin && (
         <>

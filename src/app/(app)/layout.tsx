@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth/current-user";
 import { can, canSeeCosts, roleLabel } from "@/lib/permissions";
+import { isCashEnabled } from "@/lib/cash/features";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { isBooksEnabled } from "@/lib/books/features";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const { settings } = await getSettingsSnapshot();
-  // Gross sales are ₱0 until Billing adds invoices (see src/lib/services/non-vat.ts).
+  const cashEnabled = await isCashEnabled();
+  // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
   const booksEnabled = await isBooksEnabled();
@@ -32,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           canEdit={can(user, "edit_data")}
           canViewBooks={can(user, "view_books")}
           booksEnabled={booksEnabled}
+          cashEnabled={cashEnabled}
         />
         <div className="sidebar-spacer" />
         <div className={`tracker-card level-${meter.level}`} aria-label="Non-VAT limit tracker" data-level={meter.level}>

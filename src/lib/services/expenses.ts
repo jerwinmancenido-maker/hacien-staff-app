@@ -7,6 +7,7 @@ import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
+import { assertCashEnabled } from "../cash/features";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { ExpenseInput } from "../validation/cash";
@@ -87,6 +88,7 @@ export async function getExpense(id: string) {
 
 export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, files: readonly UploadFile[] = []) {
   assertManageCash(actor);
+  await assertCashEnabled();
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
   if (toScaled(input.withholdingApplied, 2) < 0n) {
     throw new DocRuleError("Withholding can't be negative.", "withholdingApplied");
@@ -159,6 +161,7 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
 
 export async function voidExpense(id: string, reason: string, actor: ExpenseActor) {
   assertManageCash(actor);
+  await assertCashEnabled();
   const why = reason.trim();
   if (!why) throw new DocRuleError("A reason is required.", "reason");
 

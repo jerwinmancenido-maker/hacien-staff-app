@@ -74,7 +74,13 @@ export async function SupplierOverview({
               </div>
               <div>
                 <div className="meta-label">Address</div>
-                <div className="meta-val">{mainAddress ? formatAddress(mainAddress) : <span className="faint">—</span>}</div>
+                <div className="meta-val">
+                  {mainAddress ? (
+                    <Link href={`/suppliers/${supplier.id}?tab=addresses`}>{formatAddress(mainAddress)}</Link>
+                  ) : (
+                    <span className="faint">—</span>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="meta-label">Tax rule note</div>

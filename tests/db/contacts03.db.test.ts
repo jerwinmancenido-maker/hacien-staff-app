@@ -409,13 +409,15 @@ describe.skipIf(!env.hasDb)("addresses, business documents, transactions (MySQL)
       expect(withCosts.rows[0]).toHaveProperty("netMarginPct");
     });
 
-    it("supplier: one row per document with only that supplier's lines", async () => {
-      const { supplier, q1, q3, so } = await setup();
+    it("supplier Transactions never lists quotes or SOs (only POs / RRs / bills)", async () => {
+      const { supplier } = await setup();
       const list = await listTransactions({ kind: "supplier", id: supplier.id }, {}, admin);
-      expect(list.rows.map((r) => r.id)).toEqual([so.id, q3.id, q1.id]);
-      // The supplier only has the laptop line: 10 × 52,000; cost 10 × 45,000.
-      expect(list.rows[0]).toMatchObject({ total: "520000.00", supplierCost: "450000.00", netMargin: "70000.00", netMarginPct: "13.46" });
-      expect(list.totals.find((t) => t.kind === "QUOTE")).toMatchObject({ count: 2, total: "1040000.00", supplierCost: "900000.00", voidCount: 0 });
+      expect(list.rows.every((r) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(r.kind))).toBe(true);
+      expect(list.rows.some((r) => r.kind === "QUOTE" || r.kind === "SALES_ORDER")).toBe(false);
+      expect(list.totals.some((t) => t.kind === "QUOTE" || t.kind === "SALES_ORDER")).toBe(false);
+      // No POs yet in this setup → empty purchasing list for a cost user.
+      expect(list.rows).toEqual([]);
+      expect(list.restricted).toBe(false);
     });
 
     it("overview stats count open quotes and open SOs", async () => {

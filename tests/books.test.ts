@@ -35,6 +35,19 @@ describe("books feature flag", () => {
   });
 });
 
+describe("cash gating inside books rows", () => {
+  it("allows expense rows with null href when Cash is off (no /cash bypass)", () => {
+    const sources: BookSourceRow[] = [
+      row({ id: "e1", kind: "EXPENSE", date: "2026-06-05", amount: "50.00", ewt: "0.00", href: null }),
+      row({ id: "p1", kind: "SUPPLIER_PAYMENT", date: "2026-06-04", amount: "40.00", ewt: "4.00", href: "/payables/payments/p1" }),
+    ];
+    const reg = buildRegister(REGISTER_CONFIGS.disbursements, sources, "2026-06-01", "2026-06-30");
+    expect(reg.rowCount).toBe(2);
+    expect(reg.rows.find((r) => r.kind === "EXPENSE")?.href).toBeNull();
+    expect(reg.rows.find((r) => r.kind === "SUPPLIER_PAYMENT")?.href).toMatch(/^\/payables\//);
+  });
+});
+
 describe("no VAT fields on Books registers", () => {
   it("column configs never include VAT / input tax", () => {
     for (const key of REGISTER_KEYS) {

@@ -18,7 +18,8 @@ export type BookSourceRow = {
   amount: string;
   /** EWT amount when present; null when not applicable for the row. */
   ewt: string | null;
-  href: string;
+  /** Source document URL; null when the target section is gated off (e.g. Cash). */
+  href: string | null;
   /** Voided rows are excluded before totals. */
   voided?: boolean;
 };

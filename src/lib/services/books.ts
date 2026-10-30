@@ -6,6 +6,7 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { money } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { db } from "../db";
+import { isCashEnabled } from "../cash/features";
 import type { BookSourceRow } from "../books/registers";
 import { manilaYmdFromInstant } from "../books/period";
 import type { RegisterKey } from "../books/config";
@@ -26,6 +27,8 @@ function sumEwt(allocs: { withholdingApplied: { toFixed(n: number): string } | s
 /** All source rows that can feed any register (caller filters by kind/period). */
 export async function listBookSourceRows(actor: PermissionUser): Promise<BookSourceRow[]> {
   assertCan(actor, "view_books");
+  // Expense detail lives under /cash — do not link there when CASH_ENABLED is off.
+  const cashOn = await isCashEnabled();
 
   const [billings, collections, bills, payments, expenses] = await Promise.all([
     db.billing.findMany({
@@ -145,7 +148,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       particulars: bits.join(" · "),
       amount: money(e.amount),
       ewt: money(e.withholdingApplied),
-      href: `/cash/expenses/${e.id}`,
+      href: cashOn ? `/cash/expenses/${e.id}` : null,
       voided: e.status === "VOID",
     });
   }

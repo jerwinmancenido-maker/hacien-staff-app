@@ -59,7 +59,7 @@ export function BooksRegisterTable({
                   if (c.key === "documentNumber") {
                     return (
                       <td key={c.key}>
-                        <Link href={r.href}>{r.documentNumber}</Link>
+                        {r.href ? <Link href={r.href}>{r.documentNumber}</Link> : r.documentNumber}
                       </td>
                     );
                   }

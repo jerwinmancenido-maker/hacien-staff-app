@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
-import { DocRuleError } from "@/lib/documents/common";
-import { isCashEnabled } from "@/lib/cash/features";
+import { assertCashEnabled } from "@/lib/cash/features";
 import { createCashAccount, updateCashAccount } from "@/lib/services/cash-accounts";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
 import { recordCashTransfer, voidCashTransfer } from "@/lib/services/cash-transfers";
@@ -15,9 +14,7 @@ import { type FormState } from "@/lib/validation/forms";
 import { formFiles } from "@/lib/form-files";
 
 async function assertFeatureOn() {
-  if (!(await isCashEnabled())) {
-    throw new DocRuleError("Cash is turned off. Enable it in Settings → Features (or CASH_ENABLED=true).");
-  }
+  await assertCashEnabled();
 }
 
 function refreshCash(paths: string[] = []) {
