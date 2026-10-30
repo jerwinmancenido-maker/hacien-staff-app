@@ -58,7 +58,8 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
     key: "sales",
     label: "Sales",
     title: "Sales register",
-    subtitle: "Cash receipts and sales journal from billings and collections.",
+    subtitle:
+      "Billings and collections listed together; period totals stay separate (Invoiced vs Collected). Draft — not a tax basis.",
     emptyFeeds:
       "This register is built from non-void billings (sales invoices) and collections (cash receipts). Record those under Billing & Collections first.",
     columns: BASE_COLUMNS,

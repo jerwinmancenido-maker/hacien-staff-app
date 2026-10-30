@@ -15,3 +15,5 @@ Staff walkthrough with `BOOKS_ENABLED=true` and throwaway local seed data (Admin
 | `09-empty-state.png` | Empty period naming source records |
 
 Draft banner text: **Draft format — confirm with accountant/RDO before using as official books**.
+
+| `10-sales-360px-table-wrap-scroll.png` | 360px phone: sales table scrolls sideways in `.table-wrap` |

@@ -40,11 +40,25 @@ export type BookPageTotal = {
   rowCount: number;
 };
 
+/** Sales register only — never combine invoiced + collected into one tax-like total. */
+export type SalesPeriodTotals = {
+  invoicedAmount: string;
+  invoicedEwt: string;
+  collectedAmount: string;
+  collectedEwt: string;
+};
+
 export type BookRegister = {
   rows: BookRegisterRow[];
   pageTotals: BookPageTotal[];
-  periodAmountTotal: string;
-  periodEwtTotal: string;
+  /**
+   * Single period total for registers that are not the sales register.
+   * Null on the sales register (use salesPeriodTotals instead).
+   */
+  periodAmountTotal: string | null;
+  periodEwtTotal: string | null;
+  /** Present only for the sales register. */
+  salesPeriodTotals: SalesPeriodTotals | null;
   rowCount: number;
 };
 
@@ -56,6 +70,9 @@ export const SOURCE_LABELS: Record<RegisterSourceKind, string> = {
   EXPENSE: "Expense",
 };
 
+export const INVOICED_TOTAL_LABEL = "Invoiced total";
+export const COLLECTED_TOTAL_LABEL = "Collected total";
+
 /** Sum amounts with scaled decimals. */
 export function sumMoney(amounts: readonly string[]): string {
   let total = 0n;
@@ -66,6 +83,7 @@ export function sumMoney(amounts: readonly string[]): string {
 /**
  * Build a register for a period. Excludes voided rows. Sorts by date then
  * document number. Computes running page totals and period totals.
+ * Sales register: separate Invoiced / Collected period totals (no combined total).
  */
 export function buildRegister(
   config: RegisterConfig,
@@ -90,10 +108,15 @@ export function buildRegister(
   const pageTotals: BookPageTotal[] = [];
   let periodAmt = 0n;
   let periodEwt = 0n;
+  let invoicedAmt = 0n;
+  let invoicedEwt = 0n;
+  let collectedAmt = 0n;
+  let collectedEwt = 0n;
   let pageAmt = 0n;
   let pageEwt = 0n;
   let pageIndex = 0;
   let rowOnPage = 0;
+  const isSales = config.key === "sales";
 
   const flushPage = () => {
     if (rowOnPage === 0) return;
@@ -117,6 +140,13 @@ export function buildRegister(
     pageEwt += ewt;
     periodAmt += amt;
     periodEwt += ewt;
+    if (src.kind === "BILLING") {
+      invoicedAmt += amt;
+      invoicedEwt += ewt;
+    } else if (src.kind === "COLLECTION") {
+      collectedAmt += amt;
+      collectedEwt += ewt;
+    }
     rowOnPage += 1;
     rows.push({
       ...src,
@@ -131,22 +161,36 @@ export function buildRegister(
   return {
     rows,
     pageTotals,
-    periodAmountTotal: fromScaled(periodAmt, 2),
-    periodEwtTotal: fromScaled(periodEwt, 2),
+    periodAmountTotal: isSales ? null : fromScaled(periodAmt, 2),
+    periodEwtTotal: isSales ? null : fromScaled(periodEwt, 2),
+    salesPeriodTotals: isSales
+      ? {
+          invoicedAmount: fromScaled(invoicedAmt, 2),
+          invoicedEwt: fromScaled(invoicedEwt, 2),
+          collectedAmount: fromScaled(collectedAmt, 2),
+          collectedEwt: fromScaled(collectedEwt, 2),
+        }
+      : null,
     rowCount: rows.length,
   };
 }
 
 /**
- * CSV cell with spreadsheet formula-injection defence.
- * Prefix a single quote when the value starts with =, +, -, @, tab, or CR,
- * then apply normal CSV quoting. Shared by Books registers and tax worksheets.
+ * CSV cell escape. Neutralizes spreadsheet formula injection by prefixing a
+ * leading apostrophe when the value starts with = + - @ tab or CR, then applies
+ * normal RFC-style quoting for comma / quote / newline.
+ * Shared by Books registers and tax worksheets (single helper — do not duplicate).
+ *
+ * Note on negatives: a value like "-100.00" starts with "-", so it gets the
+ * apostrophe prefix ('-100.00). That is intentional — same rule as other
+ * formula-risky prefixes — and keeps Excel/Sheets from treating the cell as a
+ * formula. Positive money strings ("100.00") are unchanged.
  */
 export function csvCell(v: string): string {
-  const s = String(v);
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
-  return safe;
+  let out = String(v);
+  if (/^[=+\-@\t\r]/.test(out)) out = `'${out}`;
+  if (/[",\n]/.test(out)) return `"${out.replace(/"/g, '""')}"`;
+  return out;
 }
 
 function cellValue(row: BookSourceRow, key: RegisterColumn["key"]): string {
@@ -168,21 +212,38 @@ function cellValue(row: BookSourceRow, key: RegisterColumn["key"]): string {
   }
 }
 
-/** CSV for a built register (config columns + period total row). */
+function totalCsvLine(
+  config: RegisterConfig,
+  label: string,
+  amount: string,
+  ewt: string,
+): string {
+  return config.columns
+    .map((c) => {
+      if (c.key === "particulars") return csvCell(label);
+      if (c.key === "amount") return csvCell(amount);
+      if (c.key === "ewt") return csvCell(ewt);
+      return "";
+    })
+    .join(",");
+}
+
+/** CSV for a built register (config columns + period total row(s)). */
 export function registerToCsv(config: RegisterConfig, register: BookRegister): string {
   const headers = config.columns.map((c) => c.label);
   const lines = [headers.map(csvCell).join(",")];
   for (const row of register.rows) {
     lines.push(config.columns.map((c) => csvCell(cellValue(row, c.key))).join(","));
   }
-  // Period total line
-  const totalCells = config.columns.map((c) => {
-    if (c.key === "particulars") return csvCell("Period total");
-    if (c.key === "amount") return csvCell(register.periodAmountTotal);
-    if (c.key === "ewt") return csvCell(register.periodEwtTotal);
-    return "";
-  });
-  lines.push(totalCells.join(","));
+  if (register.salesPeriodTotals) {
+    const s = register.salesPeriodTotals;
+    lines.push(totalCsvLine(config, INVOICED_TOTAL_LABEL, s.invoicedAmount, s.invoicedEwt));
+    lines.push(totalCsvLine(config, COLLECTED_TOTAL_LABEL, s.collectedAmount, s.collectedEwt));
+  } else if (register.periodAmountTotal != null) {
+    lines.push(
+      totalCsvLine(config, "Period total", register.periodAmountTotal, register.periodEwtTotal ?? "0.00"),
+    );
+  }
   return `${lines.join("\n")}\n`;
 }
 

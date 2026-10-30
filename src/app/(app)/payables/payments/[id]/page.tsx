@@ -43,14 +43,19 @@ export default async function PaymentDetailPage({
         }
         subtitle={`${p.supplier.name} · ${PAYABLES_DISCLAIMER}`}
         actions={
-          canVoid && (
-            <VoidButton
-              label="Void payment"
-              docLabel={`payment ${p.number}`}
-              body="This undoes the payment: bill balances go back up. Give a short reason. The payment number stays used and is never reused."
-              onVoid={voidSupplierPaymentAction.bind(null, id)}
-            />
-          )
+          <>
+            <Link className="btn btn-secondary" href={`/print/supplier-payments/${id}`} target="_blank">
+              Print / Save PDF
+            </Link>
+            {canVoid && (
+              <VoidButton
+                label="Void payment"
+                docLabel={`payment ${p.number}`}
+                body="This undoes the payment: bill balances go back up. Give a short reason. The payment number stays used and is never reused."
+                onVoid={voidSupplierPaymentAction.bind(null, id)}
+              />
+            )}
+          </>
         }
       />
       <PayablesNav active="payments" />

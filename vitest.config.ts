@@ -14,5 +14,10 @@ export default defineConfig({
     // The numbering tests open many connections at once.
     testTimeout: 60_000,
     hookTimeout: 120_000,
+    env: {
+      SESSION_SECRET: process.env.SESSION_SECRET || "test-session-secret-at-least-16-chars",
+      DATABASE_URL: process.env.DATABASE_URL || "",
+      TEST_DATABASE_URL: process.env.TEST_DATABASE_URL || "",
+    },
   },
 });
