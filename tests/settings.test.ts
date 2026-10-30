@@ -106,6 +106,30 @@ describe("settings versioning", () => {
     ).rejects.toBeInstanceOf(SettingsConflictError);
   });
 
+  it("maps SettingsVersion_version_key unique race (P2002) to SettingsConflictError", async () => {
+    const { Prisma } = await import("@prisma/client");
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    const original = store.create.bind(store);
+    store.create = async () => {
+      // Simulate the MySQL unique index winning after the optimistic versionId check.
+      throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the constraint: `SettingsVersion_version_key`", {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { modelName: "SettingsVersion", target: ["version"] },
+      });
+    };
+    const err = await saveSettingsSection(store, {
+      key: "quotes",
+      value: { defaultValidityDays: 15 },
+      userId: "a",
+      baseVersionId: v1.versionId,
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(SettingsConflictError);
+    expect(err.message).toBe("Settings were changed by someone else. Reload the page and try again.");
+    store.create = original;
+  });
+
   it("returns field errors and saves nothing for invalid input", async () => {
     const store = memoryStore();
     const v1 = await getSettingsSnapshot(store);
