@@ -1,6 +1,7 @@
 // Letterhead helpers: map Settings → print company block; warn when TIN/address missing.
 
 import type { Settings } from "@/lib/settings/schema";
+import { accountNumberForPrint } from "./account-number";
 import type { PaperSize, PrintCompanyBlock, PrintPaymentInstruction } from "./types";
 
 export type CompanySettings = Settings["company"];
@@ -41,12 +42,14 @@ export function paymentInstructionsFromSettings(print: PrintSettings): PrintPaym
     label: b.bankName,
     accountName: b.accountName,
     accountLast4: b.accountLast4,
+    accountPrinted: accountNumberForPrint(b),
   }));
   const wallets = (print.eWallets ?? []).map((w) => ({
     kind: "ewallet" as const,
     label: w.provider,
     accountName: w.accountName,
     accountLast4: w.accountLast4,
+    accountPrinted: accountNumberForPrint(w),
   }));
   return [...banks, ...wallets];
 }

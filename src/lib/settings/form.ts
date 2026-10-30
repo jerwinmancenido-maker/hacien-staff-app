@@ -84,12 +84,16 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         bankName: get(`banks.${i}.bankName`) ?? "",
         accountName: get(`banks.${i}.accountName`) ?? "",
         accountLast4: get(`banks.${i}.accountLast4`) ?? "",
-      })).filter((b) => b.bankName || b.accountName || b.accountLast4);
+        printFullAccountNumber: checked(get(`banks.${i}.printFullAccountNumber`)),
+        accountNumberFull: get(`banks.${i}.accountNumberFull`) ?? "",
+      })).filter((b) => b.bankName || b.accountName || b.accountLast4 || b.accountNumberFull);
       const eWallets = Array.from({ length: Math.min(eWalletCount, 5) }, (_, i) => ({
         provider: get(`eWallets.${i}.provider`) ?? "",
         accountName: get(`eWallets.${i}.accountName`) ?? "",
         accountLast4: get(`eWallets.${i}.accountLast4`) ?? "",
-      })).filter((b) => b.provider || b.accountName || b.accountLast4);
+        printFullAccountNumber: checked(get(`eWallets.${i}.printFullAccountNumber`)),
+        accountNumberFull: get(`eWallets.${i}.accountNumberFull`) ?? "",
+      })).filter((b) => b.provider || b.accountName || b.accountLast4 || b.accountNumberFull);
       return {
         paperSize: get("paperSize") ?? "A4",
         showInputTaxDisclaimer: checked(get("showInputTaxDisclaimer")),

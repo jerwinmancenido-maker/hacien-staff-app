@@ -43,9 +43,37 @@ export function PrintCompanyForm({
     eWallets: print.eWallets,
   });
 
-  const [bankRows, setBankRows] = useState(print.banks.length ? print.banks : [{ bankName: "", accountName: "", accountLast4: "" }]);
+  const emptyBank = {
+    bankName: "",
+    accountName: "",
+    accountLast4: "",
+    printFullAccountNumber: false,
+    accountNumberFull: "",
+  };
+  const emptyWallet = {
+    provider: "",
+    accountName: "",
+    accountLast4: "",
+    printFullAccountNumber: false,
+    accountNumberFull: "",
+  };
+  const [bankRows, setBankRows] = useState(
+    print.banks.length
+      ? print.banks.map((b) => ({
+          ...b,
+          printFullAccountNumber: b.printFullAccountNumber ?? false,
+          accountNumberFull: b.accountNumberFull ?? "",
+        }))
+      : [emptyBank],
+  );
   const [walletRows, setWalletRows] = useState(
-    print.eWallets.length ? print.eWallets : [{ provider: "", accountName: "", accountLast4: "" }],
+    print.eWallets.length
+      ? print.eWallets.map((w) => ({
+          ...w,
+          printFullAccountNumber: w.printFullAccountNumber ?? false,
+          accountNumberFull: w.accountNumberFull ?? "",
+        }))
+      : [emptyWallet],
   );
 
   const warning = useMemo(
@@ -59,7 +87,8 @@ export function PrintCompanyForm({
     <div className="card">
       <h2>Print &amp; company details</h2>
       <p className="muted small">
-        These details appear on every printable document. Account numbers print as last 4 digits only.
+        These details appear on every printable document. Account numbers print as last 4 digits unless you turn on
+        &quot;Print full account number&quot; for a receiving account.
       </p>
       {warning && (
         <div className="alert warn" role="status">
@@ -152,7 +181,9 @@ export function PrintCompanyForm({
           </div>
 
           <h3 className="section-title">Payment instructions (quotes, SOs, billings)</h3>
-          <p className="muted small full">Only the last 4 digits of each account number are stored and printed.</p>
+          <p className="muted small full">
+            Last 4 digits are always stored. Turn on &quot;Print full account number&quot; only for accounts customers pay into.
+          </p>
           {bankRows.map((row, i) => (
             <div key={`bank-${i}`} style={{ display: "contents" }}>
               <Field label={`Bank ${i + 1} name`} name={`banks.${i}.bankName`} value={row.bankName} err={e[`banks.${i}.bankName`]} />
@@ -164,6 +195,32 @@ export function PrintCompanyForm({
                 err={e[`banks.${i}.accountLast4`]}
                 hint="Exactly 4 digits"
               />
+              <div className="field full">
+                <label className="check" htmlFor={`banks.${i}.printFullAccountNumber`}>
+                  <input type="hidden" name={`banks.${i}.printFullAccountNumber`} value="false" />
+                  <input
+                    id={`banks.${i}.printFullAccountNumber`}
+                    name={`banks.${i}.printFullAccountNumber`}
+                    type="checkbox"
+                    value="true"
+                    defaultChecked={!!row.printFullAccountNumber}
+                    onChange={(ev) =>
+                      setBankRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, printFullAccountNumber: ev.target.checked } : r)))
+                    }
+                  />
+                  Print full account number
+                </label>
+                <div className="hint">Only turn on for your own accounts that customers pay into.</div>
+              </div>
+              {row.printFullAccountNumber && (
+                <Field
+                  label="Full account number"
+                  name={`banks.${i}.accountNumberFull`}
+                  value={row.accountNumberFull ?? ""}
+                  err={e[`banks.${i}.accountNumberFull`]}
+                  hint="Stored only if you enter it. Digits, spaces or dashes."
+                />
+              )}
             </div>
           ))}
           <div className="field full">
@@ -171,7 +228,7 @@ export function PrintCompanyForm({
               type="button"
               className="btn btn-secondary"
               disabled={bankRows.length >= 5}
-              onClick={() => setBankRows((r) => [...r, { bankName: "", accountName: "", accountLast4: "" }])}
+              onClick={() => setBankRows((r) => [...r, { ...emptyBank }])}
             >
               Add bank
             </button>
@@ -186,6 +243,32 @@ export function PrintCompanyForm({
                 value={row.accountLast4}
                 err={e[`eWallets.${i}.accountLast4`]}
               />
+              <div className="field full">
+                <label className="check" htmlFor={`eWallets.${i}.printFullAccountNumber`}>
+                  <input type="hidden" name={`eWallets.${i}.printFullAccountNumber`} value="false" />
+                  <input
+                    id={`eWallets.${i}.printFullAccountNumber`}
+                    name={`eWallets.${i}.printFullAccountNumber`}
+                    type="checkbox"
+                    value="true"
+                    defaultChecked={!!row.printFullAccountNumber}
+                    onChange={(ev) =>
+                      setWalletRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, printFullAccountNumber: ev.target.checked } : r)))
+                    }
+                  />
+                  Print full account number
+                </label>
+                <div className="hint">Only turn on for your own accounts that customers pay into.</div>
+              </div>
+              {row.printFullAccountNumber && (
+                <Field
+                  label="Full account number"
+                  name={`eWallets.${i}.accountNumberFull`}
+                  value={row.accountNumberFull ?? ""}
+                  err={e[`eWallets.${i}.accountNumberFull`]}
+                  hint="Stored only if you enter it. Digits, spaces or dashes."
+                />
+              )}
             </div>
           ))}
           <div className="field full">
@@ -193,7 +276,7 @@ export function PrintCompanyForm({
               type="button"
               className="btn btn-secondary"
               disabled={walletRows.length >= 5}
-              onClick={() => setWalletRows((r) => [...r, { provider: "", accountName: "", accountLast4: "" }])}
+              onClick={() => setWalletRows((r) => [...r, { ...emptyWallet }])}
             >
               Add e-wallet
             </button>

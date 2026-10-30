@@ -57,8 +57,14 @@ export type PrintPaymentInstruction = {
   kind: "bank" | "ewallet";
   label: string;
   accountName: string;
-  /** Last 4 digits only — never the full account number. */
+  /** Last 4 digits (always available). */
   accountLast4: string;
+  /**
+   * What to print: `****1234` by default, or the full number when the per-account
+   * "Print full account number" toggle is ON and a full number was entered.
+   * Fixtures/snapshots must only ever use the masked form.
+   */
+  accountPrinted: string;
 };
 
 export type ProfessionalPrintModel = {

@@ -253,7 +253,7 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
           <ul>
             {doc.paymentInstructions.map((p, i) => (
               <li key={i}>
-                {p.kind === "bank" ? "Bank" : "E-wallet"}: {p.label} · {p.accountName} · ****{p.accountLast4}
+                {p.kind === "bank" ? "Bank" : "E-wallet"}: {p.label} · {p.accountName} · {p.accountPrinted}
               </li>
             ))}
           </ul>

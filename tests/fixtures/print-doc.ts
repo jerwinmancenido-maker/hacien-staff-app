@@ -74,7 +74,9 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
     number: "QT-2026-0001",
     status: "SENT",
     thankYou: true,
-    paymentInstructions: [{ kind: "bank", label: "Sample Bank", accountName: "HACIEN Sample", accountLast4: "1234" }],
+    paymentInstructions: [
+      { kind: "bank", label: "Sample Bank", accountName: "HACIEN Sample", accountLast4: "1234", accountPrinted: "****1234" },
+    ],
     signatories: [
       { role: "Prepared by", name: "Jerwin" },
       { role: "Approved by", name: null },
@@ -98,7 +100,9 @@ export const billingPrintFixture = (): ProfessionalPrintModel =>
     number: "BL-2026-0001",
     thankYou: true,
     taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
-    paymentInstructions: [{ kind: "ewallet", label: "GCash", accountName: "HACIEN", accountLast4: "5678" }],
+    paymentInstructions: [
+      { kind: "ewallet", label: "GCash", accountName: "HACIEN", accountLast4: "5678", accountPrinted: "****5678" },
+    ],
   });
 
 export const collectionPrintFixture = (): ProfessionalPrintModel =>

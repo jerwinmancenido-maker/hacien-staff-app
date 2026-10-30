@@ -20,6 +20,37 @@ const listOfNames = z
   .min(1, "Add at least one option.")
   .refine((items) => new Set(items.map((i) => i.toLowerCase())).size === items.length, "Options must be unique.");
 
+const accountLast4 = z
+  .string()
+  .trim()
+  .regex(/^\d{4}$/, "Enter the last 4 digits only.");
+
+/** Full account number is optional; stored only when staff enter it. Never put in fixtures/logs. */
+const accountNumberFull = z
+  .string()
+  .trim()
+  .max(64)
+  .regex(/^[\d\s-]*$/, "Use digits, spaces or dashes only.")
+  .optional()
+  .or(z.literal(""));
+
+const paymentAccountBank = z.object({
+  bankName: z.string().trim().min(1).max(100),
+  accountName: z.string().trim().min(1).max(100),
+  accountLast4,
+  /** OFF by default — print ****last4. ON — print full number when entered. */
+  printFullAccountNumber: z.boolean().default(false),
+  accountNumberFull,
+});
+
+const paymentAccountEwallet = z.object({
+  provider: z.string().trim().min(1).max(100),
+  accountName: z.string().trim().min(1).max(100),
+  accountLast4,
+  printFullAccountNumber: z.boolean().default(false),
+  accountNumberFull,
+});
+
 export const settingsSections = {
   approval: z.object({
     marginBelowPct: z.coerce.number().min(0, "0 or more.").max(100, "100 or less."),
@@ -105,31 +136,8 @@ export const settingsSections = {
     quoteTerms: z.string().trim().max(2000).optional().or(z.literal("")),
     deliveryNotes: z.string().trim().max(2000).optional().or(z.literal("")),
     warrantyNotes: z.string().trim().max(2000).optional().or(z.literal("")),
-    banks: z
-      .array(
-        z.object({
-          bankName: z.string().trim().min(1).max(100),
-          accountName: z.string().trim().min(1).max(100),
-          /** Last 4 digits only. */
-          accountLast4: z
-            .string()
-            .trim()
-            .regex(/^\d{4}$/, "Enter the last 4 digits only."),
-        }),
-      )
-      .max(5),
-    eWallets: z
-      .array(
-        z.object({
-          provider: z.string().trim().min(1).max(100),
-          accountName: z.string().trim().min(1).max(100),
-          accountLast4: z
-            .string()
-            .trim()
-            .regex(/^\d{4}$/, "Enter the last 4 digits only."),
-        }),
-      )
-      .max(5),
+    banks: z.array(paymentAccountBank).max(5),
+    eWallets: z.array(paymentAccountEwallet).max(5),
   }),
 } as const;
 
