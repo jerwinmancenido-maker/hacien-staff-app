@@ -107,7 +107,7 @@ Every create, update, archive and restore, plus sign-ins, failed sign-ins and se
 - **Statuses:** quotes go Draft → Sent → Won (by **Convert to SO**) or Lost; any quote can be voided (reason required), except a Won quote with an open SO ("Void the sales order first."). Sales orders are made only by converting a quote and are Open or Void; voiding an SO puts its quote back to Sent. Voided documents are read-only. Removed item lines are marked `removedAt`, never deleted.
 - **Needs approval** (display only for now): shown when net margin % is below, or the total above, the approval rules in the settings version the quote was made under.
 - **Email** builds a draft (to the quote's contact or the main contact) to copy or open with `mailto:`. The app **never sends** it; each draft is logged as `email_draft`.
-- The ₱3M non-VAT meter is **not** fed from quotes or SOs; it will use invoices in a later part.
+- The ₱3M non-VAT meter sums non-voided Part 5 **billing** booklet totals (`Billing.amount`) by `invoiceDate` in the Settings tax year (Asia/Manila). Withholding and collections do not change the gross.
 
 ### Withholding rates (Settings → Withholding)
 An editable table (code, label, applies to, ATC code, rate %, active, note). The defaults (Goods 1%, Services 2%, Government percentage tax 3%, Government VAT 5%) are inserted by the migration with the note "verify with BIR"; **every rate must be verified with the BIR / accountant**, and the tab says so. Saving writes a new settings version (shown in the change log) and an audit row. Rates are never deleted; untick Active instead.

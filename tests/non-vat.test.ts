@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
-import { getGrossSalesYtd, getNonVatMeter, noInvoicesYet, nonVatMeter, taxYearStart, type GrossSalesSource } from "@/lib/services/non-vat";
+import {
+  billingsGrossSales,
+  getGrossSalesYtd,
+  getNonVatMeter,
+  nonVatMeter,
+  sumGrossSalesAmounts,
+  taxYearStart,
+  type GrossSalesSource,
+} from "@/lib/services/non-vat";
 
 const taxYear = DEFAULT_SETTINGS.taxYear; // ₱3,000,000, warns at 70% and 90%
 
-/** Test hook: a fake gross-sales source with invoices at given instants. */
-function fakeInvoices(rows: { at: string; amount: number }[]): GrossSalesSource & { calls: [Date, Date][] } {
+/** Test hook: a fake gross-sales source with billings at given instants. */
+function fakeBillings(rows: { at: string; amount: number }[]): GrossSalesSource & { calls: [Date, Date][] } {
   const calls: [Date, Date][] = [];
   return {
     calls,
@@ -17,15 +25,29 @@ function fakeInvoices(rows: { at: string; amount: number }[]): GrossSalesSource 
 }
 
 describe("non-VAT threshold meter", () => {
-  it("returns ₱0 until invoices exist", async () => {
-    expect(await getGrossSalesYtd(2026, new Date("2026-10-30T00:00:00Z"))).toBe(0);
-    expect(await noInvoicesYet.grossSalesBetween(new Date(0), new Date())).toBe(0);
-    const meter = await getNonVatMeter(taxYear, new Date("2026-10-30T00:00:00Z"));
+  it("sums amount strings with exact cents (no float drift)", () => {
+    expect(sumGrossSalesAmounts([])).toBe(0);
+    expect(sumGrossSalesAmounts(["0.00"])).toBe(0);
+    expect(sumGrossSalesAmounts(["100.10", "200.20", "0.03"])).toBe(300.33);
+    // Many small cents that would drift with float sum still total exactly.
+    const many = Array.from({ length: 100 }, () => "0.10");
+    expect(sumGrossSalesAmounts(many)).toBe(10);
+  });
+
+  it("exposes billingsGrossSales as the default GrossSalesSource", () => {
+    expect(billingsGrossSales).toBeDefined();
+    expect(typeof billingsGrossSales.grossSalesBetween).toBe("function");
+  });
+
+  it("returns ₱0 from an empty injected source", async () => {
+    const empty = fakeBillings([]);
+    expect(await getGrossSalesYtd(2026, new Date("2026-10-30T00:00:00Z"), empty)).toBe(0);
+    const meter = await getNonVatMeter(taxYear, new Date("2026-10-30T00:00:00Z"), empty);
     expect(meter).toMatchObject({ used: 0, limit: 3_000_000, pct: 0, pctLabel: "0.0%", barPct: 0, level: "ok" });
   });
 
   it("sums gross sales from Jan 1 (Manila time) of the tax year up to now", async () => {
-    const source = fakeInvoices([
+    const source = fakeBillings([
       { at: "2025-12-31T15:59:59Z", amount: 999 }, // Dec 31 23:59 Manila: last year
       { at: "2025-12-31T16:00:00Z", amount: 100_000 }, // Jan 1 00:00 Manila: counts
       { at: "2026-06-15T04:00:00Z", amount: 200_000 },
@@ -38,7 +60,7 @@ describe("non-VAT threshold meter", () => {
   });
 
   it("stops at the end of the tax year and is 0 before it starts", async () => {
-    const source = fakeInvoices([{ at: "2026-12-31T15:59:59Z", amount: 10 }, { at: "2026-12-31T16:00:00Z", amount: 99 }]);
+    const source = fakeBillings([{ at: "2026-12-31T15:59:59Z", amount: 10 }, { at: "2026-12-31T16:00:00Z", amount: 99 }]);
     expect(await getGrossSalesYtd(2026, new Date("2027-03-01T00:00:00Z"), source)).toBe(10);
     expect(await getGrossSalesYtd(2027, new Date("2026-06-01T00:00:00Z"), source)).toBe(0);
   });
@@ -61,7 +83,7 @@ describe("non-VAT threshold meter", () => {
   });
 
   it("uses an injected source end to end", async () => {
-    const source = fakeInvoices([{ at: "2026-03-01T00:00:00Z", amount: 2_800_000 }]);
+    const source = fakeBillings([{ at: "2026-03-01T00:00:00Z", amount: 2_800_000 }]);
     const meter = await getNonVatMeter(taxYear, new Date("2026-10-30T00:00:00Z"), source);
     expect(meter).toMatchObject({ used: 2_800_000, level: "second", pctLabel: "93.3%" });
   });

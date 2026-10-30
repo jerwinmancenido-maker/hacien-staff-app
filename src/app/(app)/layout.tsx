@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const { settings } = await getSettingsSnapshot();
-  // Gross sales are ₱0 until Billing adds invoices (see src/lib/services/non-vat.ts).
+  // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
 
