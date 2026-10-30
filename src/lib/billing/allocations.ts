@@ -104,3 +104,44 @@ export function autoAllocateOldestFirst(
 export function wouldExceedCredit(unapplied: string, additionalCash: string): boolean {
   return toScaled(additionalCash, 2) > toScaled(unapplied, 2);
 }
+
+export type CreditSource = { collectionId: string; unappliedCredit: string };
+
+/**
+ * Spread `amount` of customer credit onto one billing from credit sources
+ * (oldest / caller order first). Cash only — credit apply never creates 2307.
+ * Returns empty when amount is 0; throws via callers when amount exceeds credit.
+ */
+export function planCreditApplication(
+  amount: string,
+  sources: readonly CreditSource[],
+  billingId: string,
+): Array<{ collectionId: string; billingId: string; cashApplied: string; withholdingApplied: string }> {
+  let left = toScaled(amount, 2);
+  if (left < 0n) throw new Error("Amount can't be negative.");
+  const out: Array<{ collectionId: string; billingId: string; cashApplied: string; withholdingApplied: string }> = [];
+  for (const s of sources) {
+    if (left <= 0n) break;
+    const avail = toScaled(s.unappliedCredit, 2);
+    if (avail <= 0n) continue;
+    const take = avail < left ? avail : left;
+    out.push({
+      collectionId: s.collectionId,
+      billingId,
+      cashApplied: fromScaled(take, 2),
+      withholdingApplied: "0.00",
+    });
+    left -= take;
+  }
+  if (left > 0n) {
+    throw new Error(`Not enough customer credit (₱${fromScaled(left, 2)} short).`);
+  }
+  return out;
+}
+
+/** min(a, b) for money strings at 2 dp (scaled bigint). */
+export function minMoney(a: string, b: string): string {
+  const aa = toScaled(a, 2);
+  const bb = toScaled(b, 2);
+  return fromScaled(aa < bb ? aa : bb, 2);
+}

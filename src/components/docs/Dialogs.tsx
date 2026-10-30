@@ -61,6 +61,11 @@ export function VoidDialog({
               {error}
             </div>
           )}
+          {state.values?.billHref && (
+            <p className="small" style={{ marginTop: 8 }}>
+              <a href={state.values.billHref}>Open {state.values.billLabel ?? "supplier bill"} →</a>
+            </p>
+          )}
         </div>
         <div className="buttons">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
