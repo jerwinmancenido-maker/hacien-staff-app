@@ -17,6 +17,7 @@ export const NUMBERED_DOCS = [
   { key: "quote", label: "Quotes" },
   { key: "salesOrder", label: "Sales orders" },
   { key: "supplierPo", label: "Supplier POs" },
+  { key: "receivingReport", label: "Receiving reports" },
 ] as const;
 
 export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {

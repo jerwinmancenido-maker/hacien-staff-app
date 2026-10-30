@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BookIcon, BoxIcon, CartIcon, CoinIcon, FileIcon, GearIcon, HomeIcon, ListIcon, TruckIcon, UsersIcon } from "./Icons";
 
-type Item = { href: string; label: string; icon: ReactNode; soon?: boolean; adminOnly?: boolean };
+type Item = { href: string; label: string; icon: ReactNode; soon?: boolean; adminOnly?: boolean; costsOnly?: boolean; editOnly?: boolean };
 
 const MAIN: Item[] = [
   { href: "/", label: "Home", icon: <HomeIcon /> },
@@ -16,7 +16,8 @@ const MAIN: Item[] = [
 const LATER: Item[] = [
   { href: "/quotes", label: "Quotes", icon: <FileIcon /> },
   { href: "/sales-orders", label: "Sales Orders", icon: <CartIcon /> },
-  { href: "/supplier-pos", label: "Supplier POs", icon: <BoxIcon />, soon: true },
+  { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon />, costsOnly: true },
+  { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon />, soon: true },
   { href: "/books", label: "Books", icon: <BookIcon />, soon: true },
 ];
@@ -26,7 +27,7 @@ const ADMIN: Item[] = [
   { href: "/audit", label: "Audit log", icon: <ListIcon />, adminOnly: true },
 ];
 
-export function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
+export function SidebarNav({ isAdmin, canSeeCosts = false, canEdit = false }: { isAdmin: boolean; canSeeCosts?: boolean; canEdit?: boolean }) {
   const path = usePathname();
   const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
   const render = (i: Item) => (
@@ -40,7 +41,7 @@ export function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
     <nav aria-label="Main">
       {MAIN.map(render)}
       <div className="nav-label">Deals</div>
-      {LATER.map(render)}
+      {LATER.filter((i) => (!i.costsOnly || canSeeCosts) && (!i.editOnly || canEdit)).map(render)}
       {isAdmin && (
         <>
           <div className="nav-label">Admin</div>
@@ -61,6 +62,9 @@ const CRUMB_LABELS: Record<string, string> = {
   quotes: "Quotes",
   "sales-orders": "Sales Orders",
   "supplier-pos": "Supplier POs",
+  "purchase-orders": "Supplier POs",
+  receiving: "Receiving",
+  bill: "Record bill",
   billing: "Billing & Collections",
   books: "Books",
   new: "New",

@@ -15,13 +15,15 @@ export const ROLE_LABELS: Record<Role, string> = {
 export type Permission =
   | "view" // read master data
   | "edit_data" // create/update customers, suppliers, contacts
-  | "approve" // approve quotes/POs (later)
+  | "approve" // approve supplier POs (quotes later)
   | "manage_settings"
   | "manage_users"
   | "view_audit";
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  ADMIN: ["view", "edit_data", "manage_settings", "manage_users", "view_audit"],
+  // Admins can approve POs too, so a small team isn't blocked when the only
+  // approver is away. The last-approver guard still keeps one Approver role.
+  ADMIN: ["view", "edit_data", "approve", "manage_settings", "manage_users", "view_audit"],
   APPROVER: ["view", "edit_data", "approve"],
   STAFF: ["view", "edit_data"],
   VIEWER: ["view"],

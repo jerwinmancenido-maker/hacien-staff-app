@@ -5,7 +5,15 @@ import Link from "next/link";
 import { formatPeso } from "@/lib/format";
 
 export type DocCounts = { active: number; expired: number; expiring: number };
-export type OpenDocStats = { openQuotes: number; openQuotesTotal: string; openSalesOrders: number; openSalesOrdersTotal: string } | null;
+export type OpenDocStats = {
+  openQuotes: number;
+  openQuotesTotal: string;
+  openSalesOrders: number;
+  openSalesOrdersTotal: string;
+  // Supplier overview, cost users only:
+  openPos?: number;
+  awaitingReceipt?: number;
+} | null;
 
 export function OpenDocsCards({ stats, basePath, showTotals }: { stats: OpenDocStats; basePath: string; showTotals: boolean }) {
   if (!stats) {
@@ -29,6 +37,13 @@ export function OpenDocsCards({ stats, basePath, showTotals }: { stats: OpenDocS
         <div className="value num">{stats.openSalesOrders}</div>
         <div className="foot">{showTotals ? formatPeso(stats.openSalesOrdersTotal) : "Open sales orders"}</div>
       </Link>
+      {stats.openPos !== undefined && (
+        <Link className="card stat stat-link" href={`${basePath}?tab=transactions&type=PURCHASE_ORDER`}>
+          <div className="label">Open POs</div>
+          <div className="value num">{stats.openPos}</div>
+          <div className="foot">{stats.awaitingReceipt ?? 0} awaiting receipt</div>
+        </Link>
+      )}
     </>
   );
 }

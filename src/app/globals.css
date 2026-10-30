@@ -2294,6 +2294,43 @@ pre.json {
   height: 100%;
 }
 
+/* Purchasing: received-of-ordered bars, attachments, match flags. */
+.qty-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fill);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.qty-bar span {
+  display: block;
+  height: 100%;
+  background: var(--amber);
+  border-radius: 999px;
+}
+.qty-bar span.full {
+  background: var(--green);
+}
+.attach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+.attach-list li + li {
+  margin-top: 2px;
+}
+.warn-text {
+  color: var(--amber);
+}
+td.has-error input {
+  border-color: var(--red);
+}
+.match-table td,
+.match-table th {
+  vertical-align: top;
+}
+
 /* A4 with 14mm top/bottom margins leaves 269mm of printable height. The page
    box must stay clearly under that (rounding, the 100vh shell and trailing
    margins used to push an empty 2nd page), so: no fixed/100vh heights in print,

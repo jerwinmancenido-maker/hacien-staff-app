@@ -8,17 +8,29 @@
 // COST_FIELDS: supplierId / supplierName), so a supplier's quote/SO lines are
 // only listed for cost users; others get `restricted: true` and no rows.
 
-import type { Prisma, QuoteStatus, SalesOrderStatus } from "@prisma/client";
+import type { Prisma, PurchaseOrderStatus, QuoteStatus, ReceivingReportStatus, SalesOrderStatus, SupplierBillStatus } from "@prisma/client";
 import { db } from "../db";
 import { canSeeCosts, stripCosts, type PermissionUser } from "../permissions";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { money, ymd } from "../documents/common";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "../quotes/views";
+import { PO_STATUSES } from "../purchasing/status";
 import type { ContactOwner } from "./contacts";
 
-export type TransactionKind = "QUOTE" | "SALES_ORDER";
-export const TRANSACTION_KINDS: TransactionKind[] = ["QUOTE", "SALES_ORDER"];
-export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = { QUOTE: "Quote", SALES_ORDER: "Sales order" };
+export type TransactionKind = "QUOTE" | "SALES_ORDER" | "PURCHASE_ORDER" | "RECEIVING_REPORT" | "SUPPLIER_BILL";
+export const TRANSACTION_KINDS: TransactionKind[] = ["QUOTE", "SALES_ORDER", "PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
+export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = {
+  QUOTE: "Quote",
+  SALES_ORDER: "Sales order",
+  PURCHASE_ORDER: "Supplier PO",
+  RECEIVING_REPORT: "Receiving report",
+  SUPPLIER_BILL: "Supplier bill",
+};
+/** Purchasing kinds are cost data: only listed for users with "Can see costs". */
+export const PURCHASING_KINDS: TransactionKind[] = ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
+export const RR_STATUSES: ReceivingReportStatus[] = ["POSTED", "VOID"];
+export const BILL_STATUSES: SupplierBillStatus[] = ["RECORDED", "VOID"];
+export { PO_STATUSES };
 
 export const TRANSACTIONS_PAGE_SIZE = 50;
 
@@ -29,7 +41,10 @@ export type TransactionRow = {
   date: string;
   status: string;
   contactName: string | null;
-  /** Contract total (customer) or the total of this supplier's lines (supplier). */
+  /**
+   * Contract total (customer) or the total of this supplier's lines (supplier);
+   * PO total, value received (qty × PO unit cost) or bill amount for purchasing kinds.
+   */
   total: string;
   href: string;
   // Cost users only:
@@ -131,6 +146,8 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
     wantSos ? db.salesOrder.count({ where: soWhere }) : 0,
   ]);
 
+  const purchasing = withCosts ? await purchasingRows(owner, filters, take) : { rows: [], count: 0, totals: [] };
+
   type DocRow = (typeof quotes)[number] | (typeof sos)[number];
   const toRow = (kind: TransactionKind, d: DocRow): TransactionRow & { createdAt: Date } => {
     const lines = "items" in d ? (d.items as { total: unknown; supplierTotal: unknown; margin: unknown }[]) : null;
@@ -155,13 +172,14 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
     return { ...base, supplierCost: money(d.supplierCost), netMargin: money(d.netMargin), netMarginPct: money(d.netMarginPct) };
   };
 
-  const merged = [...quotes.map((q) => toRow("QUOTE", q)), ...sos.map((s) => toRow("SALES_ORDER", s))].sort(newestFirst);
-  const totalRows = quoteCount + soCount;
+  const merged = [...quotes.map((q) => toRow("QUOTE", q)), ...sos.map((s) => toRow("SALES_ORDER", s)), ...purchasing.rows].sort(newestFirst);
+  const totalRows = quoteCount + soCount + purchasing.count;
   const rows = merged.slice((page - 1) * TRANSACTIONS_PAGE_SIZE, page * TRANSACTIONS_PAGE_SIZE).map(withoutCreatedAt);
 
   const totals: TransactionTotals[] = [];
   if (wantQuotes) totals.push(await kindTotals("QUOTE", quoteWhere, supplierId, withCosts));
   if (wantSos) totals.push(await kindTotals("SALES_ORDER", soWhere, supplierId, withCosts));
+  totals.push(...purchasing.totals);
 
   return stripCosts(
     {
@@ -176,6 +194,126 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
     },
     user,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Supplier POs, receiving reports and supplier bills (cost users only)
+// ---------------------------------------------------------------------------
+
+type Row = TransactionRow & { createdAt: Date };
+
+/** qty (2 dp) × unit cost (2 dp) summed to cents. */
+function valueReceived(items: readonly { qtyReceived: { toFixed(n: number): string }; purchaseOrderItem: { unitCost: { toFixed(n: number): string } } }[]): string {
+  let cents = 0n;
+  for (const i of items) {
+    const p = toScaled(i.qtyReceived.toFixed(2), 2) * toScaled(i.purchaseOrderItem.unitCost.toFixed(2), 2);
+    cents += (p + 50n) / 100n;
+  }
+  return fromScaled(cents, 2);
+}
+
+async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, take: number): Promise<{ rows: Row[]; count: number; totals: TransactionTotals[] }> {
+  const want = (k: TransactionKind) => !filters.type || filters.type === k;
+  const poStatus = statusFilter<PurchaseOrderStatus>(filters.status, PO_STATUSES);
+  const rrStatus = statusFilter<ReceivingReportStatus>(filters.status, RR_STATUSES);
+  const billStatus = statusFilter<SupplierBillStatus>(filters.status, BILL_STATUSES);
+  const supplier = owner.kind === "supplier";
+  // Which POs belong to the owner (customers: through their sales orders), and the contact filter.
+  const poOwner: Prisma.PurchaseOrderWhereInput = supplier ? { supplierId: owner.id } : { salesOrder: { is: { customerId: owner.id } } };
+  const poContact: Prisma.PurchaseOrderWhereInput = filters.contactId ? (supplier ? { supplierContactId: filters.contactId } : { salesOrder: { is: { contactId: filters.contactId } } }) : {};
+  const poScope: Prisma.PurchaseOrderWhereInput = { AND: [poOwner, poContact] };
+
+  const poWhere: Prisma.PurchaseOrderWhereInput = { ...poScope, ...(poStatus ?? {}) };
+  const rrWhere: Prisma.ReceivingReportWhereInput = { purchaseOrder: { is: poScope }, ...(rrStatus ?? {}) };
+  const billWhere: Prisma.SupplierBillWhereInput = supplier
+    ? { supplierId: owner.id, ...(filters.contactId ? { purchaseOrder: { is: { supplierContactId: filters.contactId } } } : {}), ...(billStatus ?? {}) }
+    : { purchaseOrder: { is: poScope }, ...(billStatus ?? {}) };
+  const wantPo = want("PURCHASE_ORDER") && poStatus !== null;
+  const wantRr = want("RECEIVING_REPORT") && rrStatus !== null;
+  const wantBill = want("SUPPLIER_BILL") && billStatus !== null;
+  const orderBy = [{ createdAt: "desc" }] as const;
+
+  const rrItems = { items: { select: { qtyReceived: true, purchaseOrderItem: { select: { unitCost: true } } } } } as const;
+  const [pos, rrs, bills, poCount, rrCount, billCount] = await Promise.all([
+    wantPo ? db.purchaseOrder.findMany({ where: poWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplierContact: { select: { name: true } }, supplier: { select: { name: true } } } }) : [],
+    wantRr
+      ? db.receivingReport.findMany({
+          where: rrWhere,
+          orderBy: [{ receivedDate: "desc" }, ...orderBy],
+          take,
+          include: { ...rrItems, purchaseOrder: { select: { number: true, supplierContact: { select: { name: true } } } } },
+        })
+      : [],
+    wantBill ? db.supplierBill.findMany({ where: billWhere, orderBy: [{ billDate: "desc" }, ...orderBy], take, include: { purchaseOrder: { select: { id: true, supplierContact: { select: { name: true } } } } } }) : [],
+    wantPo ? db.purchaseOrder.count({ where: poWhere }) : 0,
+    wantRr ? db.receivingReport.count({ where: rrWhere }) : 0,
+    wantBill ? db.supplierBill.count({ where: billWhere }) : 0,
+  ]);
+
+  const rows: Row[] = [
+    ...pos.map((p) => ({
+      kind: "PURCHASE_ORDER" as const,
+      id: p.id,
+      number: p.number,
+      date: ymd(p.date)!,
+      status: p.status,
+      contactName: supplier ? (p.supplierContact?.name ?? null) : p.supplier.name,
+      total: money(p.subtotal),
+      href: `/purchase-orders/${p.id}`,
+      createdAt: p.createdAt,
+    })),
+    ...rrs.map((r) => ({
+      kind: "RECEIVING_REPORT" as const,
+      id: r.id,
+      number: r.number,
+      date: ymd(r.receivedDate)!,
+      status: r.status,
+      contactName: r.purchaseOrder.supplierContact?.name ?? null,
+      total: valueReceived(r.items),
+      href: `/purchase-orders/${r.purchaseOrderId}?tab=receiving`,
+      createdAt: r.createdAt,
+    })),
+    ...bills.map((b) => ({
+      kind: "SUPPLIER_BILL" as const,
+      id: b.id,
+      number: b.billNumber,
+      date: ymd(b.billDate)!,
+      status: b.status,
+      contactName: b.purchaseOrder?.supplierContact?.name ?? null,
+      total: money(b.amount),
+      href: b.purchaseOrder ? `/purchase-orders/${b.purchaseOrder.id}?tab=bills` : `/suppliers/${b.supplierId}?tab=transactions`,
+      createdAt: b.createdAt,
+    })),
+  ];
+
+  const totals: TransactionTotals[] = [];
+  if (wantPo) {
+    const notVoid = { AND: [poWhere, { status: { not: "VOID" as const } }] };
+    const [count, voidCount, sum] = await Promise.all([
+      db.purchaseOrder.count({ where: notVoid }),
+      db.purchaseOrder.count({ where: { AND: [poWhere, { status: "VOID" }] } }),
+      db.purchaseOrder.aggregate({ where: notVoid, _sum: { subtotal: true } }),
+    ]);
+    totals.push({ kind: "PURCHASE_ORDER", count, voidCount, total: sumMoney([sum._sum.subtotal]) });
+  }
+  if (wantRr) {
+    const notVoid = { AND: [rrWhere, { status: "POSTED" as const }] };
+    const [posted, voidCount] = await Promise.all([
+      db.receivingReport.findMany({ where: notVoid, select: rrItems }),
+      db.receivingReport.count({ where: { AND: [rrWhere, { status: "VOID" }] } }),
+    ]);
+    totals.push({ kind: "RECEIVING_REPORT", count: posted.length, voidCount, total: valueReceived(posted.flatMap((r) => r.items)) });
+  }
+  if (wantBill) {
+    const notVoid = { AND: [billWhere, { status: "RECORDED" as const }] };
+    const [count, voidCount, sum] = await Promise.all([
+      db.supplierBill.count({ where: notVoid }),
+      db.supplierBill.count({ where: { AND: [billWhere, { status: "VOID" }] } }),
+      db.supplierBill.aggregate({ where: notVoid, _sum: { amount: true } }),
+    ]);
+    totals.push({ kind: "SUPPLIER_BILL", count, voidCount, total: sumMoney([sum._sum.amount]) });
+  }
+  return { rows, count: poCount + rrCount + billCount, totals };
 }
 
 /** Totals for one kind over the whole filtered set (not just the page). VOID documents are only counted. */
@@ -236,12 +374,20 @@ export async function openDocumentStats(owner: ContactOwner, user: PermissionUse
     db.quote.findFirst({ where: quoteOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     db.salesOrder.findFirst({ where: soOwner, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
+  const poStats =
+    owner.kind === "supplier" && canSeeCosts(user)
+      ? await Promise.all([
+          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } }),
+          db.purchaseOrder.count({ where: { supplierId: owner.id, status: { in: ["SENT", "PARTIALLY_RECEIVED"] } } }),
+        ])
+      : null;
   const lastDocAt = [lastQuote?.updatedAt, lastSo?.updatedAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   return {
     openQuotes: q._count,
     openQuotesTotal: sumMoney([q._sum.contractPrice]),
     openSalesOrders: so._count,
     openSalesOrdersTotal: sumMoney([so._sum.contractPrice]),
+    ...(poStats ? { openPos: poStats[0], awaitingReceipt: poStats[1] } : {}),
     lastDocAt,
   };
 }

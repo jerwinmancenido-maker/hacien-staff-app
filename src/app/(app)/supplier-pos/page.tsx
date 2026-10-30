@@ -1,5 +1,6 @@
-import { ComingSoon } from "../ComingSoon";
+import { redirect } from "next/navigation";
 
+// Old sidebar link: supplier POs live at /purchase-orders.
 export default function Page() {
-  return <ComingSoon title="Supplier POs" line="Purchase orders, receiving and supplier payments." />;
+  redirect("/purchase-orders");
 }

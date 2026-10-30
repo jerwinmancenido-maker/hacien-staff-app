@@ -9,7 +9,11 @@ import { formatDate, formatPeso } from "@/lib/format";
 import type { PermissionUser } from "@/lib/permissions";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
 import {
+  BILL_STATUSES,
   listTransactions,
+  PO_STATUSES,
+  PURCHASING_KINDS,
+  RR_STATUSES,
   TRANSACTION_KIND_LABELS,
   TRANSACTION_KINDS,
   type TransactionFilters,
@@ -19,15 +23,43 @@ import type { ContactOwner } from "@/lib/services/contacts";
 import { RecordList, type RecordItem } from "./RecordList";
 import { EmptyState, type ChipTone } from "./ui";
 
-const STATUS_TONE: Record<string, ChipTone> = { DRAFT: "grey", SENT: "amber", WON: "green", LOST: "grey", VOID: "red", OPEN: "green" };
-const STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void", OPEN: "Open" };
+const STATUS_TONE: Record<string, ChipTone> = {
+  DRAFT: "grey",
+  SENT: "amber",
+  WON: "green",
+  LOST: "grey",
+  VOID: "red",
+  OPEN: "green",
+  APPROVED: "dark",
+  PARTIALLY_RECEIVED: "amber",
+  RECEIVED: "green",
+  CLOSED: "grey",
+  POSTED: "green",
+  RECORDED: "green",
+};
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  WON: "Won",
+  LOST: "Lost",
+  VOID: "Void",
+  OPEN: "Open",
+  APPROVED: "Approved",
+  PARTIALLY_RECEIVED: "Partially received",
+  RECEIVED: "Received",
+  CLOSED: "Closed",
+  POSTED: "Posted",
+  RECORDED: "Recorded",
+};
+const AVATAR: Record<TransactionKind, string> = { QUOTE: "Q T", SALES_ORDER: "S O", PURCHASE_ORDER: "P O", RECEIVING_REPORT: "R R", SUPPLIER_BILL: "B L" };
+const AMOUNT_LABEL: Partial<Record<TransactionKind, string>> = { PURCHASE_ORDER: "PO total", RECEIVING_REPORT: "Value received", SUPPLIER_BILL: "Bill amount" };
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
 export type TransactionsSearch = { contact?: string; type?: string; status?: string; page?: string };
 
 export function parseTransactionFilters(s: TransactionsSearch, contacts: Pick<Contact, "id">[]): TransactionFilters {
   const type = TRANSACTION_KINDS.includes(s.type as TransactionKind) ? (s.type as TransactionKind) : null;
-  const statuses: string[] = [...QUOTE_STATUSES, ...SALES_ORDER_STATUSES];
+  const statuses: string[] = [...QUOTE_STATUSES, ...SALES_ORDER_STATUSES, ...PO_STATUSES, ...RR_STATUSES, ...BILL_STATUSES];
   return {
     // Only this owner's contacts.
     contactId: contacts.some((c) => c.id === s.contact) ? s.contact! : null,
@@ -70,7 +102,7 @@ export async function TransactionsTab({
       <div className="card">
         <EmptyState
           title="Cost access needed"
-          line="Which quotes and sales orders use this supplier is cost information. Ask an admin to turn on “Can see costs” for you. Supplier POs and bills will show here for everyone once they're built."
+          line="Which quotes, sales orders, supplier POs and bills involve this supplier is cost information. Ask an admin to turn on “Can see costs” for you. Received quantities are on the Receiving page."
         />
       </div>
     );
@@ -89,7 +121,7 @@ export async function TransactionsTab({
       id: `${r.kind}-${r.id}`,
       href: r.href,
       inactive: r.status === "VOID",
-      avatarName: r.kind === "QUOTE" ? "Q T" : "S O",
+      avatarName: AVATAR[r.kind],
       title: <Link href={r.href}>{r.number}</Link>,
       subtitle: (
         <>
@@ -110,7 +142,7 @@ export async function TransactionsTab({
         { label: "Contact", value: r.contactName ?? "—" },
         ...cost,
       ],
-      amount: { label: owner.kind === "supplier" ? "This supplier's lines" : "Contract total", value: formatPeso(r.total), strong: true },
+      amount: { label: AMOUNT_LABEL[r.kind] ?? (owner.kind === "supplier" ? "This supplier's lines" : "Contract total"), value: formatPeso(r.total), strong: true },
       sortValues: { date: r.date, number: r.number, total: Number(r.total) },
     };
   });
@@ -136,7 +168,7 @@ export async function TransactionsTab({
         </label>
         <select id="txn-type" name="type" defaultValue={filters.type ?? ""} className="input">
           <option value="">All types</option>
-          {TRANSACTION_KINDS.map((k) => (
+          {TRANSACTION_KINDS.filter((k) => list.canSeeCosts || !PURCHASING_KINDS.includes(k)).map((k) => (
             <option key={k} value={k}>
               {TRANSACTION_KIND_LABELS[k]}
             </option>
@@ -161,6 +193,21 @@ export async function TransactionsTab({
               </option>
             ))}
           </optgroup>
+          {list.canSeeCosts && (
+            <optgroup label="Supplier POs">
+              {PO_STATUSES.filter((s) => !(["DRAFT", "SENT", "VOID"] as string[]).includes(s)).map((s) => (
+                <option key={`po-${s}`} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {list.canSeeCosts && (
+            <optgroup label="Receiving / bills">
+              <option value="POSTED">Posted</option>
+              <option value="RECORDED">Recorded</option>
+            </optgroup>
+          )}
         </select>
         <button type="submit" className="btn btn-secondary btn-sm">
           Filter
@@ -175,7 +222,7 @@ export async function TransactionsTab({
       {contactName && (
         <div className="small muted txn-contact-note">
           Showing transactions with <strong>{contactName}</strong>.
-          {owner.kind === "supplier" && " Supplier contacts aren't linked to quote or SO lines; they'll link to supplier POs and bills when those are built."}
+          {owner.kind === "supplier" && " Supplier contacts aren't linked to quote or SO lines; supplier POs, receiving reports and bills are filtered by the PO's contact."}
         </div>
       )}
 
@@ -236,11 +283,13 @@ export async function TransactionsTab({
               <tbody>
                 {list.totals.map((t) => (
                   <tr key={t.kind}>
-                    <td>{TRANSACTION_KIND_LABELS[t.kind]}s</td>
+                    <td>
+                      {TRANSACTION_KIND_LABELS[t.kind]}s{AMOUNT_LABEL[t.kind] && <span className="small muted"> · {AMOUNT_LABEL[t.kind]?.toLowerCase()}</span>}
+                    </td>
                     <td className="num">{t.count}</td>
                     <td className="num strong">{formatPeso(t.total)}</td>
-                    {list.canSeeCosts && <td className="num">{formatPeso(t.supplierCost ?? "0")}</td>}
-                    {list.canSeeCosts && <td className="num">{formatPeso(t.netMargin ?? "0")}</td>}
+                    {list.canSeeCosts && <td className="num">{t.supplierCost !== undefined ? formatPeso(t.supplierCost) : "—"}</td>}
+                    {list.canSeeCosts && <td className="num">{t.netMargin !== undefined ? formatPeso(t.netMargin) : "—"}</td>}
                     <td className="num">{t.voidCount > 0 ? `${t.voidCount} void` : "—"}</td>
                   </tr>
                 ))}

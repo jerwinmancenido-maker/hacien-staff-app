@@ -1,0 +1,307 @@
+// Supplier POs, receiving and the 3-way match: the pure rules.
+
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import {
+  afterEdit,
+  approverError,
+  canPo,
+  closeError,
+  poActionError,
+  PO_STATUSES,
+  receiptStatus,
+  soLineProgress,
+  voidError,
+  type PoAction,
+  type PoStatus,
+} from "@/lib/purchasing/status";
+import { planPurchaseOrders, qtyMismatch, type SoLineForPo } from "@/lib/purchasing/plan";
+import { applyReceipt, checkReceipt, remainingQty } from "@/lib/purchasing/receipt";
+import { threeWayMatch } from "@/lib/purchasing/match";
+import { allocateDocNumber, formatDocNumber, seriesYear } from "@/lib/documents/series";
+import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import { getSettingsSnapshot, type SettingsStore, type SettingsVersionRecord } from "@/lib/settings/service";
+import { NUMBERED_DOCS } from "@/lib/settings/form";
+import { stripCosts, roleFlags } from "@/lib/permissions";
+import { PoPrintDocument } from "@/components/purchasing/PoPrintDocument";
+import { qrSvg } from "@/lib/print/qr";
+import type { PoPrintDoc } from "@/lib/purchasing/views";
+
+const line = (id: string, supplierId: string | null, extra: Partial<SoLineForPo> = {}): SoLineForPo => ({
+  id,
+  sortOrder: Number(id.replace(/\D/g, "")) || 0,
+  description: `Item ${id}`,
+  kind: "GOODS",
+  qty: "10.00",
+  unit: "pc",
+  supplierId,
+  supplierUnitCost: "450.00",
+  ...extra,
+});
+
+describe("create POs from a sales order", () => {
+  it("groups SO lines by supplier, one PO per supplier, in SO line order", () => {
+    const plan = planPurchaseOrders([line("l3", "A"), line("l1", "A"), line("l2", "B")], new Set());
+    expect(plan.pos.map((p) => p.supplierId)).toEqual(["A", "B"]);
+    expect(plan.pos[0]!.lines.map((l) => l.salesOrderItemId)).toEqual(["l1", "l3"]);
+    expect(plan.pos[1]!.lines.map((l) => l.salesOrderItemId)).toEqual(["l2"]);
+  });
+
+  it("copies description, qty, unit and the SO line's supplier unit cost", () => {
+    const plan = planPurchaseOrders([line("l1", "A", { description: "Laptop i5", qty: "3.50", unit: "set", supplierUnitCost: "45123.45", kind: "SERVICES" })], new Set());
+    expect(plan.pos[0]!.lines[0]).toEqual({ salesOrderItemId: "l1", description: "Laptop i5", kind: "SERVICES", qty: "3.50", unit: "set", unitCost: "45123.45" });
+  });
+
+  it("lists lines without a supplier as 'needs a supplier' and skips them, unless one is picked", () => {
+    const lines = [line("l1", "A"), line("l2", null)];
+    const plan = planPurchaseOrders(lines, new Set());
+    expect(plan.needsSupplier.map((l) => l.id)).toEqual(["l2"]);
+    expect(plan.pos).toHaveLength(1);
+    const picked = planPurchaseOrders(lines, new Set(), { l2: "B" });
+    expect(picked.needsSupplier).toEqual([]);
+    expect(picked.pos.map((p) => p.supplierId)).toEqual(["A", "B"]);
+  });
+
+  it("excludes lines already on a non-void PO, and unticked lines", () => {
+    const plan = planPurchaseOrders([line("l1", "A"), line("l2", "A"), line("l3", "B")], new Set(["l1"]), {}, new Set(["l1", "l2"]));
+    expect(plan.alreadyOrdered.map((l) => l.id)).toEqual(["l1"]);
+    expect(plan.pos).toEqual([{ supplierId: "A", lines: [expect.objectContaining({ salesOrderItemId: "l2" })] }]);
+  });
+
+  it("warns when PO qty for a SO line differs from the SO qty", () => {
+    expect(qtyMismatch("10.00", ["10.00"])).toBeNull();
+    expect(qtyMismatch("10.00", ["4", "6"])).toBeNull();
+    expect(qtyMismatch("10.00", ["8.00"])).toMatch(/less/);
+    expect(qtyMismatch("10.00", ["12.00"])).toMatch(/more/);
+  });
+});
+
+describe("PO status machine", () => {
+  const expected: Record<PoAction, PoStatus[]> = {
+    edit: ["DRAFT", "APPROVED"],
+    approve: ["DRAFT"],
+    markSent: ["APPROVED"],
+    receive: ["SENT", "PARTIALLY_RECEIVED"],
+    close: ["PARTIALLY_RECEIVED", "RECEIVED"],
+    void: ["DRAFT", "APPROVED", "SENT"],
+    bill: ["SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"],
+  };
+
+  it.each(Object.entries(expected))("%s is allowed exactly from its statuses", (action, allowed) => {
+    for (const s of PO_STATUSES) {
+      expect(canPo(s, action as PoAction), `${action} from ${s}`).toBe(allowed.includes(s));
+      if (!allowed.includes(s)) expect(poActionError(s, action as PoAction)).toBeTruthy();
+      else expect(poActionError(s, action as PoAction)).toBeNull();
+    }
+  });
+
+  it("says a void PO is void for any action", () => {
+    for (const a of Object.keys(expected) as PoAction[]) expect(poActionError("VOID", a)).toBe("This PO is void.");
+  });
+
+  it("editing an approved PO returns it to Draft and clears the approval", () => {
+    expect(afterEdit("APPROVED")).toEqual({ status: "DRAFT", clearsApproval: true });
+    expect(afterEdit("DRAFT")).toEqual({ status: "DRAFT", clearsApproval: false });
+  });
+
+  it("approver must differ from the creator unless admin", () => {
+    expect(approverError({ id: "u1", isAdmin: false }, "u1")).toMatch(/other than the creator/);
+    expect(approverError({ id: "u1", isAdmin: true }, "u1")).toBeNull();
+    expect(approverError({ id: "u2", isAdmin: false }, "u1")).toBeNull();
+  });
+
+  it("short-close needs a reason; closing a fully received PO doesn't", () => {
+    expect(closeError("RECEIVED", null)).toBeNull();
+    expect(closeError("PARTIALLY_RECEIVED", "  ")).toMatch(/reason/);
+    expect(closeError("PARTIALLY_RECEIVED", "Supplier out of stock")).toBeNull();
+    expect(closeError("SENT", "x")).toMatch(/partially or fully received/);
+    expect(closeError("DRAFT", "x")).toBeTruthy();
+  });
+
+  it("void needs no posted receiving report", () => {
+    expect(voidError("SENT", 0)).toBeNull();
+    expect(voidError("SENT", 1)).toBe("Void the receiving reports first.");
+    expect(voidError("PARTIALLY_RECEIVED", 0)).toBeTruthy();
+    expect(voidError("RECEIVED", 0)).toBeTruthy();
+    expect(voidError("CLOSED", 0)).toBeTruthy();
+  });
+
+  it("derives SENT / PARTIALLY_RECEIVED / RECEIVED from received quantities", () => {
+    expect(receiptStatus([{ qty: "10", receivedQty: "0" }, { qty: "5", receivedQty: "0" }])).toBe("SENT");
+    expect(receiptStatus([{ qty: "10", receivedQty: "4" }, { qty: "5", receivedQty: "0" }])).toBe("PARTIALLY_RECEIVED");
+    expect(receiptStatus([{ qty: "10", receivedQty: "10" }, { qty: "5", receivedQty: "4.99" }])).toBe("PARTIALLY_RECEIVED");
+    expect(receiptStatus([{ qty: "10", receivedQty: "10" }, { qty: "5", receivedQty: "5" }])).toBe("RECEIVED");
+  });
+
+  it("SO line progress: not ordered / ordered / partial / received", () => {
+    expect(soLineProgress("10", []).state).toBe("NOT_ORDERED");
+    expect(soLineProgress("10", [{ qty: "10", receivedQty: "0" }]).state).toBe("ORDERED");
+    expect(soLineProgress("10", [{ qty: "10", receivedQty: "3" }])).toEqual({ state: "PARTIALLY_RECEIVED", ordered: "10.00", received: "3.00" });
+    expect(soLineProgress("10", [{ qty: "6", receivedQty: "6" }, { qty: "4", receivedQty: "4" }]).state).toBe("RECEIVED");
+  });
+});
+
+describe("over-receive guard", () => {
+  const lines = [
+    { id: "a", description: "Laptop", qty: "10.00", receivedQty: "7.00" },
+    { id: "b", description: "Mouse", qty: "5.00", receivedQty: "0.00" },
+  ];
+
+  it("shows the remaining quantity", () => {
+    expect(remainingQty(lines[0]!)).toBe("3.00");
+    expect(remainingQty({ qty: "1", receivedQty: "2" })).toBe("0.00");
+  });
+
+  it("accepts partial receipts and skips 0 / blank lines", () => {
+    const r = checkReceipt(lines, [
+      { lineId: "a", qty: "3" },
+      { lineId: "b", qty: "" },
+    ]);
+    expect(r).toEqual({ ok: true, entries: [{ lineId: "a", qty: "3.00" }] });
+    expect(checkReceipt(lines, [{ lineId: "b", qty: "0" }, { lineId: "a", qty: "1.5" }])).toEqual({ ok: true, entries: [{ lineId: "a", qty: "1.50" }] });
+  });
+
+  it("rejects receivedQty + qty > ordered", () => {
+    const r = checkReceipt(lines, [{ lineId: "a", qty: "3.01" }]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.a).toMatch(/Only 3 left/);
+      expect(r.message).toMatch(/more than was ordered/);
+    }
+  });
+
+  it("rejects bad numbers, unknown lines, duplicates and an all-zero receipt", () => {
+    expect(checkReceipt(lines, [{ lineId: "a", qty: "-1" }]).ok).toBe(false);
+    expect(checkReceipt(lines, [{ lineId: "zz", qty: "1" }]).ok).toBe(false);
+    expect(checkReceipt(lines, [{ lineId: "b", qty: "1" }, { lineId: "b", qty: "1" }]).ok).toBe(false);
+    expect(checkReceipt(lines, [{ lineId: "a", qty: "0" }])).toEqual({ ok: false, errors: {}, message: "Enter a quantity for at least one line." });
+  });
+
+  it("applies and reverses receipts (RR void) within 0…ordered", () => {
+    expect(applyReceipt({ qty: "10", receivedQty: "7" }, "3", 1)).toBe("10.00");
+    expect(applyReceipt({ qty: "10", receivedQty: "7" }, "3", -1)).toBe("4.00");
+    expect(() => applyReceipt({ qty: "10", receivedQty: "7" }, "4", 1)).toThrow();
+    expect(() => applyReceipt({ qty: "10", receivedQty: "2" }, "3", -1)).toThrow();
+  });
+});
+
+describe("3-way match", () => {
+  const po = [
+    { id: "a", description: "Laptop", unit: "pc", qty: "10.00", unitCost: "45000.00", receivedQty: "10.00" },
+    { id: "b", description: "Mouse", unit: "pc", qty: "5.00", unitCost: "500.00", receivedQty: "5.00" },
+  ];
+
+  it("matches when billed qty and price equal received and PO", () => {
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-1", amount: "452500.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45000" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "500" }] }]);
+    expect(m.status).toBe("MATCHED");
+    expect(m.lines.map((l) => l.status)).toEqual(["MATCHED", "MATCHED"]);
+    expect(m.headerFlags).toEqual([]);
+    expect(m.receivedTotal).toBe("452500.00");
+  });
+
+  it("flags a unit price difference with the amount", () => {
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-1", amount: "455000.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45250" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "500" }] }]);
+    const a = m.lines[0]!;
+    expect(a.flags).toContain("PRICE_DIFFERS");
+    expect(a.status).toBe("PRICE_MISMATCH");
+    expect(a.priceDifference).toBe("2500.00");
+    expect(a.billedUnitPrice).toBe("45250.00");
+    expect(m.status).toBe("MISMATCH");
+    expect(m.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
+    expect(m.headerFlags[0]!.amount).toBe("2500.00");
+  });
+
+  it("flags billed > received and received < ordered as qty mismatches", () => {
+    const partial = [{ ...po[0]!, receivedQty: "6.00" }];
+    const m = threeWayMatch(partial, [{ id: "1", billNumber: "SI-2", amount: "360000.00", items: [{ purchaseOrderItemId: "a", qty: "8", unitPrice: "45000" }] }]);
+    expect(m.lines[0]!.flags).toEqual(["BILLED_MORE_THAN_RECEIVED", "RECEIVED_LESS_THAN_ORDERED"]);
+    expect(m.lines[0]!.status).toBe("QTY_MISMATCH");
+  });
+
+  it("flags a bill whose header amount ≠ the sum of its lines", () => {
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-3", amount: "452600.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45000" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "500" }] }]);
+    expect(m.headerFlags.map((f) => f.code)).toEqual(["BILL_LINES_DIFFER", "BILLED_DIFFERS_FROM_RECEIVED"]);
+    expect(m.headerFlags[0]!.amount).toBe("100.00");
+  });
+
+  it("matches a header-only bill against the received value; not billed when no bills", () => {
+    expect(threeWayMatch(po, []).status).toBe("NOT_BILLED");
+    const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-4", amount: "452500.00", items: [] }]);
+    expect(m.headerFlags).toEqual([]);
+    expect(m.billedTotal).toBe("452500.00");
+  });
+});
+
+describe("PO / RR numbering", () => {
+  it("formats PO-YYYY-#### and RR-YYYY-#### from the defaults", () => {
+    expect(formatDocNumber(DEFAULT_SETTINGS.numbering.supplierPo, 2026, 1)).toBe("PO-2026-0001");
+    expect(formatDocNumber(DEFAULT_SETTINGS.numbering.receivingReport, 2026, 42)).toBe("RR-2026-0042");
+    expect(NUMBERED_DOCS.map((d) => d.key)).toContain("receivingReport");
+  });
+
+  it("resets yearly (one counter per year) unless turned off", () => {
+    expect(seriesYear(DEFAULT_SETTINGS.numbering.receivingReport, 2027)).toBe(2027);
+    expect(seriesYear({ ...DEFAULT_SETTINGS.numbering.receivingReport, resetYearly: false }, 2027)).toBe(0);
+  });
+
+  it("allocates the next number from the locked series row", async () => {
+    const calls: string[] = [];
+    const tx = {
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        calls.push(strings.join("?"));
+        return [{ id: "s1", nextNumber: 7 }];
+      },
+      $executeRaw: async () => 1,
+    } as never;
+    expect(await allocateDocNumber(tx, "RECEIVING_REPORT", 2026, DEFAULT_SETTINGS.numbering.receivingReport)).toBe("RR-2026-0007");
+    expect(calls[0]).toMatch(/FOR UPDATE/);
+  });
+
+  it("fills receivingReport into an older settings snapshot that lacks it", async () => {
+    const old = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    delete old.numbering.receivingReport;
+    old.numbering.supplierPo.prefix = "SPO";
+    const rec: SettingsVersionRecord = { id: "v1", version: 1, data: old, changedKey: null, before: null, after: null, effectiveFrom: new Date(), createdById: null };
+    const store: SettingsStore = { latest: async () => rec, byId: async () => rec, create: async () => rec };
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.settings.numbering.receivingReport).toEqual({ prefix: "RR", padding: 4, resetYearly: true });
+    expect(snap.settings.numbering.supplierPo.prefix).toBe("SPO");
+  });
+});
+
+describe("cost stripping of PO / RR payloads", () => {
+  const staff = { ...roleFlags(["STAFF"]), active: true, canSeeCosts: false };
+  it("removes unit costs from anything that still carries them", () => {
+    const payload = { number: "PO-2026-0001", lines: [{ description: "Laptop", qty: "10.00", unitCost: "45000.00", supplierId: "s1" }] };
+    expect(stripCosts(payload, staff)).toEqual({ number: "PO-2026-0001", lines: [{ description: "Laptop", qty: "10.00" }] });
+  });
+});
+
+describe("PO print", () => {
+  const doc: PoPrintDoc = {
+    number: "PO-2026-0001",
+    revision: 1,
+    status: "SENT",
+    date: "2026-10-30",
+    expectedDate: "2026-11-06",
+    company: { name: "HACIEN", tin: "123-456-789-000", address: "Quezon City" },
+    supplier: { name: "Octagon Computer", tin: "111-222-333-000", address: "Unit 4, 12 Rizal St.\nPasig City" },
+    contact: { name: "Ben Uy", email: "ben@example.com", phone: null },
+    deliveryAddress: "TESDA, East Service Road, Taguig",
+    salesOrderNumber: "SO-2026-0003",
+    items: [{ description: "Laptop i5", qty: "10.00", unit: "pc", unitCost: "45000.00", total: "450000.00" }],
+    subtotal: "450000.00",
+    terms: "Net 30",
+    notes: null,
+  };
+
+  it("renders the A4 PO with NON-VAT, supplier block, deliver-to, QR and footer — no selling prices or margins", async () => {
+    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc, qrSvg: await qrSvg() }));
+    for (const s of ["NON-VAT", "Purchase Order", "PO-2026-0001", "Octagon Computer", "TIN 111-222-333-000", "Deliver to", "₱450,000.00", "Net 30", "<svg", "This is a system-generated document. No signature required."]) {
+      expect(html, s).toContain(s);
+    }
+    const lower = html.toLowerCase();
+    for (const w of ["margin", "contract price", "unit price", "withholding", "signature over", "approved by"]) expect(lower, w).not.toContain(w);
+  });
+});

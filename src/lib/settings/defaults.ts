@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
     quote: { prefix: "QT", padding: 4, resetYearly: true },
     salesOrder: { prefix: "SO", padding: 4, resetYearly: true },
     supplierPo: { prefix: "PO", padding: 4, resetYearly: true },
+    receivingReport: { prefix: "RR", padding: 4, resetYearly: true },
   },
   taxYear: { year: 2026, nonVatLimit: 3_000_000, warnFirstPct: 70, warnSecondPct: 90 },
   company: { name: "HACIEN", tin: "", address: "" },
