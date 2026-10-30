@@ -64,9 +64,6 @@ export function taxFooterLines(
   }
   if (STATEMENT_KINDS.has(kind)) {
     lines.push(STATEMENT_NOT_OFFICIAL);
-    if (kind === "customer_statement" && opts.showInputTaxDisclaimer) {
-      lines.push(INPUT_TAX_DISCLAIMER);
-    }
   }
   return lines;
 }

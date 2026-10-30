@@ -10,6 +10,7 @@ import {
   INPUT_TAX_DISCLAIMER,
   NON_VAT_LABEL,
   NOT_OFFICIAL_INVOICE,
+  STATEMENT_NOT_OFFICIAL,
   taxFooterLines,
 } from "@/lib/print/tax-wording";
 import {
@@ -102,6 +103,13 @@ describe("professional print documents", () => {
     }
   });
 
+  it("customer statement does not include the input-tax disclaimer", () => {
+    const markup = html(customerStatementFixture());
+    expect(markup).not.toContain(INPUT_TAX_DISCLAIMER);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([STATEMENT_NOT_OFFICIAL]);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([STATEMENT_NOT_OFFICIAL]);
+  });
+
   it("keeps tax footer lines in the shared config module", () => {
     expect(taxFooterLines("billing", { showInputTaxDisclaimer: true })).toEqual([
       NOT_OFFICIAL_INVOICE,
@@ -109,6 +117,10 @@ describe("professional print documents", () => {
     ]);
     expect(taxFooterLines("billing", { showInputTaxDisclaimer: false })).toEqual([NOT_OFFICIAL_INVOICE]);
     expect(taxFooterLines("quote")).toEqual([]);
+    expect(taxFooterLines("collection", { showInputTaxDisclaimer: true })).toEqual([
+      NOT_OFFICIAL_INVOICE,
+      INPUT_TAX_DISCLAIMER,
+    ]);
   });
 
   it("masks payment accounts to last 4 digits only", () => {

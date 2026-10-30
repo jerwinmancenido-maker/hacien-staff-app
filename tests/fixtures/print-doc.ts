@@ -1,5 +1,5 @@
 import type { ProfessionalPrintModel } from "@/lib/print/types";
-import { NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER } from "@/lib/print/tax-wording";
+import { INPUT_TAX_DISCLAIMER, NOT_OFFICIAL_INVOICE, STATEMENT_NOT_OFFICIAL } from "@/lib/print/tax-wording";
 
 const company = {
   registeredName: "HACIEN Sample Trading Co.",
@@ -196,7 +196,7 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
     items: undefined,
     totals: undefined,
     thankYou: true,
-    taxLines: ["Statement of account — not an official invoice/receipt", INPUT_TAX_DISCLAIMER],
+    taxLines: [STATEMENT_NOT_OFFICIAL],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "10000.00",
@@ -222,7 +222,7 @@ export const supplierStatementFixture = (): ProfessionalPrintModel =>
     party: supplierParty,
     items: undefined,
     totals: undefined,
-    taxLines: ["Statement of account — not an official invoice/receipt"],
+    taxLines: [STATEMENT_NOT_OFFICIAL],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "5000.00",
