@@ -4,7 +4,10 @@
 import { fromScaled, toScaled } from "../quotes/calc";
 import { ymdCmp } from "../cash/balance";
 import type { RegisterColumn, RegisterConfig, RegisterSourceKind } from "./config";
+import { csvCell } from "./csv";
 import { ymdInPeriod } from "./period";
+
+export { csvCell } from "./csv";
 
 export type BookSourceRow = {
   id: string;
@@ -173,27 +176,6 @@ export function buildRegister(
       : null,
     rowCount: rows.length,
   };
-}
-
-/**
- * CSV cell escape. Neutralizes spreadsheet formula injection by prefixing a
- * leading apostrophe when the value starts with = + @ tab CR, or a leading
- * minus that is *not* a plain number, then applies normal RFC-style quoting
- * for comma / quote / newline.
- * Shared by Books registers and tax worksheets (single helper — do not duplicate).
- *
- * Plain numeric cells matching /^-?\d+(\.\d+)?$/ (including negatives like
- * "-500.00") stay unescaped so spreadsheet apps keep them as numbers.
- * Risky minus forms ("-cmd", "-1+1") still get the apostrophe.
- */
-export function csvCell(v: string): string {
-  let out = String(v);
-  const plainNumber = /^-?\d+(\.\d+)?$/.test(out);
-  if (/^[=+@\t\r]/.test(out) || (/^-/.test(out) && !plainNumber)) {
-    out = `'${out}`;
-  }
-  if (/[",\n]/.test(out)) return `"${out.replace(/"/g, '""')}"`;
-  return out;
 }
 
 function cellValue(row: BookSourceRow, key: RegisterColumn["key"]): string {
