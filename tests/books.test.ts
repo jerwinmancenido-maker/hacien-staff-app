@@ -42,6 +42,11 @@ describe("books feature flag", () => {
     expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true })).toContain("/books");
     expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true, cashEnabled: false })).not.toContain("/cash");
     expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true, payablesEnabled: false })).not.toContain("/payables");
+    // Tax worksheets live under Books (/books/tax) — no separate Deals nav item;
+    // gating is booksOnly via filterDealsNavItems (same path as Cash/Payables flags).
+    const hrefs = dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true });
+    expect(hrefs).not.toContain("/books/tax");
+    expect(hrefs.filter((h) => h.startsWith("/books")).length).toBe(1);
   });
 });
 
