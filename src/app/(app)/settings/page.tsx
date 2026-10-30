@@ -146,6 +146,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
+        {tab === "lists" && (
+          <SettingsForm
+            title="Business documents"
+            label={SETTINGS_LABELS.documents}
+            versionId={snap.versionId}
+            action={save("documents")}
+            fields={[
+              {
+                name: "expiryWarningDays",
+                label: "Show \"Expires in N days\" from",
+                kind: "number",
+                value: s.documents.expiryWarningDays,
+                suffix: "days before expiry",
+              },
+            ]}
+          />
+        )}
+
         {tab === "changelog" && <ChangeLog />}
       </div>
     </>

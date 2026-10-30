@@ -50,6 +50,7 @@ model User {
   salesOrdersCreated SalesOrder[]   @relation("SalesOrderCreatedBy")
   salesOrdersUpdated SalesOrder[]   @relation("SalesOrderUpdatedBy")
   voids              DocumentVoid[]
+  documentsUploaded  BusinessDocument[]
 }
 
 model Session {
@@ -138,6 +139,8 @@ model Customer {
   name               String          @db.VarChar(191)
   // Normalized 000-000-000-000 (branch code defaults to 000). Unique among customers.
   tin                String?         @unique @db.VarChar(20)
+  // DEPRECATED (kept for one release, then dropped): the old free-text address.
+  // Copied into a default BILLING Address by migration 20261030120000. Use Address.
   address            String?         @db.Text
   withholdingType    WithholdingType
   // Default withholding for new quotes: a JSON array of WithholdingRate codes
@@ -153,6 +156,8 @@ model Customer {
   contacts    Contact[]
   quotes      Quote[]
   salesOrders SalesOrder[]
+  addresses   Address[]
+  documents   BusinessDocument[]
 
   @@index([name])
 }
@@ -162,6 +167,7 @@ model Supplier {
   name              String          @db.VarChar(191)
   // Normalized like customer TINs. Unique among suppliers.
   tin               String?         @unique @db.VarChar(20)
+  // DEPRECATED (kept for one release, then dropped). Use Address.
   address           String?         @db.Text
   taxType           SupplierTaxType
   defaultTerms      String?         @db.VarChar(100)
@@ -179,6 +185,8 @@ model Supplier {
   contacts        Contact[]
   quoteItems      QuoteItem[]
   salesOrderItems SalesOrderItem[]
+  addresses       Address[]
+  documents       BusinessDocument[]
 
   @@index([name])
 }
@@ -207,6 +215,90 @@ model Contact {
   @@index([supplierId])
 }
 
+// Structured Philippine address. Belongs to exactly one customer OR one
+// supplier (checked in src/lib/services/addresses.ts). Many per owner; at most
+// one active default per owner and kind. Archived, never deleted.
+enum AddressKind {
+  BILLING
+  DELIVERY
+  OFFICE
+  WAREHOUSE
+  OTHER
+}
+
+model Address {
+  id               String      @id @default(cuid())
+  customerId       String?
+  customer         Customer?   @relation(fields: [customerId], references: [id])
+  supplierId       String?
+  supplier         Supplier?   @relation(fields: [supplierId], references: [id])
+  kind             AddressKind
+  label            String?     @db.VarChar(100)
+  // Unit / building / street
+  street           String      @db.Text
+  barangay         String      @default("") @db.VarChar(120)
+  cityMunicipality String      @default("") @db.VarChar(120)
+  province         String      @default("") @db.VarChar(120)
+  // 4 digits (blank only on addresses copied from the old free-text field)
+  zip              String      @default("") @db.VarChar(4)
+  isDefault        Boolean     @default(false)
+  // Copied from the old free-text address: someone should split it into fields.
+  needsReview      Boolean     @default(false)
+  archivedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+// ---------------------------------------------------------------------------
+// Business documents (DTI, SEC, BIR 2303, permits …): uploaded files
+// ---------------------------------------------------------------------------
+
+enum BusinessDocumentType {
+  DTI
+  SEC
+  CDA
+  BIR_2303
+  MAYORS_PERMIT
+  PHILGEPS
+  BARANGAY_CLEARANCE
+  TAX_CLEARANCE
+  OTHER
+}
+
+// The file lives on disk under UPLOAD_DIR (outside the web root) as
+// `storageKey`, a random key; the user's file name is only metadata. Replacing a
+// document uploads a new one and archives the old (`replacesId` links them).
+model BusinessDocument {
+  id           String               @id @default(cuid())
+  customerId   String?
+  customer     Customer?            @relation(fields: [customerId], references: [id])
+  supplierId   String?
+  supplier     Supplier?            @relation(fields: [supplierId], references: [id])
+  type         BusinessDocumentType
+  otherLabel   String?              @db.VarChar(100)
+  docNumber    String?              @db.VarChar(100)
+  issueDate    DateTime?            @db.Date
+  expiryDate   DateTime?            @db.Date
+  fileName     String               @db.VarChar(255)
+  mimeType     String               @db.VarChar(100)
+  sizeBytes    Int
+  storageKey   String               @unique @db.VarChar(64)
+  sha256       String               @db.VarChar(64)
+  replacesId   String?              @db.VarChar(64)
+  uploadedById String
+  uploadedBy   User                 @relation(fields: [uploadedById], references: [id])
+  archivedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([expiryDate])
+}
+
 // ---------------------------------------------------------------------------
 // Audit log
 // ---------------------------------------------------------------------------
@@ -221,6 +313,7 @@ enum AuditAction {
   login_failed
   settings_change
   email_draft
+  download
 }
 
 model AuditLog {

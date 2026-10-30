@@ -7,7 +7,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
-import { ConvertDialog, EmailDialog, VoidDialog, type EmailDraftView } from "./Dialogs";
+import { ConvertDialog, EmailDialog, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -18,7 +18,9 @@ type Props = {
   canEdit: boolean;
   /** An open sales order made from this quote, if any. */
   openSalesOrderId: string | null;
+  /** Suggested delivery address (default delivery, else billing), editable in the dialog. */
   customerAddress: string;
+  addressOptions?: AddressOption[];
   actions: {
     markSent: (id: string) => Promise<FormState>;
     markLost: (id: string) => Promise<FormState>;
@@ -28,7 +30,7 @@ type Props = {
   };
 };
 
-export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, customerAddress, actions }: Props) {
+export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, customerAddress, addressOptions, actions }: Props) {
   const [dialog, setDialog] = useState<"void" | "convert" | "lost" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
         />
       )}
       {dialog === "convert" && (
-        <ConvertDialog number={number} defaultAddress={customerAddress} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
+        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
       )}
       <ConfirmDialog
         open={dialog === "lost"}

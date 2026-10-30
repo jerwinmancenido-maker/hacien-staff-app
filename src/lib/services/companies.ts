@@ -18,16 +18,23 @@ export class CompanyRuleError extends Error {
 // Customers
 // ---------------------------------------------------------------------------
 
-export type CustomerFilter = { q?: string; withholding?: WithholdingType; showInactive?: boolean };
+export type CustomerFilter = { q?: string; withholding?: WithholdingType; showInactive?: boolean; onlyIds?: string[] };
+
+/** The default billing / office address, for list rows. */
+const mainAddress = {
+  addresses: { where: { archivedAt: null, isDefault: true, kind: { in: ["BILLING", "OFFICE"] } }, orderBy: { kind: "asc" }, take: 1 },
+} satisfies Prisma.CustomerInclude;
 
 export function listCustomers(f: CustomerFilter) {
   const q = f.q?.trim();
   return db.customer.findMany({
     where: {
+      ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
       ...(f.showInactive ? {} : { active: true }),
       ...(f.withholding ? { withholdingType: f.withholding } : {}),
       ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
     },
+    include: mainAddress,
     orderBy: { name: "asc" },
   });
 }
@@ -87,16 +94,18 @@ export async function setCustomerActive(id: string, active: boolean, actorId: st
 // Suppliers
 // ---------------------------------------------------------------------------
 
-export type SupplierFilter = { q?: string; taxType?: SupplierTaxType; showInactive?: boolean };
+export type SupplierFilter = { q?: string; taxType?: SupplierTaxType; showInactive?: boolean; onlyIds?: string[] };
 
 export function listSuppliers(f: SupplierFilter) {
   const q = f.q?.trim();
   return db.supplier.findMany({
     where: {
+      ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
       ...(f.showInactive ? {} : { active: true }),
       ...(f.taxType ? { taxType: f.taxType } : {}),
       ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
     },
+    include: mainAddress,
     orderBy: { name: "asc" },
   });
 }

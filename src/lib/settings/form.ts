@@ -47,6 +47,8 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return { name: get("name") ?? "", tin: get("tin") ?? "", address: get("address") ?? "" };
     case "lists":
       return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
+    case "documents":
+      return { expiryWarningDays: get("expiryWarningDays") };
   }
 }
 

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import type { Contact, Customer, WithholdingType } from "@prisma/client";
+import type { Address, Contact, Customer, WithholdingType } from "@prisma/client";
 import { formatDateTime, formatPeso, initials } from "@/lib/format";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
 import { Avatar, Chip, type ChipTone } from "./ui";
 import { Activity } from "./Activity";
+import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
+import { formatAddress } from "@/lib/addresses/format";
 import { PlusIcon } from "./Icons";
 
 const TONE: Record<WithholdingType, ChipTone> = {
@@ -17,12 +19,26 @@ export async function CustomerOverview({
   contacts,
   canEdit,
   lastActivityDate,
+  addresses,
+  docIds,
+  docCounts,
+  docStats,
+  warnDays,
 }: {
   customer: Customer;
   contacts: Contact[];
   canEdit?: boolean;
   lastActivityDate?: Date | null;
+  addresses: Address[];
+  docIds: string[];
+  docCounts: DocCounts;
+  docStats: OpenDocStats;
+  warnDays: number;
 }) {
+  const basePath = `/customers/${customer.id}`;
+  const activeAddresses = addresses.filter((a) => !a.archivedAt);
+  const mainAddress =
+    activeAddresses.find((a) => a.isDefault && a.kind === "BILLING") ?? activeAddresses.find((a) => a.isDefault && a.kind === "OFFICE") ?? activeAddresses[0];
   const activeContacts = contacts.filter((c) => c.active);
   const mainContact = contacts.find((c) => c.isMain && c.active) ?? activeContacts[0];
 
@@ -59,7 +75,7 @@ export async function CustomerOverview({
               </div>
               <div>
                 <div className="meta-label">Address</div>
-                <div className="meta-val">{customer.address?.split("\n")[0] ?? <span className="faint">—</span>}</div>
+                <div className="meta-val">{mainAddress ? formatAddress(mainAddress) : <span className="faint">—</span>}</div>
               </div>
               <div>
                 <div className="meta-label">Main contact</div>
@@ -86,22 +102,14 @@ export async function CustomerOverview({
           <div className="value num">{formatPeso(0)}</div>
           <div className="foot">Gross outstanding</div>
         </div>
-        <div className="card stat">
-          <div className="label">Open quotes</div>
-          <div className="value num faint">—</div>
-          <div className="foot faint">Needs backend</div>
-        </div>
-        <div className="card stat">
-          <div className="label">Open SOs</div>
-          <div className="value num faint">—</div>
-          <div className="foot faint">Needs backend</div>
-        </div>
+        <OpenDocsCards stats={docStats} basePath={basePath} showTotals />
+        <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />
         <div className="card stat">
           <div className="label">Last activity</div>
           <div className="value" style={{ fontSize: 16, marginTop: 10 }}>
             {lastActivityDate ? formatDateTime(lastActivityDate) : "—"}
           </div>
-          <div className="foot">From audit log</div>
+          <div className="foot">Records, quotes and SOs</div>
         </div>
       </div>
 
@@ -204,6 +212,8 @@ export async function CustomerOverview({
         targets={[
           { entityType: "Customer", ids: [customer.id] },
           { entityType: "Contact", ids: contacts.map((c) => c.id) },
+          { entityType: "Address", ids: addresses.map((a) => a.id) },
+          { entityType: "BusinessDocument", ids: docIds },
         ]}
         title="Recent activity"
       />

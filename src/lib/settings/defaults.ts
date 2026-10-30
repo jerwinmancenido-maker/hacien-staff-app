@@ -15,4 +15,5 @@ export const DEFAULT_SETTINGS: Settings = {
     paymentTerms: ["COD", "Net 15", "Net 30", "Net 60", "50% down, 50% on delivery"],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
   },
+  documents: { expiryWarningDays: 30 },
 };

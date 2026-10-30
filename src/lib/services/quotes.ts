@@ -13,6 +13,7 @@ import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry,
 import { docTotals, type WithholdingSnapshot } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
+import { suggestedDeliveryAddress } from "./addresses";
 import { buildWithholdingSnapshot, codeList, listWithholdingRates, snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
@@ -279,7 +280,8 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
           date,
           buyerPoNo: input.buyerPoNo,
           buyerPoDate: input.buyerPoDate ?? null,
-          deliveryAddress: input.deliveryAddress ?? customer.address,
+          // Snapshot of the text: later address edits don't change the SO.
+          deliveryAddress: input.deliveryAddress ?? (await suggestedDeliveryAddress(customer, tx)),
           terms: quote.terms,
           notes: quote.notes,
           settingsVersionId: quote.settingsVersionId,

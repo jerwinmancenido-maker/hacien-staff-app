@@ -9,7 +9,7 @@ import { saveSupplier, setSupplierActive } from "@/lib/services/companies";
 import { supplierSchema } from "@/lib/validation/companies";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
-const FIELDS = ["name", "tin", "address", "defaultTerms", "bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes", "notes"] as const;
+const FIELDS = ["name", "tin", "defaultTerms", "bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes", "notes"] as const;
 
 export async function saveSupplierAction(id: string | null, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);

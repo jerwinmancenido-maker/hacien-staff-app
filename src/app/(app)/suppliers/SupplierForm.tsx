@@ -62,9 +62,6 @@ export function SupplierForm({
               ))}
             </select>
           </Field>
-          <Field label="Address" name="address" error={e.address} full>
-            <textarea id="address" name="address" defaultValue={v("address")} rows={2} />
-          </Field>
           <h3 className="section-title">UnionBank details</h3>
           <Field label="Account name" name="bankAccountName" error={e.bankAccountName}>
             <input id="bankAccountName" name="bankAccountName" type="text" value={bankName} onChange={(ev) => setBankName(ev.target.value)} />

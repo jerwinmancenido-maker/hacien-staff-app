@@ -1,9 +1,11 @@
 import Link from "next/link";
-import type { Contact, Supplier, SupplierTaxType } from "@prisma/client";
+import type { Address, Contact, Supplier, SupplierTaxType } from "@prisma/client";
 import { formatDateTime, formatPeso, initials } from "@/lib/format";
 import { missingBankDetails, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { Avatar, Chip, type ChipTone } from "./ui";
 import { Activity } from "./Activity";
+import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
+import { formatAddress } from "@/lib/addresses/format";
 import { AlertTriangleIcon, PlusIcon } from "./Icons";
 
 const TONE: Record<SupplierTaxType, ChipTone> = {
@@ -17,12 +19,26 @@ export async function SupplierOverview({
   contacts,
   canEdit,
   lastActivityDate,
+  addresses,
+  docIds,
+  docCounts,
+  docStats,
+  warnDays,
 }: {
   supplier: Supplier;
   contacts: Contact[];
   canEdit?: boolean;
   lastActivityDate?: Date | null;
+  addresses: Address[];
+  docIds: string[];
+  docCounts: DocCounts;
+  docStats: OpenDocStats;
+  warnDays: number;
 }) {
+  const basePath = `/suppliers/${supplier.id}`;
+  const activeAddresses = addresses.filter((a) => !a.archivedAt);
+  const mainAddress =
+    activeAddresses.find((a) => a.isDefault && a.kind === "BILLING") ?? activeAddresses.find((a) => a.isDefault && a.kind === "OFFICE") ?? activeAddresses[0];
   const activeContacts = contacts.filter((c) => c.active);
   const mainContact = contacts.find((c) => c.isMain && c.active) ?? activeContacts[0];
   const isBankMissing = missingBankDetails(supplier);
@@ -55,6 +71,10 @@ export async function SupplierOverview({
               <div>
                 <div className="meta-label">Default terms</div>
                 <div className="meta-val">{supplier.defaultTerms ?? <span className="faint">—</span>}</div>
+              </div>
+              <div>
+                <div className="meta-label">Address</div>
+                <div className="meta-val">{mainAddress ? formatAddress(mainAddress) : <span className="faint">—</span>}</div>
               </div>
               <div>
                 <div className="meta-label">Tax rule note</div>
@@ -145,17 +165,14 @@ export async function SupplierOverview({
           <div className="value num faint">—</div>
           <div className="foot faint">Needs backend</div>
         </div>
-        <div className="card stat">
-          <div className="label">Unpaid bills</div>
-          <div className="value num faint">—</div>
-          <div className="foot faint">Needs backend</div>
-        </div>
+        <OpenDocsCards stats={docStats} basePath={basePath} showTotals={false} />
+        <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />
         <div className="card stat">
           <div className="label">Last activity</div>
           <div className="value" style={{ fontSize: 16, marginTop: 10 }}>
             {lastActivityDate ? formatDateTime(lastActivityDate) : "—"}
           </div>
-          <div className="foot">From audit log</div>
+          <div className="foot">Records, quotes and SOs</div>
         </div>
       </div>
 
@@ -210,6 +227,8 @@ export async function SupplierOverview({
         targets={[
           { entityType: "Supplier", ids: [supplier.id] },
           { entityType: "Contact", ids: contacts.map((c) => c.id) },
+          { entityType: "Address", ids: addresses.map((a) => a.id) },
+          { entityType: "BusinessDocument", ids: docIds },
         ]}
         title="Recent activity"
       />

@@ -45,6 +45,9 @@ export function ContactCards({
     });
   }
 
+  const transactionsHref = (contactId: string) =>
+    ownerKind && ownerId ? `/${ownerKind === "customer" ? "customers" : "suppliers"}/${ownerId}?tab=transactions&contact=${contactId}` : null;
+
   const newContactHref =
     ownerKind && ownerId
       ? `/contacts/new?${ownerKind}=${ownerId}`
@@ -72,6 +75,7 @@ export function ContactCards({
                 contact={c}
                 canEdit={canEdit}
                 isPending={isPending}
+                transactionsHref={transactionsHref(c.id)}
                 onMakeMain={() => handleMakeMain(c.id)}
                 onToggleActive={() => handleSetActive(c.id, false)}
               />
@@ -102,6 +106,7 @@ export function ContactCards({
                       contact={c}
                       canEdit={canEdit}
                       isPending={isPending}
+                      transactionsHref={transactionsHref(c.id)}
                       onMakeMain={() => handleMakeMain(c.id)}
                       onToggleActive={() => handleSetActive(c.id, true)}
                     />
@@ -120,12 +125,14 @@ function SingleContactCard({
   contact,
   canEdit,
   isPending,
+  transactionsHref,
   onMakeMain,
   onToggleActive,
 }: {
   contact: Contact;
   canEdit: boolean;
   isPending: boolean;
+  transactionsHref: string | null;
   onMakeMain: () => void;
   onToggleActive: () => void;
 }) {
@@ -147,6 +154,7 @@ function SingleContactCard({
     label: "Edit contact",
     href: `/contacts/${contact.id}`,
   });
+  if (transactionsHref) menuItems.push({ label: "View transactions", href: transactionsHref });
 
   if (canEdit) {
     if (contact.active && !contact.isMain) {
@@ -247,6 +255,11 @@ function SingleContactCard({
             <PhoneIcon size={14} />
             <span className="faint">No phone</span>
           </div>
+        )}
+        {transactionsHref && (
+          <Link className="btn-link small contact-txn-link" href={transactionsHref}>
+            View transactions →
+          </Link>
         )}
       </div>
     </div>

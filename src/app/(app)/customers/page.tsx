@@ -3,6 +3,8 @@ import type { WithholdingType } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { listCustomers } from "@/lib/services/companies";
+import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
+import { formatAddress } from "@/lib/addresses/format";
 import { WITHHOLDING_LABELS, WITHHOLDING_TYPES } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
 import { RecordList, type RecordItem } from "@/components/RecordList";
@@ -16,7 +18,7 @@ const TONE: Record<WithholdingType, ChipTone> = {
   NONE: "grey",
 };
 
-type Search = { q?: string; wh?: string; inactive?: string; view?: string };
+type Search = { q?: string; wh?: string; inactive?: string; docs?: string; view?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -31,8 +33,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const s = await searchParams;
   const wh = WITHHOLDING_TYPES.includes(s.wh as WithholdingType) ? (s.wh as WithholdingType) : undefined;
   const showInactive = s.inactive === "1";
-  const customers = await listCustomers({ q: s.q, withholding: wh, showInactive });
-  const filtered = !!(s.q || wh);
+  const expiringOnly = s.docs === "expiring";
+  const warnDays = await expiryWarningDays();
+  const expiringIds = await ownersWithExpiringDocuments("customer", warnDays);
+  const customers = await listCustomers({ q: s.q, withholding: wh, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
+  const filtered = !!(s.q || wh || expiringOnly);
 
   const filterTabs = [
     { key: "all", label: "All", href: href(s, { wh: undefined }) },
@@ -43,7 +48,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     })),
   ];
 
-  const items: RecordItem[] = customers.map((c) => ({
+  const items: RecordItem[] = customers.map((c) => {
+    const address = c.addresses[0] ? formatAddress(c.addresses[0]) : null;
+    return {
     id: c.id,
     href: `/customers/${c.id}`,
     inactive: !c.active,
@@ -54,7 +61,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         {c.tin}
       </span>
     ) : c.active ? (
-      c.address?.split("\n")[0] || "No address"
+      address || "No address"
     ) : (
       "Inactive"
     ),
@@ -64,12 +71,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         tone: c.active ? TONE[c.withholdingType] : "grey",
       },
       ...(c.defaultTerms ? [{ label: c.defaultTerms, tone: "grey" as ChipTone }] : []),
+      ...(expiringIds.includes(c.id) ? [{ label: "Documents expiring", tone: "amber" as ChipTone }] : []),
       ...(!c.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
     ],
     meta: [
       { label: "TIN", value: c.tin ?? "—" },
       { label: "Terms", value: c.defaultTerms ?? "—" },
-      { label: "Address", value: c.address?.split("\n")[0] ?? "—" },
+      { label: "Address", value: address ?? "—" },
     ],
     amount: {
       label: "Balance due",
@@ -89,7 +97,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       terms: c.defaultTerms ?? "",
       balance: 0,
     },
-  }));
+    };
+  });
 
   return (
     <>
@@ -114,6 +123,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
           {wh && <input type="hidden" name="wh" value={wh} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
+          {expiringOnly && <input type="hidden" name="docs" value="expiring" />}
           {s.view && <input type="hidden" name="view" value={s.view} />}
         </form>
 
@@ -125,6 +135,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         />
 
         <div className="right">
+          <Link
+            className={`filter-chip${expiringOnly ? " active" : ""}`}
+            href={href(s, { docs: expiringOnly ? undefined : "expiring" })}
+            aria-pressed={expiringOnly}
+            title={`Documents expired or expiring within ${warnDays} days`}
+          >
+            Expiring documents{expiringIds.length ? ` (${expiringIds.length})` : ""}
+          </Link>
           <Link
             className={`filter-chip${showInactive ? " active" : ""}`}
             href={href(s, { inactive: showInactive ? undefined : "1" })}

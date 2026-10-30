@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FormState } from "@/lib/validation/forms";
 
-function Modal({ title, children, onClose, labelId }: { title: string; children: ReactNode; onClose: () => void; labelId: string }) {
+export function Modal({ title, children, onClose, labelId }: { title: string; children: ReactNode; onClose: () => void; labelId: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -75,18 +75,24 @@ export function VoidDialog({
   );
 }
 
+/** A saved customer address offered in the Convert dialog (text = formatted, multi-line). */
+export type AddressOption = { id: string; label: string; text: string };
+
 export function ConvertDialog({
   number,
   defaultAddress,
+  addressOptions = [],
   onClose,
   onConvert,
 }: {
   number: string;
   defaultAddress: string;
+  addressOptions?: AddressOption[];
   onClose: () => void;
   onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }) => Promise<FormState>;
 }) {
   const [v, setV] = useState({ buyerPoNo: "", buyerPoDate: "", deliveryAddress: defaultAddress });
+  const picked = addressOptions.find((o) => o.text === v.deliveryAddress)?.id ?? "";
   const [state, setState] = useState<FormState>({});
   const [pending, setPending] = useState(false);
   const e = state.fieldErrors ?? {};
@@ -118,9 +124,30 @@ export function ConvertDialog({
             <input id="buyerPoDate" type="date" className="input" value={v.buyerPoDate} onChange={(ev) => setV({ ...v, buyerPoDate: ev.target.value })} />
             {e.buyerPoDate && <div className="error">{e.buyerPoDate}</div>}
           </div>
+          {addressOptions.length > 0 && (
+            <div className="field full">
+              <label htmlFor="deliveryAddressPick">Saved address</label>
+              <select
+                id="deliveryAddressPick"
+                value={picked}
+                onChange={(ev) => {
+                  const o = addressOptions.find((a) => a.id === ev.target.value);
+                  if (o) setV({ ...v, deliveryAddress: o.text });
+                }}
+              >
+                <option value="">Typed or edited address</option>
+                {addressOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="field full">
             <label htmlFor="deliveryAddress">Delivery address</label>
-            <textarea id="deliveryAddress" rows={2} value={v.deliveryAddress} onChange={(ev) => setV({ ...v, deliveryAddress: ev.target.value })} />
+            <textarea id="deliveryAddress" rows={3} value={v.deliveryAddress} onChange={(ev) => setV({ ...v, deliveryAddress: ev.target.value })} />
+            <div className="hint">Saved on the sales order as typed. Editing the customer&apos;s addresses later won&apos;t change it.</div>
           </div>
         </div>
         <div className="buttons">

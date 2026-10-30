@@ -8,8 +8,8 @@ import { DataTable } from "@/components/DataTable";
 import { DiffView } from "@/components/DiffView";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 
-const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft"];
-const ENTITIES = ["Customer", "Supplier", "Contact", "User", "Settings", "Session", "Quote", "SalesOrder"];
+const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft", "download"];
+const ENTITIES = ["Customer", "Supplier", "Contact", "User", "Settings", "Session", "Quote", "SalesOrder", "Address", "BusinessDocument"];
 const COST_ENTITIES = ["Quote", "SalesOrder"];
 const PAGE_SIZE = 50;
 

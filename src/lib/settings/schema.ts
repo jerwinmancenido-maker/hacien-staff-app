@@ -60,6 +60,10 @@ export const settingsSections = {
     paymentTerms: listOfNames,
     contactRoles: listOfNames,
   }),
+  documents: z.object({
+    // Business documents (DTI, BIR 2303 …) show "Expires in N days" this many days ahead.
+    expiryWarningDays: z.coerce.number().int().min(1, "At least 1 day.").max(365, "At most 365 days."),
+  }),
 } as const;
 
 export const settingsSchema = z.object(settingsSections);
@@ -77,6 +81,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   taxYear: "tax year",
   company: "company details",
   lists: "lists",
+  documents: "business documents",
 };
 
 export function isSettingsKey(key: string): key is SettingsKey {

@@ -90,9 +90,6 @@ export function CustomerForm({
               ))}
             </select>
           </Field>
-          <Field label="Address" name="address" error={e.address} full>
-            <textarea id="address" name="address" defaultValue={v("address")} rows={2} />
-          </Field>
           <Field label="Notes" name="notes" error={e.notes} full>
             <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
           </Field>

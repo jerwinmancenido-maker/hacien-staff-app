@@ -2,7 +2,7 @@
 
 HACIEN staff app: quotes, sales orders, supplier POs, billing, collections and simple BIR books for a small Philippine IT supplier. AGPL-3.0.
 
-**Phase 1, Part 1** covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. **Part 2** adds quotes, sales orders, document numbering, withholding rates and print-to-PDF. Supplier POs, billing and books come later.
+**Phase 1, Part 1** covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. **Part 2** adds quotes, sales orders, document numbering, withholding rates and print-to-PDF. **Brief 03** adds structured Philippine addresses, business document uploads (DTI, SEC, BIR 2303, permits) with expiry tracking, and a Transactions tab on customers and suppliers. Supplier POs, billing and books come later.
 
 Stack: Next.js 16 (App Router, TypeScript strict), Prisma 6, MySQL 8, zod, bcryptjs, nodemailer, qrcode, Vitest. Plain CSS following `docs/design-brief.md`.
 
@@ -49,7 +49,8 @@ The Vitest suites (`tests/`) cover:
 - the no-delete rules: the Prisma extension throws on `delete` / `deleteMany`, and a source scan finds no DELETE routes or delete calls
 - TIN, customer, supplier and contact validation; main-contact rules; audit diffs; the login rate limit; peso and Manila date formatting
 - quote math (line totals, supplier total = supplier unit × buyer qty, withholding by line kind, net received, net margin ₱ and %, rounding) and the print page (NON-VAT, QR, no costs)
-- **against MySQL** (`tests/db`, needs `TEST_DATABASE_URL`): 20 parallel creates get 20 consecutive numbers, QT and SO counters are separate, a new year restarts at 0001, voided numbers are never reissued, failed transactions don't use a number; customer default withholding is copied, overrides are saved, and a Settings change doesn't alter an existing quote; non-cost users' quote/SO payloads have no cost or margin fields; convert / void rules and the DocumentVoid log; deletes still throw
+- addresses (validation, ZIP, formatter, default and owner rules), upload checks (magic bytes, size limit, file names, storage keys, `UPLOAD_DIR` guard), expiry badges, transaction sums, the `/files` 401
+- **against MySQL** (`tests/db`, needs `TEST_DATABASE_URL`): legacy address migration; address defaults / supplier rule / audit; print and Convert-to-SO addresses; upload → download permission matrix, path traversal, fake / oversized files, archived documents hidden, replace; Transactions filters, totals, pagination and no cost fields for staff / viewers; and from Part 2: 20 parallel creates get 20 consecutive numbers, QT and SO counters are separate, a new year restarts at 0001, voided numbers are never reissued, failed transactions don't use a number; customer default withholding is copied, overrides are saved, and a Settings change doesn't alter an existing quote; non-cost users' quote/SO payloads have no cost or margin fields; convert / void rules and the DocumentVoid log; deletes still throw
 
 The database suites apply migrations to `TEST_DATABASE_URL` first and refuse a database whose name doesn't contain `test`. They never clean up (nothing is deleted); each run uses its own records and unused years.
 
@@ -63,8 +64,10 @@ The database suites apply migrations to `TEST_DATABASE_URL` first and refuse a d
    - `APP_URL`: the public `https://` URL (used in email links)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`: for example, a Hostinger email account's SMTP
    - `NODE_ENV=production`
+   - `UPLOAD_DIR`: where uploaded business documents are stored, **outside** the app directory (each deploy replaces the app directory), e.g. `/home/<user>/hacien-uploads/<env>`. It's created if missing. Never under `public/` or `.next/` (the app refuses). Add it to the existing env vars; don't replace the whole set (that rotates the DB password and session secret).
+   - `UPLOAD_MAX_MB` (optional, default 10): upload size limit.
    - `TRUSTED_PROXY_COUNT`: how many reverse proxies append to `X-Forwarded-For` (default `1`). The client IP for rate limits is read that many entries from the right; the client-supplied left side is never trusted.
-4. **Build command:** `npm ci && npm run build`
+4. **Build command:** `npm ci && npm run build` (or `npm run staging:build`, which also runs `prisma migrate deploy`). `next.config.ts` builds on one CPU without worker threads, because Hostinger can't spawn them ("OS can't spawn worker thread"). Set `HOSTINGER_BUILD=1` to also skip the build's own type check there; CI still runs lint and `tsc`.
 5. **Run migrations** (every deploy that adds migrations), from the app's terminal/SSH or as a pre-start step:
    ```bash
    npx prisma migrate deploy
@@ -113,6 +116,15 @@ Each customer has a **default withholding** (any set of rate codes, possibly non
 
 ### Print / Save PDF
 **Actions → Print / Save PDF** opens `/print/quotes/:id` (or `/print/sales-orders/:id`) in a new tab: a server-rendered A4 page with print CSS. Click **Print / Save PDF** and pick **Save as PDF** in the browser's print dialog; the file name defaults to the document number and customer. The page shows HACIEN's name, TIN and address from **Settings → Company** (as of the document's settings version), a **NON-VAT** label, the number and dates, the customer and contact, items with qty, unit, unit price and total, the contract price and terms, and a footer: "This is a system-generated document. No signature required." with a QR code to https://haciensolutions.com/terms (generated on the server with the `qrcode` package, MIT). It never shows supplier costs, margins or the withholding breakdown, and has no signature lines. Viewers can print.
+
+### Addresses
+Customers and suppliers have any number of structured addresses (`Address`: billing, delivery, office, warehouse, other; unit/building/street, barangay, city/municipality, province, 4-digit ZIP) on the **Details** tab. Each kind has one default; the first of a kind becomes its default, and archiving a default promotes the next one. Suppliers must keep an office or billing address. Province and city fields suggest values from a built-in list (no external API). `formatAddress()` (`src/lib/addresses/format.ts`) gives the one-line and multi-line text used by print (customer block = default billing address) and by **Convert to SO** (pick a saved address, still editable; the SO stores the text as a snapshot). The migration copied each old free-text address into the street of a default billing address marked **Needs review**; saving it clears the flag. The old `address` columns stay for one release and will then be dropped.
+
+### Business documents
+The **Documents** tab stores DTI / SEC / CDA registrations, BIR 2303, Mayor's permit, PhilGEPS, barangay and tax clearances. Only PDF, JPG and PNG are accepted, checked by the file's first bytes (not the name or MIME type) and matching the extension, up to `UPLOAD_MAX_MB`. Files are saved under `UPLOAD_DIR` with a random key as the name; the user's file name is only metadata. Downloads go through `/files/business-documents/:id`, which checks the session and permission (signed out → 401), sends `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`, and logs a `download` audit row. Admin/Staff/Approver upload, replace and archive; Viewers only view and download. **Replace** uploads a new file and archives the old one. Badges show **Expired** or **Expires in N days** (window in **Settings → Lists → Business documents**, default 30); the overview card counts them and the Customers / Suppliers lists have an **Expiring documents** filter.
+
+### Transactions tab
+`?tab=transactions&contact=&type=&status=&page=` on customer and supplier pages, built from one service, `listTransactions()` (`src/lib/services/transactions.ts`), returning `{ kind, id, number, date, status, contactName, total, href }` rows so POs, invoices and payments can be added as new kinds. Newest first, 50 per page, with totals per type over all pages (void documents counted separately, not added). Supplier cost and margin are only in the payload for **Can see costs** users. A supplier's tab lists the quotes / SOs that have its lines (one row per document, totals of its lines only); because which supplier is on a quote is itself cost data, users without **Can see costs** see a notice instead. Each contact card links to **View transactions** filtered to that contact. The overview's Open quotes / Open SOs / Last activity cards use real data.
 
 ## Project layout
 
