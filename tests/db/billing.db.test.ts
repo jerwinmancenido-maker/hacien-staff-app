@@ -424,6 +424,86 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(row.status).toBe("PARTIALLY_PAID");
   });
 
+  it("concurrent credit applies on one collection never exceed available credit", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "2000.00" });
+    const b1 = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const b2 = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    // Fully unapplied advance — ₱500 credit available.
+    const advance = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: "ADV-CONC-CREDIT",
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-ADV-CONC",
+        amountReceived: "500.00",
+        notes: null,
+        allocations: [],
+      },
+      admin,
+    );
+    expect(await customerCreditBalance(customer.id)).toBe("500.00");
+
+    const mk = (billingId: string) =>
+      applyCustomerCredit(
+        {
+          customerId: customer.id,
+          allocations: [
+            {
+              collectionId: advance.id,
+              billingId,
+              cashApplied: "500.00",
+              withholdingApplied: "0.00",
+            },
+          ],
+        },
+        admin,
+      );
+
+    const results = await Promise.allSettled([mk(b1.id), mk(b2.id)]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok.length).toBe(1);
+    expect(bad.length).toBe(1);
+    for (const r of bad) {
+      expect(r.status).toBe("rejected");
+      if (r.status === "rejected") {
+        expect(r.reason).toBeInstanceOf(DocRuleError);
+        expect(String(r.reason.message)).toMatch(/unapplied credit/i);
+      }
+    }
+
+    const allocs = await db.collectionAllocation.findMany({
+      where: { collectionId: advance.id },
+    });
+    const applied = allocs.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+    expect(applied).toBe(toScaled("500.00", 2));
+    expect(await customerCreditBalance(customer.id)).toBe("0.00");
+  });
+
   it("voiding a collection clears pending 2307 from list and totals", async () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
