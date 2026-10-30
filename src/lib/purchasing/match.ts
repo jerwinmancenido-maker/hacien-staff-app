@@ -3,18 +3,21 @@
 // bills). Pure: the PO page passes the rows in. Money/qty use exact BigInt math.
 
 import { fromScaled, toScaled } from "../quotes/calc";
+import { formatPeso } from "../format";
 
 export type MatchPoLine = { id: string; description: string; unit: string; qty: string; unitCost: string; receivedQty: string };
 export type MatchBillLine = { purchaseOrderItemId: string; qty: string; unitPrice: string };
 export type MatchBill = { id: string; billNumber: string; amount: string; items: MatchBillLine[] };
 
-export type LineFlag = "BILLED_MORE_THAN_RECEIVED" | "RECEIVED_LESS_THAN_ORDERED" | "PRICE_DIFFERS";
+export type LineFlag = "BILLED_MORE_THAN_RECEIVED" | "BILLED_LESS_THAN_RECEIVED" | "RECEIVED_LESS_THAN_ORDERED" | "PRICE_DIFFERS";
 export type LineStatus = "MATCHED" | "QTY_MISMATCH" | "PRICE_MISMATCH";
+export type LineIssue = Exclude<LineStatus, "MATCHED">;
 export type HeaderFlag = { code: "BILL_LINES_DIFFER" | "BILLED_DIFFERS_FROM_RECEIVED"; message: string; amount: string };
 
 export const LINE_STATUS_LABELS: Record<LineStatus, string> = { MATCHED: "Matched", QTY_MISMATCH: "Qty mismatch", PRICE_MISMATCH: "Price mismatch" };
 export const LINE_FLAG_LABELS: Record<LineFlag, string> = {
   BILLED_MORE_THAN_RECEIVED: "Billed more than received",
+  BILLED_LESS_THAN_RECEIVED: "Billed less than received",
   RECEIVED_LESS_THAN_ORDERED: "Received less than ordered",
   PRICE_DIFFERS: "Unit price differs from PO",
 };
@@ -32,9 +35,20 @@ export type MatchLine = {
   billedAmount: string;
   /** Average billed unit price (2 dp), null when nothing is billed on this line. */
   billedUnitPrice: string | null;
-  /** billed amount − billed qty × PO unit cost (positive = billed above PO price). */
-  priceDifference: string;
+  /**
+   * Per-unit price difference: (billed amount − billed qty × PO unit cost) ÷ billed
+   * qty, i.e. average billed unit price − PO unit cost (positive = billed above PO
+   * price). Null when nothing is billed on this line.
+   */
+  unitPriceDifference: string | null;
+  /** Line total of the price difference: billed amount − billed qty × PO unit cost. */
+  priceDifferenceTotal: string;
+  /** True when this line was billed at more than one unit price (the per-unit difference is then an average). */
+  mixedBilledPrices: boolean;
   flags: LineFlag[];
+  /** Every problem on the line (qty and/or price), in that order; empty when matched. */
+  issues: LineIssue[];
+  /** The most serious issue (price before qty), or MATCHED. */
   status: LineStatus;
 };
 
@@ -59,6 +73,13 @@ function mul(qty: bigint, price: bigint): bigint {
   const neg = p < 0n;
   const a = neg ? -p : p;
   const r = (a + 50n) / 100n;
+  return neg ? -r : r;
+}
+
+/** a ÷ b (b > 0), half away from zero. */
+function div(a: bigint, b: bigint): bigint {
+  const neg = a < 0n;
+  const r = ((neg ? -a : a) + b / 2n) / b;
   return neg ? -r : r;
 }
 
@@ -104,13 +125,13 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
     const priceDifference = b.amount - mul(b.qty, cost);
     const flags: LineFlag[] = [];
     if (b.qty > received) flags.push("BILLED_MORE_THAN_RECEIVED");
+    if (b.qty < received) flags.push("BILLED_LESS_THAN_RECEIVED");
     if (received < ordered) flags.push("RECEIVED_LESS_THAN_ORDERED");
     if ([...b.prices].some((p) => p !== cost)) flags.push("PRICE_DIFFERS");
-    const status: LineStatus = flags.includes("PRICE_DIFFERS")
-      ? "PRICE_MISMATCH"
-      : flags.length || b.qty !== received
-        ? "QTY_MISMATCH"
-        : "MATCHED";
+    const issues: LineIssue[] = [];
+    if (flags.some((f) => f !== "PRICE_DIFFERS")) issues.push("QTY_MISMATCH");
+    if (flags.includes("PRICE_DIFFERS")) issues.push("PRICE_MISMATCH");
+    const status: LineStatus = issues.includes("PRICE_MISMATCH") ? "PRICE_MISMATCH" : (issues[0] ?? "MATCHED");
     return {
       id: l.id,
       description: l.description,
@@ -123,8 +144,11 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
       billedQty: fromScaled(b.qty, Q),
       billedAmount: fmt(b.amount),
       billedUnitPrice: b.qty > 0n ? fmt((b.amount * 100n + b.qty / 2n) / b.qty) : null,
-      priceDifference: fmt(priceDifference),
+      unitPriceDifference: b.qty > 0n ? fmt(div(priceDifference * 100n, b.qty)) : null,
+      priceDifferenceTotal: fmt(priceDifference),
+      mixedBilledPrices: b.prices.size > 1,
       flags,
+      issues,
       status,
     };
   });
@@ -146,5 +170,19 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
     billedLinesTotal: fmt(billedLinesTotal),
     headerFlags,
     status,
+  };
+}
+
+const signedPeso = (v: string) => `${Number(v) > 0 ? "+" : ""}${formatPeso(v)}`;
+
+/**
+ * Text for a line's "Unit price differs" flag: the per-unit difference first
+ * (e.g. "+₱50.00 / pc"), the line total second ("+₱500.00 on the line").
+ */
+export function priceDifferenceText(l: Pick<MatchLine, "unit" | "unitPriceDifference" | "priceDifferenceTotal" | "mixedBilledPrices">) {
+  if (l.unitPriceDifference === null) return null;
+  return {
+    perUnit: `${signedPeso(l.unitPriceDifference)} / ${l.unit || "unit"}${l.mixedBilledPrices ? " (average)" : ""}`,
+    lineTotal: `${signedPeso(l.priceDifferenceTotal)} on the line`,
   };
 }

@@ -378,7 +378,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const view = (await getPurchaseOrderView(po.id, { ...admin, isAdmin: true }))!;
       expect(view.match.status).toBe("MISMATCH");
       expect(view.match.lines[0]!.status).toBe("PRICE_MISMATCH");
-      expect(view.match.lines[0]!.priceDifference).toBe("2500.00");
+      expect(view.match.lines[0]!.priceDifferenceTotal).toBe("2500.00");
       expect(view.match.lines[1]!.status).toBe("MATCHED");
       expect(view.match.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
 

@@ -2223,6 +2223,14 @@ pre.json {
   text-align: right;
   font-weight: 600;
 }
+.print-toolbar-alert {
+  width: 210mm;
+  margin: 0 auto 12px;
+}
+.print-missing {
+  color: var(--red);
+  font-style: italic;
+}
 .print-void {
   color: var(--red);
   font-weight: 700;

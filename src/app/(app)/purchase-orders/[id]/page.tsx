@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireCostPage } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
-import { LINE_FLAG_LABELS } from "@/lib/purchasing/match";
+import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import { Activity } from "@/components/Activity";
 import { PillTabs } from "@/components/PillTabs";
@@ -323,35 +323,52 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                 </tr>
               </thead>
               <tbody>
-                {m.lines.map((l) => (
-                  <tr key={l.id}>
-                    <td style={{ whiteSpace: "pre-wrap" }}>{l.description}</td>
-                    <td className="num">
-                      {qtyText(l.orderedQty)} × {formatPeso(l.unitCost)}
-                      <div className="small muted">{formatPeso(l.orderedAmount)}</div>
-                    </td>
-                    <td className="num">
-                      {qtyText(l.receivedQty)} {l.unit}
-                      <div className="small muted">{formatPeso(l.receivedAmount)}</div>
-                    </td>
-                    <td className="num">
-                      {l.billedUnitPrice ? `${qtyText(l.billedQty)} × ${formatPeso(l.billedUnitPrice)}` : "—"}
-                      <div className="small muted">{formatPeso(l.billedAmount)}</div>
-                    </td>
-                    <td className="small">
-                      {l.flags.length === 0 && <span className="faint">—</span>}
-                      {l.flags.map((f) => (
-                        <div key={f}>
-                          {LINE_FLAG_LABELS[f]}
-                          {f === "PRICE_DIFFERS" && <b> ({Number(l.priceDifference) > 0 ? "+" : ""}{formatPeso(l.priceDifference)})</b>}
-                        </div>
-                      ))}
-                    </td>
-                    <td>
-                      <MatchChip status={l.status} />
-                    </td>
-                  </tr>
-                ))}
+                {m.lines.map((l) => {
+                  const priceText = priceDifferenceText(l);
+                  return (
+                    <tr key={l.id}>
+                      <td style={{ whiteSpace: "pre-wrap" }}>{l.description}</td>
+                      <td className="num">
+                        {qtyText(l.orderedQty)} × {formatPeso(l.unitCost)}
+                        <div className="small muted">{formatPeso(l.orderedAmount)}</div>
+                      </td>
+                      <td className="num">
+                        {qtyText(l.receivedQty)} {l.unit}
+                        <div className="small muted">{formatPeso(l.receivedAmount)}</div>
+                      </td>
+                      <td className="num">
+                        {l.billedUnitPrice ? `${qtyText(l.billedQty)} × ${formatPeso(l.billedUnitPrice)}` : "—"}
+                        <div className="small muted">{formatPeso(l.billedAmount)}</div>
+                      </td>
+                      <td className="small">
+                        {l.flags.length === 0 && <span className="faint">—</span>}
+                        {l.flags.map((f) => (
+                          <div key={f}>
+                            {LINE_FLAG_LABELS[f]}
+                            {f === "PRICE_DIFFERS" && priceText && (
+                              <>
+                                {" "}
+                                <b>({priceText.perUnit})</b>
+                                <div className="muted">{priceText.lineTotal}</div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </td>
+                      <td>
+                        {l.issues.length === 0 ? (
+                          <MatchChip status="MATCHED" />
+                        ) : (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {l.issues.map((i) => (
+                              <MatchChip key={i} status={i} />
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr>

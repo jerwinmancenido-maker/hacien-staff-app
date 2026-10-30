@@ -309,6 +309,21 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       await expect(voidQuote(q.id, "again", costUser)).rejects.toThrow(/already void/);
     });
 
+    it("the quote view lists every SO made from it, voided ones included", async () => {
+      const customer = await makeCustomer();
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const first = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-A", deliveryAddress: null }, costUser);
+      await voidSalesOrder(first.id, "Wrong buyer PO", staff);
+      const second = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-B", deliveryAddress: null }, costUser);
+      const view = (await getQuoteView(q.id, costUser))!;
+      expect(view.salesOrders.map((s) => [s.number, s.status, s.buyerPoNo])).toEqual([
+        [second.number, "OPEN", "PO-B"],
+        [first.number, "VOID", "PO-A"],
+      ]);
+      expect(view.salesOrders[1]!.voidReason).toBe("Wrong buyer PO");
+      expect(view.salesOrders[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
     it("void needs a reason", async () => {
       const customer = await makeCustomer();
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
