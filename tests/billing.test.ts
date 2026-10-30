@@ -301,4 +301,17 @@ describe("filtered SOA opening credit as of from (unit)", () => {
       ),
     ).toBe("700.00");
   });
+
+  it("application on from does not reduce opening credit (strict lt)", () => {
+    // Helpers use `date < asOf`; getStatement filters `appliedOn: { lt: from }`.
+    // So appliedOn === from is inside the period (not opening), matching collections
+    // with date >= from that appear on period lines rather than in opening credit.
+    expect(unappliedCashAsOf("1000.00", [{ cashApplied: "400.00", date: from }], from)).toBe("1000.00");
+    expect(
+      openingCreditAsOf(
+        [{ amountReceived: "1000.00", applications: [{ cashApplied: "400.00", date: from }] }],
+        from,
+      ),
+    ).toBe("1000.00");
+  });
 });
