@@ -93,6 +93,15 @@ export type NonVatMeter = {
   warnSecondPct: number;
 };
 
+/**
+ * One-decimal percent label, floored (not rounded) so 69.95% → "69.9%" and never
+ * shows a warning threshold early (e.g. "70.0%" on a still-green bar).
+ * Shared by the sidebar meter and the billing home card.
+ */
+export function formatNonVatPctLabel(pct: number): string {
+  return `${(Math.floor(pct * 10) / 10).toFixed(1)}%`;
+}
+
 /** Pure: turns gross sales and the tax-year settings into the meter shown in the sidebar. */
 export function nonVatMeter(used: number, taxYear: Settings["taxYear"]): NonVatMeter {
   const { year, nonVatLimit: limit, warnFirstPct, warnSecondPct } = taxYear;
@@ -103,7 +112,7 @@ export function nonVatMeter(used: number, taxYear: Settings["taxYear"]): NonVatM
     used,
     limit,
     pct,
-    pctLabel: `${(Math.floor(pct * 10) / 10).toFixed(1)}%`,
+    pctLabel: formatNonVatPctLabel(pct),
     barPct: Math.min(100, Math.max(0, pct)),
     level,
     warnFirstPct,

@@ -995,7 +995,9 @@ model CollectionAllocation {
   cashApplied        Decimal    @db.Decimal(15, 2)
   withholdingApplied Decimal    @default(0) @db.Decimal(15, 2)
   // Business date of this application (collection date at post, or credit-apply day).
-  appliedOn          DateTime   @db.Date
+  // DB default covers deploy gap (old build after migrate); app still sets it explicitly.
+  // Expression default requires MySQL 8.0.13+.
+  appliedOn          DateTime   @default(dbgenerated("(curdate())")) @db.Date
 
   @@index([collectionId])
   @@index([billingId])

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import {
   billingsGrossSales,
+  formatNonVatPctLabel,
   getGrossSalesYtd,
   getNonVatMeter,
   grossSalesYtdEnd,
@@ -26,6 +27,13 @@ function fakeBillings(rows: { at: string; amount: number }[]): GrossSalesSource 
 }
 
 describe("non-VAT threshold meter", () => {
+  it("floors pct labels to one decimal (never rounds up into a warning band)", () => {
+    expect(formatNonVatPctLabel(69.95)).toBe("69.9%");
+    expect(formatNonVatPctLabel(70)).toBe("70.0%");
+    expect(formatNonVatPctLabel(0)).toBe("0.0%");
+    expect(nonVatMeter(2_098_500, taxYear).pctLabel).toBe("69.9%"); // 69.95% of 3M
+  });
+
   it("sums amount strings with exact cents (no float drift)", () => {
     expect(sumGrossSalesAmounts([])).toBe(0);
     expect(sumGrossSalesAmounts(["0.00"])).toBe(0);
