@@ -80,7 +80,13 @@ export async function CustomerOverview({
               </div>
               <div>
                 <div className="meta-label">Address</div>
-                <div className="meta-val">{mainAddress ? formatAddress(mainAddress) : <span className="faint">—</span>}</div>
+                <div className="meta-val">
+                  {mainAddress ? (
+                    <Link href={`${basePath}?tab=addresses`}>{formatAddress(mainAddress)}</Link>
+                  ) : (
+                    <span className="faint">—</span>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="meta-label">Main contact</div>

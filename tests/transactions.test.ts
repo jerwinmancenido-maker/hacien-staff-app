@@ -1,7 +1,13 @@
-// Transactions tab helpers: exact money sums and margin %.
+// Transactions tab helpers: exact money sums, margin %, and customer filter kinds.
 
 import { describe, expect, it } from "vitest";
-import { __test } from "@/lib/services/transactions";
+import { parseTransactionFilters } from "@/components/TransactionsTab";
+import {
+  BILLING_KINDS,
+  PURCHASING_KINDS,
+  TRANSACTION_KINDS,
+  __test,
+} from "@/lib/services/transactions";
 
 const { sumMoney, pctOf } = __test;
 
@@ -21,5 +27,20 @@ describe("transaction totals", () => {
     expect(pctOf("2.00", "3.00")).toBe("66.67");
     expect(pctOf("-1.00", "8.00")).toBe("-12.50");
     expect(pctOf("5.00", "0.00")).toBe("0.00");
+  });
+});
+
+describe("customer transaction kinds", () => {
+  it("keeps purchasing kinds out of the customer-facing set", () => {
+    const customerKinds = TRANSACTION_KINDS.filter((k) => !PURCHASING_KINDS.includes(k));
+    expect(customerKinds).toEqual(["QUOTE", "SALES_ORDER", "BILLING", "COLLECTION"]);
+    expect(PURCHASING_KINDS).toEqual(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"]);
+    expect(BILLING_KINDS).toEqual(["BILLING", "COLLECTION"]);
+  });
+
+  it("parses type filters including purchasing kinds (supplier tab)", () => {
+    expect(parseTransactionFilters({ type: "PURCHASE_ORDER" }, []).type).toBe("PURCHASE_ORDER");
+    expect(parseTransactionFilters({ type: "BILLING" }, []).type).toBe("BILLING");
+    expect(parseTransactionFilters({ type: "NOPE" }, []).type).toBeNull();
   });
 });

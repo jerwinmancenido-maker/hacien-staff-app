@@ -201,11 +201,11 @@ export async function TransactionsTab({
         </label>
         <select id="txn-type" name="type" defaultValue={filters.type ?? ""} className="input">
           <option value="">All types</option>
-          {TRANSACTION_KINDS.filter(
-            (k) =>
-              (list.canSeeCosts || !PURCHASING_KINDS.includes(k)) &&
-              (owner.kind === "customer" || !BILLING_KINDS.includes(k)),
-          ).map((k) => (
+          {TRANSACTION_KINDS.filter((k) => {
+            if (PURCHASING_KINDS.includes(k)) return owner.kind === "supplier" && list.canSeeCosts;
+            if (BILLING_KINDS.includes(k)) return owner.kind === "customer";
+            return true;
+          }).map((k) => (
             <option key={k} value={k}>
               {TRANSACTION_KIND_LABELS[k]}
             </option>
@@ -230,7 +230,7 @@ export async function TransactionsTab({
               </option>
             ))}
           </optgroup>
-          {list.canSeeCosts && (
+          {owner.kind === "supplier" && list.canSeeCosts && (
             <optgroup label="Supplier POs">
               {PO_STATUSES.filter((s) => !(["DRAFT", "SENT", "VOID"] as string[]).includes(s)).map((s) => (
                 <option key={`po-${s}`} value={s}>
@@ -239,7 +239,7 @@ export async function TransactionsTab({
               ))}
             </optgroup>
           )}
-          {list.canSeeCosts && (
+          {owner.kind === "supplier" && list.canSeeCosts && (
             <optgroup label="Receiving / bills">
               <option value="POSTED">Posted</option>
               <option value="RECORDED">Recorded</option>

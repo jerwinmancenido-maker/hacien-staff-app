@@ -19,11 +19,9 @@ import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
 import { PlusIcon } from "@/components/Icons";
+import { resolveCompanyTab } from "@/lib/company-tabs";
 import { SupplierForm } from "../SupplierForm";
 import { saveSupplierAction, setSupplierActiveAction } from "../actions";
-
-const TABS = ["overview", "details", "contacts", "documents", "transactions", "balances"] as const;
-type Tab = (typeof TABS)[number];
 
 export default async function SupplierPage({
   params,
@@ -35,9 +33,7 @@ export default async function SupplierPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const search = await searchParams;
-  // "history" was the old name of the Transactions tab.
-  const rawTab = search.tab === "history" ? "transactions" : search.tab;
-  const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+  const tab = resolveCompanyTab(search.tab);
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
   const { settings } = await getSettingsSnapshot();
@@ -131,6 +127,13 @@ export default async function SupplierPage({
           { key: "overview", label: "Overview", href: `/suppliers/${id}` },
           { key: "details", label: "Details", href: `/suppliers/${id}?tab=details` },
           {
+            key: "addresses",
+            label: "Addresses",
+            count: addresses.filter((a) => !a.archivedAt).length,
+            dot: addresses.some((a) => !a.archivedAt && a.needsReview) ? "amber" : undefined,
+            href: `/suppliers/${id}?tab=addresses`,
+          },
+          {
             key: "contacts",
             label: "Contacts",
             count: contacts.filter((c) => c.active).length,
@@ -163,17 +166,18 @@ export default async function SupplierPage({
       )}
 
       {tab === "details" && (
-        <div className="details-stack">
-          <div className="card">
-            <SupplierForm
-              supplier={record}
-              terms={settings.lists.paymentTerms}
-              action={saveSupplierAction.bind(null, id)}
-              canEdit={canEdit}
-            />
-          </div>
-          <AddressCards addresses={addresses} ownerKind="supplier" ownerId={id} canEdit={canEdit} />
+        <div className="card">
+          <SupplierForm
+            supplier={record}
+            terms={settings.lists.paymentTerms}
+            action={saveSupplierAction.bind(null, id)}
+            canEdit={canEdit}
+          />
         </div>
+      )}
+
+      {tab === "addresses" && (
+        <AddressCards addresses={addresses} ownerKind="supplier" ownerId={id} canEdit={canEdit} />
       )}
 
       {tab === "contacts" && (

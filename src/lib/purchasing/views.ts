@@ -268,20 +268,43 @@ export type SoPurchasingLine = {
   purchaseOrders: { id?: string; number: string; status: PoStatus }[];
 };
 
+/** Linked PO on a sales order; `id` / `total` only for cost users. */
+export type SoPurchaseOrder = {
+  id?: string;
+  number: string;
+  status: PoStatus;
+  supplierName: string;
+  /** PO subtotal — cost users only. */
+  total?: string;
+};
+
 export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUser) {
   const withCosts = canSeeCosts(viewer);
-  const items = await db.salesOrderItem.findMany({
-    where: { salesOrderId, removedAt: null },
-    orderBy: { sortOrder: "asc" },
-    select: {
-      id: true,
-      qty: true,
-      purchaseOrderItems: {
-        where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
-        select: { qty: true, receivedQty: true, purchaseOrder: { select: { id: true, number: true, status: true } } },
+  const [items, pos] = await Promise.all([
+    db.salesOrderItem.findMany({
+      where: { salesOrderId, removedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        qty: true,
+        purchaseOrderItems: {
+          where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+          select: { qty: true, receivedQty: true, purchaseOrder: { select: { id: true, number: true, status: true } } },
+        },
       },
-    },
-  });
+    }),
+    db.purchaseOrder.findMany({
+      where: { salesOrderId, status: { not: "VOID" } },
+      orderBy: [{ date: "desc" }, { number: "desc" }],
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        subtotal: true,
+        supplier: { select: { name: true } },
+      },
+    }),
+  ]);
   const lines: SoPurchasingLine[] = items.map((i) => {
     const p = soLineProgress(
       money(i.qty),
@@ -294,8 +317,15 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       .map((po) => (withCosts ? { id: po.id, number: po.number, status: po.status } : { number: po.number, status: po.status }));
     return { id: i.id, ...p, purchaseOrders };
   });
+  // Built without cost keys for non-cost users (same as line PO ids above).
+  const purchaseOrders: SoPurchaseOrder[] = pos.map((po) =>
+    withCosts
+      ? { id: po.id, number: po.number, status: po.status, supplierName: po.supplier.name, total: money(po.subtotal) }
+      : { number: po.number, status: po.status, supplierName: po.supplier.name },
+  );
   return {
     lines,
+    purchaseOrders,
     total: lines.length,
     received: lines.filter((l) => l.state === "RECEIVED").length,
     ordered: lines.filter((l) => l.state !== "NOT_ORDERED").length,

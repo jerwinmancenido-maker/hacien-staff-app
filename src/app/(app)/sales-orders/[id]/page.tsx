@@ -164,9 +164,53 @@ export default async function SalesOrderPage({ params, searchParams }: { params:
           )}
         </div>
       )}
+      <div className="card" aria-label="Purchases for this order">
+        <div className="card-head">
+          <h2>Purchases for this order</h2>
+          <div className="right small muted">
+            {purchasing.purchaseOrders.length} PO{purchasing.purchaseOrders.length === 1 ? "" : "s"}
+            {canCreatePos && (
+              <>
+                {" · "}
+                <Link className="btn-link small" href={`/sales-orders/${so.id}/purchase-orders`}>
+                  Create POs →
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+        {purchasing.purchaseOrders.length === 0 ? (
+          <p className="faint">No supplier POs linked to this sales order yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="list" aria-label="Purchases for this order">
+              <thead>
+                <tr>
+                  <th>PO</th>
+                  <th>Supplier</th>
+                  <th>Status</th>
+                  {purchasing.canSeeCosts && <th className="num">PO total</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {purchasing.purchaseOrders.map((po) => (
+                  <tr key={po.number}>
+                    <td>{po.id ? <Link href={`/purchase-orders/${po.id}`}>{po.number}</Link> : po.number}</td>
+                    <td>{po.supplierName}</td>
+                    <td>
+                      <PoStatusChip status={po.status} />
+                    </td>
+                    {purchasing.canSeeCosts && <td className="num">{po.total != null ? formatPeso(po.total) : "—"}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
       <div className="card" aria-label="Purchasing">
         <div className="card-head">
-          <h2>Purchasing</h2>
+          <h2>Purchasing progress</h2>
           <div className="right small muted">
             {purchasing.received} of {purchasing.total} line{purchasing.total === 1 ? "" : "s"} received · {purchasing.ordered} ordered
           </div>

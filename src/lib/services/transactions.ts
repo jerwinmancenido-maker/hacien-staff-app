@@ -172,7 +172,10 @@ export async function listTransactions(owner: ContactOwner, filters: Transaction
     wantSos ? db.salesOrder.count({ where: soWhere }) : 0,
   ]);
 
-  const purchasing = withCosts ? await purchasingRows(owner, filters, take) : { rows: [], count: 0, totals: [] };
+  // Purchasing kinds belong on the supplier page (and on the SO "Purchases for this
+  // order" section). Customer Transactions only show quotes, SOs, billings, collections.
+  const purchasing =
+    owner.kind === "supplier" && withCosts ? await purchasingRows(owner, filters, take) : { rows: [], count: 0, totals: [] };
   const billing = owner.kind === "customer" ? await billingRows(owner.id, filters, take) : { rows: [], count: 0, totals: [] };
 
   type DocRow = (typeof quotes)[number] | (typeof sos)[number];

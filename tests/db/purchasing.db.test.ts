@@ -429,13 +429,23 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(onlyPos.rows.map((r) => r.id)).toEqual([po.id]);
 
       expect((await listTransactions({ kind: "supplier", id: a.id }, {}, staff)).restricted).toBe(true);
+      // Customer Transactions never lists supplier-side docs (even for cost users).
       const customerStaff = await listTransactions({ kind: "customer", id: customer.id }, {}, staff);
       expect(customerStaff.rows.some((r) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(r.kind))).toBe(false);
-      const customerAdmin = await listTransactions({ kind: "customer", id: customer.id }, { type: "PURCHASE_ORDER" }, admin);
-      const soPos = await db.purchaseOrder.findMany({ where: { salesOrderId: so.id }, select: { id: true } });
-      expect(soPos).toHaveLength(3); // supplier A, supplier B, and the voided extra one
-      expect(customerAdmin.rows.map((r) => r.id).sort()).toEqual(soPos.map((p) => p.id).sort());
-      expect(customerAdmin.rows.map((r) => r.id)).toContain(extra!.id);
+      const customerAdmin = await listTransactions({ kind: "customer", id: customer.id }, {}, admin);
+      expect(customerAdmin.rows.some((r) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(r.kind))).toBe(false);
+      expect(customerAdmin.totals.some((t) => ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"].includes(t.kind))).toBe(false);
+      expect((await listTransactions({ kind: "customer", id: customer.id }, { type: "PURCHASE_ORDER" }, admin)).rows).toEqual([]);
+
+      // Linked POs (with totals for cost users) live on the SO "Purchases for this order" section.
+      const soPos = await db.purchaseOrder.findMany({ where: { salesOrderId: so.id, status: { not: "VOID" } }, select: { id: true, number: true, subtotal: true } });
+      expect(soPos.length).toBeGreaterThanOrEqual(1);
+      const soPurchasesAdmin = await getSoPurchasing(so.id, admin);
+      expect(soPurchasesAdmin.purchaseOrders.map((p) => p.number).sort()).toEqual(soPos.map((p) => p.number).sort());
+      expect(soPurchasesAdmin.purchaseOrders.every((p) => p.id && p.total != null)).toBe(true);
+      const soPurchasesStaff = await getSoPurchasing(so.id, staff);
+      expect(soPurchasesStaff.purchaseOrders.map((p) => p.number).sort()).toEqual(soPos.map((p) => p.number).sort());
+      expect(soPurchasesStaff.purchaseOrders.every((p) => p.id === undefined && p.total === undefined)).toBe(true);
     });
   });
 
