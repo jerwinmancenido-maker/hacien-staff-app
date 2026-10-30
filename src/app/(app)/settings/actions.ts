@@ -45,13 +45,22 @@ export async function savePrintCompanyAction(_prev: FormState, form: FormData): 
     let logoStorageKey = get("logoStorageKey") ?? "";
     const logo = form.get("logo");
     if (logo && typeof logo !== "string" && "arrayBuffer" in logo && logo.size > 0) {
-      const { prepareUploads, discardUploads } = await import("@/lib/services/attachments");
+      const { sniffLogoMime } = await import("@/lib/print/logo-sniff");
+      const { newStorageKey, saveFile, discardUnreferencedFile } = await import("@/lib/business-docs/storage");
+      const { uploadMaxBytes } = await import("@/lib/business-docs/sniff");
       const bytes = new Uint8Array(await logo.arrayBuffer());
-      const prepared = await prepareUploads([{ name: logo.name || "logo.png", size: logo.size, bytes }]);
+      if (bytes.byteLength > uploadMaxBytes()) {
+        return { values, fieldErrors: { logo: `The file is too big. The limit is ${Math.round(uploadMaxBytes() / 1024 / 1024)} MB.` }, message: "Fix the fields marked below." };
+      }
+      if (!sniffLogoMime(bytes.subarray(0, 16))) {
+        return { values, fieldErrors: { logo: "Upload a PNG, JPEG or WebP logo." }, message: "Fix the fields marked below." };
+      }
+      const key = newStorageKey();
       try {
-        logoStorageKey = prepared[0]!.storageKey;
+        await saveFile(key, bytes);
+        logoStorageKey = key;
       } catch (err) {
-        await discardUploads(prepared);
+        await discardUnreferencedFile(key);
         throw err;
       }
     }
