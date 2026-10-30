@@ -15,6 +15,7 @@ type Item = {
   editOnly?: boolean;
   booksOnly?: boolean;
   cashOnly?: boolean;
+  payablesOnly?: boolean;
 };
 
 const MAIN: Item[] = [
@@ -29,7 +30,7 @@ const LATER: Item[] = [
   { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon />, costsOnly: true },
   { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
-  { href: "/payables", label: "Payables", icon: <CoinIcon /> },
+  { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },
   { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
   { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
 ];
@@ -39,6 +40,48 @@ const ADMIN: Item[] = [
   { href: "/audit", label: "Audit log", icon: <ListIcon />, adminOnly: true },
 ];
 
+type DealsNavFlags = {
+  canSeeCosts?: boolean;
+  canEdit?: boolean;
+  cashEnabled?: boolean;
+  payablesEnabled?: boolean;
+  booksEnabled?: boolean;
+  canViewBooks?: boolean;
+};
+
+/** Pure filter for Deals nav — unit-tested for CASH / PAYABLES / BOOKS feature gating. */
+export function filterDealsNavItems<
+  T extends {
+    costsOnly?: boolean;
+    editOnly?: boolean;
+    cashOnly?: boolean;
+    payablesOnly?: boolean;
+    booksOnly?: boolean;
+  },
+>(items: readonly T[], flags: DealsNavFlags): T[] {
+  const {
+    canSeeCosts = false,
+    canEdit = false,
+    cashEnabled = false,
+    payablesEnabled = false,
+    booksEnabled = false,
+    canViewBooks = false,
+  } = flags;
+  return items.filter(
+    (i) =>
+      (!i.costsOnly || canSeeCosts) &&
+      (!i.editOnly || canEdit) &&
+      (!i.cashOnly || cashEnabled) &&
+      (!i.payablesOnly || payablesEnabled) &&
+      (!i.booksOnly || (booksEnabled && canViewBooks)),
+  );
+}
+
+/** Href list for Deals section under the given feature / role flags. */
+export function dealsNavHrefs(flags: DealsNavFlags): string[] {
+  return filterDealsNavItems(LATER, flags).map((i) => i.href);
+}
+
 export function SidebarNav({
   isAdmin,
   canSeeCosts = false,
@@ -46,6 +89,7 @@ export function SidebarNav({
   canViewBooks = false,
   booksEnabled = false,
   cashEnabled = false,
+  payablesEnabled = false,
 }: {
   isAdmin: boolean;
   canSeeCosts?: boolean;
@@ -53,6 +97,7 @@ export function SidebarNav({
   canViewBooks?: boolean;
   booksEnabled?: boolean;
   cashEnabled?: boolean;
+  payablesEnabled?: boolean;
 }) {
   const path = usePathname();
   const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
@@ -67,13 +112,14 @@ export function SidebarNav({
     <nav aria-label="Main">
       {MAIN.map(render)}
       <div className="nav-label">Deals</div>
-      {LATER.filter(
-        (i) =>
-          (!i.costsOnly || canSeeCosts) &&
-          (!i.editOnly || canEdit) &&
-          (!i.booksOnly || (booksEnabled && canViewBooks)) &&
-          (!i.cashOnly || cashEnabled),
-      ).map(render)}
+      {filterDealsNavItems(LATER, {
+        canSeeCosts,
+        canEdit,
+        cashEnabled,
+        payablesEnabled,
+        booksEnabled,
+        canViewBooks,
+      }).map(render)}
       {isAdmin && (
         <>
           <div className="nav-label">Admin</div>

@@ -3,6 +3,7 @@ import { addDays } from "@/lib/format";
 import { agingBucket, sumAging } from "@/lib/billing/aging";
 import { autoAllocateBillsOldestFirst, validatePaymentAllocations } from "@/lib/payables/allocations";
 import { deriveSupplierBillStatus, supplierBillBalance, withholdingFromRate } from "@/lib/payables/status";
+import { dealsNavHrefs } from "@/components/Sidebar";
 import { payablesEnabledFromEnv } from "@/lib/payables/features";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
@@ -30,6 +31,20 @@ describe("feature flag", () => {
     expect(payablesEnabledFromEnv({ PAYABLES_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.payablesEnabled).toBe(false);
     expect(DEFAULT_SETTINGS.features.cashEnabled).toBe(false);
+  });
+});
+
+describe("Payables sidebar gating (PAYABLES_ENABLED)", () => {
+  const base = { canSeeCosts: true, canEdit: true, cashEnabled: false };
+
+  it("hides Payables when the flag is off", () => {
+    const hrefs = dealsNavHrefs({ ...base, payablesEnabled: false });
+    expect(hrefs).not.toContain("/payables");
+  });
+
+  it("shows Payables when the flag is on", () => {
+    const hrefs = dealsNavHrefs({ ...base, payablesEnabled: true });
+    expect(hrefs).toContain("/payables");
   });
 });
 

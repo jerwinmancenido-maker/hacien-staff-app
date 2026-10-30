@@ -160,13 +160,14 @@ export async function updateCashAccount(id: string, input: CashAccountInput, act
   );
 }
 
+/** Non-void activity linked to this account. Voided rows do not lock opening balance. */
 async function accountActivityCount(tx: Tx, id: string) {
   const [c, p, e, tFrom, tTo] = await Promise.all([
-    tx.collection.count({ where: { cashAccountId: id } }),
-    tx.supplierPayment.count({ where: { cashAccountId: id } }),
-    tx.expense.count({ where: { cashAccountId: id } }),
-    tx.cashTransfer.count({ where: { fromAccountId: id } }),
-    tx.cashTransfer.count({ where: { toAccountId: id } }),
+    tx.collection.count({ where: { cashAccountId: id, status: "POSTED" } }),
+    tx.supplierPayment.count({ where: { cashAccountId: id, status: "POSTED" } }),
+    tx.expense.count({ where: { cashAccountId: id, status: "POSTED" } }),
+    tx.cashTransfer.count({ where: { fromAccountId: id, status: "POSTED" } }),
+    tx.cashTransfer.count({ where: { toAccountId: id, status: "POSTED" } }),
   ]);
   return c + p + e + tFrom + tTo;
 }

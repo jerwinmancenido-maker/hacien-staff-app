@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { dealsNavHrefs } from "@/components/Sidebar";
 import { BOOKS_FORBIDDEN_VAT_KEYS, REGISTER_CONFIGS, REGISTER_KEYS } from "@/lib/books/config";
 import { buildRegister, registerHasVatColumn, registerToCsv, sumMoney } from "@/lib/books/registers";
 import { booksEnabledFromEnv } from "@/lib/books/features";
@@ -32,6 +33,15 @@ describe("books feature flag", () => {
     expect(booksEnabledFromEnv({ BOOKS_ENABLED: "true" })).toBe(true);
     expect(booksEnabledFromEnv({ BOOKS_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.booksEnabled).toBe(false);
+  });
+
+  it("sidebar Books item needs BOOKS_ENABLED and view_books; Cash/Payables stay independently gated", () => {
+    const base = { canSeeCosts: true, canEdit: true, cashEnabled: true, payablesEnabled: true };
+    expect(dealsNavHrefs({ ...base, booksEnabled: false, canViewBooks: true })).not.toContain("/books");
+    expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: false })).not.toContain("/books");
+    expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true })).toContain("/books");
+    expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true, cashEnabled: false })).not.toContain("/cash");
+    expect(dealsNavHrefs({ ...base, booksEnabled: true, canViewBooks: true, payablesEnabled: false })).not.toContain("/payables");
   });
 });
 
