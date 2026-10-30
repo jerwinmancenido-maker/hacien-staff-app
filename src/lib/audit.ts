@@ -26,7 +26,8 @@ export type AuditEntityType =
   | "SupplierWithholding2307"
   | "CashAccount"
   | "Expense"
-  | "CashTransfer";
+  | "CashTransfer"
+  | "TaxPaidQuarter";
 
 type Plain = Record<string, unknown>;
 

@@ -137,9 +137,16 @@ export function buildRegister(
   };
 }
 
-function csvCell(v: string): string {
-  if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
+/**
+ * CSV cell with spreadsheet formula-injection defence.
+ * Prefix a single quote when the value starts with =, +, -, @, tab, or CR,
+ * then apply normal CSV quoting. Shared by Books registers and tax worksheets.
+ */
+export function csvCell(v: string): string {
+  const s = String(v);
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 
 function cellValue(row: BookSourceRow, key: RegisterColumn["key"]): string {

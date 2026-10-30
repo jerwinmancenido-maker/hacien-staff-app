@@ -30,6 +30,7 @@ const ENTITY_LABELS: Record<string, string> = {
   DocumentAttachment: "an attachment",
   SupplierPayment: "a supplier payment",
   SupplierWithholding2307: "a supplier 2307",
+  TaxPaidQuarter: "a tax-paid entry",
 };
 
 // Addresses and documents are archived (kept in history), not "marked inactive".
