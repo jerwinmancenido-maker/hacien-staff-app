@@ -47,32 +47,6 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
     const cat = await db.expenseCategory.findFirst({ where: { active: true }, orderBy: { sortOrder: "asc" } });
     if (!cat) throw new Error("ExpenseCategory seed missing — run migrations on TEST_DATABASE_URL.");
     categoryId = cat.id;
-    // Wide booklet so parallel billing suites don't collide (skip if already widened).
-    const snap = await getSettingsSnapshot();
-    if (snap.settings.invoiceBooklet.seriesTo < 9_999_999) {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
-          await db.settingsVersion.create({
-            data: {
-              version: latest.version + 1,
-              data: {
-                ...((latest.data as object) ?? snap.settings),
-                invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-                features: { ...snap.settings.features, cashEnabled: true },
-              } as never,
-              changedKey: "invoiceBooklet",
-              before: snap.settings.invoiceBooklet,
-              after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-              createdById: admin.id,
-            },
-          });
-          break;
-        } catch (e) {
-          if (attempt === 4) throw e;
-        }
-      }
-    }
   });
 
   afterAll(async () => {
@@ -82,6 +56,31 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
 
   let invoiceSeq = 800_000 + Math.floor(Math.random() * 50_000);
   const nextInvoice = () => ++invoiceSeq;
+
+  /** Parallel suites can republish settings with the default 1–500 booklet. */
+  async function ensureWideBooklet() {
+    const wide = { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet cash" };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      if (snap.settings.invoiceBooklet.seriesTo >= 9_999_999) return;
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...(latest.data as object), invoiceBooklet: wide } as never,
+            changedKey: "invoiceBooklet",
+            before: snap.settings.invoiceBooklet,
+            after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race with another suite — retry.
+      }
+    }
+  }
 
   async function mkAccount(name: string, opening = "10000.00", openingDate = new Date(Date.UTC(2026, 0, 1))) {
     return createCashAccount(
@@ -99,6 +98,7 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
   }
 
   async function openSoBilling(year: number, unitPrice = "5000.00") {
+    await ensureWideBooklet();
     const customer = await makeCustomer(["GOODS_1"]);
     const supplier = await makeSupplier();
     const rate = await db.withholdingRate.findUnique({ where: { code: "GOODS_1" } });
