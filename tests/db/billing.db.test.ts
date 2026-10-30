@@ -15,10 +15,12 @@ import { db } from "@/lib/db";
 import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { DocRuleError, money } from "@/lib/documents/common";
+import { toScaled } from "@/lib/quotes/calc";
 import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling, soBillingSummary } from "@/lib/services/billings";
 import { applyCustomerCredit, customerCreditBalance, mark2307Received, recordCollection, voidCollection } from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
+import { arAgingSummary, list2307 } from "@/lib/billing/views";
 import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
@@ -294,6 +296,66 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
 
     const tx = await listTransactions({ kind: "customer", id: customer.id }, { type: "BILLING" }, admin);
     expect(tx.rows.some((r) => r.kind === "BILLING")).toBe(true);
+  });
+
+  it("voiding a collection clears pending 2307 from list and totals", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "5000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const col = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: "REF-VOID-2307",
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-VOID-2307",
+        amountReceived: "3000.00",
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: "2500.00",
+            withholdingApplied: "50.00",
+            withholdingRate: "0.0100",
+            atcCode: "WC010",
+          },
+        ],
+      },
+      admin,
+    );
+    const wh = await db.withholding2307.findFirstOrThrow({ where: { collectionId: col.id } });
+    expect(wh.status).toBe("PENDING");
+    expect(money(wh.amount)).toBe("50.00");
+
+    const beforeList = await list2307({ status: "PENDING", customerId: customer.id });
+    expect(beforeList.some((r) => r.id === wh.id)).toBe(true);
+    const beforeSummary = await arAgingSummary();
+    expect(toScaled(beforeSummary.pending2307, 2)).toBeGreaterThanOrEqual(toScaled("50.00", 2));
+
+    await voidCollection(col.id, "Mistake — reverse withholding", admin);
+
+    const cleared = await db.withholding2307.findUniqueOrThrow({ where: { id: wh.id } });
+    expect(cleared.status).toBe("PENDING");
+    expect(money(cleared.amount)).toBe("0.00");
+    expect(cleared.notes).toMatch(/Voided with collection/);
+
+    const afterList = await list2307({ status: "PENDING", customerId: customer.id });
+    expect(afterList.some((r) => r.id === wh.id)).toBe(false);
+    const afterSummary = await arAgingSummary();
+    // This customer's ₱50 must no longer inflate the pending total.
+    expect(toScaled(afterSummary.pending2307, 2)).toBe(toScaled(beforeSummary.pending2307, 2) - toScaled("50.00", 2));
   });
 
   it("adds billing settings version once (idempotent migration block)", async () => {

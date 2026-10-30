@@ -365,12 +365,16 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
         where: { id },
         data: { status: "VOID", voidedAt: now, voidReason: why },
       });
-      // Soft-clear pending 2307 amounts (keep rows for audit).
+      // Soft-clear pending 2307 amounts (keep rows for audit; same as upsert2307
+      // when withholding is removed — amount 0.00, status stays PENDING).
       for (const w of before.withholdings) {
         if (w.status === "PENDING") {
           await tx.withholding2307.update({
             where: { id: w.id },
-            data: { notes: `Voided with collection ${before.number}: ${why}` },
+            data: {
+              amount: "0.00",
+              notes: `Voided with collection ${before.number}: ${why}`,
+            },
           });
         }
       }

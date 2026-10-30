@@ -310,7 +310,7 @@ export async function arAgingSummary(): Promise<{
   }
 
   const pending2307 = await db.withholding2307.aggregate({
-    where: { status: "PENDING", amount: { gt: 0 } },
+    where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
     _sum: { amount: true },
   });
 
@@ -362,7 +362,12 @@ export async function arAgingSummary(): Promise<{
 }
 
 export async function list2307(filters: { status?: Withholding2307Status | "ALL"; customerId?: string } = {}) {
-  const where: { amount: { gt: number }; status?: Withholding2307Status; customerId?: string } = { amount: { gt: 0 } };
+  const where: {
+    amount: { gt: number };
+    status?: Withholding2307Status;
+    customerId?: string;
+    collection: { status: "POSTED" };
+  } = { amount: { gt: 0 }, collection: { status: "POSTED" } };
   if (filters.status && filters.status !== "ALL") where.status = filters.status;
   if (filters.customerId) where.customerId = filters.customerId;
   const rows = await db.withholding2307.findMany({
