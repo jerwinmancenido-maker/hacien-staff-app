@@ -30,26 +30,37 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
 
   beforeAll(async () => {
     admin = await makeUser("costs");
-    const snap = await getSettingsSnapshot();
-    const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
-    await db.settingsVersion.create({
-      data: {
-        version: latest.version + 1,
-        data: {
-          ...snap.settings,
-          invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet non-vat" },
-        } as never,
-        changedKey: "invoiceBooklet",
-        before: snap.settings.invoiceBooklet,
-        after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet non-vat" },
-        createdById: admin.id,
-      },
-    });
+    await ensureWideBooklet();
   });
 
   afterAll(async () => {
     await db.$disconnect();
   });
+
+  /** Parallel DB suites can publish a newer settings version with the default 1–500 booklet. */
+  async function ensureWideBooklet() {
+    const wide = { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet non-vat" };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      if (snap.settings.invoiceBooklet.seriesTo >= 9_999_999) return;
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...snap.settings, invoiceBooklet: wide } as never,
+            changedKey: "invoiceBooklet",
+            before: snap.settings.invoiceBooklet,
+            after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race with another suite — retry.
+      }
+    }
+  }
 
   async function openSo(year: number, unitPrice: string) {
     const customer = await makeCustomer(["GOODS_1"]);
@@ -95,6 +106,7 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
     invoiceDate: Date,
     dueDate = new Date(invoiceDate.getTime() + 30 * 86_400_000),
   ) {
+    await ensureWideBooklet();
     return recordBilling(
       {
         salesOrderId: soId,
@@ -118,6 +130,19 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
     const now = new Date(Date.UTC(year, 11, 1));
     expect(await getGrossSalesYtd(year, now, billingsGrossSales)).toBe(40_000);
     expect(keep.status).not.toBe("VOID");
+  });
+
+  it("counts a billing dated today when now is 01:00 PHT (DATE at 00:00 UTC)", async () => {
+    // Billing.invoiceDate is @db.Date → stored as 00:00 UTC of that calendar day.
+    // At 01:00 PHT, that DATE instant is still later than `now` on the UTC clock;
+    // YTD must extend through the end of the current PHT day so it still counts.
+    const year = await freshYear();
+    const { so } = await openSo(year, "50000.00");
+    const todayDate = new Date(Date.UTC(year, 5, 15)); // June 15 DATE
+    await bill(so.id, "33333.00", todayDate);
+    const now = new Date(Date.UTC(year, 5, 14, 17, 0, 0)); // June 15 01:00 PHT
+
+    expect(await getGrossSalesYtd(year, now, billingsGrossSales)).toBe(33_333);
   });
 
   it("uses Manila tax-year boundaries (Dec 31 23:59 PHT vs Jan 1 00:00 PHT)", async () => {

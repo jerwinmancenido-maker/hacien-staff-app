@@ -8,6 +8,7 @@
 import type { Settings } from "../settings/schema";
 import { db } from "../db";
 import { money } from "../documents/common";
+import { addDays, manilaToday } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
 
 /** Asia/Manila is UTC+8 all year (no daylight saving). */
@@ -50,7 +51,18 @@ export function taxYearStart(year: number): Date {
   return new Date(Date.UTC(year, 0, 1) - MANILA_OFFSET_MS);
 }
 
-/** Gross sales from Jan 1 of the tax year up to `now` (or the year's end, if it's over). */
+/**
+ * Upper bound for YTD queries against `@db.Date` invoiceDate values (stored as
+ * 00:00 UTC of the calendar day). Caps at the start of the next Asia/Manila
+ * calendar day so a billing dated "today" still counts before 08:00 PHT, when
+ * `now` is still on the previous UTC calendar day.
+ */
+export function grossSalesYtdEnd(now: Date, taxYearEnd: Date): Date {
+  const endOfCurrentPhtDay = addDays(manilaToday(now), 1);
+  return endOfCurrentPhtDay < taxYearEnd ? endOfCurrentPhtDay : taxYearEnd;
+}
+
+/** Gross sales from Jan 1 of the tax year through the current PHT day (or the year's end). */
 export async function getGrossSalesYtd(
   year: number,
   now: Date = new Date(),
@@ -59,7 +71,7 @@ export async function getGrossSalesYtd(
   const from = taxYearStart(year);
   const end = taxYearStart(year + 1);
   if (now <= from) return 0;
-  const to = now < end ? now : end;
+  const to = grossSalesYtdEnd(now, end);
   const total = await source.grossSalesBetween(from, to);
   return Number.isFinite(total) && total > 0 ? total : 0;
 }

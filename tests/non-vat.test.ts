@@ -4,6 +4,7 @@ import {
   billingsGrossSales,
   getGrossSalesYtd,
   getNonVatMeter,
+  grossSalesYtdEnd,
   nonVatMeter,
   sumGrossSalesAmounts,
   taxYearStart,
@@ -46,21 +47,36 @@ describe("non-VAT threshold meter", () => {
     expect(meter).toMatchObject({ used: 0, limit: 3_000_000, pct: 0, pctLabel: "0.0%", barPct: 0, level: "ok" });
   });
 
-  it("sums gross sales from Jan 1 (Manila time) of the tax year up to now", async () => {
+  it("sums gross sales from Jan 1 (Manila time) through the current PHT day", async () => {
     const source = fakeBillings([
       { at: "2025-12-31T15:59:59Z", amount: 999 }, // Dec 31 23:59 Manila: last year
       { at: "2025-12-31T16:00:00Z", amount: 100_000 }, // Jan 1 00:00 Manila: counts
       { at: "2026-06-15T04:00:00Z", amount: 200_000 },
-      { at: "2026-11-01T00:00:00Z", amount: 50_000 }, // after "now"
+      { at: "2026-11-01T00:00:00Z", amount: 50_000 }, // after end of current PHT day
     ]);
+    // 08:00 PHT on Oct 30 → range through start of Oct 31 (DATE midnight UTC).
     const now = new Date("2026-10-30T00:00:00Z");
+    const to = new Date("2026-10-31T00:00:00.000Z");
+    expect(grossSalesYtdEnd(now, taxYearStart(2027))).toEqual(to);
     expect(await getGrossSalesYtd(2026, now, source)).toBe(300_000);
-    expect(source.calls[0]).toEqual([taxYearStart(2026), now]);
+    expect(source.calls[0]).toEqual([taxYearStart(2026), to]);
     expect(taxYearStart(2026).toISOString()).toBe("2025-12-31T16:00:00.000Z");
   });
 
+  it("includes today's DATE billing when now is before 08:00 PHT", async () => {
+    // invoiceDate @db.Date = 00:00 UTC of the calendar day. At 01:00 PHT that
+    // DATE is still in the future vs `now` on the UTC timeline.
+    const source = fakeBillings([
+      { at: "2026-06-15T00:00:00.000Z", amount: 12_345 }, // today (PHT)
+      { at: "2026-06-16T00:00:00.000Z", amount: 99 }, // tomorrow
+    ]);
+    const now = new Date("2026-06-14T17:00:00.000Z"); // June 15 01:00 PHT
+    expect(await getGrossSalesYtd(2026, now, source)).toBe(12_345);
+    expect(source.calls[0]![1]).toEqual(new Date("2026-06-16T00:00:00.000Z"));
+  });
+
   it("stops at the end of the tax year and is 0 before it starts", async () => {
-    const source = fakeBillings([{ at: "2026-12-31T15:59:59Z", amount: 10 }, { at: "2026-12-31T16:00:00Z", amount: 99 }]);
+    const source = fakeBillings([{ at: "2026-12-31T00:00:00Z", amount: 10 }, { at: "2027-01-01T00:00:00Z", amount: 99 }]);
     expect(await getGrossSalesYtd(2026, new Date("2027-03-01T00:00:00Z"), source)).toBe(10);
     expect(await getGrossSalesYtd(2027, new Date("2026-06-01T00:00:00Z"), source)).toBe(0);
   });
