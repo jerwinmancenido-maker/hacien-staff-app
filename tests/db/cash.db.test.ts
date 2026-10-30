@@ -16,11 +16,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { CASH_OFF_MESSAGE } from "@/lib/cash/features";
-import { DocRuleError } from "@/lib/documents/common";
+import { DocRuleError, money } from "@/lib/documents/common";
 import { ForbiddenError } from "@/lib/permissions";
 import { toScaled } from "@/lib/quotes/calc";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { cashAccountBalance, createCashAccount, type CashActor } from "@/lib/services/cash-accounts";
+import { cashAccountBalance, createCashAccount, updateCashAccount, type CashActor } from "@/lib/services/cash-accounts";
 import { recordCashTransfer, voidCashTransfer } from "@/lib/services/cash-transfers";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
 import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
@@ -285,6 +285,78 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
     } finally {
       process.env.CASH_ENABLED = "true";
     }
+  });
+
+  it("opening balance editable after voided-only activity; locked when any posted activity remains", async () => {
+    const year = await freshYear();
+    const openingDate = new Date(Date.UTC(year, 0, 1));
+    const account = await mkAccount("OpenBal", "1000.00", openingDate);
+
+    const voidedOnly = await recordExpense(
+      {
+        date: new Date(Date.UTC(year, 2, 10)),
+        supplierId: null,
+        payeeText: "Temp expense",
+        categoryId,
+        amount: "50.00",
+        withholdingApplied: "0",
+        cashAccountId: account.id,
+        receiptNo: null,
+        notes: null,
+      },
+      admin,
+    );
+    await voidExpense(voidedOnly.id, "Mistake — void so opening can change", admin);
+
+    // Voided-only: opening balance unlocks.
+    const unlocked = await updateCashAccount(
+      account.id,
+      {
+        name: account.name,
+        type: "BANK",
+        bankName: "Test Bank",
+        accountHintLast4: "1234",
+        openingBalance: "1500.00",
+        openingDate,
+        active: true,
+      },
+      admin,
+    );
+    expect(money(unlocked.openingBalance)).toBe("1500.00");
+    expect(await cashAccountBalance(account.id)).toBe("1500.00");
+
+    // Mixed: keep one posted expense → opening stays locked.
+    const posted = await recordExpense(
+      {
+        date: new Date(Date.UTC(year, 2, 11)),
+        supplierId: null,
+        payeeText: "Keep posted",
+        categoryId,
+        amount: "25.00",
+        withholdingApplied: "0",
+        cashAccountId: account.id,
+        receiptNo: null,
+        notes: null,
+      },
+      admin,
+    );
+    expect(posted.status).toBe("POSTED");
+    await expect(
+      updateCashAccount(
+        account.id,
+        {
+          name: account.name,
+          type: "BANK",
+          bankName: "Test Bank",
+          accountHintLast4: "1234",
+          openingBalance: "2000.00",
+          openingDate,
+          active: true,
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/Opening balance can't change/i);
+    expect(money((await db.cashAccount.findUniqueOrThrow({ where: { id: account.id } })).openingBalance)).toBe("1500.00");
   });
 
   it("expense void restores account balance; staff cannot record", async () => {

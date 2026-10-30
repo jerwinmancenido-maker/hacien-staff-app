@@ -6,6 +6,7 @@ import {
   prevYmd,
   ymdCmp,
 } from "@/lib/cash/balance";
+import { dealsNavHrefs } from "@/components/Sidebar";
 import { CASH_OFF_MESSAGE, cashEnabledFromEnv } from "@/lib/cash/features";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
@@ -32,6 +33,18 @@ describe("cash feature flag", () => {
     expect(cashEnabledFromEnv({ CASH_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.cashEnabled).toBe(false);
     expect(CASH_OFF_MESSAGE).toMatch(/Cash is turned off/);
+  });
+});
+
+describe("Cash sidebar gating (CASH_ENABLED)", () => {
+  const base = { canSeeCosts: true, canEdit: true, payablesEnabled: false };
+
+  it("hides Cash when the flag is off", () => {
+    expect(dealsNavHrefs({ ...base, cashEnabled: false })).not.toContain("/cash");
+  });
+
+  it("shows Cash when the flag is on", () => {
+    expect(dealsNavHrefs({ ...base, cashEnabled: true })).toContain("/cash");
   });
 });
 
