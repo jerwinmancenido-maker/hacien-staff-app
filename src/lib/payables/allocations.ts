@@ -56,7 +56,7 @@ export function validatePaymentAllocations(
     if (!bill) {
       return {
         field: "allocations",
-        message: "One of those bills is already paid or void. Refresh the page and try again.",
+        message: "One of those bills is already paid, void, or missing. Refresh the page and try again.",
       };
     }
     let cash: bigint;

@@ -461,6 +461,211 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
     expect(row!.aging.d31_60).toBe("250.00"); // 300-50
   });
 
+  it("blocks allocation to void or already-paid bills", async () => {
+    const year = await freshYear();
+    const voided = await openBill(year, "2000.00");
+    await db.supplierBill.update({
+      where: { id: voided.bill.id },
+      data: { status: "VOID", voidedAt: new Date(), voidReason: "Duplicate" },
+    });
+    await expect(
+      recordSupplierPayment(
+        {
+          supplierId: voided.supplier.id,
+          date: new Date(Date.UTC(year, 2, 10)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "2000.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: voided.bill.id,
+              cashApplied: "2000.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/void/i);
+
+    const paid = await openBill(year, "1500.00");
+    await recordSupplierPayment(
+      {
+        supplierId: paid.supplier.id,
+        date: new Date(Date.UTC(year, 2, 10)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "1500.00",
+        notes: null,
+        allocations: [
+          {
+            supplierBillId: paid.bill.id,
+            cashApplied: "1500.00",
+            withholdingApplied: "0",
+            withholdingRate: "0.0000",
+            atcCode: null,
+          },
+        ],
+      },
+      admin,
+    );
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: paid.bill.id } })).status).toBe("PAID");
+    await expect(
+      recordSupplierPayment(
+        {
+          supplierId: paid.supplier.id,
+          date: new Date(Date.UTC(year, 2, 11)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "100.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: paid.bill.id,
+              cashApplied: "100.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already fully paid/i);
+  });
+
+  it("concurrent double-allocation is blocked (row lock)", async () => {
+    const year = await freshYear();
+    const { supplier, bill } = await openBill(year, "10000.00");
+    const mk = (ref: string) =>
+      recordSupplierPayment(
+        {
+          supplierId: supplier.id,
+          date: new Date(Date.UTC(year, 2, 10)),
+          method: "BANK_TRANSFER",
+          reference: ref,
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "10000.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: bill.id,
+              cashApplied: "10000.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        admin,
+      );
+    const results = await Promise.allSettled([mk("CONC-A"), mk("CONC-B")]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    for (const r of bad) {
+      expect(r.status).toBe("rejected");
+      if (r.status === "rejected") expect(r.reason).toBeInstanceOf(DocRuleError);
+    }
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe("PAID");
+    expect(await db.supplierPayment.count({ where: { supplierId: supplier.id, status: "POSTED" } })).toBe(1);
+  });
+
+  it("void reverses bill balances, clears 2307 to-issue, and restores AP aging", async () => {
+    const year = await freshYear();
+    const today = new Date(Date.UTC(year, 5, 15));
+    const { supplier, bill } = await openBill(year, "10000.00", -10); // overdue 10 days from billDate+offset
+    // Force due date relative to `today` for aging.
+    await db.supplierBill.update({
+      where: { id: bill.id },
+      data: { dueDate: addDays(today, -10) },
+    });
+
+    const beforeAging = await apAgingSummary(today);
+    const beforeRow = beforeAging.bySupplier.find((r) => r.supplierId === supplier.id);
+    expect(beforeRow?.aging.d1_30).toBe("10000.00");
+
+    const pay = await recordSupplierPayment(
+      {
+        supplierId: supplier.id,
+        date: today,
+        method: "BANK_TRANSFER",
+        reference: "EWT-VOID",
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "9900.00",
+        notes: null,
+        allocations: [
+          {
+            supplierBillId: bill.id,
+            cashApplied: "9900.00",
+            withholdingApplied: "100.00",
+            withholdingRate: "0.0100",
+            atcCode: "WC010",
+          },
+        ],
+      },
+      admin,
+    );
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe("PAID");
+    const wh = await db.supplierWithholding2307.findFirstOrThrow({ where: { supplierPaymentId: pay.id } });
+    expect(wh.status).toBe("TO_ISSUE");
+    expect(money(wh.amount)).toBe("100.00");
+    expect((await apAgingSummary(today)).bySupplier.find((r) => r.supplierId === supplier.id)).toBeUndefined();
+
+    await voidSupplierPayment(pay.id, "Wrong withholding", admin);
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe("RECORDED");
+    expect(money((await db.supplierWithholding2307.findUniqueOrThrow({ where: { id: wh.id } })).amount)).toBe("0.00");
+    // Zeroed 2307 must not appear on to-issue list / pending total.
+    expect(await db.supplierWithholding2307.count({ where: { status: "TO_ISSUE", amount: { gt: 0 }, id: wh.id } })).toBe(0);
+    const afterAging = await apAgingSummary(today);
+    expect(afterAging.bySupplier.find((r) => r.supplierId === supplier.id)?.aging.d1_30).toBe("10000.00");
+  });
+
+  it("ForbiddenError message is clear for Staff (no crash)", async () => {
+    const year = await freshYear();
+    const { supplier, bill } = await openBill(year, "500.00");
+    try {
+      await recordSupplierPayment(
+        {
+          supplierId: supplier.id,
+          date: new Date(Date.UTC(year, 2, 10)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "500.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: bill.id,
+              cashApplied: "500.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        staff,
+      );
+      expect.unreachable("staff should be forbidden");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ForbiddenError);
+      expect((e as Error).message).toMatch(/permission/i);
+    }
+  });
+
   it("audit entry on create", async () => {
     const year = await freshYear();
     const { supplier, bill } = await openBill(year, "1000.00");

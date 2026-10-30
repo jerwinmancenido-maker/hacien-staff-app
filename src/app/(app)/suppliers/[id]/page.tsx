@@ -212,14 +212,23 @@ export default async function SupplierPage({
             )}
           </div>
           {supplierPayments.length === 0 ? (
-            <EmptyState
-              title="No payments yet"
-              line={
-                can(user, "manage_payables")
-                  ? "When you pay this supplier at the bank, record it here."
-                  : "Payments recorded for this supplier will show here."
-              }
-            />
+            <div className="empty" style={{ padding: "8px 0" }}>
+              <EmptyState
+                title="No payments yet"
+                line={
+                  can(user, "manage_payables")
+                    ? "When you pay this supplier at the bank, record it here."
+                    : "Payments recorded for this supplier will show here."
+                }
+              />
+              {can(user, "manage_payables") && (
+                <p style={{ marginTop: 12 }}>
+                  <Link className="btn" href={`/payables/payments/new?supplierId=${id}`}>
+                    Record payment
+                  </Link>
+                </p>
+              )}
+            </div>
           ) : (
             <div className="table-wrap">
               <table className="list">

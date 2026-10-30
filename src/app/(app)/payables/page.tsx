@@ -56,7 +56,20 @@ export default async function PayablesHomePage() {
           </div>
         </div>
         {summary.bySupplier.length === 0 ? (
-          <p className="faint">No open payables yet.</p>
+          <div className="empty" style={{ padding: "16px 0" }}>
+            <p className="faint">No open payables yet.</p>
+            <p className="faint small">Record a supplier bill on a purchase order, then come back to pay it.</p>
+            {canManage && (
+              <p style={{ marginTop: 12 }}>
+                <Link className="btn btn-secondary" href="/purchase-orders">
+                  Go to supplier POs
+                </Link>{" "}
+                <Link className="btn" href="/payables/payments/new">
+                  Record payment
+                </Link>
+              </p>
+            )}
+          </div>
         ) : (
           <div className="table-wrap">
             <table className="list" aria-label="AP by supplier">

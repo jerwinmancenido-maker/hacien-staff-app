@@ -79,6 +79,41 @@ describe("payment allocation validation (exact cash match)", () => {
     ).toBeNull();
   });
 
+  it("requires sum(cash) === amountPaid exactly (EWT is separate, not float)", () => {
+    // cash 99.99 + EWT 0.01 clears 100; amountPaid must be cash only
+    expect(
+      validatePaymentAllocations(
+        "99.99",
+        [
+          {
+            supplierBillId: "b1",
+            cashApplied: "99.99",
+            withholdingApplied: "0.01",
+            withholdingRate: "0.0001",
+            atcCode: "WC010",
+          },
+        ],
+        [{ id: "b1", amount: "100.00", alreadyCash: "0", alreadyWithholding: "0" }],
+      ),
+    ).toBeNull();
+    // Off-by-one cent on cash must fail (scaled bigint, not float)
+    expect(
+      validatePaymentAllocations(
+        "100.00",
+        [
+          {
+            supplierBillId: "b1",
+            cashApplied: "99.99",
+            withholdingApplied: "0.01",
+            withholdingRate: "0.0001",
+            atcCode: "WC010",
+          },
+        ],
+        [{ id: "b1", amount: "100.00", alreadyCash: "0", alreadyWithholding: "0" }],
+      )?.message,
+    ).toMatch(/still left to allocate/i);
+  });
+
   it("rejects over-allocation (cash exceeds amount paid)", () => {
     const issue = validatePaymentAllocations(
       "500.00",

@@ -37,10 +37,17 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           {!canManage ? (
             <EmptyState title="View only" line="Ask an Admin or Approver if you need a payment recorded." />
           ) : owing.length === 0 ? (
-            <EmptyState
-              title="Nothing to pay"
-              line="No supplier has an unpaid bill yet. Record a supplier bill on a PO first."
-            />
+            <div className="empty" style={{ padding: "8px 0" }}>
+              <EmptyState
+                title="Nothing to pay"
+                line="No supplier has an unpaid bill yet. Record a supplier bill on a PO first."
+              />
+              <p style={{ marginTop: 12 }}>
+                <Link className="btn" href="/purchase-orders">
+                  Go to supplier POs
+                </Link>
+              </p>
+            </div>
           ) : (
             <>
               <p className="faint small" style={{ marginBottom: 12 }}>
@@ -87,6 +94,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
             dueDate: ymd(b.dueDate)!,
             amount: b.amount,
             balance: b.balance,
+            purchaseOrderId: b.purchaseOrderId,
           }))}
           canEdit={canManage}
         />

@@ -6,6 +6,7 @@ import { useFormAction } from "@/components/useFormAction";
 import type { FormState } from "@/lib/validation/forms";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/validation/payables";
 import { formatDate, formatPeso } from "@/lib/format";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 
 export type OpenBillRow = {
   id: string;
@@ -13,23 +14,31 @@ export type OpenBillRow = {
   dueDate: string;
   amount: string;
   balance: string;
+  purchaseOrderId?: string | null;
 };
 
 type AllocRow = { billId: string; cash: string; withholding: string; rate: string; atc: string };
 
-function money2(n: number) {
-  return (Math.round(n * 100) / 100).toFixed(2);
+/** Parse a money field to scaled cents; blank/invalid → 0n for live totals. */
+function cents(raw: string): bigint {
+  const s = raw.trim();
+  if (!s) return 0n;
+  try {
+    return toScaled(s, 2);
+  } catch {
+    return 0n;
+  }
 }
 
-function autoAllocate(amountPaid: number, bills: OpenBillRow[]): AllocRow[] {
-  let left = amountPaid;
+function autoAllocate(amountPaid: string, bills: OpenBillRow[]): AllocRow[] {
+  let left = cents(amountPaid);
   return bills.map((b) => {
-    const bal = Number(b.balance) || 0;
-    const take = left > 0 ? Math.min(bal, left) : 0;
+    const bal = cents(b.balance);
+    const take = left > 0n ? (bal < left ? bal : left) : 0n;
     left -= take;
     return {
       billId: b.id,
-      cash: take > 0 ? money2(take) : "",
+      cash: take > 0n ? fromScaled(take, 2) : "",
       withholding: "",
       rate: "",
       atc: "",
@@ -66,13 +75,13 @@ export function PaymentForm({
   const [showEwt, setShowEwt] = useState(false);
 
   const totalOpen = useMemo(
-    () => money2(openBills.reduce((a, b) => a + (Number(b.balance) || 0), 0)),
+    () => fromScaled(openBills.reduce((a, b) => a + cents(b.balance), 0n), 2),
     [openBills],
   );
 
-  const startingAmount = defaults.amountPaid || (Number(totalOpen) > 0 ? totalOpen : "");
+  const startingAmount = defaults.amountPaid || (cents(totalOpen) > 0n ? totalOpen : "");
   const [amount, setAmount] = useState(startingAmount);
-  const [allocs, setAllocs] = useState<AllocRow[]>(() => autoAllocate(Number(startingAmount) || 0, openBills));
+  const [allocs, setAllocs] = useState<AllocRow[]>(() => autoAllocate(startingAmount, openBills));
 
   if (!canEdit) {
     return (
@@ -103,14 +112,14 @@ export function PaymentForm({
 
   const setAmountAndAlloc = (raw: string) => {
     setAmount(raw);
-    setAllocs(autoAllocate(Number(raw) || 0, openBills));
+    setAllocs(autoAllocate(raw, openBills));
   };
 
-  const cashSum = allocs.reduce((a, x) => a + (Number(x.cash) || 0), 0);
-  const whSum = allocs.reduce((a, x) => a + (Number(x.withholding) || 0), 0);
-  const paid = Number(amount) || 0;
-  const leftToAllocate = Math.round((paid - cashSum) * 100) / 100;
-  const canSave = paid > 0 && leftToAllocate === 0;
+  const cashSum = allocs.reduce((a, x) => a + cents(x.cash), 0n);
+  const whSum = allocs.reduce((a, x) => a + cents(x.withholding), 0n);
+  const paid = cents(amount);
+  const leftToAllocate = paid - cashSum;
+  const canSave = paid > 0n && leftToAllocate === 0n;
 
   const updateAlloc = (i: number, patch: Partial<AllocRow>) => {
     const next = [...allocs];
@@ -256,7 +265,13 @@ export function PaymentForm({
                 <tr key={b.id}>
                   <td>
                     <input type="hidden" name="allocBillId" value={b.id} />
-                    <span className="strong">{b.billNumber}</span>
+                    {b.purchaseOrderId ? (
+                      <Link className="strong" href={`/purchase-orders/${b.purchaseOrderId}?tab=bills`}>
+                        {b.billNumber}
+                      </Link>
+                    ) : (
+                      <span className="strong">{b.billNumber}</span>
+                    )}
                     <div className="faint small">Bill total {formatPeso(b.amount)}</div>
                   </td>
                   <td>{dayLabel(b.dueDate)}</td>
@@ -328,33 +343,39 @@ export function PaymentForm({
         <button type="button" className="btn-link small" onClick={() => setShowEwt((v) => !v)}>
           {showEwt ? "Hide withholding (EWT)" : "Add withholding (EWT) — uncommon; pending RDO"}
         </button>
+        {showEwt && (
+          <span className="faint">
+            {" "}
+            — EWT is expanded withholding tax. Rate is a percent (enter 1 for 1%). ATC is the BIR alphanumeric tax code.
+          </span>
+        )}
       </p>
 
       <div
-        className={`card${leftToAllocate !== 0 ? " alert-ish" : ""}`}
-        style={{ marginTop: 16, padding: "12px 16px", background: leftToAllocate === 0 ? "#EEF4EF" : "#F8F3E8" }}
+        className={`card${leftToAllocate !== 0n ? " alert-ish" : ""}`}
+        style={{ marginTop: 16, padding: "12px 16px", background: leftToAllocate === 0n ? "#EEF4EF" : "#F8F3E8" }}
         role="status"
         aria-live="polite"
       >
         <dl className="kv" style={{ margin: 0 }}>
           <dt>Cash paid</dt>
-          <dd className="num">{formatPeso(money2(paid))}</dd>
+          <dd className="num">{formatPeso(fromScaled(paid, 2))}</dd>
           <dt>Applied to bills</dt>
-          <dd className="num">{formatPeso(money2(cashSum))}</dd>
+          <dd className="num">{formatPeso(fromScaled(cashSum, 2))}</dd>
           <dt>
             <b>Left to allocate</b>
           </dt>
           <dd className="num strong">
-            {leftToAllocate === 0
+            {leftToAllocate === 0n
               ? "₱0.00 — ready to save"
-              : leftToAllocate > 0
-                ? `${formatPeso(money2(leftToAllocate))} still needs to go on a bill`
-                : `${formatPeso(money2(-leftToAllocate))} too much on bills — lower a cash amount`}
+              : leftToAllocate > 0n
+                ? `${formatPeso(fromScaled(leftToAllocate, 2))} still needs to go on a bill`
+                : `${formatPeso(fromScaled(-leftToAllocate, 2))} too much on bills — lower a cash amount`}
           </dd>
-          {whSum > 0 && (
+          {whSum > 0n && (
             <>
               <dt>Withholding total</dt>
-              <dd className="num">{formatPeso(money2(whSum))}</dd>
+              <dd className="num">{formatPeso(fromScaled(whSum, 2))}</dd>
             </>
           )}
         </dl>
@@ -364,7 +385,7 @@ export function PaymentForm({
         <button className="btn" type="submit" disabled={pending || !canSave}>
           {pending ? "Saving…" : "Save payment"}
         </button>
-        {!canSave && paid > 0 && (
+        {!canSave && paid > 0n && (
           <span className="faint small">Fix “Left to allocate” to ₱0.00 before saving.</span>
         )}
         <Link className="btn btn-secondary" href="/payables/payments">

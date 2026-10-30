@@ -29,9 +29,36 @@ async function lockSupplier(tx: Tx, supplierId: string) {
 
 async function lockBills(tx: Tx, ids: string[]) {
   if (!ids.length) return;
+  // Lock in id order to avoid deadlocks between concurrent payments.
   const sorted = [...ids].sort();
   for (const id of sorted) {
     await tx.$queryRaw`SELECT \`id\` FROM \`SupplierBill\` WHERE \`id\` = ${id} FOR UPDATE`;
+  }
+}
+
+/** After FOR UPDATE: reject void / already-paid bills with an actionable message. */
+async function assertBillsAllocatable(tx: Tx, ids: string[]) {
+  if (!ids.length) return;
+  const unique = [...new Set(ids)];
+  const rows = await tx.supplierBill.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, billNumber: true, status: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const id of unique) {
+    const b = byId.get(id);
+    if (!b) {
+      throw new DocRuleError("One of those bills was not found. Refresh the page and try again.", "allocations");
+    }
+    if (b.status === "VOID") {
+      throw new DocRuleError(`Bill ${b.billNumber} is void. Remove it from this payment.`, "allocations");
+    }
+    if (b.status === "PAID") {
+      throw new DocRuleError(
+        `Bill ${b.billNumber} is already fully paid. Refresh and pick unpaid bills.`,
+        "allocations",
+      );
+    }
   }
 }
 
@@ -39,9 +66,10 @@ async function billsForAlloc(
   tx: Tx,
   supplierId: string,
   excludePaymentId?: string,
-): Promise<(BillForAlloc & { dueDate: Date; billNumber: string })[]> {
+): Promise<(BillForAlloc & { dueDate: Date; billNumber: string; purchaseOrderId: string | null })[]> {
   const rows = await tx.supplierBill.findMany({
-    where: { supplierId, status: { not: "VOID" } },
+    // PAID/VOID are not allocatable; remaining balance is computed from posted payments.
+    where: { supplierId, status: { in: ["RECORDED", "PARTIALLY_PAID"] } },
     include: {
       allocations: {
         where: {
@@ -54,6 +82,7 @@ async function billsForAlloc(
   return rows.map((b) => ({
     id: b.id,
     billNumber: b.billNumber,
+    purchaseOrderId: b.purchaseOrderId,
     amount: money(b.amount),
     dueDate: b.dueDate,
     alreadyCash: fromScaled(
@@ -150,10 +179,9 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
           withholdingRate: a.withholdingRate,
           atcCode: a.atcCode ?? null,
         }));
-        await lockBills(
-          tx,
-          allocInputs.map((a) => a.supplierBillId),
-        );
+        const billIds = allocInputs.map((a) => a.supplierBillId);
+        await lockBills(tx, billIds);
+        await assertBillsAllocatable(tx, billIds);
         const open = await billsForAlloc(tx, supplier.id);
         const issue = validatePaymentAllocations(input.amountPaid, allocInputs, open);
         if (issue) throw new DocRuleError(issue.message, issue.field);

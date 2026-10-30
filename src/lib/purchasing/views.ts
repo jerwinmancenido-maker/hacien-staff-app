@@ -76,7 +76,18 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
         orderBy: [{ receivedDate: "desc" }, { createdAt: "desc" }],
         include: { receivedBy: userName, items: true, attachments: attachmentSelect },
       },
-      bills: { orderBy: [{ billDate: "desc" }, { createdAt: "desc" }], include: { items: true, attachments: attachmentSelect, createdBy: userName } },
+      bills: {
+        orderBy: [{ billDate: "desc" }, { createdAt: "desc" }],
+        include: {
+          items: true,
+          attachments: attachmentSelect,
+          createdBy: userName,
+          allocations: {
+            where: { supplierPayment: { status: "POSTED" } },
+            include: { supplierPayment: { select: { id: true, number: true } } },
+          },
+        },
+      },
     },
   });
   if (!po) return null;
@@ -176,6 +187,12 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       createdBy: b.createdBy.name,
       items: b.items.map((x) => ({ description: lineDesc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qty), unitPrice: money(x.unitPrice), total: money(x.total) })),
       attachments: b.attachments,
+      payments: b.allocations.map((a) => ({
+        id: a.supplierPayment.id,
+        number: a.supplierPayment.number,
+        cashApplied: money(a.cashApplied),
+        withholdingApplied: money(a.withholdingApplied),
+      })),
     })),
     match,
     postedReceipts: po.receivingReports.filter((r) => r.status === "POSTED").length,

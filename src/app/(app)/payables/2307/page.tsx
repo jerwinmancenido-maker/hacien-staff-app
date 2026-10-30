@@ -57,8 +57,24 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="faint">
-                    Nothing here.
+                  <td colSpan={9}>
+                    <div className="empty" style={{ padding: "24px 8px" }}>
+                      <p className="faint">
+                        {status === "TO_ISSUE"
+                          ? "No 2307 certificates waiting to be issued."
+                          : "Nothing matches this filter."}
+                      </p>
+                      <p className="faint small">
+                        2307 rows appear when a payment includes withholding (EWT). Whether HACIEN must withhold is still unverified (pending RDO).
+                      </p>
+                      {canManage && (
+                        <p style={{ marginTop: 8 }}>
+                          <Link className="btn" href="/payables/payments/new">
+                            Record a payment
+                          </Link>
+                        </p>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (

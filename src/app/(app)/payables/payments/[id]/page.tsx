@@ -81,11 +81,14 @@ export default async function PaymentDetailPage({
                 <dd>{day(p.checkDate)}</dd>
               </>
             )}
-            <dt>Amount paid</dt>
+            <dt>Cash paid</dt>
             <dd className="num strong">{formatPeso(p.amountPaid)}</dd>
-            <dt>Cash allocated</dt>
+            <dt>Applied to bills</dt>
             <dd className="num">{formatPeso(p.cashApplied)}</dd>
-            <dt>EWT total</dt>
+            <dt>
+              Withholding total
+              <div className="hint">EWT — expanded withholding tax, if any</div>
+            </dt>
             <dd className="num">{formatPeso(p.withholdingTotal)}</dd>
             {p.notes && (
               <>
@@ -113,6 +116,23 @@ export default async function PaymentDetailPage({
           <p className="faint small">
             This is a record of a bank payment already made — the app does not send money. Status and amounts are at the top; use the tabs for bill breakdown and attachments.
           </p>
+          {p.allocations.length > 0 && (
+            <p className="small" style={{ marginTop: 12 }}>
+              Applied to{" "}
+              {p.allocations.map((a, i) => (
+                <span key={a.id}>
+                  {i > 0 && ", "}
+                  {a.supplierBill.purchaseOrderId ? (
+                    <Link href={`/purchase-orders/${a.supplierBill.purchaseOrderId}?tab=bills`}>{a.supplierBill.billNumber}</Link>
+                  ) : (
+                    a.supplierBill.billNumber
+                  )}
+                </span>
+              ))}
+              {" · "}
+              <Link href={`/suppliers/${p.supplier.id}?tab=payments`}>Supplier payments</Link>
+            </p>
+          )}
         </div>
       )}
 
@@ -125,18 +145,22 @@ export default async function PaymentDetailPage({
               <table className="list">
                 <thead>
                   <tr>
-                    <th>Bill</th>
+                    <th>Supplier bill</th>
                     <th className="num">Cash</th>
-                    <th className="num">EWT</th>
+                    <th className="num">Withheld (EWT)</th>
                     <th className="num">Rate</th>
-                    <th>ATC</th>
+                    <th>ATC code</th>
                   </tr>
                 </thead>
                 <tbody>
                   {p.allocations.map((a) => (
                     <tr key={a.id}>
                       <td>
-                        {a.supplierBill.billNumber}
+                        {a.supplierBill.purchaseOrderId ? (
+                          <Link href={`/purchase-orders/${a.supplierBill.purchaseOrderId}?tab=bills`}>{a.supplierBill.billNumber}</Link>
+                        ) : (
+                          a.supplierBill.billNumber
+                        )}
                         <div className="faint small">Due {day(a.supplierBill.dueDate)}</div>
                       </td>
                       <td className="num">{formatPeso(a.cashApplied)}</td>
@@ -149,6 +173,9 @@ export default async function PaymentDetailPage({
               </table>
             </div>
           )}
+          <p className="faint small" style={{ marginTop: 12 }}>
+            Cash on each row must add up to cash paid. Withholding (EWT) reduces what is still owed on the bill but is not part of cash paid.
+          </p>
         </div>
       )}
 

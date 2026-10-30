@@ -81,7 +81,16 @@ export async function getSupplierPaymentView(id: string) {
       supplier: { select: { id: true, name: true, taxType: true } },
       allocations: {
         include: {
-          supplierBill: { select: { id: true, billNumber: true, amount: true, dueDate: true, status: true } },
+          supplierBill: {
+            select: {
+              id: true,
+              billNumber: true,
+              amount: true,
+              dueDate: true,
+              status: true,
+              purchaseOrderId: true,
+            },
+          },
         },
       },
       withholdings: true,
@@ -119,6 +128,7 @@ export async function getSupplierPaymentView(id: string) {
         amount: money(a.supplierBill.amount),
         dueDate: ymd(a.supplierBill.dueDate)!,
         status: a.supplierBill.status,
+        purchaseOrderId: a.supplierBill.purchaseOrderId,
       },
     })),
     withholdings: p.withholdings.map((w) => ({
