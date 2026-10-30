@@ -3,6 +3,8 @@ import { requireUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
 import { formatDate, formatPeso, manilaHour } from "@/lib/format";
 import { canSeeCosts } from "@/lib/permissions";
+import { isCashEnabled } from "@/lib/cash/features";
+import { cashPositionSummary } from "@/lib/services/cash-accounts";
 import { purchasingStats } from "@/lib/purchasing/views";
 import { PageHeader } from "@/components/ui";
 
@@ -21,6 +23,8 @@ export default async function HomePage() {
   ]);
   const po = await purchasingStats();
   const withCosts = canSeeCosts(user);
+  const cashOn = await isCashEnabled();
+  const cash = cashOn ? await cashPositionSummary() : null;
   const first = user.name.split(" ")[0];
   return (
     <>
@@ -52,6 +56,20 @@ export default async function HomePage() {
           <div className="value">{po.awaitingReceipt}</div>
           <div className="foot">POs sent to suppliers, not fully received →</div>
         </Link>
+        {cash && (
+          <Link href="/cash" className="card stat">
+            <div className="label">Cash position</div>
+            <div className="value num">{formatPeso(cash.total)}</div>
+            <div className="foot">
+              {cash.accounts.length === 0
+                ? "Add a bank account →"
+                : cash.accounts
+                    .slice(0, 2)
+                    .map((a) => `${a.name} ${formatPeso(a.balance)}`)
+                    .join(" · ") + (cash.accounts.length > 2 ? "…" : "")}
+            </div>
+          </Link>
+        )}
         <div className="card stat">
           <div className="label">Active contacts</div>
           <div className="value">{contacts}</div>

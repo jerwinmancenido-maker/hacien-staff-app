@@ -81,6 +81,14 @@ export default async function PaymentDetailPage({
                 <dd>{day(p.checkDate)}</dd>
               </>
             )}
+            <dt>Paid from</dt>
+            <dd>
+              {p.cashAccount ? (
+                <Link href={`/cash/accounts/${p.cashAccount.id}`}>{p.cashAccount.name}</Link>
+              ) : (
+                <span className="faint">Not assigned</span>
+              )}
+            </dd>
             <dt>Cash paid</dt>
             <dd className="num strong">{formatPeso(p.amountPaid)}</dd>
             <dt>Applied to bills</dt>

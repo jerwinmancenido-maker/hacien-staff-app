@@ -83,6 +83,14 @@ export default async function CollectionDetailPage({
             )}
             <dt>Receipt no.</dt>
             <dd>{c.receiptNo ?? "—"}</dd>
+            <dt>Deposited to</dt>
+            <dd>
+              {c.cashAccount ? (
+                <Link href={`/cash/accounts/${c.cashAccount.id}`}>{c.cashAccount.name}</Link>
+              ) : (
+                <span className="faint">Not assigned</span>
+              )}
+            </dd>
             <dt>Amount received</dt>
             <dd className="num strong">{formatPeso(c.amountReceived)}</dd>
             <dt>Cash applied</dt>

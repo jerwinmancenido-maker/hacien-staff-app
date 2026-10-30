@@ -33,6 +33,7 @@ export async function recordSupplierPaymentAction(_prev: FormState, form: FormDa
     checkBank: parsed.data.checkBank ?? "",
     checkDate: parsed.data.checkDate ? parsed.data.checkDate.toISOString().slice(0, 10) : "",
     amountPaid: parsed.data.amountPaid,
+    cashAccountId: parsed.data.cashAccountId ?? "",
     notes: parsed.data.notes ?? "",
   };
   let goTo: string | null = null;

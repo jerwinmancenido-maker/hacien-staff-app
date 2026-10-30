@@ -85,6 +85,7 @@ export async function recordCollectionAction(_prev: FormState, form: FormData): 
     checkDate: parsed.data.checkDate ? parsed.data.checkDate.toISOString().slice(0, 10) : "",
     receiptNo: parsed.data.receiptNo ?? "",
     amountReceived: parsed.data.amountReceived,
+    cashAccountId: parsed.data.cashAccountId ?? "",
     notes: parsed.data.notes ?? "",
   };
   let goTo: string | null = null;

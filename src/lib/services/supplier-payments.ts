@@ -186,6 +186,13 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         const issue = validatePaymentAllocations(input.amountPaid, allocInputs, open);
         if (issue) throw new DocRuleError(issue.message, issue.field);
 
+        if (input.cashAccountId) {
+          const acct = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
+          if (!acct || !acct.active) {
+            throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");
+          }
+        }
+
         const number = await allocateDocNumber(tx, "SUPPLIER_PAYMENT", year, format);
         const payment = await tx.supplierPayment.create({
           data: {
@@ -197,6 +204,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
             checkBank: input.checkBank,
             checkDate: input.checkDate,
             amountPaid: input.amountPaid,
+            cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,
             createdById: actor.id,
           },
@@ -248,6 +256,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
             method: input.method,
             reference: input.reference,
             amountPaid: input.amountPaid,
+            cashAccountId: input.cashAccountId ?? null,
             withholdingTotal: fromScaled(whTotal, 2),
             allocations: allocInputs.length,
             attachments: uploads.length,

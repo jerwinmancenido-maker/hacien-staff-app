@@ -2,7 +2,7 @@
 
 HACIEN staff app: quotes, sales orders, supplier POs, billing, collections and simple BIR books for a small Philippine IT supplier. AGPL-3.0.
 
-**Phase 1, Part 1** covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. **Part 2** adds quotes, sales orders, document numbering, withholding rates and print-to-PDF. **Brief 03** adds structured Philippine addresses, business document uploads (DTI, SEC, BIR 2303, permits) with expiry tracking, and a Transactions tab on customers and suppliers. **Part 4** adds supplier POs, receiving and supplier bills. **Part 5** adds customer billings and collections. **Part 6** adds hand-recorded supplier payments (payables), behind a feature flag that is **OFF by default**.
+**Phase 1, Part 1** covers the app shell, sign-in, users and roles, versioned settings, customers, suppliers, contacts and the audit log. **Part 2** adds quotes, sales orders, document numbering, withholding rates and print-to-PDF. **Brief 03** adds structured Philippine addresses, business document uploads (DTI, SEC, BIR 2303, permits) with expiry tracking, and a Transactions tab on customers and suppliers. **Part 4** adds supplier POs, receiving and supplier bills. **Part 5** adds customer billings and collections. **Part 6** adds hand-recorded supplier payments (payables), behind a feature flag that is **OFF by default**. **Part 7a** adds cash/bank accounts, expenses (EXP-YYYY-####), transfers (TRF-YYYY-####) and an account ledger, also **OFF by default** (`cashEnabled` / `CASH_ENABLED`).
 
 Stack: Next.js 16 (App Router, TypeScript strict), Prisma 6, MySQL 8, zod, bcryptjs, nodemailer, qrcode, Vitest. Plain CSS following `docs/design-brief.md`.
 
@@ -68,6 +68,7 @@ The database suites apply migrations to `TEST_DATABASE_URL` first and refuse a d
    - `UPLOAD_MAX_MB` (optional, default 10): upload size limit.
    - `TRUSTED_PROXY_COUNT`: how many reverse proxies append to `X-Forwarded-For` (default `1`). The client IP for rate limits is read that many entries from the right; the client-supplied left side is never trusted.
    - **Payables (Part 6):** OFF by default. For staging, either turn on **Settings → Features → Enable Payables**, or set `PAYABLES_ENABLED=true` (env wins when set). Do not enable in production until reviewed.
+   - **Cash (Part 7a):** OFF by default. For staging, turn on **Settings → Features → Enable Cash**, or set `CASH_ENABLED=true` (env wins when set). Hand-recorded only — the app never connects to a bank.
 4. **Build command:** `npm ci && npm run build` (or `npm run staging:build`, which also runs `prisma migrate deploy`). `next.config.ts` builds on one CPU without worker threads, because Hostinger can't spawn them ("OS can't spawn worker thread"). Set `HOSTINGER_BUILD=1` to also skip the build's own type check there; CI still runs lint and `tsc`.
 5. **Run migrations** (every deploy that adds migrations), from the app's terminal/SSH or as a pre-start step:
    ```bash

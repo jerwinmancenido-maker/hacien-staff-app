@@ -36,6 +36,8 @@ export const settingsSections = {
     billing: numberingFormat,
     collection: numberingFormat,
     supplierPayment: numberingFormat,
+    expense: numberingFormat,
+    cashTransfer: numberingFormat,
   }),
   taxYear: z
     .object({
@@ -82,9 +84,10 @@ export const settingsSections = {
   collections: z.object({
     overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),
   }),
-  // Feature flags (OFF by default). Staging: turn on payablesEnabled here or set PAYABLES_ENABLED=true.
+  // Feature flags (OFF by default). Staging: turn on here or set PAYABLES_ENABLED / CASH_ENABLED.
   features: z.object({
     payablesEnabled: z.boolean(),
+    cashEnabled: z.boolean(),
   }),
 } as const;
 

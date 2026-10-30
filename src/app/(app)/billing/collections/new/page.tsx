@@ -8,6 +8,9 @@ import { billingToday } from "@/lib/billing/dates";
 import { billingBalance } from "@/lib/billing/status";
 import { isoDate } from "@/lib/format";
 import { fromScaled, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
+import { isCashEnabled } from "@/lib/cash/features";
+import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionForm, type OpenBillingRow } from "@/components/billing/CollectionForm";
 import { PageHeader } from "@/components/ui";
@@ -77,6 +80,9 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
     .filter((b) => toScaled(b.balance, 2) > 0n);
 
   const today = billingToday();
+  const cashOn = await isCashEnabled();
+  const cashAccounts = cashOn ? await listActiveCashAccounts() : [];
+  const defaultCash = cashOn ? await defaultCashAccountId() : null;
 
   return (
     <>
@@ -89,7 +95,19 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
           customerId={customer.id}
           customerName={customer.name}
           openBillings={openBillings}
-          defaults={{ date: isoDate(today), amountReceived: "", method: "CASH", receiptNo: "" }}
+          cashAccounts={cashAccounts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            typeLabel: CASH_ACCOUNT_TYPE_LABELS[a.type],
+            hint: a.accountHintLast4,
+          }))}
+          defaults={{
+            date: isoDate(today),
+            amountReceived: "",
+            method: "CASH",
+            receiptNo: "",
+            cashAccountId: defaultCash ?? "",
+          }}
         />
       </div>
     </>

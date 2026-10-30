@@ -29,6 +29,7 @@ describe("feature flag", () => {
     expect(payablesEnabledFromEnv({ PAYABLES_ENABLED: "true" })).toBe(true);
     expect(payablesEnabledFromEnv({ PAYABLES_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.payablesEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.features.cashEnabled).toBe(false);
   });
 });
 

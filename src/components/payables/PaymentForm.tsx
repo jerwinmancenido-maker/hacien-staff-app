@@ -7,6 +7,7 @@ import type { FormState } from "@/lib/validation/forms";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/validation/payables";
 import { formatDate, formatPeso } from "@/lib/format";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
+import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
 
 export type OpenBillRow = {
   id: string;
@@ -60,13 +61,15 @@ export function PaymentForm({
   supplierName,
   defaults,
   openBills,
+  cashAccounts = [],
   canEdit,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   supplierId: string;
   supplierName: string;
-  defaults: { date: string; amountPaid: string; method: string };
+  defaults: { date: string; amountPaid: string; method: string; cashAccountId?: string };
   openBills: OpenBillRow[];
+  cashAccounts?: CashAccountOption[];
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
@@ -213,6 +216,16 @@ export function PaymentForm({
           </div>
           {e.amountPaid && <div className="error">{e.amountPaid}</div>}
         </div>
+
+        <CashAccountSelect
+          accounts={cashAccounts}
+          defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
+          allowBlank
+          blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
+          error={e.cashAccountId}
+          label="Paid from"
+          hint="Which cash or bank account the money left. Leave blank if you are not sure yet."
+        />
 
         <div className={`field full${e.notes ? " has-error" : ""}`}>
           <label htmlFor="notes">Notes (optional)</label>

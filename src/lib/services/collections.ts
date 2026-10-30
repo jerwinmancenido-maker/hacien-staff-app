@@ -149,6 +149,13 @@ export async function recordCollection(input: CollectionInput, actor: Collection
         if (issue) throw new DocRuleError(issue.message, issue.field);
 
         const number = await allocateDocNumber(tx, "COLLECTION", year, format);
+        if (input.cashAccountId) {
+          const acct = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
+          if (!acct || !acct.active) {
+            throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");
+          }
+        }
+
         const collection = await tx.collection.create({
           data: {
             number,
@@ -160,6 +167,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             checkDate: input.checkDate,
             receiptNo: input.receiptNo,
             amountReceived: input.amountReceived,
+            cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,
             createdById: actor.id,
           },
@@ -212,6 +220,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             method: input.method,
             receiptNo: input.receiptNo,
             amountReceived: input.amountReceived,
+            cashAccountId: input.cashAccountId ?? null,
             cashApplied: fromScaled(cashApplied, 2),
             unappliedCredit: credit,
             allocations: allocInputs.length,

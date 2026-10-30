@@ -176,6 +176,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.payablesEnabled,
                 hint: "OFF by default. Turn on for staging to use /payables. Or set env PAYABLES_ENABLED=true (env wins when set).",
               },
+              {
+                name: "cashEnabled",
+                label: "Enable Cash (accounts, expenses, transfers)",
+                kind: "checkbox",
+                value: s.features.cashEnabled,
+                hint: "OFF by default. Turn on for staging to use /cash. Or set env CASH_ENABLED=true (env wins when set).",
+              },
             ]}
           />
         )}

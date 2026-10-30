@@ -23,7 +23,10 @@ export type AuditEntityType =
   | "Collection"
   | "Withholding2307"
   | "SupplierPayment"
-  | "SupplierWithholding2307";
+  | "SupplierWithholding2307"
+  | "CashAccount"
+  | "Expense"
+  | "CashTransfer";
 
 type Plain = Record<string, unknown>;
 
