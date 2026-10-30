@@ -2,7 +2,11 @@
 // Turn on in Settings → Features (Admin), or set CASH_ENABLED=true in env
 // for staging. Env wins when set to "1" / "true" / "yes".
 
+import { DocRuleError } from "../documents/common";
 import { getSettingsSnapshot } from "../settings";
+
+export const CASH_OFF_MESSAGE =
+  "Cash is turned off. Enable it in Settings → Features (or set CASH_ENABLED=true).";
 
 /** Sync check from env only (useful in unit tests without DB). */
 export function cashEnabledFromEnv(env: Record<string, string | undefined> = process.env): boolean | null {
@@ -19,4 +23,9 @@ export async function isCashEnabled(): Promise<boolean> {
   if (fromEnv !== null) return fromEnv;
   const snap = await getSettingsSnapshot();
   return snap.settings.features.cashEnabled === true;
+}
+
+/** Reject mutations that touch cash accounts / ledgers when the feature is off. */
+export async function assertCashEnabled(): Promise<void> {
+  if (!(await isCashEnabled())) throw new DocRuleError(CASH_OFF_MESSAGE);
 }

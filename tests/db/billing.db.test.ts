@@ -38,20 +38,29 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     });
     const snap = await getSettingsSnapshot();
     // Wide booklet range so parallel suites don't collide on invoiceNo (unique forever).
-    const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
-    await db.settingsVersion.create({
-      data: {
-        version: latest.version + 1,
-        data: {
-          ...snap.settings,
-          invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        } as never,
-        changedKey: "invoiceBooklet",
-        before: snap.settings.invoiceBooklet,
-        after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        createdById: admin.id,
-      },
-    });
+    if (snap.settings.invoiceBooklet.seriesTo < 9_999_999) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+          await db.settingsVersion.create({
+            data: {
+              version: latest.version + 1,
+              data: {
+                ...((latest.data as object) ?? snap.settings),
+                invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
+              } as never,
+              changedKey: "invoiceBooklet",
+              before: snap.settings.invoiceBooklet,
+              after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
+              createdById: admin.id,
+            },
+          });
+          break;
+        } catch (e) {
+          if (attempt === 4) throw e;
+        }
+      }
+    }
   });
 
   afterAll(async () => {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
+import { isCashEnabled } from "@/lib/cash/features";
 import { formatDate, formatPeso } from "@/lib/format";
 import { getCollectionView } from "@/lib/billing/views";
 import { Activity } from "@/components/Activity";
@@ -28,6 +29,7 @@ export default async function CollectionDetailPage({
   const c = await getCollectionView(id);
   if (!c) notFound();
   const canManage = can(user, "manage_billing");
+  const cashOn = await isCashEnabled();
   const canVoid = canManage && c.status === "POSTED" && !c.withholdings.some((w) => w.status === "RECEIVED");
 
   return (
@@ -86,7 +88,11 @@ export default async function CollectionDetailPage({
             <dt>Deposited to</dt>
             <dd>
               {c.cashAccount ? (
-                <Link href={`/cash/accounts/${c.cashAccount.id}`}>{c.cashAccount.name}</Link>
+                cashOn ? (
+                  <Link href={`/cash/accounts/${c.cashAccount.id}`}>{c.cashAccount.name}</Link>
+                ) : (
+                  c.cashAccount.name
+                )
               ) : (
                 <span className="faint">Not assigned</span>
               )}

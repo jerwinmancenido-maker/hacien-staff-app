@@ -95,6 +95,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
           customerId={customer.id}
           customerName={customer.name}
           openBillings={openBillings}
+          cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({
             id: a.id,
             name: a.name,

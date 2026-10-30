@@ -62,6 +62,7 @@ export function PaymentForm({
   defaults,
   openBills,
   cashAccounts = [],
+  cashEnabled = false,
   canEdit,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -70,6 +71,8 @@ export function PaymentForm({
   defaults: { date: string; amountPaid: string; method: string; cashAccountId?: string };
   openBills: OpenBillRow[];
   cashAccounts?: CashAccountOption[];
+  /** When false (CASH_ENABLED off), hide the paid-from account selector. */
+  cashEnabled?: boolean;
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
@@ -217,15 +220,17 @@ export function PaymentForm({
           {e.amountPaid && <div className="error">{e.amountPaid}</div>}
         </div>
 
-        <CashAccountSelect
-          accounts={cashAccounts}
-          defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
-          allowBlank
-          blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
-          error={e.cashAccountId}
-          label="Paid from"
-          hint="Which cash or bank account the money left. Leave blank if you are not sure yet."
-        />
+        {cashEnabled && (
+          <CashAccountSelect
+            accounts={cashAccounts}
+            defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
+            allowBlank
+            blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
+            error={e.cashAccountId}
+            label="Paid from"
+            hint="Which cash or bank account the money left. Leave blank if you are not sure yet."
+          />
+        )}
 
         <div className={`field full${e.notes ? " has-error" : ""}`}>
           <label htmlFor="notes">Notes (optional)</label>

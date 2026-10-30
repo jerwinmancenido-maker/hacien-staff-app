@@ -12,6 +12,7 @@ import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/comm
 import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
 import { unappliedCash } from "../billing/status";
+import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
@@ -150,6 +151,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
 
         const number = await allocateDocNumber(tx, "COLLECTION", year, format);
         if (input.cashAccountId) {
+          await assertCashEnabled();
           const acct = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
           if (!acct || !acct.active) {
             throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");

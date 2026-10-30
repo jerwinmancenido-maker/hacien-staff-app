@@ -6,6 +6,7 @@ import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
+import { assertCashEnabled } from "../cash/features";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { CashTransferInput } from "../validation/cash";
@@ -41,6 +42,7 @@ export async function getCashTransfer(id: string) {
 
 export async function recordCashTransfer(input: CashTransferInput, actor: TransferActor) {
   assertManageCash(actor);
+  await assertCashEnabled();
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
   if (input.fromAccountId === input.toAccountId) {
     throw new DocRuleError("Pick two different accounts.", "toAccountId");
@@ -94,6 +96,7 @@ export async function recordCashTransfer(input: CashTransferInput, actor: Transf
 
 export async function voidCashTransfer(id: string, reason: string, actor: TransferActor) {
   assertManageCash(actor);
+  await assertCashEnabled();
   const why = reason.trim();
   if (!why) throw new DocRuleError("A reason is required.", "reason");
 
