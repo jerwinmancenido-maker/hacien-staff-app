@@ -2343,13 +2343,26 @@ td.has-error input {
    box must stay clearly under that (rounding, the 100vh shell and trailing
    margins used to push an empty 2nd page), so: no fixed/100vh heights in print,
    a min-height a few mm below the printable area, and nothing after the footer. */
+/* Page X of Y via @page margin boxes (CSS only). Engines that support
+   counter(pages) show the total; others leave it blank — .pp-page-num then
+   falls back to "Page X" only. See docs/screenshots/print-docs/PAGE-NUMBERS.md. */
 @page {
   size: A4;
-  margin: 14mm 12mm;
+  margin: 14mm 12mm 18mm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #666;
+  }
 }
 @page letter {
   size: letter;
-  margin: 0.5in;
+  margin: 0.5in 0.5in 0.65in;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #666;
+  }
 }
 @media print {
   html,
@@ -2392,6 +2405,7 @@ td.has-error input {
   .pp-items thead {
     display: table-header-group;
   }
+  /* Fallback when @page margin boxes / counter(pages) are unsupported. */
   .pp-page-num::after {
     content: "Page " counter(page);
   }
