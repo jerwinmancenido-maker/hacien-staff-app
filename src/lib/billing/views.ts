@@ -9,7 +9,7 @@ import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
 import { bookletGrid } from "./booklet";
 import { billingToday, daysPastDue, isOverdue } from "./dates";
-import { billingBalance, unappliedCash } from "./status";
+import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance } from "../services/collections";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
@@ -470,21 +470,25 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
   if (from) {
     const priorBillings = await db.billing.findMany({
       where: { customerId, status: { not: "VOID" }, invoiceDate: { lt: from } },
-      include: { allocations: { where: { collection: { status: "POSTED", date: { lt: from } } } } },
+      // Only applications dated before `from` (not today's full allocation history).
+      include: { allocations: { where: { collection: { status: "POSTED" }, appliedOn: { lt: from } } } },
     });
     for (const b of priorBillings) {
       opening += toScaled(billingBalance(money(b.amount), appliedOf(b.allocations)), 2);
     }
-    // Unapplied credit before from reduces opening.
+    // Unapplied credit as of `from`: prior collections minus applications before `from`.
     const priorCols = await db.collection.findMany({
       where: { customerId, status: "POSTED", date: { lt: from } },
       include: { allocations: true },
     });
-    for (const c of priorCols) {
-      // Approximate: treat current unapplied on prior-period collections as opening credit.
-      const u = unappliedCash(money(c.amountReceived), c.allocations.map((a) => money(a.cashApplied)));
-      opening -= toScaled(u, 2);
-    }
+    const openingCredit = openingCreditAsOf(
+      priorCols.map((c) => ({
+        amountReceived: money(c.amountReceived),
+        applications: c.allocations.map((a) => ({ cashApplied: money(a.cashApplied), date: a.appliedOn })),
+      })),
+      from,
+    );
+    opening -= toScaled(openingCredit, 2);
   }
 
   type Line =
