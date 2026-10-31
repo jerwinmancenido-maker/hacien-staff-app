@@ -21,6 +21,7 @@ function assertCosts(viewer: PermissionUser) {
 }
 import {
   companyContactLine,
+  mergeCompanyLetterhead,
   missingCompanyPrintFields,
   paperSizeFromSettings,
   paymentInstructionsFromSettings,
@@ -67,11 +68,22 @@ export function customerMoneyTotals(opts: {
 const day = (ymdStr: string | null | undefined) =>
   ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—";
 
+/**
+ * Letterhead for professional prints.
+ *
+ * Quote / SO (pinned settingsVersionId): each company letterhead field uses the
+ * pinned value when non-blank, otherwise the current Settings value — so a blank
+ * TIN/address filled in later still prints, but an issued rename/TIN change does
+ * not rewrite older documents on reprint.
+ *
+ * Billing / collection / statements / PO path via this helper with no pin: current
+ * Settings only. Print options (paper, banks, notes) still prefer the pin when set.
+ */
 async function letterhead(settingsVersionId?: string | null) {
-  const snap = settingsVersionId
-    ? ((await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot()))
-    : await getSettingsSnapshot();
-  const { company, print } = snap.settings;
+  const latest = await getSettingsSnapshot();
+  const pinned = settingsVersionId ? await getSettingsVersion(settingsVersionId) : null;
+  const company = mergeCompanyLetterhead(pinned?.settings.company, latest.settings.company);
+  const print = (pinned ?? latest).settings.print;
   return {
     company: printCompanyBlock(company),
     print,

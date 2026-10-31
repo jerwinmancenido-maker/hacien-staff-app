@@ -21,13 +21,9 @@ export function PoPrintDocument({ doc, qrSvg }: { doc: PoPrintDoc; qrSvg: string
         <div>
           <div className="print-company">{doc.company.name}</div>
           <div className="print-nonvat">NON-VAT</div>
-          {/* Blank Company settings print a visible placeholder instead of silently omitting the line. */}
-          {doc.company.tin.trim() ? <div>TIN {doc.company.tin}</div> : <div className="print-missing">TIN: [not set in Company settings]</div>}
-          {doc.company.address.trim() ? (
-            <div className="print-pre">{doc.company.address}</div>
-          ) : (
-            <div className="print-missing">Address: [not set in Company settings]</div>
-          )}
+          {/* Empty TIN/address: omit the line. Screen warning stays in the print toolbar. */}
+          {doc.company.tin.trim() ? <div>TIN {doc.company.tin}</div> : null}
+          {doc.company.address.trim() ? <div className="print-pre">{doc.company.address}</div> : null}
         </div>
         <div className="print-title">
           <h1>Purchase Order</h1>

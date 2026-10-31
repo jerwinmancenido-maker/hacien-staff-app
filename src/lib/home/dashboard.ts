@@ -18,7 +18,11 @@ import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
 import { listTaxCalendar } from "../services/tax-calendar";
 import { fromScaled, toScaled } from "../quotes/calc";
-import { listRecentHomeActivity, type HomeActivityItem } from "./activity";
+import {
+  HOME_RECENT_DESKTOP_ROWS,
+  listRecentHomeActivity,
+  type HomeActivityItem,
+} from "./activity";
 import {
   auditLogHref,
   billingsOverdueHref,
@@ -38,13 +42,22 @@ import {
   taxCalendarHref,
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
+import { formatCompactPesoLimit } from "./nonVatCopy";
+import {
+  buildHomePipeline,
+  type HomePipeline,
+  OPEN_QUOTE_STATUSES,
+  soUnbilledAmount,
+} from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
+  manilaDayOfMonth,
   manilaMonthKey,
+  mtdVsSameDaysChip,
   owedOverdueChip,
   salesMonthLabel,
   salesMonthsRangeLabel,
-  salesVsLastMonthCaption,
+  sameDaysEndYmd,
   shiftMonthKey,
   type HomeSales,
 } from "./sales";
@@ -82,6 +95,11 @@ export type HomeTaxDeadline = {
   dueLabel: string;
   /** e.g. "Due Mon, Nov 16, 2026 · in 16 days" */
   dueDetail: string;
+  /**
+   * Phone one-line strip, e.g. "NOV 16 · 1701Q due in 16 days".
+   * Built from the real badge / form / days — never hard-coded.
+   */
+  stripLabel: string;
   dueYmd: string | null;
   /** Uppercase month abbr for the date badge (NOV). */
   badgeMonth: string | null;
@@ -112,12 +130,16 @@ export type HomeKpiChange = {
 
 export type HomeKpis = {
   billedThisMonth: {
+    /** e.g. "Billed (Oct)" — month from Manila now. */
+    label: string;
     amount: string;
     change: HomeKpiChange;
+    /** Empty when both MTD and same-days prior are ₱0 (no chip). */
     vsCaption: string;
     href: string;
   };
   owedByCustomers: {
+    label: string;
     amount: string;
     overdueChip: { label: string; tone: "overdue" } | null;
     billingCount: number;
@@ -125,15 +147,24 @@ export type HomeKpis = {
     href: string;
   };
   collectedThisMonth: {
+    /** e.g. "Collected (Oct)". */
+    label: string;
     amount: string;
+    /** Legacy muted line when there is no MTD chip (e.g. both ₱0). */
     caption: string;
+    change: HomeKpiChange;
+    vsCaption: string;
     href: string;
   };
   billedThisYear: {
+    /** e.g. "Billed (2026)". */
+    label: string;
     amount: string;
     barPct: number;
     pctLabel: string;
     limitLabel: string;
+    /** Phone sub-line: "46.8% of ₱3M limit" from live pct + Non-VAT limit. */
+    phoneLimitLabel: string;
     href: string;
   };
 };
@@ -155,19 +186,22 @@ export type HomeDashboard = {
   header: HomeHeaderActions;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
+  /** Open quotes + open unbilled SOs; null when viewer lacks view on both. */
+  pipeline: HomePipeline | null;
   nonVat: HomeNonVat;
   recent: HomeActivityItem[];
-  auditHref: string;
+  /** Audit log href when the viewer has `view_audit`; otherwise null (no View all). */
+  auditHref: string | null;
   features: HomeFeatureFlags;
   withCosts: boolean;
 };
 
 const ACTION_LABELS: Record<HomeActionKind, string> = {
-  quotesNeedsApproval: "Quotes waiting for approval",
-  quotesNoReply: "Quotes sent with no reply after 7 days",
-  salesOrdersNeedsPo: "Sales orders with lines that have no PO yet",
-  posAwaitingReceipt: "POs waiting to be received",
-  billsOverPo: "Supplier bills higher than their PO",
+  quotesNeedsApproval: "Quotes to approve",
+  quotesNoReply: "Quotes with no reply",
+  salesOrdersNeedsPo: "SOs needing a PO",
+  posAwaitingReceipt: "POs to receive",
+  billsOverPo: "Bills over PO",
   billingsOverdue: "Billings past due",
   customersNoWithholding: "Withholding not set",
 };
@@ -223,6 +257,36 @@ function buildTaxDetail(dueYmd: string | null, now: Date): string {
   return `Due ${when} · in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
+/**
+ * Phone Billed-year KPI sub-line from live Non-VAT meter values.
+ * e.g. pctLabel "46.8%" + limit 3_000_000 → "46.8% of ₱3M limit".
+ */
+export function billedYearPhoneLimitLabel(pctLabel: string, limit: number): string {
+  return `${pctLabel} of ${formatCompactPesoLimit(limit)} limit`;
+}
+
+/** Compact phone tax strip: "NOV 16 · 1701Q due in 16 days". */
+export function buildTaxStripLabel(opts: {
+  form: string;
+  badgeMonth: string | null;
+  badgeDay: string | null;
+  dueYmd: string | null;
+  now?: Date;
+}): string {
+  const now = opts.now ?? new Date();
+  const datePart =
+    opts.badgeMonth && opts.badgeDay ? `${opts.badgeMonth} ${opts.badgeDay}` : "Tax";
+  const form = opts.form?.trim() || "Tax calendar";
+  if (!opts.dueYmd) return `${datePart} · ${form}`;
+  const days = daysUntilYmd(opts.dueYmd, now);
+  if (days < 0) {
+    const n = Math.abs(days);
+    return `${datePart} · ${form} ${n} ${n === 1 ? "day" : "days"} overdue`;
+  }
+  if (days === 0) return `${datePart} · ${form} due today`;
+  return `${datePart} · ${form} due in ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 function monthShortLabel(now: Date): string {
   const key = manilaMonthKey(now);
   return salesMonthLabel(key, null).short;
@@ -234,17 +298,25 @@ function buildKpis(opts: {
   overdueCount: number;
   openCount: number;
   collected: string;
+  collectedPriorSameDays: string;
   nonVat: HomeNonVat;
   now: Date;
 }): HomeKpis {
-  const { sales, owedAmount, overdueCount, openCount, collected, nonVat, now } = opts;
+  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, nonVat, now } =
+    opts;
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
   const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
+  const year = Number(manilaMonthKey(now).slice(0, 4));
+  const day = sales.mtdDay;
+  const billedChip = sales.mtdChip;
+  const collectedChip = mtdVsSameDaysChip(collected, collectedPriorSameDays, lastKey, day);
   const collectedCaption =
-    !Number.isFinite(collectedNum) || collectedNum <= 0
-      ? `No payments recorded in ${mon}`
-      : `Posted collections in ${mon}`;
+    collectedChip != null
+      ? ""
+      : !Number.isFinite(collectedNum) || collectedNum <= 0
+        ? "No payments yet"
+        : `Posted collections in ${mon}`;
 
   const billingCount = openCount;
   const billingCountLabel =
@@ -252,12 +324,14 @@ function buildKpis(opts: {
 
   return {
     billedThisMonth: {
+      label: `Billed (${mon})`,
       amount: sales.thisMonth,
-      change: sales.change,
-      vsCaption: salesVsLastMonthCaption(sales.lastMonth, lastKey),
+      change: billedChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: billedChip?.vsCaption ?? "",
       href: sales.href,
     },
     owedByCustomers: {
+      label: "Owed",
       amount: owedAmount,
       overdueChip: owedOverdueChip(overdueCount, openCount),
       billingCount,
@@ -265,15 +339,20 @@ function buildKpis(opts: {
       href: owedByCustomersHref(),
     },
     collectedThisMonth: {
+      label: `Collected (${mon})`,
       amount: collected,
       caption: collectedCaption,
+      change: collectedChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: collectedChip?.vsCaption ?? "",
       href: collectedThisMonthHref(now),
     },
     billedThisYear: {
+      label: `Billed (${year})`,
       amount: sales.thisYear,
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,
       limitLabel: `of Non-VAT ${formatCompactLimit(nonVat.limit)}`,
+      phoneLimitLabel: billedYearPhoneLimitLabel(nonVat.pctLabel, nonVat.limit),
       href: nonVat.href,
     },
   };
@@ -290,6 +369,47 @@ function headerActions(user: PermissionUser): HomeHeaderActions {
     newQuoteHref: can(user, "edit_data") ? newQuoteHref() : null,
     newBillingHref: can(user, "manage_billing") ? newBillingHref() : null,
   };
+}
+
+async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | null> {
+  const [quoteAgg, openSos] = await Promise.all([
+    db.quote.aggregate({
+      where: { status: { in: [...OPEN_QUOTE_STATUSES] } },
+      _count: true,
+      _sum: { contractPrice: true },
+    }),
+    db.salesOrder.findMany({
+      where: { status: "OPEN" },
+      select: {
+        contractPrice: true,
+        billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
+      },
+    }),
+  ]);
+
+  let soCount = 0;
+  let soUnbilled = 0n;
+  for (const so of openSos) {
+    const remaining = soUnbilledAmount(
+      String(so.contractPrice),
+      so.billings.map((b) => String(b.amount)),
+    );
+    const rem = toScaled(remaining, 2);
+    if (rem > 0n) {
+      soCount += 1;
+      soUnbilled += rem;
+    }
+  }
+
+  const quotesTotal = quoteAgg._sum.contractPrice != null ? String(quoteAgg._sum.contractPrice) : "0.00";
+
+  return buildHomePipeline({
+    user,
+    quotesCount: quoteAgg._count,
+    quotesTotal,
+    salesOrdersCount: soCount,
+    salesOrdersUnbilled: fromScaled(soUnbilled, 2),
+  });
 }
 
 export async function loadHomeDashboard(
@@ -340,6 +460,7 @@ export async function loadHomeDashboard(
             overdueCount: 0,
             openCount: 0,
             collected: "0.00",
+            collectedPriorSameDays: "0.00",
             nonVat,
             now,
           })
@@ -347,15 +468,19 @@ export async function loadHomeDashboard(
       header,
       money: [],
       tax: null,
+      pipeline: null,
       nonVat,
       recent: [],
-      auditHref: auditLogHref(),
+      auditHref: can(user, "view_audit") ? auditLogHref() : null,
       features,
       withCosts,
     };
   }
 
   const period = currentMonthPeriod(now);
+  const lastMonthKey = shiftMonthKey(manilaMonthKey(now), -1);
+  const priorSameDaysTo = sameDaysEndYmd(lastMonthKey, manilaDayOfMonth(now));
+  const priorSameDaysFrom = `${lastMonthKey}-01`;
 
   const [
     quotesNeedsApproval,
@@ -366,9 +491,11 @@ export async function loadHomeDashboard(
     customersNoWh,
     ar,
     collected,
+    collectedPriorSameDays,
     nonVatSnap,
     sales,
     recent,
+    pipeline,
   ] = await Promise.all([
     listQuotesView({ needsApproval: true, now }, user),
     listQuotesView({ noReplyAfterDays: 7, now }, user),
@@ -379,9 +506,16 @@ export async function loadHomeDashboard(
     listCustomers({ withholdingPick: "NOT_SET" }),
     arAgingSummary(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumCollectionsReceived({
+      status: "POSTED",
+      fromYmd: priorSameDaysFrom,
+      toYmd: priorSameDaysTo,
+    }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
-    listRecentHomeActivity(5, { withCosts }),
+    // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
+    listRecentHomeActivity(HOME_RECENT_DESKTOP_ROWS, { withCosts }),
+    loadHomePipeline(user),
   ]);
 
   // Same list as /receiving (Awaiting delivery).
@@ -458,6 +592,7 @@ export async function loadHomeDashboard(
           overdueCount: ar.overdueCount,
           openCount: ar.openCount,
           collected,
+          collectedPriorSameDays,
           nonVat,
           now,
         })
@@ -473,11 +608,19 @@ export async function loadHomeDashboard(
     if (next || overdueUnfiled > 0) {
       const dueYmd = next?.dueYmd ?? null;
       const badge = taxBadge(dueYmd);
+      const form = next?.form ?? "Tax calendar";
       tax = {
-        form: next?.form ?? "Tax calendar",
+        form,
         description: next?.description ?? "Open the tax calendar",
         dueLabel: dueYmd ? formatDate(new Date(`${dueYmd}T00:00:00.000Z`)) : "No upcoming date",
         dueDetail: buildTaxDetail(dueYmd, now),
+        stripLabel: buildTaxStripLabel({
+          form,
+          badgeMonth: badge.badgeMonth,
+          badgeDay: badge.badgeDay,
+          dueYmd,
+          now,
+        }),
         dueYmd,
         badgeMonth: badge.badgeMonth,
         badgeDay: badge.badgeDay,
@@ -502,9 +645,10 @@ export async function loadHomeDashboard(
     header,
     money,
     tax,
+    pipeline,
     nonVat,
     recent,
-    auditHref: auditLogHref(),
+    auditHref: can(user, "view_audit") ? auditLogHref() : null,
     features,
     withCosts,
   };

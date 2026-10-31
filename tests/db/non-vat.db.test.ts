@@ -21,7 +21,7 @@ import {
 import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection } from "@/lib/services/collections";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { freshYear, freshYearPair, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
   let admin: DocActor;
@@ -163,12 +163,11 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
   });
 
   it("uses Manila tax-year boundaries (Dec 31 23:59 PHT vs Jan 1 00:00 PHT)", async () => {
-    // freshYear reserves base and base+1 so neither year is shared with other suites.
+    // freshYearPair reserves base and base+1 so neither year is shared with other suites.
     // Tax year Y=base+1: [Jan 1 00:00 PHT Y, Jan 1 00:00 PHT Y+1).
     // DATE columns store calendar days at 00:00 UTC; Dec 31 of base is last year,
     // Jan 1 of Y is the first day of the tax year (matches taxYearStart / PHT midnight).
-    const base = await freshYear();
-    const year = base + 1;
+    const { base, next: year } = await freshYearPair();
     const { so: soPrev } = await openSo(base, "50000.00");
     const { so: soCurr } = await openSo(year, "50000.00");
 

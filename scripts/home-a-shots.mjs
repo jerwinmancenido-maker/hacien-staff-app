@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Concept A Home screenshots: data / empty / staff × 1280 / 360.
+ * Captures at REAL content height (no fixed tall canvas / empty tail).
+ * Logs measured page height in px for each shot.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -73,6 +75,31 @@ async function setViewport(cdp, w, h) {
   });
 }
 
+async function measurePageHeight(cdp) {
+  const r = await cdp.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      // Content-only height: page header + Home cards. Do NOT use main.content's
+      // box (its padding-bottom / tall viewport stretch inflate the canvas).
+      let bottom = 0;
+      const bump = (el) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        bottom = Math.max(bottom, r.bottom + window.scrollY);
+      };
+      bump(document.querySelector('.page-header'));
+      bump(document.querySelector('.home-dashboard'));
+      bump(document.querySelector('.home-getting-started'));
+      for (const el of document.querySelectorAll('.home-dashboard .card, .home-getting-started')) {
+        bump(el);
+      }
+      const pad = 12;
+      return Math.max(400, Math.ceil(bottom + pad));
+    })()`,
+  });
+  return Number(r.result?.value) || 800;
+}
+
 async function shot(cdp, name, clip) {
   const params = { format: "png", fromSurface: true };
   if (clip) params.clip = { ...clip, scale: 1 };
@@ -123,14 +150,81 @@ async function goHome(cdp, w, h) {
   await sleep(500);
 }
 
-async function shotHome(cdp, name, w, h, readyExpr) {
-  await goHome(cdp, w, h);
+/**
+ * Fail if the document (or Home cards) can scroll sideways.
+ * Used at 320 and 360 — nothing may overflow the viewport width.
+ */
+async function assertNoHorizontalScroll(cdp, viewportWidth, label) {
+  const r = await cdp.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      const doc = document.documentElement;
+      const body = document.body;
+      const scrollWidth = Math.max(doc.scrollWidth || 0, body.scrollWidth || 0);
+      const clientWidth = Math.min(doc.clientWidth || Infinity, window.innerWidth || Infinity);
+      const offenders = [];
+      for (const el of document.querySelectorAll('.home-dashboard, .home-dashboard .card, .home-tax, .home-activity-card, .home-ra-row, .home-ct, .page-header')) {
+        const r = el.getBoundingClientRect();
+        if (r.right > clientWidth + 1) {
+          offenders.push({
+            cls: (el.className || '').toString().slice(0, 60),
+            right: Math.round(r.right),
+            width: Math.round(r.width),
+          });
+        }
+      }
+      return {
+        scrollWidth,
+        clientWidth,
+        innerWidth: window.innerWidth,
+        ok: scrollWidth <= clientWidth + 1 && offenders.length === 0,
+        offenders: offenders.slice(0, 8),
+      };
+    })()`,
+  });
+  const info = r.result?.value ?? {};
+  console.log(
+    "scrollWidthCheck",
+    label,
+    `viewport=${viewportWidth}`,
+    `scrollWidth=${info.scrollWidth}`,
+    `clientWidth=${info.clientWidth}`,
+    info.ok ? "ok" : "FAIL",
+    info.offenders?.length ? JSON.stringify(info.offenders) : "",
+  );
+  if (!info.ok) {
+    throw new Error(
+      `Horizontal overflow at ${label} (viewport ${viewportWidth}): ` +
+        `scrollWidth=${info.scrollWidth} clientWidth=${info.clientWidth} ` +
+        `offenders=${JSON.stringify(info.offenders)}`,
+    );
+  }
+  return info;
+}
+
+async function shotHome(cdp, name, w, readyExpr, { checkScroll = false } = {}) {
+  // Lay out at a tall provisional height so content is not clipped while measuring.
+  await goHome(cdp, w, 2400);
   if (readyExpr) await waitFor(cdp, readyExpr);
   await cdp.send("Runtime.evaluate", {
     expression: `window.scrollTo(0, 0); document.querySelector('.page-header, .home-dashboard')?.scrollIntoView({ block: 'start' });`,
   });
   await sleep(350);
-  await shot(cdp, name);
+  let height = await measurePageHeight(cdp);
+  await setViewport(cdp, w, height);
+  await sleep(200);
+  height = await measurePageHeight(cdp);
+  await setViewport(cdp, w, height);
+  await sleep(150);
+  await cdp.send("Runtime.evaluate", { expression: `window.scrollTo(0, 0);` });
+  await sleep(100);
+  let scrollInfo = null;
+  if (checkScroll || w <= 360) {
+    scrollInfo = await assertNoHorizontalScroll(cdp, w, name);
+  }
+  await shot(cdp, name, { x: 0, y: 0, width: w, height, scale: 1 });
+  console.log("pageHeight", name, `${w}x${height}`);
+  return { height, scrollInfo };
 }
 
 async function main() {
@@ -149,7 +243,7 @@ async function main() {
       "--disable-gpu",
       "--no-sandbox",
       "--disable-dev-shm-usage",
-      "--window-size=1280,1600",
+      "--window-size=1280,2400",
       "about:blank",
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
@@ -175,24 +269,54 @@ async function main() {
   await cdp.send("Network.enable");
 
   const mode = process.argv[2] || "data";
+  const heights = {};
+  const scrolls = {};
+  const readyData = `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`;
+  const readyEmpty = `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`;
+  const readyStaff = `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`;
+
+  async function record(name, w, readyExpr, opts) {
+    const r = await shotHome(cdp, name, w, readyExpr, opts);
+    heights[name] = r.height;
+    if (r.scrollInfo) {
+      scrolls[name] = {
+        viewport: w,
+        scrollWidth: r.scrollInfo.scrollWidth,
+        clientWidth: r.scrollInfo.clientWidth,
+        ok: r.scrollInfo.ok,
+      };
+    }
+  }
 
   if (mode === "staff") {
     await login(cdp, staffEmail);
-    await shotHome(cdp, "home-a-staff-1280.png", 1280, 1400, `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`);
-    await shotHome(cdp, "home-a-staff-360.png", 360, 1800, `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`);
+    await record("home-a-staff-1280.png", 1280, readyStaff);
+    await record("home-a-staff-360.png", 360, readyStaff, { checkScroll: true });
   } else if (mode === "empty") {
     await login(cdp, adminEmail);
-    await shotHome(cdp, "home-a-empty-1280.png", 1280, 1400, `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`);
-    await shotHome(cdp, "home-a-empty-360.png", 360, 1800, `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`);
+    await record("home-a-empty-1280.png", 1280, readyEmpty);
+    await record("home-a-empty-360.png", 360, readyEmpty, { checkScroll: true });
+  } else if (mode === "dense") {
+    await login(cdp, adminEmail);
+    await record("home-a-data-dense-1280.png", 1280, readyData);
+    if (heights["home-a-data-dense-1280.png"] > 800) {
+      throw new Error(
+        `Dense 1280 page height ${heights["home-a-data-dense-1280.png"]} > 800`,
+      );
+    }
   } else {
     await login(cdp, adminEmail);
-    await shotHome(cdp, "home-a-data-1280.png", 1280, 1600, `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`);
-    await shotHome(cdp, "home-a-data-360.png", 360, 2000, `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`);
+    await record("home-a-data-1280.png", 1280, readyData);
+    await record("home-a-data-360.png", 360, readyData, { checkScroll: true });
+    await record("home-a-data-320.png", 320, readyData, { checkScroll: true });
+    if (heights["home-a-data-1280.png"] > 800) {
+      throw new Error(`Data 1280 page height ${heights["home-a-data-1280.png"]} > 800`);
+    }
   }
 
   cdp.close();
   chrome.kill("SIGKILL");
-  console.log("shots done:", mode);
+  console.log("shots done:", mode, JSON.stringify({ heights, scrolls }));
 }
 
 main().catch((e) => {

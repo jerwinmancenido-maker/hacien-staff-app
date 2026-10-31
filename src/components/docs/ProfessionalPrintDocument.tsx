@@ -31,17 +31,10 @@ function CompanyLetterhead({ company }: { company: ProfessionalPrintModel["compa
         </div>
         <div className="pp-letterhead-text">
           <div className="pp-company-line">{companyLine}</div>
-          {company.address ? (
-            <div className="pp-pre">{company.address}</div>
-          ) : (
-            <div className="pp-missing no-print">Address: [not set — Add your address so it prints on documents]</div>
-          )}
+          {/* Empty address/TIN: omit the line. Warning lives only in PrintShell toolbar. */}
+          {company.address ? <div className="pp-pre">{company.address}</div> : null}
           <div className="pp-tin-row">
-            {company.tin ? (
-              <span>TIN {company.tin}</span>
-            ) : (
-              <span className="pp-missing no-print">TIN: [not set — Add your TIN so it prints on documents]</span>
-            )}
+            {company.tin ? <span>TIN {company.tin}</span> : null}
             <span className="pp-nonvat">{NON_VAT_LABEL}</span>
           </div>
           {contactBits.length > 0 && <div className="pp-contact-bits">{contactBits.join(" · ")}</div>}

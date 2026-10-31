@@ -63,8 +63,8 @@ export function salesMonthLabel(key: MonthKey, prevKey: MonthKey | null): { shor
 }
 
 /**
- * Change vs last month for the Sales row (plain wording, no colour / arrows).
- * - last month is 0 or missing → "—"
+ * Change vs a prior period (plain wording, no colour / arrows).
+ * - prior is 0 or missing → "—" (caller may hide the chip entirely when both are 0)
  * - equal → "Same"
  * - otherwise "Up N%" / "Down N%" (integer %, floored toward zero)
  */
@@ -83,6 +83,53 @@ export function salesChangeVsLastMonth(
   if (rounded < 0) return { label: `Down ${Math.abs(rounded)}%`, tone: "down" };
   // Non-zero but rounds to 0 (e.g. 0.4%) — treat as flat.
   return { label: "Same", tone: "flat" };
+}
+
+/** Manila calendar day-of-month (1–31) for `now`. */
+export function manilaDayOfMonth(now: Date = new Date()): number {
+  return Number(isoDate(manilaToday(now)).slice(8, 10));
+}
+
+/** Last calendar day of a YYYY-MM month key. */
+export function monthKeyLastDay(key: MonthKey): number {
+  const [ys, ms] = key.split("-");
+  return new Date(Date.UTC(Number(ys), Number(ms), 0)).getUTCDate();
+}
+
+/**
+ * Inclusive end YYYY-MM-DD for “same days” in `monthKey`, capped to that
+ * month’s last day (e.g. day 31 in February → Feb 28/29).
+ */
+export function sameDaysEndYmd(monthKey: MonthKey, dayOfMonth: number): string {
+  const day = Math.max(1, Math.trunc(dayOfMonth));
+  const capped = Math.min(day, monthKeyLastDay(monthKey));
+  return `${monthKey}-${String(capped).padStart(2, "0")}`;
+}
+
+/**
+ * MTD vs same-days-of-prior-month chip for Billed / Collected KPIs.
+ * - both ₱0 → null (no chip; never “Down 100%”)
+ * - otherwise Up/Down/Same when prior &gt; 0, plus “vs ₱X by Oct 1”
+ */
+export function mtdVsSameDaysChip(
+  thisMtd: number | string,
+  priorSameDays: number | string,
+  priorMonthKey: MonthKey,
+  dayOfMonth: number,
+): { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null {
+  const cur = typeof thisMtd === "number" ? thisMtd : Number(thisMtd);
+  const prev = typeof priorSameDays === "number" ? priorSameDays : Number(priorSameDays);
+  const curN = Number.isFinite(cur) ? cur : 0;
+  const prevN = Number.isFinite(prev) ? prev : 0;
+  if (curN === 0 && prevN === 0) return null;
+
+  const endYmd = sameDaysEndYmd(priorMonthKey, dayOfMonth);
+  const [ys, ms, ds] = endYmd.split("-");
+  const short = SHORT_MONTHS[Number(ms) - 1] ?? priorMonthKey;
+  const dayNum = Number(ds);
+  void ys;
+  const vsCaption = `vs ${formatCompactPesoWhole(prevN)} by ${short} ${dayNum}`;
+  return { change: salesChangeVsLastMonth(curN, prevN), vsCaption };
 }
 
 /** Axis / bar short labels like ₱500K / ₱1.0M / ₱274K (compact, always with ₱). */
@@ -142,7 +189,7 @@ export function salesAxisTicks(maxAmount: number): number[] {
   return [nice];
 }
 
-/** Caption under "Billed this month": "vs ₱145,000 in Sep". */
+/** @deprecated Prefer {@link mtdVsSameDaysChip}; kept for older call sites/tests. */
 export function salesVsLastMonthCaption(lastMonthAmount: number | string, lastMonthKey: MonthKey): string {
   const [ys, ms] = lastMonthKey.split("-");
   const month = Number(ms);
@@ -235,6 +282,8 @@ export type HomeSalesMonth = {
   yearLabel: string | null;
   amount: string;
   isCurrent: boolean;
+  /** True for the in-progress Manila month (hollow point / dashed segment). */
+  isPartial: boolean;
 };
 
 export type HomeSalesCustomer = {
@@ -250,8 +299,15 @@ export type HomeSales = {
   /** Last 6 months (narrow view); same objects as a slice of `months`. */
   monthsNarrow: HomeSalesMonth[];
   thisMonth: string;
+  /** Prior calendar month total (full month; chart / legacy). */
   lastMonth: string;
+  /** Same calendar days of prior month as MTD so far (KPI compare). */
+  lastMonthSameDays: string;
+  /** Manila day-of-month used for same-days compare. */
+  mtdDay: number;
   change: { label: string; tone: "up" | "down" | "flat" | "none" };
+  /** null when both MTD and same-days prior are ₱0 (no chip). */
+  mtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
   thisYear: string;
   topCustomers: HomeSalesCustomer[];
   empty: boolean;

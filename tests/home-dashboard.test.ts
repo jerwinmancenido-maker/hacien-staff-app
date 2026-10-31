@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { currentMonthPeriod } from "@/lib/books/period";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
-import { activitySummary, documentHref } from "@/lib/home/activity";
+import { activitySummary, documentHref, formatHomeActivityWhen } from "@/lib/home/activity";
 import {
   HOME_WITHHOLDING_NOT_SET_LABEL,
+  billedYearPhoneLimitLabel,
+  buildTaxStripLabel,
   homeMonthBounds,
   homeOwedSplit,
   homeSumAmounts,
@@ -206,6 +208,51 @@ describe("home activity helpers", () => {
     expect(documentHref("SupplierBill", "b1", { purchaseOrderId: "po1" })).toBe("/purchase-orders/po1?tab=bills");
     expect(documentHref("SupplierBill", "b1")).toBeNull();
   });
+
+  it("formats compact Manila activity times (time today; date + time otherwise)", () => {
+    // 2026-10-31 09:49 UTC = 5:49 PM PHT
+    const at = new Date("2026-10-31T09:49:00.000Z");
+    const sameDay = new Date("2026-10-31T02:00:00.000Z"); // still Oct 31 PHT
+    const nextDay = new Date("2026-11-01T02:00:00.000Z"); // Nov 1 PHT
+    expect(formatHomeActivityWhen(at, sameDay)).toBe("5:49 PM");
+    expect(formatHomeActivityWhen(at, nextDay)).toBe("Oct 31, 5:49 PM");
+  });
+});
+
+describe("home tax phone strip label", () => {
+  it("builds NOV 16 · 1701Q due in N days from computed fields (not hard-coded)", () => {
+    // Manila "today" 2026-10-31 → due 2026-11-16 is 16 days out.
+    const now = new Date("2026-10-31T04:00:00.000Z");
+    expect(
+      buildTaxStripLabel({
+        form: "1701Q",
+        badgeMonth: "NOV",
+        badgeDay: "16",
+        dueYmd: "2026-11-16",
+        now,
+      }),
+    ).toBe("NOV 16 · 1701Q due in 16 days");
+    expect(
+      buildTaxStripLabel({
+        form: "1701Q",
+        badgeMonth: "NOV",
+        badgeDay: "16",
+        dueYmd: "2026-10-31",
+        now,
+      }),
+    ).toBe("NOV 16 · 1701Q due today");
+  });
+});
+
+describe("home billed-year phone limit label", () => {
+  it("joins live pctLabel with compact Non-VAT limit (not hard-coded 46.8)", () => {
+    expect(billedYearPhoneLimitLabel("46.8%", 3_000_000)).toBe("46.8% of ₱3M limit");
+    expect(billedYearPhoneLimitLabel("0.0%", 3_000_000)).toBe("0.0% of ₱3M limit");
+    expect(billedYearPhoneLimitLabel("50.0%", 1_500_000)).toBe("50.0% of ₱1.5M limit");
+    // Uses the same compact formatter as the Non-VAT title / sidebar.
+    expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
+    expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).not.toMatch(/^46\.8/);
+  });
 });
 
 describe("home concept A staff / empty wiring", () => {
@@ -214,7 +261,10 @@ describe("home concept A staff / empty wiring", () => {
     expect(page).toMatch(/showSales/);
     expect(page).toMatch(/is-staff/);
     expect(page).toMatch(/HomeKpiCards/);
+    expect(page).toMatch(/HomeNeedsAction/);
     expect(page).not.toMatch(/HomeMoney/);
     expect(page).not.toMatch(/HomeNonVat/);
+    // Needs action always renders (short empty line when all counts are 0).
+    expect(page).not.toMatch(/hasMid/);
   });
 });

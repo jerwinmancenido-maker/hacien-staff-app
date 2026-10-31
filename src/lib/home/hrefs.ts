@@ -5,9 +5,21 @@ import { addDays, isoDate, manilaToday } from "../format";
 
 export const HOME_QUOTE_NEEDS_APPROVAL = "needsApproval";
 export const HOME_QUOTE_NO_REPLY = "noReply";
+export const HOME_QUOTE_OPEN = "open";
 export const HOME_SO_NEEDS_PO = "needsPo";
+export const HOME_SO_OPEN = "open";
 export const HOME_PO_BILLED_OVER = "billedOver";
 export const HOME_BILLS_DUE_DAYS = "7";
+
+/** Quotes list: DRAFT + SENT (not WON / LOST / VOID). */
+export function openQuotesHref(): string {
+  return `/quotes?${HOME_QUOTE_OPEN}=1`;
+}
+
+/** Sales orders list: OPEN with remaining-to-bill &gt; 0 (not VOID / fully billed). */
+export function openSalesOrdersHref(): string {
+  return `/sales-orders?${HOME_SO_OPEN}=1`;
+}
 
 export function quotesNeedsApprovalHref(): string {
   return `/quotes?${HOME_QUOTE_NEEDS_APPROVAL}=1`;
@@ -49,11 +61,6 @@ export function billingsOverdueMoneyHref(): string {
 export function collectedThisMonthHref(now: Date = new Date()): string {
   const { fromYmd, toYmd } = currentMonthPeriod(now);
   return `/billing/collections?status=POSTED&from=${fromYmd}&to=${toYmd}`;
-}
-
-export function billedThisMonthHref(now: Date = new Date()): string {
-  const { fromYmd, toYmd } = currentMonthPeriod(now);
-  return `/billing/billings?from=${fromYmd}&to=${toYmd}`;
 }
 
 export function supplierBillsDueSoonHref(now: Date = new Date()): string {

@@ -41,6 +41,36 @@ export function missingFieldsPrintConfirm(missing: readonly string[]): string | 
 /** Default letterhead mark from the HACIEN brand kit. Settings upload overrides. */
 export const BRAND_LETTERHEAD_LOGO = "/brand/logo-full.svg";
 
+const LETTERHEAD_FIELDS = [
+  "name",
+  "tradeName",
+  "tin",
+  "address",
+  "phone",
+  "email",
+  "website",
+  "logoStorageKey",
+] as const satisfies readonly (keyof CompanySettings)[];
+
+/**
+ * Issued quote / SO letterhead: keep each non-blank pinned field, fall back to
+ * current Settings field-by-field when the pin is blank. Issued docs are records
+ * and must not change on reprint after a Settings rename or TIN change.
+ * Call with `pinned = null` for PO / billing (current Settings only).
+ */
+export function mergeCompanyLetterhead(
+  pinned: CompanySettings | null | undefined,
+  current: CompanySettings,
+): CompanySettings {
+  if (!pinned) return { ...current };
+  const merged = { ...current };
+  for (const key of LETTERHEAD_FIELDS) {
+    const value = pinned[key];
+    if (typeof value === "string" && value.trim()) merged[key] = value;
+  }
+  return merged;
+}
+
 export function printCompanyBlock(company: CompanySettings): PrintCompanyBlock {
   return {
     registeredName: company.name,

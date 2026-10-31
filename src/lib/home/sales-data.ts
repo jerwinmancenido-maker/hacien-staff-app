@@ -14,12 +14,14 @@ import {
   canShowHomeSales,
   isSalesEmpty,
   lastNMonthKeys,
+  manilaDayOfMonth,
   manilaMonthKey,
   monthKeyBounds,
+  mtdVsSameDaysChip,
   salesAxisTicks,
-  salesChangeVsLastMonth,
   salesMonthLabel,
   salesMonthsRangeLabel,
+  sameDaysEndYmd,
   shiftMonthKey,
   topSalesCustomers,
   type HomeSales,
@@ -82,11 +84,22 @@ export async function loadHomeSales(
   const yearStartYmd = `${taxYear}-01-01`;
   const yearEndExclusive = taxYearStart(taxYear + 1);
 
+  const currentKey = manilaMonthKey(now);
+  const lastMonthKey = shiftMonthKey(currentKey, -1);
+  const mtdDay = manilaDayOfMonth(now);
+  const priorSameDaysEnd = sameDaysEndYmd(lastMonthKey, mtdDay);
+  let lastMonthSameDaysCents = 0n;
+
   for (const r of rows) {
     const ymd = dateYmd(r.invoiceDate);
     const key = ymd.slice(0, 7) as MonthKey;
     const cents = toScaled(money(r.amount), 2);
     if (byMonth.has(key)) byMonth.set(key, (byMonth.get(key) ?? 0n) + cents);
+
+    // Same calendar days of prior month (through mtdDay, capped).
+    if (key === lastMonthKey && ymd <= priorSameDaysEnd) {
+      lastMonthSameDaysCents += cents;
+    }
 
     // Top customers: tax-year YTD only (same window as Non-VAT).
     if (r.invoiceDate >= yearFrom && r.invoiceDate < yearEndExclusive && ymd >= yearStartYmd) {
@@ -96,23 +109,25 @@ export async function loadHomeSales(
     }
   }
 
-  const currentKey = manilaMonthKey(now);
   const months: HomeSalesMonth[] = monthKeys.map((key, i) => {
     const prev = i > 0 ? monthKeys[i - 1]! : null;
     const label = salesMonthLabel(key, prev);
+    const isCurrent = key === currentKey;
     return {
       key,
       shortLabel: label.short,
       yearLabel: label.showYear ? String(label.year) : null,
       amount: fromScaled(byMonth.get(key) ?? 0n, 2),
-      isCurrent: key === currentKey,
+      isCurrent,
+      isPartial: isCurrent,
     };
   });
 
   const thisMonth = months[months.length - 1]?.amount ?? "0.00";
-  const lastMonthKey = shiftMonthKey(currentKey, -1);
   const lastMonth = fromScaled(byMonth.get(lastMonthKey) ?? 0n, 2);
-  const change = salesChangeVsLastMonth(thisMonth, lastMonth);
+  const lastMonthSameDays = fromScaled(lastMonthSameDaysCents, 2);
+  const mtdChip = mtdVsSameDaysChip(thisMonth, lastMonthSameDays, lastMonthKey, mtdDay);
+  const change = mtdChip?.change ?? { label: "—", tone: "none" as const };
 
   const top = topSalesCustomers(
     [...byCustomer.entries()].map(([customerId, v]) => ({
@@ -131,7 +146,10 @@ export async function loadHomeSales(
     monthsNarrow: months.slice(-6),
     thisMonth,
     lastMonth,
+    lastMonthSameDays,
+    mtdDay,
     change,
+    mtdChip,
     thisYear: Number.isFinite(thisYear) && thisYear > 0 ? thisYear.toFixed(2) : "0.00",
     topCustomers: top.map((c) => ({
       customerId: c.customerId,
