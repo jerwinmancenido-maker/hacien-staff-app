@@ -56,7 +56,7 @@ const STATUS_LABEL: Record<string, string> = {
   RECEIVED: "Received",
   CLOSED: "Closed",
   POSTED: "Posted",
-  RECORDED: "Recorded",
+  RECORDED: "Unpaid",
   PARTIALLY_PAID: "Partially paid",
   PAID: "Paid",
   "OPEN|OVERDUE": "Overdue",
@@ -70,6 +70,7 @@ const AVATAR: Record<TransactionKind, string> = {
   SUPPLIER_BILL: "B L",
   BILLING: "B L",
   COLLECTION: "C R",
+  SUPPLIER_PAYMENT: "P Y",
 };
 const AMOUNT_LABEL: Partial<Record<TransactionKind, string>> = {
   PURCHASE_ORDER: "PO total",
@@ -243,9 +244,11 @@ export async function TransactionsTab({
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Receiving / bills">
+              <optgroup label="Receiving / bills / payments">
                 <option value="POSTED">Posted</option>
-                <option value="RECORDED">Recorded</option>
+                <option value="RECORDED">Unpaid</option>
+                <option value="PARTIALLY_PAID">Partially paid</option>
+                <option value="PAID">Paid</option>
               </optgroup>
             </>
           )}
@@ -263,7 +266,7 @@ export async function TransactionsTab({
       {contactName && (
         <div className="small muted txn-contact-note">
           Showing transactions with <strong>{contactName}</strong>.
-          {owner.kind === "supplier" && " Supplier POs, receiving reports and bills are filtered by the PO's contact."}
+          {owner.kind === "supplier" && " Supplier POs, receiving reports, bills and payments are filtered by the PO's contact."}
         </div>
       )}
 
@@ -277,7 +280,7 @@ export async function TransactionsTab({
             ? "Nothing matches these filters."
             : owner.kind === "customer"
               ? "Quotes, sales orders, billings and collections for this customer will show here."
-              : "Supplier POs, receiving reports and bills for this supplier will show here."
+              : "Supplier POs, receiving reports, bills and payments for this supplier will show here."
         }
       />
 

@@ -36,6 +36,8 @@ export async function attachmentDownload(user: (PermissionUser & { id: string })
       billingId: att.billingId,
       collectionId: att.collectionId,
       withholding2307Id: att.withholding2307Id,
+      supplierPaymentId: att.supplierPaymentId,
+      supplierWithholding2307Id: att.supplierWithholding2307Id,
     },
     diff: false,
     ip: meta.ip ?? null,

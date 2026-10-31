@@ -35,6 +35,7 @@ export const settingsSections = {
     receivingReport: numberingFormat,
     billing: numberingFormat,
     collection: numberingFormat,
+    supplierPayment: numberingFormat,
   }),
   taxYear: z
     .object({
@@ -81,6 +82,10 @@ export const settingsSections = {
   collections: z.object({
     overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),
   }),
+  // Feature flags (OFF by default). Staging: turn on payablesEnabled here or set PAYABLES_ENABLED=true.
+  features: z.object({
+    payablesEnabled: z.boolean(),
+  }),
 } as const;
 
 export const settingsSchema = z.object(settingsSections);
@@ -101,6 +106,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   documents: "business documents",
   invoiceBooklet: "invoice booklet",
   collections: "collections",
+  features: "features",
 };
 
 export function isSettingsKey(key: string): key is SettingsKey {

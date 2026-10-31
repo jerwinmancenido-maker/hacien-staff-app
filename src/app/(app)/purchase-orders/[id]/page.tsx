@@ -251,6 +251,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     <th>Date</th>
                     <th className="num">Amount</th>
                     <th>Lines</th>
+                    <th>Payments</th>
                     <th>Files</th>
                     <th>Status</th>
                     <th aria-label="Actions" />
@@ -272,6 +273,18 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                           : "Total only"}
                         {b.voidReason && <div className="faint">Void: {b.voidReason}</div>}
                       </td>
+                      <td className="small">
+                        {b.payments.length === 0 ? (
+                          <span className="faint">—</span>
+                        ) : (
+                          b.payments.map((p) => (
+                            <div key={p.id}>
+                              <Link href={`/payables/payments/${p.id}`}>{p.number}</Link>
+                              <span className="faint"> · {formatPeso(p.cashApplied)}</span>
+                            </div>
+                          ))
+                        )}
+                      </td>
                       <td>
                         <AttachmentLinks files={b.attachments} />
                       </td>
@@ -279,7 +292,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         <BillStatusChip status={b.status} />
                       </td>
                       <td>
-                        {canEdit && b.status !== "VOID" && (
+                        {canEdit && b.status !== "VOID" && b.status !== "PAID" && b.status !== "PARTIALLY_PAID" && (
                           <VoidButton label="Void" docLabel="bill" body={`Bill ${b.billNumber} will be marked Void. Its number can be used again.`} onVoid={voidBillAction.bind(null, id, b.id)} />
                         )}
                       </td>
@@ -289,9 +302,11 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
               </table>
             </div>
           )}
-          <div className="small muted" style={{ marginTop: 8 }}>
-            Payments: later.
-          </div>
+          <p className="faint small" style={{ marginTop: 12 }}>
+            Payments are recorded under{" "}
+            <Link href={`/suppliers/${po.supplier.id}?tab=payments`}>the supplier</Link> or{" "}
+            <Link href="/payables/payments">Payables → Payments</Link>.
+          </p>
         </div>
       )}
 

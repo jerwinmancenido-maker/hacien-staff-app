@@ -28,6 +28,8 @@ const ENTITY_LABELS: Record<string, string> = {
   ReceivingReport: "a receiving report",
   SupplierBill: "a supplier bill",
   DocumentAttachment: "an attachment",
+  SupplierPayment: "a supplier payment",
+  SupplierWithholding2307: "a supplier 2307",
 };
 
 // Addresses and documents are archived (kept in history), not "marked inactive".

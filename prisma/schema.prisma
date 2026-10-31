@@ -59,9 +59,10 @@ model User {
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
-  billingsCreated        Billing[]            @relation("BillingCreatedBy")
-  billingsUpdated        Billing[]            @relation("BillingUpdatedBy")
-  collectionsCreated     Collection[]         @relation("CollectionCreatedBy")
+  billingsCreated              Billing[]                 @relation("BillingCreatedBy")
+  billingsUpdated              Billing[]                 @relation("BillingUpdatedBy")
+  collectionsCreated           Collection[]              @relation("CollectionCreatedBy")
+  supplierPaymentsCreated      SupplierPayment[]         @relation("SupplierPaymentCreatedBy")
 }
 
 model Session {
@@ -201,8 +202,10 @@ model Supplier {
   salesOrderItems SalesOrderItem[]
   addresses       Address[]
   documents       BusinessDocument[]
-  purchaseOrders  PurchaseOrder[]
-  supplierBills   SupplierBill[]
+  purchaseOrders     PurchaseOrder[]
+  supplierBills      SupplierBill[]
+  supplierPayments   SupplierPayment[]
+  supplierWithholdings SupplierWithholding2307[]
 
   @@index([name])
 }
@@ -397,6 +400,7 @@ enum DocType {
   SUPPLIER_BILL
   BILLING
   COLLECTION
+  SUPPLIER_PAYMENT
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -619,8 +623,12 @@ enum ReceivingReportStatus {
   VOID
 }
 
+// RECORDED = unpaid (legacy name kept for additive migration). Paid status is
+// recomputed from posted SupplierPaymentAllocation rows.
 enum SupplierBillStatus {
   RECORDED
+  PARTIALLY_PAID
+  PAID
   VOID
 }
 
@@ -757,7 +765,7 @@ model ReceivingReportItem {
 }
 
 // The supplier's invoice, recorded against a PO (or just the supplier).
-// Payments come later.
+// Status (unpaid / partial / paid) is recomputed from posted payment allocations.
 model SupplierBill {
   id              String             @id @default(cuid())
   supplierId      String
@@ -770,6 +778,8 @@ model SupplierBill {
   // bill number unique per supplier among non-void bills.
   activeKey       String?            @unique @db.VarChar(255)
   billDate        DateTime           @db.Date
+  // Due date for AP aging (from PO/supplier terms at record time; editable later).
+  dueDate         DateTime           @db.Date
   amount          Decimal            @db.Decimal(15, 2)
   notes           String?            @db.Text
   status          SupplierBillStatus @default(RECORDED)
@@ -780,13 +790,16 @@ model SupplierBill {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  items       SupplierBillItem[]
-  attachments DocumentAttachment[]
+  items        SupplierBillItem[]
+  attachments  DocumentAttachment[]
+  allocations  SupplierPaymentAllocation[]
+  withholdings SupplierWithholding2307[]
 
   @@index([supplierId])
   @@index([purchaseOrderId])
   @@index([status])
   @@index([billDate])
+  @@index([dueDate])
 }
 
 // Optional line-level detail of a bill, for the 3-way match.
@@ -806,36 +819,43 @@ model SupplierBillItem {
 }
 
 // Files attached to a receiving report (delivery receipt photo), a supplier
-// bill (invoice scan), a billing (filled-in booklet copy), a collection, or a
-// BIR 2307. Same storage as business documents: random key under UPLOAD_DIR,
-// magic-byte sniffed, never deleted (archivedAt instead).
+// bill (invoice scan), a billing (filled-in booklet copy), a collection, a
+// supplier payment (proof of payment), or a BIR 2307. Same storage as business
+// documents: random key under UPLOAD_DIR, magic-byte sniffed, never deleted
+// (archivedAt instead).
 model DocumentAttachment {
-  id                String           @id @default(cuid())
-  receivingReportId String?
-  receivingReport   ReceivingReport? @relation(fields: [receivingReportId], references: [id])
-  supplierBillId    String?
-  supplierBill      SupplierBill?    @relation(fields: [supplierBillId], references: [id])
-  billingId         String?
-  billing           Billing?         @relation(fields: [billingId], references: [id])
-  collectionId      String?
-  collection        Collection?      @relation(fields: [collectionId], references: [id])
-  withholding2307Id String?
-  withholding2307   Withholding2307? @relation(fields: [withholding2307Id], references: [id])
-  fileName          String           @db.VarChar(255)
-  mimeType          String           @db.VarChar(100)
-  sizeBytes         Int
-  storageKey        String           @unique @db.VarChar(64)
-  sha256            String           @db.VarChar(64)
-  uploadedById      String
-  uploadedBy        User             @relation(fields: [uploadedById], references: [id])
-  archivedAt        DateTime?
-  createdAt         DateTime         @default(now())
+  id                        String                   @id @default(cuid())
+  receivingReportId         String?
+  receivingReport           ReceivingReport?         @relation(fields: [receivingReportId], references: [id])
+  supplierBillId            String?
+  supplierBill              SupplierBill?            @relation(fields: [supplierBillId], references: [id])
+  billingId                 String?
+  billing                   Billing?                 @relation(fields: [billingId], references: [id])
+  collectionId              String?
+  collection                Collection?              @relation(fields: [collectionId], references: [id])
+  withholding2307Id         String?
+  withholding2307           Withholding2307?         @relation(fields: [withholding2307Id], references: [id])
+  supplierPaymentId         String?
+  supplierPayment           SupplierPayment?         @relation(fields: [supplierPaymentId], references: [id])
+  supplierWithholding2307Id String?
+  supplierWithholding2307   SupplierWithholding2307? @relation(fields: [supplierWithholding2307Id], references: [id])
+  fileName                  String                   @db.VarChar(255)
+  mimeType                  String                   @db.VarChar(100)
+  sizeBytes                 Int
+  storageKey                String                   @unique @db.VarChar(64)
+  sha256                    String                   @db.VarChar(64)
+  uploadedById              String
+  uploadedBy                User                     @relation(fields: [uploadedById], references: [id])
+  archivedAt                DateTime?
+  createdAt                 DateTime                 @default(now())
 
   @@index([receivingReportId])
   @@index([supplierBillId])
   @@index([billingId])
   @@index([collectionId])
   @@index([withholding2307Id])
+  @@index([supplierPaymentId])
+  @@index([supplierWithholding2307Id])
 }
 
 // ---------------------------------------------------------------------------
@@ -998,5 +1018,110 @@ model Withholding2307 {
   @@index([customerId])
   @@index([billingId])
   @@index([collectionId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Supplier payments (hand-recorded bank payments; no bank/API connection)
+// ---------------------------------------------------------------------------
+
+enum SupplierPaymentStatus {
+  POSTED
+  VOID
+}
+
+enum SupplierPaymentMethod {
+  BANK_TRANSFER
+  CHECK
+  CASH
+  E_WALLET
+}
+
+enum SupplierWithholding2307Status {
+  TO_ISSUE
+  ISSUED
+}
+
+// Internal PAY-YYYY-####. Records a cash payment already made at the bank.
+// Allocations must cover the cash paid plus any EWT exactly (no supplier advances).
+model SupplierPayment {
+  id          String                @id @default(cuid())
+  number      String                @unique @db.VarChar(40)
+  supplierId  String
+  supplier    Supplier              @relation(fields: [supplierId], references: [id])
+  date        DateTime              @db.Date
+  method      SupplierPaymentMethod
+  // Bank reference or check number (free text).
+  reference   String?               @db.VarChar(100)
+  checkBank   String?               @db.VarChar(100)
+  checkDate   DateTime?             @db.Date
+  // Cash paid (bank/check/cash/e-wallet). Does not include EWT withheld.
+  amountPaid  Decimal               @db.Decimal(15, 2)
+  notes       String?               @db.Text
+  status      SupplierPaymentStatus @default(POSTED)
+  voidedAt    DateTime?
+  voidReason  String?               @db.Text
+  createdById String
+  createdBy   User                  @relation("SupplierPaymentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  allocations  SupplierPaymentAllocation[]
+  withholdings SupplierWithholding2307[]
+  attachments  DocumentAttachment[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([date])
+}
+
+// Links cash + optional EWT from a supplier payment onto a supplier bill.
+// Snapshot rate/ATC on the row so past records stay correct if rates change.
+// Sum(cashApplied) must equal payment.amountPaid; sum(cash+EWT) equals
+// amountPaid + total EWT (exact — no unapplied advances in this part).
+model SupplierPaymentAllocation {
+  id                 String          @id @default(cuid())
+  supplierPaymentId  String
+  supplierPayment    SupplierPayment @relation(fields: [supplierPaymentId], references: [id])
+  supplierBillId     String
+  supplierBill       SupplierBill    @relation(fields: [supplierBillId], references: [id])
+  cashApplied        Decimal         @db.Decimal(15, 2)
+  withholdingApplied Decimal         @default(0) @db.Decimal(15, 2)
+  // EWT snapshot at payment time (fraction e.g. 0.0100 = 1%).
+  withholdingRate    Decimal         @default(0) @db.Decimal(5, 4)
+  atcCode            String?         @db.VarChar(20)
+
+  @@unique([supplierPaymentId, supplierBillId])
+  @@index([supplierPaymentId])
+  @@index([supplierBillId])
+}
+
+// BIR Form 2307 to *issue* to a supplier when HACIEN withholds EWT.
+// Record status only — the app does not generate the BIR form.
+// UNVERIFIED whether HACIEN must withhold (pending RDO answer).
+model SupplierWithholding2307 {
+  id                String                        @id @default(cuid())
+  supplierBillId    String?
+  supplierBill      SupplierBill?                 @relation(fields: [supplierBillId], references: [id])
+  supplierPaymentId String?
+  supplierPayment   SupplierPayment?              @relation(fields: [supplierPaymentId], references: [id])
+  supplierId        String
+  supplier          Supplier                      @relation(fields: [supplierId], references: [id])
+  rate              Decimal                       @db.Decimal(5, 4)
+  atcCode           String?                       @db.VarChar(20)
+  amount            Decimal                       @db.Decimal(15, 2)
+  periodFrom        DateTime?                     @db.Date
+  periodTo          DateTime?                     @db.Date
+  status            SupplierWithholding2307Status @default(TO_ISSUE)
+  issuedAt          DateTime?                     @db.Date
+  notes             String?                       @db.Text
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  attachments DocumentAttachment[]
+
+  @@index([supplierId])
+  @@index([supplierBillId])
+  @@index([supplierPaymentId])
   @@index([status])
 }

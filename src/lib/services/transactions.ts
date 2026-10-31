@@ -17,6 +17,7 @@ import type {
   ReceivingReportStatus,
   SalesOrderStatus,
   SupplierBillStatus,
+  SupplierPaymentStatus,
 } from "@prisma/client";
 import { db } from "../db";
 import { canSeeCosts, stripCosts, type PermissionUser } from "../permissions";
@@ -29,7 +30,15 @@ import { overdueInfo } from "../billing/views";
 import { getSettingsSnapshot } from "../settings";
 import type { ContactOwner } from "./contacts";
 
-export type TransactionKind = "QUOTE" | "SALES_ORDER" | "PURCHASE_ORDER" | "RECEIVING_REPORT" | "SUPPLIER_BILL" | "BILLING" | "COLLECTION";
+export type TransactionKind =
+  | "QUOTE"
+  | "SALES_ORDER"
+  | "PURCHASE_ORDER"
+  | "RECEIVING_REPORT"
+  | "SUPPLIER_BILL"
+  | "BILLING"
+  | "COLLECTION"
+  | "SUPPLIER_PAYMENT";
 export const TRANSACTION_KINDS: TransactionKind[] = [
   "QUOTE",
   "SALES_ORDER",
@@ -38,6 +47,7 @@ export const TRANSACTION_KINDS: TransactionKind[] = [
   "SUPPLIER_BILL",
   "BILLING",
   "COLLECTION",
+  "SUPPLIER_PAYMENT",
 ];
 export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = {
   QUOTE: "Quote",
@@ -47,19 +57,21 @@ export const TRANSACTION_KIND_LABELS: Record<TransactionKind, string> = {
   SUPPLIER_BILL: "Supplier bill",
   BILLING: "Billing",
   COLLECTION: "Collection",
+  SUPPLIER_PAYMENT: "Supplier payment",
 };
 /** Purchasing kinds are cost data: only listed for users with "Can see costs". */
-export const PURCHASING_KINDS: TransactionKind[] = ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"];
+export const PURCHASING_KINDS: TransactionKind[] = ["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL", "SUPPLIER_PAYMENT"];
 /** Customer-facing billing kinds (not cost data). */
 export const BILLING_KINDS: TransactionKind[] = ["BILLING", "COLLECTION"];
 /** Customer Transactions tab: quotes, SOs, billings, collections only. */
 export const CUSTOMER_TX_KINDS: TransactionKind[] = ["QUOTE", "SALES_ORDER", ...BILLING_KINDS];
-/** Supplier Transactions tab: POs, RRs, supplier bills (payments added in payables). */
+/** Supplier Transactions tab: POs, RRs, supplier bills and supplier payments. */
 export const SUPPLIER_TX_KINDS: TransactionKind[] = [...PURCHASING_KINDS];
 export const RR_STATUSES: ReceivingReportStatus[] = ["POSTED", "VOID"];
-export const BILL_STATUSES: SupplierBillStatus[] = ["RECORDED", "VOID"];
+export const BILL_STATUSES: SupplierBillStatus[] = ["RECORDED", "PARTIALLY_PAID", "PAID", "VOID"];
 export const BILLING_TX_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
 export const COLLECTION_TX_STATUSES: CollectionStatus[] = ["POSTED", "VOID"];
+export const SUPPLIER_PAYMENT_TX_STATUSES: SupplierPaymentStatus[] = ["POSTED", "VOID"];
 export { PO_STATUSES };
 
 export const TRANSACTIONS_PAGE_SIZE = 50;
@@ -346,31 +358,36 @@ function valueReceived(items: readonly { qtyReceived: { toFixed(n: number): stri
   return fromScaled(cents, 2);
 }
 
-/** Supplier Transactions only — never called for customers after the both-ways split. */
 async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, take: number): Promise<{ rows: Row[]; count: number; totals: TransactionTotals[] }> {
   const want = (k: TransactionKind) => !filters.type || filters.type === k;
   const poStatus = statusFilter<PurchaseOrderStatus>(filters.status, PO_STATUSES);
   const rrStatus = statusFilter<ReceivingReportStatus>(filters.status, RR_STATUSES);
   const billStatus = statusFilter<SupplierBillStatus>(filters.status, BILL_STATUSES);
-  const poOwner: Prisma.PurchaseOrderWhereInput = { supplierId: owner.id };
-  const poContact: Prisma.PurchaseOrderWhereInput = filters.contactId ? { supplierContactId: filters.contactId } : {};
+  const payStatus = statusFilter<SupplierPaymentStatus>(filters.status, SUPPLIER_PAYMENT_TX_STATUSES);
+  const supplier = owner.kind === "supplier";
+  // Which POs belong to the owner (customers: through their sales orders), and the contact filter.
+  const poOwner: Prisma.PurchaseOrderWhereInput = supplier ? { supplierId: owner.id } : { salesOrder: { is: { customerId: owner.id } } };
+  const poContact: Prisma.PurchaseOrderWhereInput = filters.contactId ? (supplier ? { supplierContactId: filters.contactId } : { salesOrder: { is: { contactId: filters.contactId } } }) : {};
   const poScope: Prisma.PurchaseOrderWhereInput = { AND: [poOwner, poContact] };
 
   const poWhere: Prisma.PurchaseOrderWhereInput = { ...poScope, ...(poStatus ?? {}) };
   const rrWhere: Prisma.ReceivingReportWhereInput = { purchaseOrder: { is: poScope }, ...(rrStatus ?? {}) };
-  const billWhere: Prisma.SupplierBillWhereInput = {
-    supplierId: owner.id,
-    ...(filters.contactId ? { purchaseOrder: { is: { supplierContactId: filters.contactId } } } : {}),
-    ...(billStatus ?? {}),
-  };
+  const billWhere: Prisma.SupplierBillWhereInput = supplier
+    ? { supplierId: owner.id, ...(filters.contactId ? { purchaseOrder: { is: { supplierContactId: filters.contactId } } } : {}), ...(billStatus ?? {}) }
+    : { purchaseOrder: { is: poScope }, ...(billStatus ?? {}) };
+  const payWhere: Prisma.SupplierPaymentWhereInput = supplier
+    ? { supplierId: owner.id, ...(payStatus ?? {}) }
+    : { allocations: { some: { supplierBill: { is: { purchaseOrder: { is: poScope } } } } }, ...(payStatus ?? {}) };
   const wantPo = want("PURCHASE_ORDER") && poStatus !== null;
   const wantRr = want("RECEIVING_REPORT") && rrStatus !== null;
   const wantBill = want("SUPPLIER_BILL") && billStatus !== null;
+  // Payments are supplier-scoped; skip when filtering a customer with a contact.
+  const wantPay = want("SUPPLIER_PAYMENT") && payStatus !== null && !(owner.kind === "customer" && filters.contactId);
   const orderBy = [{ createdAt: "desc" }] as const;
 
   const rrItems = { items: { select: { qtyReceived: true, purchaseOrderItem: { select: { unitCost: true } } } } } as const;
-  const [pos, rrs, bills, poCount, rrCount, billCount] = await Promise.all([
-    wantPo ? db.purchaseOrder.findMany({ where: poWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplierContact: { select: { name: true } } } }) : [],
+  const [pos, rrs, bills, pays, poCount, rrCount, billCount, payCount] = await Promise.all([
+    wantPo ? db.purchaseOrder.findMany({ where: poWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplierContact: { select: { name: true } }, supplier: { select: { name: true } } } }) : [],
     wantRr
       ? db.receivingReport.findMany({
           where: rrWhere,
@@ -380,9 +397,11 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
         })
       : [],
     wantBill ? db.supplierBill.findMany({ where: billWhere, orderBy: [{ billDate: "desc" }, ...orderBy], take, include: { purchaseOrder: { select: { id: true, supplierContact: { select: { name: true } } } } } }) : [],
+    wantPay ? db.supplierPayment.findMany({ where: payWhere, orderBy: [{ date: "desc" }, ...orderBy], take, include: { supplier: { select: { name: true } } } }) : [],
     wantPo ? db.purchaseOrder.count({ where: poWhere }) : 0,
     wantRr ? db.receivingReport.count({ where: rrWhere }) : 0,
     wantBill ? db.supplierBill.count({ where: billWhere }) : 0,
+    wantPay ? db.supplierPayment.count({ where: payWhere }) : 0,
   ]);
 
   const rows: Row[] = [
@@ -392,7 +411,7 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
       number: p.number,
       date: ymd(p.date)!,
       status: p.status,
-      contactName: p.supplierContact?.name ?? null,
+      contactName: supplier ? (p.supplierContact?.name ?? null) : p.supplier.name,
       total: money(p.subtotal),
       href: `/purchase-orders/${p.id}`,
       createdAt: p.createdAt,
@@ -419,6 +438,17 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
       href: b.purchaseOrder ? `/purchase-orders/${b.purchaseOrder.id}?tab=bills` : `/suppliers/${b.supplierId}?tab=transactions`,
       createdAt: b.createdAt,
     })),
+    ...pays.map((p) => ({
+      kind: "SUPPLIER_PAYMENT" as const,
+      id: p.id,
+      number: p.number,
+      date: ymd(p.date)!,
+      status: p.status,
+      contactName: supplier ? null : p.supplier.name,
+      total: money(p.amountPaid),
+      href: `/payables/payments/${p.id}`,
+      createdAt: p.createdAt,
+    })),
   ];
 
   const totals: TransactionTotals[] = [];
@@ -440,7 +470,7 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
     totals.push({ kind: "RECEIVING_REPORT", count: posted.length, voidCount, total: valueReceived(posted.flatMap((r) => r.items)) });
   }
   if (wantBill) {
-    const notVoid = { AND: [billWhere, { status: "RECORDED" as const }] };
+    const notVoid = { AND: [billWhere, { status: { not: "VOID" as const } }] };
     const [count, voidCount, sum] = await Promise.all([
       db.supplierBill.count({ where: notVoid }),
       db.supplierBill.count({ where: { AND: [billWhere, { status: "VOID" }] } }),
@@ -448,7 +478,16 @@ async function purchasingRows(owner: ContactOwner, filters: TransactionFilters, 
     ]);
     totals.push({ kind: "SUPPLIER_BILL", count, voidCount, total: sumMoney([sum._sum.amount]) });
   }
-  return { rows, count: poCount + rrCount + billCount, totals };
+  if (wantPay) {
+    const notVoid = { AND: [payWhere, { status: "POSTED" as const }] };
+    const [count, voidCount, sum] = await Promise.all([
+      db.supplierPayment.count({ where: notVoid }),
+      db.supplierPayment.count({ where: { AND: [payWhere, { status: "VOID" }] } }),
+      db.supplierPayment.aggregate({ where: notVoid, _sum: { amountPaid: true } }),
+    ]);
+    totals.push({ kind: "SUPPLIER_PAYMENT", count, voidCount, total: sumMoney([sum._sum.amountPaid]) });
+  }
+  return { rows, count: poCount + rrCount + billCount + payCount, totals };
 }
 
 /** Totals for one kind over the whole filtered set (not just the page). VOID documents are only counted. */

@@ -24,6 +24,7 @@ const TABS = [
   { key: "tax", label: "Tax year" },
   { key: "withholding", label: "Withholding" },
   { key: "billing", label: "Billing" },
+  { key: "features", label: "Features" },
   { key: "company", label: "Company" },
   { key: "lists", label: "Lists" },
   { key: "changelog", label: "Change log" },
@@ -159,6 +160,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               ]}
             />
           </>
+        )}
+
+        {tab === "features" && (
+          <SettingsForm
+            title="Features"
+            label={SETTINGS_LABELS.features}
+            versionId={snap.versionId}
+            action={save("features")}
+            fields={[
+              {
+                name: "payablesEnabled",
+                label: "Enable Payables (supplier payments)",
+                kind: "checkbox",
+                value: s.features.payablesEnabled,
+                hint: "OFF by default. Turn on for staging to use /payables. Or set env PAYABLES_ENABLED=true (env wins when set).",
+              },
+            ]}
+          />
         )}
 
         {tab === "company" && (

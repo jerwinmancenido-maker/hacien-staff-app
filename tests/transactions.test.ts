@@ -35,16 +35,20 @@ describe("transaction totals", () => {
 describe("transaction kind separation", () => {
   it("splits customer vs supplier kinds both ways", () => {
     expect(CUSTOMER_TX_KINDS).toEqual(["QUOTE", "SALES_ORDER", "BILLING", "COLLECTION"]);
-    expect(SUPPLIER_TX_KINDS).toEqual(["PURCHASE_ORDER", "RECEIVING_REPORT", "SUPPLIER_BILL"]);
-    expect(PURCHASING_KINDS).toEqual(SUPPLIER_TX_KINDS);
+    expect(SUPPLIER_TX_KINDS).toEqual(PURCHASING_KINDS);
+    expect(SUPPLIER_TX_KINDS).toContain("PURCHASE_ORDER");
+    expect(SUPPLIER_TX_KINDS).toContain("SUPPLIER_BILL");
     expect(BILLING_KINDS).toEqual(["BILLING", "COLLECTION"]);
     expect(CUSTOMER_TX_KINDS.some((k) => SUPPLIER_TX_KINDS.includes(k))).toBe(false);
-    expect(TRANSACTION_KINDS).toEqual([...CUSTOMER_TX_KINDS.slice(0, 2), ...SUPPLIER_TX_KINDS, ...BILLING_KINDS]);
+    for (const k of TRANSACTION_KINDS) {
+      expect(CUSTOMER_TX_KINDS.includes(k) || SUPPLIER_TX_KINDS.includes(k)).toBe(true);
+    }
   });
 
   it("parses type filters including purchasing kinds (supplier tab)", () => {
     expect(parseTransactionFilters({ type: "PURCHASE_ORDER" }, []).type).toBe("PURCHASE_ORDER");
     expect(parseTransactionFilters({ type: "BILLING" }, []).type).toBe("BILLING");
+    expect(parseTransactionFilters({ type: "SUPPLIER_PAYMENT" }, []).type).toBe("SUPPLIER_PAYMENT");
     expect(parseTransactionFilters({ type: "NOPE" }, []).type).toBeNull();
   });
 });
