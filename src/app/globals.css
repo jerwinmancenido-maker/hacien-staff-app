@@ -5095,12 +5095,14 @@ button.contact-card-add {
     min-width: 0;
     align-items: stretch; /* equal tile height like KPI row */
   }
-  .home-pipeline-phone .home-pipeline-tile {
+  .home-pipeline-phone .home-pipeline-tile,
+  .home-pipeline-phone > .card {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
     align-self: stretch;
+    margin-top: 0; /* defeat global `.card + .card { margin-top: 14px }` */
     padding: 10px 12px;
     min-height: 0;
     height: auto;

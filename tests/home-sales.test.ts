@@ -336,6 +336,9 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(
       /@media \(max-width:\s*640px\)[\s\S]*\.home-pipeline-phone\s*\{[^}]*align-items:\s*stretch/s,
     );
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-pipeline-phone[\s\S]*margin-top:\s*0/s,
+    );
     const shots = readFileSync(path.join(root, "scripts/home-a-shots.mjs"), "utf8");
     expect(shots).toMatch(/scrollWidth/);
     expect(shots).toMatch(/assertNoHorizontalScroll/);
