@@ -2,9 +2,21 @@
   "host": "127.0.0.1",
   "report": [
     {
+      "name": "settings-withholding-360.png",
+      "width": 360,
+      "height": 2414,
+      "scrollWidth": 360
+    },
+    {
+      "name": "settings-withholding-1280.png",
+      "width": 1280,
+      "height": 1440,
+      "scrollWidth": 1280
+    },
+    {
       "name": "quote-editor-pick-1280.png",
       "width": 1280,
-      "height": 1593,
+      "height": 1855,
       "scrollWidth": 1265
     },
     {
@@ -46,7 +58,7 @@
     {
       "name": "quote-editor-pick-360.png",
       "width": 360,
-      "height": 2372,
+      "height": 2486,
       "scrollWidth": 360
     },
     {
