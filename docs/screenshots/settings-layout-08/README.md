@@ -8,7 +8,7 @@ Local throwaway DB only (`jerwin@example.com` seed). Full-page shots at real pag
 | approval | 900 | 900 | 360 |
 | numbering | 960 | 1583 | 360 |
 | tax | 1139 | 1536 | 360 |
-| tax-calendar | 1611 | 4297 | 360 |
+| tax-calendar | 1006 | 2759 | 360 |
 | withholding | 900 | 1771 | 360 |
 | billing | 900 | 1012 | 360 |
 | features | 900 | 900 | 360 |
