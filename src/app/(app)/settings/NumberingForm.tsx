@@ -1,6 +1,6 @@
 "use client";
 
-// Settings → Numbering: compact table (doc | prefix | digits | example).
+// Settings → Numbering: compact table (doc | restart yearly | prefix | digits | example).
 
 import { useRef, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
@@ -58,6 +58,7 @@ export function NumberingForm({
             <thead>
               <tr>
                 <th scope="col">Doc type</th>
+                <th scope="col">Restart yearly</th>
                 <th scope="col">Prefix</th>
                 <th scope="col">Next no.</th>
                 <th scope="col">Example</th>
@@ -80,24 +81,25 @@ export function NumberingForm({
                 return (
                   <tr key={d.key} data-doc={d.key}>
                     <td className="numbering-doc" data-label="Doc type">
-                      <div className="numbering-doc-row">
-                        <span className="strong">{d.label}</span>
-                        <label className="check numbering-reset" htmlFor={resetName}>
-                          <input type="hidden" name={resetName} value="false" />
-                          <input
-                            id={resetName}
-                            name={resetName}
-                            type="checkbox"
-                            value="true"
-                            defaultChecked={
-                              state.values?.[resetName] !== undefined
-                                ? state.values[resetName] === "true"
-                                : !!f.resetYearly
-                            }
-                          />
-                          Restart yearly
-                        </label>
-                      </div>
+                      <span className="strong">{d.label}</span>
+                    </td>
+                    <td className="numbering-reset-cell" data-label="Restart yearly">
+                      <label className="check numbering-reset" htmlFor={resetName}>
+                        <input type="hidden" name={resetName} value="false" />
+                        <input
+                          id={resetName}
+                          name={resetName}
+                          type="checkbox"
+                          value="true"
+                          aria-label={`Restart ${d.label} counter every year`}
+                          defaultChecked={
+                            state.values?.[resetName] !== undefined
+                              ? state.values[resetName] === "true"
+                              : !!f.resetYearly
+                          }
+                        />
+                        <span className="numbering-reset-text">Restart yearly</span>
+                      </label>
                     </td>
                     <td className={`numbering-prefix${e[prefixName] ? " has-error" : ""}`} data-label="Prefix">
                       <label className="sr-only" htmlFor={prefixName}>

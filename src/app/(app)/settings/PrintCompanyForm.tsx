@@ -102,7 +102,7 @@ export function PrintCompanyForm({
         &quot;Print full account number&quot; for a receiving account.
       </p>
       {warning && (
-        <div className="alert warn" role="status">
+        <div className="settings-notice" role="status">
           <b>{warning}</b>
         </div>
       )}

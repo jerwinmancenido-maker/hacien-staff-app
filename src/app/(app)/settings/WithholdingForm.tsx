@@ -82,13 +82,13 @@ export function WithholdingForm({
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id ?? `new-${i}`}>
-                  <td>
+                  <td data-label="Code">
                     <input
                       aria-label="Code"
                       value={r.code}
                       readOnly={!!r.id}
                       onChange={(ev) => set(i, { code: ev.target.value.toUpperCase() })}
-                      style={{ width: 120 }}
+                      className="withholding-code-input"
                     />
                     {rowError(i) && (
                       <div className="error small" role="alert">
@@ -96,7 +96,7 @@ export function WithholdingForm({
                       </div>
                     )}
                   </td>
-                  <td className="col-label">
+                  <td className="col-label" data-label="Label">
                     <input
                       aria-label="Label"
                       value={r.label}
@@ -104,7 +104,7 @@ export function WithholdingForm({
                       className="withholding-label-input"
                     />
                   </td>
-                  <td>
+                  <td data-label="Applies to">
                     <select aria-label="Applies to" value={r.lineKind} onChange={(ev) => set(i, { lineKind: ev.target.value })}>
                       {WITHHOLDING_LINE_KINDS.map((k) => (
                         <option key={k} value={k}>
@@ -113,17 +113,23 @@ export function WithholdingForm({
                       ))}
                     </select>
                   </td>
-                  <td>
-                    <input aria-label="ATC code" value={r.atcCode} onChange={(ev) => set(i, { atcCode: ev.target.value })} placeholder="—" style={{ width: 80 }} />
+                  <td data-label="ATC">
+                    <input aria-label="ATC code" value={r.atcCode} onChange={(ev) => set(i, { atcCode: ev.target.value })} placeholder="—" className="withholding-atc-input" />
                   </td>
-                  <td className="num">
-                    <input aria-label="Rate percent" value={r.ratePct} inputMode="decimal" onChange={(ev) => set(i, { ratePct: ev.target.value })} style={{ width: 70, textAlign: "right" }} />
+                  <td className="num" data-label="Rate %">
+                    <input aria-label="Rate percent" value={r.ratePct} inputMode="decimal" onChange={(ev) => set(i, { ratePct: ev.target.value })} className="withholding-rate-input" />
                   </td>
-                  <td>
+                  <td data-label="Active">
                     <input aria-label="Active" type="checkbox" checked={r.active} onChange={(ev) => set(i, { active: ev.target.checked })} />
                   </td>
-                  <td>
-                    <input aria-label="Note" value={r.note} onChange={(ev) => set(i, { note: ev.target.value })} />
+                  <td className="col-note" data-label="Note">
+                    <textarea
+                      aria-label="Note"
+                      className="withholding-note-input"
+                      rows={2}
+                      value={r.note}
+                      onChange={(ev) => set(i, { note: ev.target.value })}
+                    />
                   </td>
                 </tr>
               ))}

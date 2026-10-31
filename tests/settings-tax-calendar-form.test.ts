@@ -84,6 +84,8 @@ describe("TaxCalendarForm markup", () => {
     expect(html).not.toContain("Day of the month (1–31).");
     expect(html).not.toContain("Month of the year (1–12).");
     expect(html).toContain("Leave blank to use 25 days after quarter end.");
+    expect(html).toContain("tax-cal-hint-row");
+    expect(html).toContain('data-hint-for="2551q"');
     expect(html).toContain("settings-form-actions");
     expect(html).toContain("Save changes");
 
