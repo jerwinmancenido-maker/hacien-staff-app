@@ -21,6 +21,7 @@ import { approvalReasons, docTotals, ratePctLabel, toScaled, type ItemKind, type
 import { remainingToBill } from "../billing/status";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
+import { mergeCompanyLetterhead } from "../print/company";
 
 type StoredMoney = {
   contractPrice: string;
@@ -481,9 +482,11 @@ export type PrintDoc = {
 
 const printItem = (i: ItemRow): PrintItem => ({ description: i.description, qty: money(i.qty), unit: i.unit, unitPrice: money(i.unitPrice), total: money(i.total) });
 
+/** Pinned-first letterhead; blank pinned fields fall back to current Settings. */
 async function companyFor(settingsVersionId: string) {
-  const snap = (await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot());
-  return snap.settings.company;
+  const latest = await getSettingsSnapshot();
+  const pinned = await getSettingsVersion(settingsVersionId);
+  return mergeCompanyLetterhead(pinned?.settings.company, latest.settings.company);
 }
 
 export async function getQuotePrint(id: string): Promise<PrintDoc | null> {

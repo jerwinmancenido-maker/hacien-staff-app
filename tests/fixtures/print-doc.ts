@@ -1,5 +1,11 @@
 import type { ProfessionalPrintModel } from "@/lib/print/types";
-import { INPUT_TAX_DISCLAIMER, NOT_OFFICIAL_INVOICE, QUOTATION_NOT_INVOICE, STATEMENT_NOT_OFFICIAL } from "@/lib/print/tax-wording";
+import {
+  INPUT_TAX_DISCLAIMER,
+  NOT_OFFICIAL_INVOICE,
+  QUOTATION_NOT_INVOICE,
+  SALES_ORDER_NOT_INVOICE,
+  STATEMENT_NOT_OFFICIAL,
+} from "@/lib/print/tax-wording";
 
 const company = {
   registeredName: "HACIEN Sample Trading Co.",
@@ -110,7 +116,7 @@ export const salesOrderPrintFixture = (): ProfessionalPrintModel =>
     number: "SO-2026-0001",
     hideStatus: true,
     thankYou: true,
-    taxLines: [QUOTATION_NOT_INVOICE],
+    taxLines: [SALES_ORDER_NOT_INVOICE],
     meta: [
       { label: "Prepared by", value: "Jerwin" },
       { label: "Customer PO/ref", value: "PO-CUST-99" },
