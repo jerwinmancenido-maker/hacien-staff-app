@@ -47,7 +47,7 @@ export function WithholdingForm({
   return (
     <div className="card settings-section">
       <h2 className="settings-section-title">Withholding rates</h2>
-      <div className="alert warn" role="note">
+      <div className="settings-notice" role="note">
         <b>Rates must be verified with BIR / accountant.</b> These are examples only. Changes apply to new quotes; existing quotes keep the
         rates they were made with.
       </div>
@@ -66,12 +66,12 @@ export function WithholdingForm({
         )}
         <input type="hidden" name="baseVersionId" value={versionId} />
         <input type="hidden" name="rows" value={JSON.stringify(rows)} />
-        <div className="table-wrap edit-table">
+        <div className="table-wrap edit-table withholding-settings-table">
           <table className="list">
             <thead>
               <tr>
                 <th>Code</th>
-                <th>Label</th>
+                <th className="col-label">Label</th>
                 <th>Applies to</th>
                 <th>ATC</th>
                 <th className="num">Rate %</th>
@@ -96,8 +96,13 @@ export function WithholdingForm({
                       </div>
                     )}
                   </td>
-                  <td>
-                    <input aria-label="Label" value={r.label} onChange={(ev) => set(i, { label: ev.target.value })} />
+                  <td className="col-label">
+                    <input
+                      aria-label="Label"
+                      value={r.label}
+                      onChange={(ev) => set(i, { label: ev.target.value })}
+                      className="withholding-label-input"
+                    />
                   </td>
                   <td>
                     <select aria-label="Applies to" value={r.lineKind} onChange={(ev) => set(i, { lineKind: ev.target.value })}>

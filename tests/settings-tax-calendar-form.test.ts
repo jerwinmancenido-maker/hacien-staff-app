@@ -22,6 +22,9 @@ import type { FormState } from "@/lib/validation/forms";
 
 const noopAction = async (): Promise<FormState> => ({ ok: true });
 
+const INTRO =
+  "Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and checked. This app never files or pays. Do not add the abolished 0605 fee.";
+
 describe("obligationUsesDueMonth", () => {
   it("is true only for annual_1701 (1701 / 1701A)", () => {
     const annual = TAX_CALENDAR_OBLIGATIONS.filter((d) => obligationUsesDueMonth(d)).map((d) => d.key);
@@ -37,18 +40,26 @@ describe("obligationUsesDueMonth", () => {
 });
 
 describe("obligationDueDayHint", () => {
-  it("returns one short line per schedule kind", () => {
+  it("returns special one-line hints only; generic day/month ranges live in headers", () => {
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
       const hint = obligationDueDayHint(def);
-      expect(hint.length).toBeGreaterThan(0);
+      if (hint == null) {
+        expect(["quarterly_1701q", "annual_1701", "quarterly_after_end", "monthly"]).toContain(def.schedule.kind);
+        continue;
+      }
       expect(hint.includes("\n")).toBe(false);
       expect(hint.toLowerCase()).not.toContain("catalog month rule");
+      expect(hint).not.toBe("Day of the month (1–31).");
+      expect(hint).not.toBe("Month of the year (1–12).");
     }
+    expect(obligationDueDayHint(TAX_CALENDAR_OBLIGATIONS.find((d) => d.key === "2551q")!)).toContain(
+      "25 days after quarter end",
+    );
   });
 });
 
 describe("TaxCalendarForm markup", () => {
-  it("renders COR row, one table row per form, and Due month inputs only for annual", () => {
+  it("renders intro inside the card, COR baseline, header ranges, Due month only for annual", () => {
     const seed = defaultTaxCalendarSettings();
     const html = renderToStaticMarkup(
       createElement(TaxCalendarForm, {
@@ -57,17 +68,28 @@ describe("TaxCalendarForm markup", () => {
         action: noopAction,
         corUploadedAndChecked: seed.corUploadedAndChecked,
         obligations: seed.obligations,
+        intro: INTRO,
       }),
     );
 
+    expect(html).toContain("settings-tax-cal-intro");
+    expect(html).toContain(INTRO);
+    expect(html).toContain("settings-cor-check");
     expect(html).toContain("COR uploaded and checked");
     expect(html).toContain("tax-cal-settings-table");
     expect(html).toContain(">Form</th>");
     expect(html).toContain(">Show</th>");
-    expect(html).toContain(">Due day</th>");
-    expect(html).toContain(">Due month</th>");
+    expect(html).toContain(">Due day (1–31)</th>");
+    expect(html).toContain(">Due month (1–12)</th>");
+    expect(html).not.toContain("Day of the month (1–31).");
+    expect(html).not.toContain("Month of the year (1–12).");
+    expect(html).toContain("Leave blank to use 25 days after quarter end.");
     expect(html).toContain("settings-form-actions");
     expect(html).toContain("Save changes");
+
+    // App defaults: 2551Q and 2550Q Show ON (not a seed override).
+    expect(seed.obligations["2551q"].enabled).toBe(true);
+    expect(seed.obligations["2550q"].enabled).toBe(true);
 
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
       const rowMatch = html.match(
@@ -143,5 +165,8 @@ describe("settings layout CSS contracts", () => {
     expect(css).toMatch(/\.settings-form-actions[^}]*sticky/);
     expect(css).toMatch(/\.pill-tab[^}]*min-height:\s*40px/);
     expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*\.pill-tabs-track\s*\{[^}]*overflow-x:\s*auto/);
+    expect(css).toMatch(/\.settings-pill-tabs[\s\S]*\.pill-tabs-arrow[\s\S]*display:\s*none/);
+    expect(css).toMatch(/\.settings-notice/);
+    expect(css).toMatch(/\.print-collapse-body\.is-collapsed/);
   });
 });

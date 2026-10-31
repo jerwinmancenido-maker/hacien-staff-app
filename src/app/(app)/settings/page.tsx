@@ -3,8 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
 import { roleLabel } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { changedLeaves, NUMBERED_DOCS } from "@/lib/settings/form";
-import { formatDocNumber } from "@/lib/settings/numbering";
+import { changedLeaves } from "@/lib/settings/form";
 import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/withholding";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
@@ -24,6 +23,7 @@ import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
 import { TaxCalendarForm } from "./TaxCalendarForm";
+import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
@@ -58,7 +58,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const save = (key: string) => saveSettingsAction.bind(null, key);
 
   return (
-    <>
+    <div className="settings-shell">
       <PageHeader
         title="Settings"
         subtitle={`Version ${snap.version} · in effect since ${formatDateTime(snap.effectiveFrom)}. Every save makes a new version; existing documents keep theirs.`}
@@ -72,6 +72,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       />
       <PillTabs
         active={tab}
+        size="sm"
+        className="settings-pill-tabs"
         tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
       />
       <div className="settings-page">
@@ -100,19 +102,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "numbering" && (
-          <SettingsForm
-            title="Numbering"
+          <NumberingForm
             label={SETTINGS_LABELS.numbering}
             versionId={snap.versionId}
             action={save("numbering")}
-            fields={NUMBERED_DOCS.flatMap((d) => {
-              const f = s.numbering[d.key];
-              return [
-                { name: `${d.key}.prefix`, label: "Prefix", kind: "text" as const, value: f.prefix, group: d.label, hint: `First number: ${formatDocNumber(f, s.taxYear.year, 1)}` },
-                { name: `${d.key}.padding`, label: "Counter digits", kind: "number" as const, value: f.padding, group: d.label },
-                { name: `${d.key}.resetYearly`, label: "Restart the counter every year", kind: "checkbox" as const, value: f.resetYearly, group: d.label },
-              ];
-            })}
+            numbering={s.numbering}
+            taxYear={s.taxYear.year}
           />
         )}
 
@@ -191,19 +186,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "tax-calendar" && (
-          <>
-            <p className="faint small settings-tab-intro">
-              Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and
-              checked. This app never files or pays. Do not add the abolished 0605 fee.
-            </p>
-            <TaxCalendarForm
-              label={SETTINGS_LABELS.taxCalendar}
-              versionId={snap.versionId}
-              action={save("taxCalendar")}
-              corUploadedAndChecked={s.taxCalendar.corUploadedAndChecked}
-              obligations={s.taxCalendar.obligations}
-            />
-          </>
+          <TaxCalendarForm
+            label={SETTINGS_LABELS.taxCalendar}
+            versionId={snap.versionId}
+            action={save("taxCalendar")}
+            corUploadedAndChecked={s.taxCalendar.corUploadedAndChecked}
+            obligations={s.taxCalendar.obligations}
+            intro="Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and checked. This app never files or pays. Do not add the abolished 0605 fee."
+          />
         )}
 
         {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}
@@ -330,7 +320,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {tab === "changelog" && <ChangeLog />}
       </div>
-    </>
+    </div>
   );
 }
 

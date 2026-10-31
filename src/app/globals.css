@@ -1098,13 +1098,23 @@ tr.inactive .cell-primary .sub {
 }
 
 /* ---------- Settings page layout (Brief 08) ---------- */
+.settings-shell .page-header {
+  margin-bottom: 8px;
+}
+.settings-shell .page-header h1 {
+  font-size: 26px;
+  line-height: 1.15;
+}
+.settings-shell .page-header .subtitle {
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.settings-shell .settings-pill-tabs {
+  margin-bottom: 10px;
+}
 .settings-page {
   max-width: 960px;
   width: 100%;
-}
-.settings-tab-intro {
-  margin: 0 0 14px;
-  max-width: 64ch;
 }
 .settings-tab-link {
   margin: 8px 0 16px;
@@ -1133,14 +1143,70 @@ tr.inactive .cell-primary .sub {
   margin-right: auto;
   max-width: 42ch;
 }
+.settings-tax-cal-intro {
+  margin: 0 0 10px;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
 .settings-cor-row {
-  margin-bottom: 16px;
-  padding-bottom: 14px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-.settings-cor-row .check {
+.settings-cor-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 40px;
   font-weight: 500;
+  line-height: 1.2;
+}
+.settings-cor-check input[type="checkbox"] {
+  margin: 0;
+  align-self: center;
+}
+.settings-cor-label {
+  line-height: 1.2;
+}
+.settings-cor-row .hint {
+  margin-top: 2px;
+  margin-left: 26px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.settings-section.tax-cal-card {
+  padding: 12px 14px;
+}
+.settings-section.tax-cal-card .settings-section-title {
+  margin-bottom: 6px;
+}
+.settings-section.tax-cal-card .settings-form-actions {
+  margin-top: 8px;
+  padding-top: 6px;
+  position: static;
+}
+.settings-tax-cal-intro {
+  margin-bottom: 8px;
+}
+.settings-cor-row {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+}
+.settings-cor-check {
+  min-height: 32px;
+}
+.settings-notice {
+  background: var(--fill);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
 }
 .tax-cal-settings-wrap {
   width: 100%;
@@ -1152,17 +1218,18 @@ tr.inactive .cell-primary .sub {
   table-layout: fixed;
 }
 .tax-cal-settings-table th {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-2);
   background: var(--fill);
   text-align: left;
-  padding: 10px 12px;
+  padding: 5px 8px;
+  vertical-align: bottom;
 }
 .tax-cal-settings-table td {
-  padding: 12px;
+  padding: 3px 8px;
   vertical-align: top;
   border-bottom: 1px solid var(--border);
 }
@@ -1171,40 +1238,51 @@ tr.inactive .cell-primary .sub {
 }
 .tax-cal-settings-table th:nth-child(1),
 .tax-cal-settings-table td:nth-child(1) {
-  width: 38%;
+  width: 40%;
 }
 .tax-cal-settings-table th:nth-child(2),
 .tax-cal-settings-table td:nth-child(2) {
-  width: 14%;
+  width: 10%;
 }
 .tax-cal-settings-table th:nth-child(3),
 .tax-cal-settings-table td:nth-child(3),
 .tax-cal-settings-table th:nth-child(4),
 .tax-cal-settings-table td:nth-child(4) {
-  width: 24%;
+  width: 25%;
 }
 .tax-cal-settings-form .strong {
   display: block;
-  line-height: 1.35;
+  line-height: 1.2;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tax-cal-show-toggle {
-  min-height: 40px;
-  min-width: 40px;
+  min-height: 32px;
+  min-width: 32px;
+  align-items: flex-start;
+  padding-top: 0;
 }
 .tax-cal-show-text {
   /* Column header already says Show; keep text for stacked phone rows only. */
   display: none;
   font-size: 13px;
 }
+.tax-cal-settings-day,
+.tax-cal-settings-month {
+  /* Keep input + special hint on one compact block; top-aligned with Show/Form. */
+}
 .tax-cal-settings-day input,
 .tax-cal-settings-month input {
   width: 100%;
-  max-width: 120px;
-  height: 40px;
-  padding: 0 10px;
+  max-width: 64px;
+  height: 30px;
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--card);
+  display: block;
 }
 .tax-cal-settings-day input:focus,
 .tax-cal-settings-month input:focus {
@@ -1214,15 +1292,205 @@ tr.inactive .cell-primary .sub {
 }
 .tax-cal-settings-day .hint,
 .tax-cal-settings-month .hint {
-  margin-top: 5px;
-  font-size: 12px;
+  margin-top: 1px;
+  font-size: 10.5px;
   color: var(--text-3);
-  line-height: 1.35;
+  line-height: 1.15;
 }
 .tax-cal-month-na {
-  display: inline-flex;
+  display: inline-block;
+  min-height: 1px;
+}
+
+/* Settings tabs: fit all 11 at desktop; sideways scroll only below md */
+@media (min-width: 769px) {
+  .settings-pill-tabs.pill-tabs-wrap {
+    max-width: 100%;
+  }
+  .settings-pill-tabs .pill-tabs-track,
+  .settings-pill-tabs .pill-tabs-track.track-sm {
+    gap: 0;
+    padding: 2px;
+    overflow-x: visible;
+    flex-wrap: nowrap;
+  }
+  .settings-pill-tabs .pill-tab {
+    padding: 4px 7px;
+    font-size: 12px;
+    min-height: 40px;
+    letter-spacing: -0.01em;
+  }
+  .settings-pill-tabs .pill-tabs-track.track-sm .pill-tab {
+    padding: 4px 7px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  .settings-pill-tabs .pill-tabs-arrow {
+    display: none !important;
+  }
+  .settings-pill-tabs.has-overflow .pill-tabs-track {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+}
+
+/* Numbering compact table */
+.numbering-settings-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.numbering-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.numbering-settings-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--fill);
+  text-align: left;
+  padding: 8px 10px;
+}
+.numbering-settings-table td {
+  padding: 8px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.numbering-settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.numbering-settings-table th:nth-child(1),
+.numbering-settings-table td:nth-child(1) {
+  width: 28%;
+}
+.numbering-settings-table th:nth-child(2),
+.numbering-settings-table td:nth-child(2) {
+  width: 18%;
+}
+.numbering-settings-table th:nth-child(3),
+.numbering-settings-table td:nth-child(3) {
+  width: 14%;
+}
+.numbering-settings-table th:nth-child(4),
+.numbering-settings-table td:nth-child(4) {
+  width: 40%;
+}
+.numbering-doc-row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 8px 12px;
+  min-height: 36px;
+}
+.numbering-doc .strong {
+  font-size: 13px;
+}
+.numbering-reset {
+  min-height: 32px;
+  font-size: 12px;
+  color: var(--text-2);
+  font-weight: 400;
+}
+.numbering-prefix input,
+.numbering-digits input {
+  width: 100%;
+  max-width: 120px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.numbering-example-code {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: transparent;
+}
+
+/* Withholding label column */
+.withholding-settings-table table.list th.col-label,
+.withholding-settings-table table.list td.col-label {
+  min-width: 180px;
+  width: 28%;
+}
+.withholding-label-input {
+  width: 100% !important;
+  min-width: 160px;
+  white-space: normal;
+}
+
+/* Print & company: collapsible + sticky preview */
+.print-company-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .print-company-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  }
+  .print-company-preview {
+    position: sticky;
+    top: 12px;
+    margin-top: 0;
+  }
+}
+.print-collapse {
+  border-top: 1px solid var(--border);
+}
+.print-collapse:first-child {
+  border-top: none;
+}
+.print-collapse-head {
+  margin: 0;
+}
+.print-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
   min-height: 40px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.print-collapse-chevron {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--text-2);
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+.print-collapse-chevron.is-open {
+  transform: rotate(90deg);
+}
+.print-collapse-body.is-collapsed,
+.print-field-visually-hidden {
+  /* Keep mounted for form submit; hide from layout/AT when collapsed. */
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.print-collapse-body {
+  padding-bottom: 12px;
 }
 
 .alert {
@@ -2621,6 +2889,49 @@ pre.json {
     display: inline;
   }
   .settings-form-actions {
+    position: static;
+  }
+  .numbering-settings-table,
+  .numbering-settings-table thead,
+  .numbering-settings-table tbody,
+  .numbering-settings-table tr,
+  .numbering-settings-table th,
+  .numbering-settings-table td {
+    display: block;
+    width: 100%;
+  }
+  .numbering-settings-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .numbering-settings-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .numbering-doc {
+    grid-column: 1 / -1;
+  }
+  .numbering-example {
+    grid-column: 1 / -1;
+  }
+  .numbering-prefix input,
+  .numbering-digits input {
+    max-width: none;
+  }
+  .print-company-layout {
+    grid-template-columns: 1fr;
+  }
+  .print-company-preview {
     position: static;
   }
   .content {

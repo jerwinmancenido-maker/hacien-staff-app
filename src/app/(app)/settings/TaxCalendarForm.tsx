@@ -13,12 +13,15 @@ import {
   type ObligationSettingsRow,
   type TaxCalendarObligationKey,
 } from "@/lib/tax/calendar-obligations";
+
 export type TaxCalendarFormProps = {
   label: string;
   versionId: string;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   corUploadedAndChecked: boolean;
   obligations: Record<TaxCalendarObligationKey, ObligationSettingsRow>;
+  /** Intro copy shown inside the card (full width). */
+  intro: string;
 };
 
 export function TaxCalendarForm({
@@ -27,6 +30,7 @@ export function TaxCalendarForm({
   action,
   corUploadedAndChecked,
   obligations,
+  intro,
 }: TaxCalendarFormProps) {
   const { state, pending, submit } = useFormAction(action);
   const [confirming, setConfirming] = useState(false);
@@ -46,8 +50,9 @@ export function TaxCalendarForm({
   };
 
   return (
-    <div className="card settings-section">
+    <div className="card settings-section tax-cal-card">
       <h2 className="settings-section-title">Tax calendar</h2>
+      <p className="settings-tax-cal-intro">{intro}</p>
       <form
         ref={formRef}
         noValidate
@@ -63,8 +68,8 @@ export function TaxCalendarForm({
         )}
         <input type="hidden" name="baseVersionId" value={versionId} />
 
-        <div className={`settings-cor-row field${e.corUploadedAndChecked ? " has-error" : ""}`}>
-          <label className="check" htmlFor="corUploadedAndChecked">
+        <div className={`settings-cor-row${e.corUploadedAndChecked ? " has-error" : ""}`}>
+          <label className="check settings-cor-check" htmlFor="corUploadedAndChecked">
             <input type="hidden" name="corUploadedAndChecked" value="false" />
             <input
               id="corUploadedAndChecked"
@@ -73,7 +78,7 @@ export function TaxCalendarForm({
               value="true"
               defaultChecked={checked("corUploadedAndChecked", corUploadedAndChecked)}
             />
-            COR uploaded and checked
+            <span className="settings-cor-label">COR uploaded and checked</span>
           </label>
           {e.corUploadedAndChecked ? (
             <div className="error" role="alert">
@@ -92,8 +97,8 @@ export function TaxCalendarForm({
               <tr>
                 <th scope="col">Form</th>
                 <th scope="col">Show</th>
-                <th scope="col">Due day</th>
-                <th scope="col">Due month</th>
+                <th scope="col">Due day (1–31)</th>
+                <th scope="col">Due month (1–12)</th>
               </tr>
             </thead>
             <tbody>
@@ -103,6 +108,7 @@ export function TaxCalendarForm({
                 const dueDayName = `obligations.${def.key}.dueDay`;
                 const dueMonthName = `obligations.${def.key}.dueMonth`;
                 const showMonth = obligationUsesDueMonth(def);
+                const dayHint = obligationDueDayHint(def);
                 const dayErr = e[dueDayName];
                 const monthErr = e[dueMonthName];
                 return (
@@ -126,7 +132,7 @@ export function TaxCalendarForm({
                         <span className="tax-cal-show-text">Show</span>
                       </label>
                     </td>
-                    <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day">
+                    <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day (1–31)">
                       <label className="sr-only" htmlFor={dueDayName}>
                         Due day for {def.form}
                       </label>
@@ -144,12 +150,12 @@ export function TaxCalendarForm({
                           {dayErr}
                         </div>
                       ) : (
-                        <div className="hint">{obligationDueDayHint(def)}</div>
+                        dayHint && <div className="hint">{dayHint}</div>
                       )}
                     </td>
                     <td
                       className={`tax-cal-settings-month${monthErr ? " has-error" : ""}`}
-                      data-label="Due month"
+                      data-label="Due month (1–12)"
                     >
                       {showMonth ? (
                         <>
@@ -165,12 +171,10 @@ export function TaxCalendarForm({
                             max={12}
                             defaultValue={numVal(dueMonthName, o.dueMonth)}
                           />
-                          {monthErr ? (
+                          {monthErr && (
                             <div className="error" role="alert">
                               {monthErr}
                             </div>
-                          ) : (
-                            <div className="hint">Month of the year (1–12).</div>
                           )}
                         </>
                       ) : (

@@ -227,8 +227,11 @@ export function obligationUsesDueMonth(def: TaxCalendarObligationDef): boolean {
   return def.schedule.kind === "annual_1701";
 }
 
-/** Short due-day hint for Settings → Tax calendar (one line). */
-export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
+/**
+ * Special due-day hint for Settings → Tax calendar (one line), or null when the
+ * column header “Due day (1–31)” is enough.
+ */
+export function obligationDueDayHint(def: TaxCalendarObligationDef): string | null {
   switch (def.schedule.kind) {
     case "undated_year_end":
       return "Leave blank for date to confirm. Set day once RDO confirms.";
@@ -239,7 +242,7 @@ export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
     case "books_of_accounts":
       return "Leave blank; day follows books type (Jan 15 or Jan 30).";
     default:
-      return "Day of the month (1–31).";
+      return null;
   }
 }
 
