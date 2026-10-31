@@ -22,5 +22,9 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
+  // Skip Next internals, favicon, brand kit assets and other static public files
+  // so login (no session) can still load logos / icons / the web manifest.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|brand/|site\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
+}

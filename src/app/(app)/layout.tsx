@@ -7,6 +7,7 @@ import { formatPeso } from "@/lib/format";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
 import { BellIcon, LogoutIcon, SearchIcon } from "@/components/Icons";
@@ -26,8 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="frame">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-logo">H</span>
-          <span>HACIEN</span>
+          <a href="/" className="brand-link" aria-label="HACIEN home">
+            <BrandLogo variant="wordmark" />
+          </a>
         </div>
         <SidebarNav
           isAdmin={can(user, "manage_settings")}

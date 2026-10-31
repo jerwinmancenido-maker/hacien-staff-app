@@ -22,33 +22,39 @@ Build a clickable mockup of the HACIEN Staff App, an internal tool for a small P
 Return only the single HTML file.
 
 
-## Visual style (match the attached reference image)
+## Visual style (HACIEN brand kit v1.1)
 
-Jerwin will attach the reference image. Copy its look closely; only the content changes to HACIEN.
+Source of truth: brand kit style guide + logo handoff. Look: **black and white, one blue pixel.** Keep it clean — Jerwin dislikes boxy, cluttered layouts.
 
-- **Overall:** monochrome. Black, white and warm greys only. No blue accent. The app sits in one big rounded frame (radius about 28px, soft drop shadow) on a light background.
-- **Colors:** app background #F4F4F2; cards #FFFFFF; borders #E9E9E6 (1px); main text #151515; secondary text #6E6E6A; faint text #A3A3A0; fills #F0F0ED. Status colors stay but muted: green #3F7A57 on #EEF4EF, amber #94681E on #F8F3E8, red #A33A2F on #F7EDEB.
-- **Font:** clean sans-serif (Inter or system). Page title about 24 to 28px, weight 600, slightly tight letter spacing. Body 13 to 14px. Labels 11 to 12px grey.
-- **Sidebar (light, same color as background):** square black "H" logo plus "HACIEN". Nav items have a small grey line icon and a label. The active item is a white pill (radius 12, faint shadow) with bold black text. A small white card near the bottom (we use the ₱3M non-VAT limit tracker), then a user row: round avatar, "Jerwin", "Admin · Approver", ⋮.
-- **Top bar:** breadcrumb at left ("HACIEN / Staff / Page", last part bold). At right: a rounded search pill with a "⌘K" hint, a bell icon and a round avatar.
-- **Page header:** a small grey greeting ("Good evening, Jerwin 👋"), a big title, a grey subtitle. On the right: a white date-range pill ("📅 Oct 1 – Oct 31, 2026 ▾") and ONE black primary button (radius 12, white text, ⊕ icon).
-- **Stat cards:** white, radius 16, soft border. Label top-left, small icon top-right, big number (about 22px), then a grey "↑ 12% vs last month" line and a tiny bar sparkline at bottom-right (thin grey bars, last few black).
-- **Charts (Home):** bar chart for cash in vs out by week (black bars = in, light grey = out, legend dots at top-right, "Next 6 weeks ▾" pill). Donut for the deal pipeline (shades of black to light grey, total in the middle, legend list with counts and ₱ on the right). Timeline/Gantt for SO deliveries and payments: grey header row with week columns, one row per SO/PO, rounded grey pill bars with text, and a dashed vertical "Today" line with a black "Today" tag.
-- **Lists and tables:** white card, light grey header row, thin row lines, ⋯ menu at row end. Small "View all" pill buttons at card top-right.
-- **Buttons:** primary = black fill, radius 12. Secondary = white with border, fully round (pill). Dangerous = muted red, always with a confirm.
-- **Chips/tags:** small rounded pills with the muted status colors above.
-- **Spacing:** generous; 12 to 16px gaps between cards, 16 to 18px card padding. Soft, flat, no gradients except the donut.
+- **Overall:** Ink on white/grey. One accent blue used sparingly. Flat layout (no heavy app frame or drop shadow on the shell). Soft, generous whitespace.
+- **Accent blue `#2563EB`:** used ONLY for the one primary button per screen, text links, and focus rings (plus the logo’s blue square and the 6px active-nav pixel). Never for big fills or body text. Hover/pressed: `#1D4ED8`. Selected/active tint: `#EFF6FF`.
+- **Colors:** ink `#0A0A0A`; white `#FFFFFF`; page bg grey-50 `#FAFAFA`; fills/table header grey-100 `#F5F5F5`; rules/borders 1px grey-200 `#E5E5E5`; secondary text grey-600 `#525252`; labels/tagline grey-700 `#404040`; placeholder/disabled grey-400 `#A3A3A3`. Status chips only: success `#15803D` on `#F0FDF4`, warning `#B45309` on `#FFFBEB`, danger `#B91C1C` on `#FEF2F2`.
+- **Logo (SVG only — never retype HACIEN in a font):**
+  - Files: `logo-full.svg`, `logo-wordmark.svg`, `logo-full-white.svg`, `logo-mono-black.svg`, `icon.svg` / `icon-dark.svg`, PNGs, `favicon.ico` under `public/brand/`.
+  - Clear space: **2× the blue square** (0.286 × cap height) empty on every side of the artwork.
+  - Minimum sizes: full logo **200px / 40mm** wide; wordmark-only **96px / 24mm**; icon **16px / 6mm**. Below 200px use the wordmark; below 96px use the icon.
+  - The blue square sits on the baseline, centred horizontally in the A (not vertically).
+  - Staff app: `logo-wordmark.svg` at 24px tall in the sidebar; login uses centred `logo-full.svg` (≥200px). Favicon + app icons from the kit (`favicon.ico`, `icon-192` / `icon-512`, apple-touch).
+- **Fonts:** Inter 400/500/600 for UI and body (`font-variant-numeric: tabular-nums` on amounts). **Archivo Black** for page titles only (and print document titles). Caps labels: Inter 600, 11–12px, uppercase, letter-spacing 0.08em, grey-700.
+- **Shape:** radius 4px (inputs, chips), 6px (cards, buttons). No pill buttons. Shadows only on pop-overs and menus (`0 1px 2px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.06)`).
+- **Sidebar:** white, 1px right border. Wordmark at top. Active nav: ink 600 text, blue-tint background, and a **6px blue square marker** on the left. Inactive: grey-600.
+- **Top bar:** breadcrumb at left ("HACIEN / Staff / Page", last part bold). At right: search field, bell, avatar, sign out.
+- **Page header:** optional grey greeting, Archivo Black title (~30px), grey subtitle. On the right: ONE primary blue button (and secondary/outline actions as needed).
+- **Lists and tables:** white surface, grey-100 caps header, 1px grey-200 row dividers, ~44–56px rows, right-aligned tabular amounts. Whole row is a real link where applicable.
+- **Buttons:** primary = blue `#2563EB` fill, white text, 6px radius, 36px tall (one per screen). Secondary = white + grey-200 border, ink text. Danger = white + danger text/border, always with a confirm.
+- **Chips/tags:** 4px radius, status colours above (neutral = grey-700 on grey-100).
+- **Spacing:** 4px grid; card padding 16–24px; generous whitespace. Pixel motif (6–8px blue square) at most one or two per screen (active nav, section bullet, empty-state accent).
 
 ### Tables and lists (modern SaaS list style, not Excel)
 
-- **No grid:** no vertical lines and no cell borders. Use only a very faint row divider (#F3F3F0), or none, and no divider under the last row.
-- **Rows:** about 56px tall. On hover the row gets a soft #F7F7F5 background with rounded ends (radius 12).
+- **No grid:** no vertical lines and no cell borders. Use only a 1px `#E5E5E5` row divider, or none, and no divider under the last row.
+- **Rows:** about 44–56px tall. On hover the row gets a soft grey-50 background with slight rounded ends (radius 6).
 - **Clickable rows:** the whole row is clickable and opens that record (quote, SO, customer, etc.), not just the number text. Show a pointer cursor and the hover highlight. Clicks on the ⋯ menu, checkboxes, buttons and inputs must NOT open the row.
-- **Header:** small uppercase text (about 10.5px), light grey, slight letter spacing, no background fill.
+- **Header:** caps label style (Inter 600, ~11px, letter-spacing 0.08em, grey-700) on grey-100.
 - **Primary column:** bold, with a muted secondary line under it (e.g. customer name with the buyer PO no. below, or quote no. with "Valid until" below). Customer and supplier cells get a small round initial avatar.
-- **Cells:** status is shown as soft pill chips in the muted status colors. Amounts are right-aligned in tabular numbers, key amounts semi-bold. Progress is shown as mini inline bars.
-- **⋯ menu:** a light icon with no border, faint until the row is hovered.
+- **Cells:** status is shown as soft chips (4px radius) in the status colours. Amounts are right-aligned in tabular numbers, key amounts semi-bold. Progress is shown as mini inline bars.
+- **⋯ menu:** a light icon with no border, faint until the row is hovered. Menu panel uses the overlay shadow.
 - **Wide tables:** fold less important columns into the secondary line (e.g. Buyer PO under Customer, Next step under SO no., Due under Billing, Email under Name).
-- **Toolbar above lists:** a search pill, filter chips (the active chip is black with white text) and a "View all" pill on the right.
+- **Toolbar above lists:** a search field, filter chips (the active chip is ink with white text) and a "View all" control on the right.
 - **Empty states:** friendly, with a small round icon, "All clear here" and one helpful line. Never a bare "No data".
 - **Finance tables:** the Books App view uses this modern style. ONLY "Copy to manual books" keeps the ledger-paper look (gridlines, page total, balance forward), because it mirrors the paper BIR book.
