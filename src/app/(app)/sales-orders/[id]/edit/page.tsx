@@ -40,7 +40,14 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
           buyerPoNo: so.buyerPoNo ?? "",
           buyerPoDate: so.buyerPoDate ?? "",
           deliveryAddress: so.deliveryAddress ?? "",
-          items: editableItems(so.items, canSeeCosts(user)).map((i) => ({ ...i, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "" })),
+          items: editableItems(so.items, canSeeCosts(user)).map((i) => ({
+            ...i,
+            supplierId: i.supplierId ?? null,
+            supplierUnitCost: i.supplierUnitCost ?? "",
+            withholdingRate: i.withholdingRate,
+            withholdingAtc: i.withholdingAtc ?? null,
+            withholdingOverride: i.withholdingOverride ?? false,
+          })),
         }}
       />
     </>

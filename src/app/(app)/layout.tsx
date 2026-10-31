@@ -4,6 +4,7 @@ import { isCashEnabled } from "@/lib/cash/features";
 import { isPayablesEnabled } from "@/lib/payables/features";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
+import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
@@ -21,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
   const booksEnabled = await isBooksEnabled();
+  const nonVatTitle = homeNonVatTitle(meter.limit);
 
   return (
     <div className="frame">
@@ -42,11 +44,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <a
           href="/billing"
           className={`tracker-card level-${meter.level}`}
-          aria-label="Non-VAT sales limit (₱3M)"
+          aria-label={nonVatTitle}
           data-level={meter.level}
         >
           <div className="label tracker-head">
-            <span>Non-VAT sales limit (₱3M)</span>
+            <span>{nonVatTitle}</span>
             <b className="num tracker-pct">{meter.pctLabel}</b>
           </div>
           <div className="value num" style={{ textAlign: "left" }}>

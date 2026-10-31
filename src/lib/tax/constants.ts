@@ -4,6 +4,12 @@
 // filing. This app never files returns and never connects to BIR or eBIRForms.
 // Values here are working assumptions for worksheets only.
 
+/**
+ * Existing business VAT registration setting. HACIEN is non-VAT (8% option).
+ * Used to hide the Gov VAT 5% withholding option. Flip only when registration changes.
+ */
+export const BUSINESS_IS_VAT_REGISTERED = false;
+
 /** Banner on every tax worksheet screen and print/PDF. */
 export const TAX_WORKSHEET_BANNER =
   "Worksheet only — check with your accountant before filing. Not filed by this app.";
@@ -38,15 +44,16 @@ export const OVER_THRESHOLD_WARNING =
   "Cumulative sales exceed ₱3,000,000. The 8% option and non-VAT status may no longer apply — consult your accountant before filing.";
 
 /**
- * Shown on the 1701Q worksheet until the accountant confirms tax basis.
- * Do not pick invoiced vs collected in the app.
+ * 1701Q worksheet basis: Invoiced is the main column (EOPT, RR 3-2024).
+ * Collected stays as a small reference only — 8% math unchanged.
  */
 export const TAX_BASIS_UNVERIFIED_NOTE =
-  "Basis UNVERIFIED: accountant to confirm invoiced vs collected.";
+  "Invoiced is the main basis (EOPT, RR 3-2024). Collected is shown as a reference only.";
 
-/** Staff-facing labels for the two cumulative figures (not a chosen basis). */
-export const INVOICED_TOTAL_LABEL = "Invoiced total";
-export const COLLECTED_TOTAL_LABEL = "Collected total";
+/** Staff-facing labels for the two cumulative figures. */
+export const INVOICED_TOTAL_LABEL = "Invoiced (main basis)";
+export const COLLECTED_TOTAL_LABEL = "Collected (reference)";
+export const COLLECTED_REFERENCE_HINT = "Reference only — not the filing basis under EOPT / RR 3-2024.";
 
 /** Note on the supplier EWT worksheet (HACIEN may or may not be a withholding agent). */
 export const SUPPLIER_EWT_RDO_NOTE =

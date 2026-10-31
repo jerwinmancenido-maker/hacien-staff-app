@@ -10,7 +10,16 @@ import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
-import { TAX_CALENDAR_PROVISIONAL_BANNER } from "@/lib/tax/calendar-constants";
+import {
+  BOOKS_OF_ACCOUNTS_TYPE_LABELS,
+  INCOME_TAX_METHOD_LABELS,
+  TAX_CALENDAR_PROVISIONAL_BANNER,
+} from "@/lib/tax/calendar-constants";
+import { formatHolidayLines } from "@/lib/tax/holidays";
+import {
+  incomeTaxMethodForYear,
+  incomeTaxMethodSelectYears,
+} from "@/lib/tax/income-tax-method";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
@@ -116,9 +125,68 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             action={save("taxYear")}
             fields={[
               { name: "year", label: "Tax year", kind: "number", value: s.taxYear.year },
+              {
+                name: "incomeTaxMethodsByYearPrior",
+                label: "method prior",
+                kind: "hidden",
+                value: JSON.stringify(s.taxYear.incomeTaxMethodsByYear ?? {}),
+              },
+              {
+                name: "methodByYearYears",
+                label: "method years",
+                kind: "hidden",
+                value: incomeTaxMethodSelectYears(
+                  s.taxYear.year,
+                  s.taxYear.incomeTaxMethodsByYear ?? {},
+                ).join(","),
+              },
+              ...incomeTaxMethodSelectYears(s.taxYear.year, s.taxYear.incomeTaxMethodsByYear ?? {}).map(
+                (y) => ({
+                  name: `methodByYear.${y}`,
+                  label: `Income tax method — ${y}${y === s.taxYear.year ? " (active tax year)" : ""}`,
+                  kind: "select" as const,
+                  value: incomeTaxMethodForYear(
+                    {
+                      year: s.taxYear.year,
+                      incomeTaxMethod: s.taxYear.incomeTaxMethod,
+                      incomeTaxMethodsByYear: s.taxYear.incomeTaxMethodsByYear ?? {},
+                    },
+                    y,
+                  ),
+                  options: [
+                    { value: "EIGHT_PERCENT", label: INCOME_TAX_METHOD_LABELS.EIGHT_PERCENT },
+                    { value: "GRADUATED", label: INCOME_TAX_METHOD_LABELS.GRADUATED },
+                  ],
+                  hint:
+                    y === s.taxYear.year
+                      ? "Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A."
+                      : "Saving another year’s method leaves other years untouched.",
+                  group: "Income tax method by year",
+                }),
+              ),
+              {
+                name: "booksType",
+                label: "Books of accounts type",
+                kind: "select",
+                value: s.taxYear.booksType ?? "",
+                options: [
+                  { value: "", label: "Not chosen yet (date to confirm)" },
+                  { value: "loose_leaf", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.loose_leaf },
+                  { value: "computerized", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.computerized },
+                ],
+                hint: "Loose-leaf due Jan 15; computerized due Jan 30 — both rolled to the next working day when they fall on a weekend or holiday.",
+              },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
               { name: "warnFirstPct", label: "First warning at", kind: "number", value: s.taxYear.warnFirstPct, suffix: "% of the limit" },
               { name: "warnSecondPct", label: "Second warning at", kind: "number", value: s.taxYear.warnSecondPct, suffix: "% of the limit" },
+              {
+                name: "holidays",
+                label: "Holiday list (YYYY-MM-DD [regular|special] [name])",
+                kind: "lines",
+                value: formatHolidayLines(s.taxYear.holidays ?? []),
+                hint: "Editable. Seeded with 2026 only — add 2025 / 2027 (and later) yourself; the calendar warns when a year has no holidays. Due dates on a weekend or holiday move to the next working day (RMC 65-2016).",
+                full: true,
+              },
             ]}
           />
         )}

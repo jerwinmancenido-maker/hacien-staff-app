@@ -57,14 +57,42 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
-      taxCalendar: {
-        ...DEFAULT_SETTINGS.taxCalendar,
-        ...(v.data as Partial<Settings>).taxCalendar,
-        obligations: {
+      taxYear: {
+        ...DEFAULT_SETTINGS.taxYear,
+        ...(v.data as Partial<Settings>).taxYear,
+        incomeTaxMethodsByYear: {
+          ...DEFAULT_SETTINGS.taxYear.incomeTaxMethodsByYear,
+          ...((v.data as Partial<Settings>).taxYear?.incomeTaxMethodsByYear ?? {}),
+        },
+        holidays:
+          (v.data as Partial<Settings>).taxYear?.holidays ?? DEFAULT_SETTINGS.taxYear.holidays,
+        booksType:
+          (v.data as Partial<Settings>).taxYear?.booksType !== undefined
+            ? (v.data as Partial<Settings>).taxYear!.booksType
+            : DEFAULT_SETTINGS.taxYear.booksType,
+        incomeTaxMethod:
+          (v.data as Partial<Settings>).taxYear?.incomeTaxMethod ??
+          DEFAULT_SETTINGS.taxYear.incomeTaxMethod,
+      },
+      taxCalendar: (() => {
+        const obligations = {
           ...DEFAULT_SETTINGS.taxCalendar.obligations,
           ...((v.data as Partial<Settings>).taxCalendar?.obligations ?? {}),
-        },
-      },
+        };
+        // Migrate on read: drop stale 2551q.dueDay (old catalog used day-of-month 15).
+        if (obligations["2551q"]) {
+          obligations["2551q"] = {
+            ...obligations["2551q"],
+            dueDay: null,
+            dueMonth: null,
+          };
+        }
+        return {
+          ...DEFAULT_SETTINGS.taxCalendar,
+          ...(v.data as Partial<Settings>).taxCalendar,
+          obligations,
+        };
+      })(),
       print: {
         ...DEFAULT_SETTINGS.print,
         ...(v.data as Partial<Settings>).print,
@@ -96,6 +124,11 @@ export async function getSettingsSnapshot(store: SettingsStore): Promise<Setting
 export async function getSettingsVersion(store: SettingsStore, versionId: string): Promise<SettingsSnapshot | null> {
   const v = await store.byId(versionId);
   return v ? toSnapshot(v) : null;
+}
+
+/** Build a SettingsSnapshot from a stored version row (same parse path as by-id). */
+export function settingsSnapshotFromRecord(v: SettingsVersionRecord): SettingsSnapshot {
+  return toSnapshot(v);
 }
 
 export type SaveSectionInput<K extends SettingsKey> = {

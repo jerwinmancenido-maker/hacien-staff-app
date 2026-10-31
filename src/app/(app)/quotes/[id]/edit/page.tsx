@@ -47,7 +47,14 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           buyerPoNo: "",
           buyerPoDate: "",
           deliveryAddress: "",
-          items: editableItems(quote.items, withCosts).map((i) => ({ ...i, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "" })),
+          items: editableItems(quote.items, withCosts).map((i) => ({
+            ...i,
+            supplierId: i.supplierId ?? null,
+            supplierUnitCost: i.supplierUnitCost ?? "",
+            withholdingRate: i.withholdingRate,
+            withholdingAtc: i.withholdingAtc ?? null,
+            withholdingOverride: i.withholdingOverride ?? false,
+          })),
         }}
       />
     </>

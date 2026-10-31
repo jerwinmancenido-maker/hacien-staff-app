@@ -3,6 +3,30 @@ import type { Settings } from "./schema";
 // Seed defaults only. The app always reads settings from the database.
 // Tax calendar obligation defaults mirror src/lib/tax/calendar-obligations.ts
 // (kept inline so prisma/seed.mts can load this file without a deep .ts import chain).
+// 2026 PH holidays mirror src/lib/tax/holidays.ts (inline for seed.mts).
+const PH_HOLIDAYS_2026 = [
+  { ymd: "2026-01-01", kind: "regular" as const, name: "New Year's Day" },
+  { ymd: "2026-03-20", kind: "regular" as const, name: "Eid'l Fitr" },
+  { ymd: "2026-04-02", kind: "regular" as const, name: "Maundy Thursday" },
+  { ymd: "2026-04-03", kind: "regular" as const, name: "Good Friday" },
+  { ymd: "2026-04-09", kind: "regular" as const, name: "Araw ng Kagitingan" },
+  { ymd: "2026-05-01", kind: "regular" as const, name: "Labor Day" },
+  { ymd: "2026-05-27", kind: "regular" as const, name: "Eid'l Adha" },
+  { ymd: "2026-06-12", kind: "regular" as const, name: "Independence Day" },
+  { ymd: "2026-08-31", kind: "regular" as const, name: "National Heroes Day" },
+  { ymd: "2026-11-30", kind: "regular" as const, name: "Bonifacio Day" },
+  { ymd: "2026-12-25", kind: "regular" as const, name: "Christmas Day" },
+  { ymd: "2026-12-30", kind: "regular" as const, name: "Rizal Day" },
+  { ymd: "2026-02-17", kind: "special" as const, name: "Chinese New Year" },
+  { ymd: "2026-04-04", kind: "special" as const, name: "Black Saturday" },
+  { ymd: "2026-08-21", kind: "special" as const, name: "Ninoy Aquino Day" },
+  { ymd: "2026-11-01", kind: "special" as const, name: "All Saints' Day" },
+  { ymd: "2026-11-02", kind: "special" as const, name: "All Souls' Day" },
+  { ymd: "2026-12-08", kind: "special" as const, name: "Feast of the Immaculate Conception" },
+  { ymd: "2026-12-24", kind: "special" as const, name: "Christmas Eve" },
+  { ymd: "2026-12-31", kind: "special" as const, name: "New Year's Eve" },
+];
+
 export const DEFAULT_SETTINGS: Settings = {
   approval: { marginBelowPct: 18, totalAbove: 500_000 },
   quotes: { defaultValidityDays: 30 },
@@ -17,7 +41,16 @@ export const DEFAULT_SETTINGS: Settings = {
     expense: { prefix: "EXP", padding: 4, resetYearly: true },
     cashTransfer: { prefix: "TRF", padding: 4, resetYearly: true },
   },
-  taxYear: { year: 2026, nonVatLimit: 3_000_000, warnFirstPct: 70, warnSecondPct: 90 },
+  taxYear: {
+    year: 2026,
+    nonVatLimit: 3_000_000,
+    warnFirstPct: 70,
+    warnSecondPct: 90,
+    incomeTaxMethod: "EIGHT_PERCENT",
+    incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" },
+    holidays: PH_HOLIDAYS_2026,
+    booksType: null,
+  },
   company: {
     name: "HACIEN",
     tradeName: "",
@@ -41,7 +74,8 @@ export const DEFAULT_SETTINGS: Settings = {
     obligations: {
       "1701q": { enabled: true, dueDay: 15, dueMonth: null },
       "1701": { enabled: true, dueDay: 15, dueMonth: 4 },
-      "2551q": { enabled: true, dueDay: 15, dueMonth: null },
+      "1701a": { enabled: true, dueDay: 15, dueMonth: 4 },
+      "2551q": { enabled: true, dueDay: null, dueMonth: null },
       "2550q": { enabled: true, dueDay: 25, dueMonth: null },
       "0619e": { enabled: false, dueDay: 10, dueMonth: null },
       "1601eq": { enabled: false, dueDay: null, dueMonth: null },

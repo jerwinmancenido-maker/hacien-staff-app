@@ -40,24 +40,36 @@ function appliedOf(allocs: { cashApplied: unknown; withholdingApplied: unknown }
   return { cashApplied: fromScaled(cash, 2), withholdingApplied: fromScaled(wh, 2) };
 }
 
-export async function listBillings(filters: {
+type BillingListFilters = {
   customerId?: string;
   salesOrderId?: string;
   status?: BillingStatus | "ALL" | "OVERDUE";
   q?: string;
-} = {}) {
-  const snap = await getSettingsSnapshot();
-  const grace = snap.settings.collections.overdueGraceDays;
-  const today = billingToday();
+  /** Inclusive Manila YYYY-MM-DD bounds on invoiceDate (DATE column). */
+  fromYmd?: string;
+  toYmd?: string;
+};
+
+/** Shared where-clause for list + uncapped sum (list pages still page with take:200). */
+function billingsWhere(filters: BillingListFilters) {
   const where: {
     customerId?: string;
     salesOrderId?: string;
-    status?: BillingStatus;
+    status?: BillingStatus | { not: "VOID" };
+    invoiceDate?: { gte?: Date; lte?: Date };
     OR?: ({ number: { contains: string } } | { customer: { name: { contains: string } } } | { invoiceNo: number })[];
   } = {};
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.salesOrderId) where.salesOrderId = filters.salesOrderId;
   if (filters.status && filters.status !== "ALL" && filters.status !== "OVERDUE") where.status = filters.status;
+  if (filters.fromYmd || filters.toYmd) {
+    where.invoiceDate = {
+      ...(filters.fromYmd ? { gte: new Date(`${filters.fromYmd}T00:00:00.000Z`) } : {}),
+      ...(filters.toYmd ? { lte: new Date(`${filters.toYmd}T00:00:00.000Z`) } : {}),
+    };
+    // Month / range views skip voids so totals match "billed this month".
+    if (!filters.status || filters.status === "ALL") where.status = { not: "VOID" };
+  }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     const asNo = Number(q);
@@ -67,6 +79,31 @@ export async function listBillings(filters: {
       ...(Number.isInteger(asNo) ? [{ invoiceNo: asNo }] : []),
     ];
   }
+  return where;
+}
+
+/**
+ * Uncapped Σ(amount) with the same filters as listBillings (voids excluded on
+ * month/range views). Home money must use this — listBillings is take:200.
+ */
+export async function sumBillingsAmount(filters: BillingListFilters = {}): Promise<string> {
+  if (filters.status === "OVERDUE") {
+    throw new Error("sumBillingsAmount does not support OVERDUE; use arAgingSummary().overdueCount / overdue.");
+  }
+  const agg = await db.billing.aggregate({ where: billingsWhere(filters), _sum: { amount: true } });
+  return money(agg._sum.amount ?? 0);
+}
+
+export async function listBillings(filters: BillingListFilters = {}) {
+  const snap = await getSettingsSnapshot();
+  const grace = snap.settings.collections.overdueGraceDays;
+  const today = billingToday();
+  const overdueOnly = filters.status === "OVERDUE";
+  const where = billingsWhere(filters);
+  // OVERDUE: exclude voids up front; filter overdue before take:200 so recent
+  // current invoices cannot crowd overdue rows off the page.
+  if (overdueOnly) where.status = { not: "VOID" };
+
   const rows = await db.billing.findMany({
     where,
     include: {
@@ -75,7 +112,8 @@ export async function listBillings(filters: {
       allocations: { where: { collection: { status: "POSTED" } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    take: 200,
+    // Page after overdue filter (below). Other statuses keep the DB take.
+    ...(overdueOnly ? {} : { take: 200 }),
   });
   const mapped = rows.map((b) => {
     const applied = appliedOf(b.allocations);
@@ -96,7 +134,7 @@ export async function listBillings(filters: {
       aging: agingBucket(b.dueDate, today) as AgingBucket,
     };
   });
-  if (filters.status === "OVERDUE") return mapped.filter((r) => r.overdue.overdue && r.status !== "VOID");
+  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(0, 200);
   return mapped;
 }
 
@@ -165,18 +203,52 @@ export async function getBillingView(id: string) {
   };
 }
 
-export async function listCollections(filters: { customerId?: string; status?: CollectionStatus | "ALL"; q?: string } = {}) {
+type CollectionListFilters = {
+  customerId?: string;
+  status?: CollectionStatus | "ALL";
+  q?: string;
+  /** Inclusive Manila YYYY-MM-DD bounds on collection date (DATE column). */
+  fromYmd?: string;
+  toYmd?: string;
+};
+
+/** Shared where-clause for list + uncapped sum (list pages still page with take:200). */
+function collectionsWhere(filters: CollectionListFilters) {
   const where: {
     customerId?: string;
     status?: CollectionStatus;
+    date?: { gte?: Date; lte?: Date };
     OR?: ({ number: { contains: string } } | { receiptNo: { contains: string } } | { customer: { name: { contains: string } } } | { reference: { contains: string } })[];
   } = {};
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  if (filters.fromYmd || filters.toYmd) {
+    where.date = {
+      ...(filters.fromYmd ? { gte: new Date(`${filters.fromYmd}T00:00:00.000Z`) } : {}),
+      ...(filters.toYmd ? { lte: new Date(`${filters.toYmd}T00:00:00.000Z`) } : {}),
+    };
+  }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     where.OR = [{ number: { contains: q } }, { receiptNo: { contains: q } }, { customer: { name: { contains: q } } }, { reference: { contains: q } }];
   }
+  return where;
+}
+
+/**
+ * Uncapped Σ(amountReceived) with the same filters as listCollections.
+ * Home money must use this — listCollections is take:200.
+ */
+export async function sumCollectionsReceived(filters: CollectionListFilters = {}): Promise<string> {
+  const agg = await db.collection.aggregate({
+    where: collectionsWhere(filters),
+    _sum: { amountReceived: true },
+  });
+  return money(agg._sum.amountReceived ?? 0);
+}
+
+export async function listCollections(filters: CollectionListFilters = {}) {
+  const where = collectionsWhere(filters);
   const rows = await db.collection.findMany({
     where,
     include: {
@@ -280,9 +352,40 @@ export type CustomerAgingRow = {
   credit: string;
 };
 
+/**
+ * Unapplied customer credit for every customer with POSTED collections, in one
+ * pass (same math as customerCreditBalance per id).
+ */
+async function customerCreditsGrouped(): Promise<Map<string, { name: string; credit: string }>> {
+  const collections = await db.collection.findMany({
+    where: { status: "POSTED" },
+    select: {
+      customerId: true,
+      amountReceived: true,
+      allocations: { select: { cashApplied: true } },
+      customer: { select: { name: true } },
+    },
+  });
+  const scaled = new Map<string, { name: string; credit: bigint }>();
+  for (const c of collections) {
+    const unapplied = unappliedCash(
+      money(c.amountReceived),
+      c.allocations.map((a) => money(a.cashApplied)),
+    );
+    const cur = scaled.get(c.customerId) ?? { name: c.customer.name, credit: 0n };
+    cur.credit += toScaled(unapplied, 2);
+    scaled.set(c.customerId, cur);
+  }
+  const out = new Map<string, { name: string; credit: string }>();
+  for (const [id, v] of scaled) out.set(id, { name: v.name, credit: fromScaled(v.credit, 2) });
+  return out;
+}
+
 export async function arAgingSummary(): Promise<{
   totalReceivable: string;
   overdue: string;
+  /** Count of non-void billings with balance > 0 that are past due (grace applied). */
+  overdueCount: number;
   pending2307: string;
   credit: string;
   byCustomer: CustomerAgingRow[];
@@ -301,56 +404,52 @@ export async function arAgingSummary(): Promise<{
   const byCustomer = new Map<string, { name: string; rows: { dueDate: Date; balance: string }[]; overdue: bigint }>();
   let totalRecv = 0n;
   let totalOverdue = 0n;
+  let overdueCount = 0;
   for (const b of billings) {
     const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
     const bal = toScaled(balance, 2);
     if (bal <= 0n) continue;
     totalRecv += bal;
     const od = isOverdue(b.dueDate, balance, today, grace);
-    if (od) totalOverdue += bal;
+    if (od) {
+      totalOverdue += bal;
+      overdueCount += 1;
+    }
     const bucket = byCustomer.get(b.customerId) ?? { name: b.customer.name, rows: [], overdue: 0n };
     bucket.rows.push({ dueDate: b.dueDate, balance });
     if (od) bucket.overdue += bal;
     byCustomer.set(b.customerId, bucket);
   }
 
-  const pending2307 = await db.withholding2307.aggregate({
-    where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
-    _sum: { amount: true },
-  });
+  const [pending2307, creditsByCustomer] = await Promise.all([
+    db.withholding2307.aggregate({
+      where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
+      _sum: { amount: true },
+    }),
+    customerCreditsGrouped(),
+  ]);
 
-  const customers = [...byCustomer.entries()].map(([customerId, v]) => ({
+  const customers: CustomerAgingRow[] = [...byCustomer.entries()].map(([customerId, v]) => ({
     customerId,
     customerName: v.name,
     aging: sumAging(v.rows, today),
     overdue: fromScaled(v.overdue, 2),
-    credit: "0.00",
+    credit: creditsByCustomer.get(customerId)?.credit ?? "0.00",
   }));
 
-  // Credits per customer (unapplied cash).
-  let totalCredit = 0n;
-  for (const row of customers) {
-    const c = await customerCreditBalance(row.customerId);
-    row.credit = c;
-    totalCredit += toScaled(c, 2);
-  }
+  let totalCredit = customers.reduce((a, row) => a + toScaled(row.credit, 2), 0n);
+
   // Also include customers with credit but no open AR.
-  const creditOnly = await db.collection.findMany({
-    where: { status: "POSTED" },
-    select: { customerId: true, customer: { select: { name: true } } },
-    distinct: ["customerId"],
-  });
-  for (const c of creditOnly) {
-    if (byCustomer.has(c.customerId)) continue;
-    const credit = await customerCreditBalance(c.customerId);
-    if (toScaled(credit, 2) <= 0n) continue;
-    totalCredit += toScaled(credit, 2);
+  for (const [customerId, v] of creditsByCustomer) {
+    if (byCustomer.has(customerId)) continue;
+    if (toScaled(v.credit, 2) <= 0n) continue;
+    totalCredit += toScaled(v.credit, 2);
     customers.push({
-      customerId: c.customerId,
-      customerName: c.customer.name,
+      customerId,
+      customerName: v.name,
       aging: emptyAging(),
       overdue: "0.00",
-      credit,
+      credit: v.credit,
     });
   }
 
@@ -359,6 +458,7 @@ export async function arAgingSummary(): Promise<{
   return {
     totalReceivable: fromScaled(totalRecv, 2),
     overdue: fromScaled(totalOverdue, 2),
+    overdueCount,
     pending2307: money(pending2307._sum.amount ?? 0),
     credit: fromScaled(totalCredit, 2),
     byCustomer: customers,

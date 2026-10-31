@@ -7,9 +7,6 @@ import { Prisma } from "@prisma/client";
 
 const rate = (code: string, lineKind: WithholdingSnapshot["lineKind"], r: string): WithholdingSnapshot => ({ code, label: code, lineKind, rate: r, atcCode: null });
 const GOODS_1 = rate("GOODS_1", "GOODS", "0.0100");
-const SERVICES_2 = rate("SERVICES_2", "SERVICES", "0.0200");
-const GOV_PT_3 = rate("GOV_PT_3", "GOV_PT", "0.0300");
-const GOV_VAT_5 = rate("GOV_VAT_5", "GOV_VAT", "0.0500");
 
 describe("decimal helpers", () => {
   it("parses and formats exactly, rounding half-up", () => {
@@ -52,60 +49,134 @@ describe("line amounts", () => {
   });
 });
 
-describe("document totals", () => {
+describe("document totals (per-line rates)", () => {
   const lines = [
-    { kind: "GOODS" as const, qty: "10", unitPrice: "52000", supplierUnitCost: "45000" },
-    { kind: "SERVICES" as const, qty: "1", unitPrice: "20000", supplierUnitCost: "5000" },
+    { kind: "GOODS" as const, qty: "10", unitPrice: "52000", supplierUnitCost: "45000", withholdingRate: "0.0100", withholdingAtc: "WI158" },
+    { kind: "SERVICES" as const, qty: "1", unitPrice: "20000", supplierUnitCost: "5000", withholdingRate: "0.0200", withholdingAtc: "WI160" },
   ];
 
-  it("applies goods rates to goods lines, services rates to services lines and gov rates to the total", () => {
-    const t = docTotals(lines, [GOODS_1, SERVICES_2, GOV_PT_3, GOV_VAT_5]);
+  it("mixed document: goods at 1% plus services at 2% totals correctly", () => {
+    const t = docTotals(lines);
     expect(t.contractPrice).toBe("540000.00");
+    // 520000×1% = 5200; 20000×2% = 400
     expect(t.withholding.map((w) => [w.code, w.base, w.amount])).toEqual([
       ["GOODS_1", "520000.00", "5200.00"],
       ["SERVICES_2", "20000.00", "400.00"],
-      ["GOV_PT_3", "540000.00", "16200.00"],
-      ["GOV_VAT_5", "540000.00", "27000.00"],
     ]);
-    expect(t.withholdingTotal).toBe("48800.00");
-    expect(t.netReceived).toBe("491200.00");
+    expect(t.withholdingTotal).toBe("5600.00");
+    expect(t.netReceived).toBe("534400.00");
     expect(t.supplierCost).toBe("455000.00");
-    expect(t.netMargin).toBe("36200.00");
-    expect(t.netMarginPct).toBe("6.70"); // 36,200 / 540,000
+    expect(t.netMargin).toBe("79400.00");
+    expect(t.netMarginPct).toBe("14.70");
   });
 
-  it("uses the gross contract price as the base (non-VAT: never ÷ 1.12)", () => {
-    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "112000", supplierUnitCost: "0" }], [GOODS_1]);
+  it("rounds withholding per line to the centavo (half-up), then sums", () => {
+    // 100.50 × 1% = 1.005 → 1.01; 100.50 × 3% = 3.015 → 3.02
+    const t = docTotals([
+      { kind: "GOODS", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0100", withholdingAtc: "WI158" },
+      { kind: "SERVICES", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WG010" },
+    ]);
+    expect(t.withholding.map((w) => w.amount)).toEqual(["1.01", "3.02"]);
+    expect(t.withholdingTotal).toBe("4.03");
+    expect(t.netReceived).toBe("196.97"); // 201.00 − 4.03
+  });
+
+  it("uses the gross line total as the base (non-VAT: never ÷ 1.12)", () => {
+    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "112000", supplierUnitCost: "0", withholdingRate: "0.0100", withholdingAtc: "WI158" }]);
     expect(t.withholding[0]?.base).toBe("112000.00");
     expect(t.withholdingTotal).toBe("1120.00");
   });
 
-  it("with no withholding, net received = contract price", () => {
-    const t = docTotals(lines, []);
+  it("null/blank line rates contribute ₱0 (legacy unsapped rows)", () => {
+    const t = docTotals([
+      { kind: "GOODS", qty: "10", unitPrice: "52000", supplierUnitCost: "45000", withholdingRate: null },
+      { kind: "SERVICES", qty: "1", unitPrice: "20000", supplierUnitCost: "5000" },
+    ]);
+    expect(t.withholdingTotal).toBe("0.00");
+    expect(t.netReceived).toBe(t.contractPrice);
+  });
+
+  it("with no withholding rates, net received = contract price", () => {
+    const t = docTotals([
+      { kind: "GOODS", qty: "10", unitPrice: "52000", supplierUnitCost: "45000" },
+      { kind: "SERVICES", qty: "1", unitPrice: "20000", supplierUnitCost: "5000" },
+    ]);
     expect(t.netReceived).toBe(t.contractPrice);
     expect(t.netMargin).toBe("85000.00");
     expect(t.netMarginPct).toBe("15.74");
   });
 
-  it("rounds each withholding amount to 2 decimals", () => {
-    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "100.50", supplierUnitCost: "0" }], [GOODS_1, GOV_PT_3]);
-    // 1.005 → 1.01 ; 3.015 → 3.02
-    expect(t.withholding.map((w) => w.amount)).toEqual(["1.01", "3.02"]);
-    expect(t.withholdingTotal).toBe("4.03");
-    expect(t.netReceived).toBe("96.47");
-  });
-
   it("handles an empty quote and negative margins", () => {
-    expect(docTotals([], [GOODS_1]).netMarginPct).toBe("0.00");
-    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "150" }], []);
+    expect(docTotals([]).netMarginPct).toBe("0.00");
+    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "150" }]);
     expect(t.netMargin).toBe("-50.00");
     expect(t.netMarginPct).toBe("-50.00");
   });
 
   it("matches the design brief example (₱510,000 / ₱450,000 → 11.76%)", () => {
-    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "510000", supplierUnitCost: "450000" }], []);
+    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "510000", supplierUnitCost: "450000" }]);
     expect(t.netMargin).toBe("60000.00");
     expect(t.netMarginPct).toBe("11.76");
+  });
+});
+
+describe("planItems re-apply respects overrides", () => {
+  it("manual override survives re-apply; other lines refresh", () => {
+    const existing = [
+      {
+        id: "a",
+        kind: "GOODS" as const,
+        supplierId: null,
+        supplierUnitCost: "0",
+        withholdingRate: "0.0150",
+        withholdingAtc: "WI158",
+        withholdingOverride: true,
+      },
+      {
+        id: "b",
+        kind: "SERVICES" as const,
+        supplierId: null,
+        supplierUnitCost: "0",
+        withholdingRate: "0.0200",
+        withholdingAtc: "WI160",
+        withholdingOverride: false,
+      },
+    ];
+    const { items } = planItems(
+      existing,
+      [
+        {
+          id: "a",
+          description: "Laptop",
+          kind: "GOODS",
+          qty: "1",
+          unit: "pc",
+          supplierId: null,
+          supplierUnitCost: "0",
+          unitPrice: "1000",
+          withholdingRate: "0.0150",
+          withholdingAtc: "WI158",
+          withholdingOverride: true,
+        },
+        {
+          id: "b",
+          description: "Install",
+          kind: "SERVICES",
+          qty: "1",
+          unit: "lot",
+          supplierId: null,
+          supplierUnitCost: "0",
+          unitPrice: "500",
+          withholdingRate: "0.0200",
+          withholdingAtc: "WI160",
+          withholdingOverride: false,
+        },
+      ],
+      false,
+      { customerWithholdingType: "GOVERNMENT", reapplyWithholding: true },
+    );
+    expect(items[0]).toMatchObject({ withholdingRate: "0.0150", withholdingAtc: "WI158", withholdingOverride: true });
+    expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WG010", withholdingOverride: false });
   });
 });
 

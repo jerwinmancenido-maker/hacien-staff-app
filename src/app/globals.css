@@ -39,6 +39,11 @@
 }
 
 :root {
+  /* Brand accent (same names/values as brand-06 / PR 23) so the branches merge cleanly. */
+  --blue: #2563eb;
+  --blue-dark: #1d4ed8;
+  --blue-tint: #eff6ff;
+
   --bg: #f4f4f2;
   --card: #ffffff;
   --border: #e9e9e6;
@@ -292,7 +297,8 @@ a.tracker-card:hover {
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--text);
+  /* Non-VAT sidebar meter: brand accent below warn % (level-first/second override). */
+  background: var(--blue);
   border-radius: 999px;
 }
 
@@ -2040,13 +2046,40 @@ pre.json {
     border-radius: 0;
   }
   .topbar {
-    padding: 12px 16px;
+    padding: 10px 12px;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px 8px;
+    align-items: center;
+  }
+  .crumbs {
+    font-size: 12px;
+    line-height: 1.3;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .topbar .user-name {
+    display: none; /* free space next to Sign out at phone widths */
+  }
+  .topbar .right {
+    gap: 6px;
   }
   .topbar-search {
-    min-width: 100%;
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
     order: 3;
+    height: 36px;
+  }
+  .topbar-search input {
+    font-size: 14px;
+  }
+  /* Books / tax section tabs: keep one row, scroll instead of wrapping cramped */
+  .pill-tabs-wrap {
+    margin-bottom: 10px;
+  }
+  .pill-tabs-track {
+    gap: 4px;
   }
   .content {
     padding: 16px;
@@ -2187,11 +2220,157 @@ pre.json {
 /* Editable tables (editor items, withholding rates) */
 .edit-table {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .edit-table table.list td {
   height: auto;
   padding: 6px 6px;
   vertical-align: top;
+}
+/*
+ * Quote/SO item editors: WH%/ATC stacked; Description sticky. Money cols fit
+ * ₱999,999.99 (12px tabular-nums); Kind fits "Services"; line actions stack.
+ * ≥1280: fixed layout, no H-scroll, no cell clip/overlap (~896px content).
+ * Below 1280: min-widths keep cells unclipped; wrapper may scroll.
+ */
+.edit-table.items-edit {
+  overflow-x: auto;
+}
+.edit-table.items-edit table.list {
+  width: 100%;
+  border-collapse: separate;
+}
+.edit-table.items-edit table.list th:first-child,
+.edit-table.items-edit table.list td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  min-width: 6.5rem;
+}
+.edit-table.items-edit table.list th:first-child {
+  z-index: 3;
+}
+.edit-table.items-edit table.list th,
+.edit-table.items-edit table.list td {
+  padding-left: 3px;
+  padding-right: 3px;
+  box-sizing: border-box;
+}
+.edit-table.items-edit input,
+.edit-table.items-edit select,
+.edit-table.items-edit textarea {
+  min-width: 0;
+}
+/* Money headers wrap; body money stays nowrap (via .num). */
+.edit-table.items-edit table.list th.col-money,
+.edit-table.items-edit table.list th.col-wh {
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  vertical-align: bottom;
+}
+.edit-table.items-edit .col-money {
+  /* 12px tabular ₱999,999.99 ≈ 86px; cell ≥ that with padding */
+  min-width: 5.65rem;
+  width: 5.65rem;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.edit-table.items-edit .col-kind {
+  /* Native <select> must be wide enough to paint "Services" in full. */
+  min-width: 5rem;
+  width: 5rem;
+}
+.edit-table.items-edit .col-qty {
+  min-width: 2.35rem;
+  width: 2.35rem;
+}
+.edit-table.items-edit .col-unit {
+  min-width: 2.5rem;
+  width: 2.5rem;
+}
+.edit-table.items-edit .col-supplier {
+  min-width: 4.15rem;
+  width: 4.15rem;
+}
+.edit-table.items-edit .col-actions,
+.edit-table.items-edit td.line-actions {
+  min-width: 1.5rem;
+  width: 1.5rem;
+}
+.edit-table.items-edit td.line-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  white-space: normal;
+}
+.edit-table.items-edit .col-wh {
+  width: 3.1rem;
+  min-width: 3.1rem;
+  white-space: normal;
+}
+.edit-table.items-edit .w-wh,
+.edit-table.items-edit .w-atc {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: right;
+  padding: 3px 3px;
+  font-size: 11px;
+}
+.edit-table.items-edit .w-atc {
+  text-align: left;
+  margin-top: 3px;
+}
+.edit-table.items-edit .col-kind select {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 4px 1px;
+}
+.edit-table.items-edit .col-supplier select {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 11px;
+  padding: 4px 1px;
+}
+.edit-table.items-edit .w-num {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 3px;
+}
+.edit-table.items-edit .w-num-s {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 4px 2px;
+  font-size: 12px;
+}
+.edit-table.items-edit .w-unit {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 4px 2px;
+  font-size: 12px;
+}
+.wh-computed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
 }
 .edit-table input,
 .edit-table select,
@@ -2206,6 +2385,9 @@ pre.json {
   width: 100%;
   min-width: 200px;
   resize: vertical;
+}
+.edit-table.items-edit textarea {
+  min-width: 120px;
 }
 .edit-table select {
   max-width: 170px;
@@ -2226,15 +2408,117 @@ pre.json {
 .edit-table .w-unit {
   width: 60px;
 }
+/* Items editor: beat the generic edit-table input/select widths above. */
+.edit-table.items-edit input,
+.edit-table.items-edit input:not([type]),
+.edit-table.items-edit input[type="text"],
+.edit-table.items-edit select,
+.edit-table.items-edit textarea {
+  min-width: 0;
+}
+.edit-table.items-edit .w-num,
+.edit-table.items-edit .w-num-s,
+.edit-table.items-edit .w-unit {
+  width: 100%;
+  max-width: none;
+}
+.edit-table.items-edit textarea {
+  min-width: 0;
+}
+.edit-table.items-edit .col-kind select,
+.edit-table.items-edit .col-supplier select {
+  max-width: none;
+}
+.edit-table.items-edit table.list th.col-unit,
+.edit-table.items-edit table.list th.col-supplier,
+.edit-table.items-edit table.list th.col-kind,
+.edit-table.items-edit table.list th.col-qty {
+  /* Single-word headers: never mid-word break; width must fit the label. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  letter-spacing: 0.02em;
+  vertical-align: bottom;
+}
+.edit-table.items-edit table.list th.col-money {
+  /* Multi-word money headers wrap at spaces only. */
+  overflow-wrap: normal;
+  word-break: normal;
+}
+/* Below 1280: min-widths keep cells unclipped when the wrapper scrolls. */
+.edit-table.items-edit .col-money {
+  min-width: 5.8rem;
+}
+.edit-table.items-edit .col-kind {
+  min-width: 5rem;
+}
+.edit-table.items-edit .col-unit {
+  min-width: 2.5rem;
+}
+.edit-table.items-edit .col-supplier {
+  min-width: 4.15rem;
+}
+.edit-table.items-edit .col-qty {
+  min-width: 2.5rem;
+}
 .edit-table .error {
   color: var(--red);
 }
 .line-actions {
   white-space: nowrap;
 }
+.edit-table.items-edit td.line-actions {
+  white-space: normal;
+}
 .line-actions .btn-link {
   text-decoration: none;
   padding: 2px 4px;
+}
+/* Final ≥1280 widths (must follow other items-edit rules). */
+@media (min-width: 1280px) {
+  .edit-table.items-edit {
+    overflow-x: visible;
+  }
+  .edit-table.items-edit table.list {
+    table-layout: fixed;
+  }
+  .edit-table.items-edit textarea {
+    min-width: 0;
+  }
+  .edit-table.items-edit table.list th:first-child,
+  .edit-table.items-edit table.list td:first-child {
+    width: auto;
+    min-width: 120px;
+    max-width: none;
+  }
+  .edit-table.items-edit .col-kind {
+    width: 84px;
+    min-width: 84px;
+  }
+  .edit-table.items-edit .col-qty {
+    width: 40px;
+    min-width: 40px;
+  }
+  .edit-table.items-edit .col-unit {
+    width: 40px;
+    min-width: 40px;
+  }
+  .edit-table.items-edit .col-supplier {
+    width: 66px;
+    min-width: 66px;
+  }
+  .edit-table.items-edit .col-money {
+    width: 84px;
+    min-width: 84px;
+  }
+  .edit-table.items-edit .col-wh {
+    width: 50px;
+    min-width: 50px;
+  }
+  .edit-table.items-edit .col-actions,
+  .edit-table.items-edit td.line-actions {
+    width: 24px;
+    min-width: 24px;
+  }
 }
 .btn-link.danger {
   color: var(--red);
@@ -2631,9 +2915,23 @@ button.contact-card-add {
   margin-right: 4px;
   vertical-align: middle;
 }
-.aging-bar-fill.amber { background: var(--amber, #b45309); }
-.aging-bar-fill.red { background: var(--red); }
-.aging-bar-fill:not(.empty) { height: 100%; background: #4ade80; border-radius: inherit; }
+.aging-bar-fill:not(.empty) {
+  height: 100%;
+  border-radius: inherit;
+  background: #4ade80;
+}
+/* Home Non-VAT card: accent below warn %; amber/red win once warn thresholds hit. */
+.home-nonvat .aging-bar-fill:not(.empty) {
+  background: var(--blue);
+}
+.aging-bar-fill.amber,
+.home-nonvat .aging-bar-fill.amber {
+  background: var(--amber);
+}
+.aging-bar-fill.red,
+.home-nonvat .aging-bar-fill.red {
+  background: var(--red);
+}
 .statement-doc .print-doc-title h1 { font-size: 1.35rem; margin: 0; }
 .statement-aging { margin-top: 1.5rem; page-break-inside: avoid; }
 .print-placeholder { color: var(--red); font-weight: 600; }
@@ -3161,6 +3459,28 @@ button.contact-card-add {
 /* ---------- Tax calendar (Part 7d) — phone cards / desktop table ---------- */
 /* sm breakpoint (~640px), matching Tailwind sm: */
 
+/* One calm notice (BIR rules + missing holidays + provisional) — not stacked alert boxes. */
+.tax-cal-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text);
+  border-radius: var(--radius);
+  background: var(--fill);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.tax-cal-notice-line {
+  margin: 0;
+}
+.tax-cal-notice-line + .tax-cal-notice-line {
+  margin-top: 6px;
+}
+.tax-cal-notice-provisional {
+  color: var(--text-3);
+}
+
 .tax-cal-mobile {
   display: none;
   flex-direction: column;
@@ -3617,4 +3937,168 @@ button.contact-card-add {
     font-size: 11px;
     max-width: 100%;
   }
+}
+
+/* ---------- Home dashboard ---------- */
+
+.home-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-dashboard > .card {
+  margin-top: 0;
+}
+.home-getting-started-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.home-action-list,
+.home-money-list,
+.home-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-action-row,
+.home-money-row,
+.home-activity-row,
+.home-tax-link,
+.home-nonvat-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 10px;
+  margin: 0 -10px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.home-action-row:hover,
+.home-money-row:hover,
+.home-activity-row:hover,
+.home-tax-link:hover,
+.home-nonvat-link:hover {
+  background: #f7f7f5;
+}
+.home-action-list li + li .home-action-row,
+.home-money-list li + li .home-money-row,
+.home-activity-list li + li .home-activity-row {
+  border-top: 1px solid #f3f3f0;
+  border-radius: 0;
+}
+.home-action-label,
+.home-money-label,
+.home-activity-summary {
+  font-size: 14px;
+}
+.home-action-count {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+.home-money-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.home-money-overdue {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-tax-main {
+  min-width: 0;
+}
+.home-tax-due {
+  text-align: right;
+}
+.home-tax-due .label {
+  color: var(--text-2);
+  font-size: 11px;
+}
+.home-tax-overdue {
+  margin-top: 10px;
+}
+.home-tax-overdue a {
+  color: var(--red);
+  font-weight: 600;
+  text-decoration: none;
+}
+.home-tax-overdue a:hover {
+  text-decoration: underline;
+}
+.home-nonvat-link {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.home-nonvat-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-nonvat-pct {
+  margin-left: auto;
+  font-weight: 600;
+}
+.home-nonvat-helper {
+  margin: 0;
+  line-height: 1.35;
+}
+.home-nonvat-warn {
+  color: var(--red);
+  font-weight: 600;
+}
+.home-activity-row {
+  align-items: flex-start;
+}
+.home-activity-when {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .home-action-row,
+  .home-money-row,
+  .home-activity-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .home-money-amounts,
+  .home-tax-due {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .home-nonvat-pct {
+    margin-left: 0;
+  }
+}
+
+/* 1701Q worksheet: Invoiced main / Collected reference (PR 19) */
+.tax-income-worksheet th.tax-income-main,
+.tax-income-worksheet td.tax-income-main {
+  min-width: 7.5rem;
+}
+.tax-income-worksheet th.tax-income-ref,
+.tax-income-worksheet td.tax-income-ref {
+  min-width: 6rem;
+  color: var(--muted, #667);
+}
+.tax-cal-form .tax-cal-plain {
+  margin-top: 2px;
+  font-weight: 400;
+}
+.tax-cal-tasks {
+  margin: 4px 0 0;
 }

@@ -1,4 +1,5 @@
-// Pure due-date, weekend, and status helpers for the tax calendar (PHT / Manila).
+// Pure due-date, weekend/holiday, and status helpers for the tax calendar (PHT / Manila).
+// RMC 65-2016: due dates that fall on a weekend or holiday move to the next working day.
 
 import { addDays, isoDate, manilaToday } from "../format";
 import {
@@ -13,6 +14,7 @@ import {
   type ObligationSchedule,
   type TaxCalendarObligationKey,
 } from "./calendar-obligations";
+import { holidayYmdSet, type TaxHoliday } from "./holidays";
 
 /** Manila weekday: 0=Sun … 6=Sat (UTC date of a Manila YMD stored as DATE). */
 export function manilaWeekday(ymd: string): number {
@@ -25,20 +27,47 @@ export function isWeekendYmd(ymd: string): boolean {
   return d === 0 || d === 6;
 }
 
-/**
- * Previous working day (Mon–Fri) before `ymd` when `ymd` is Sat/Sun.
- * Sat → Friday; Sun → Friday. Weekday → same day.
- * Does NOT change the legal due date — only used for the "File by … to be safe" hint.
- */
-export function previousWorkingDay(ymd: string): string {
-  const d = manilaWeekday(ymd);
-  if (d === 6) return addDaysYmd(ymd, -1); // Sat → Fri
-  if (d === 0) return addDaysYmd(ymd, -2); // Sun → Fri
-  return ymd;
+export function isHolidayYmd(ymd: string, holidays: readonly TaxHoliday[] | ReadonlySet<string>): boolean {
+  const set = holidays instanceof Set ? holidays : holidayYmdSet(holidays);
+  return set.has(ymd);
+}
+
+/** True when the date is Sat/Sun or in the holiday set. */
+export function isNonWorkingYmd(ymd: string, holidays: readonly TaxHoliday[] | ReadonlySet<string> = []): boolean {
+  return isWeekendYmd(ymd) || isHolidayYmd(ymd, holidays);
 }
 
 export function addDaysYmd(ymd: string, days: number): string {
   return isoDate(addDays(new Date(`${ymd}T00:00:00.000Z`), days));
+}
+
+/**
+ * Next working day on or after `ymd` (skip weekends + holidays).
+ * RMC 65-2016 roll-forward for tax due dates.
+ */
+export function nextWorkingDay(ymd: string, holidays: readonly TaxHoliday[] | ReadonlySet<string> = []): string {
+  const set = holidays instanceof Set ? holidays : holidayYmdSet(holidays);
+  let cur = ymd;
+  // Safety bound: never loop more than a year of calendar days.
+  for (let i = 0; i < 366; i++) {
+    if (!isNonWorkingYmd(cur, set)) return cur;
+    cur = addDaysYmd(cur, 1);
+  }
+  return cur;
+}
+
+/**
+ * Previous working day on or before `ymd` (skip weekends + holidays).
+ * Used for the "File by … to be safe" hint (file a day early).
+ */
+export function previousWorkingDay(ymd: string, holidays: readonly TaxHoliday[] | ReadonlySet<string> = []): string {
+  const set = holidays instanceof Set ? holidays : holidayYmdSet(holidays);
+  let cur = ymd;
+  for (let i = 0; i < 366; i++) {
+    if (!isNonWorkingYmd(cur, set)) return cur;
+    cur = addDaysYmd(cur, -1);
+  }
+  return cur;
 }
 
 /** Clamp day into the month (e.g. day 31 in April → 30). */
@@ -53,34 +82,61 @@ export function lastDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
 }
 
-export type WeekendHint = {
-  /** Legal due date (unchanged even on weekends). */
+export type WorkingDayHint = {
+  /** Catalog / statutory legal due date before weekend/holiday roll. */
   legalDueYmd: string;
-  /** True when legal due falls on Sat/Sun. */
-  fallsOnWeekend: boolean;
-  /** Previous working day when fallsOnWeekend; otherwise null. */
+  /** Effective due after RMC 65-2016 roll (same as legal when already a working day). */
+  dueYmd: string;
+  /** True when legal due fell on a weekend or holiday and was rolled. */
+  rolled: boolean;
+  /** Previous working day before the effective due (for the file-early hint). */
   fileByYmd: string | null;
-  /** Staff-facing hint, or null. */
+  /** Staff-facing hint, or null when no roll was needed. */
   fileByHint: string | null;
 };
 
-/** Weekend rule: show legal date; add File-by hint; never auto-move the due date. */
-export function weekendRule(legalDueYmd: string): WeekendHint {
-  if (!isWeekendYmd(legalDueYmd)) {
-    return { legalDueYmd, fallsOnWeekend: false, fileByYmd: null, fileByHint: null };
+/** @deprecated Use WorkingDayHint — kept for call sites that still say WeekendHint. */
+export type WeekendHint = WorkingDayHint & {
+  /** @deprecated Prefer `rolled`. True when legal fell on Sat/Sun (ignores holidays). */
+  fallsOnWeekend: boolean;
+};
+
+/**
+ * RMC 65-2016: move weekend/holiday dues to the next working day.
+ * Keep the existing "File by … to be safe" hint whenever a roll happened
+ * (hint date = previous working day before the effective due).
+ */
+export function workingDayRule(
+  legalDueYmd: string,
+  holidays: readonly TaxHoliday[] | ReadonlySet<string> = [],
+): WorkingDayHint {
+  const set = holidays instanceof Set ? holidays : holidayYmdSet(holidays);
+  const dueYmd = nextWorkingDay(legalDueYmd, set);
+  const rolled = dueYmd !== legalDueYmd;
+  if (!rolled) {
+    return { legalDueYmd, dueYmd, rolled: false, fileByYmd: null, fileByHint: null };
   }
-  const fileByYmd = previousWorkingDay(legalDueYmd);
+  // File a day early: previous working day strictly before the effective due.
+  const fileByYmd = previousWorkingDay(addDaysYmd(dueYmd, -1), set);
   return {
     legalDueYmd,
-    fallsOnWeekend: true,
+    dueYmd,
+    rolled: true,
     fileByYmd,
     fileByHint: `${TAX_CALENDAR_FILE_BY_PREFIX}${fileByYmd}${TAX_CALENDAR_FILE_BY_SUFFIX}`,
   };
 }
 
+/** Weekend-only helper kept for older tests; prefers empty holiday set. */
+export function weekendRule(legalDueYmd: string, holidays: readonly TaxHoliday[] = []): WeekendHint {
+  const w = workingDayRule(legalDueYmd, holidays);
+  return { ...w, fallsOnWeekend: isWeekendYmd(legalDueYmd) };
+}
+
 /**
  * Status bucket relative to Manila today.
  * Marked done is decided by the caller (completion row); this helper covers the rest.
+ * Not-applicable rows must never be reported as overdue by the caller.
  */
 export function statusForDueDate(
   dueYmd: string | null,
@@ -115,11 +171,16 @@ export type GeneratedOccurrence = {
   periodKey: string;
   /** Plain period label, e.g. "Q1 2026", "2026-05", "TY 2025", "2026". */
   periodLabel: string;
-  /** Legal due date YYYY-MM-DD, or null when undated. */
+  /** Effective due date YYYY-MM-DD after weekend/holiday roll, or null when undated. */
   dueYmd: string | null;
   /** Display string for the due column ("date to confirm" when null). */
   dueDisplay: string;
-} & WeekendHint;
+  legalDueYmd: string;
+  rolled: boolean;
+  fallsOnWeekend: boolean;
+  fileByYmd: string | null;
+  fileByHint: string | null;
+};
 
 function periodQuarterLabel(year: number, quarter: number): string {
   return `Q${quarter} ${year}`;
@@ -134,8 +195,10 @@ function effectiveDueDay(schedule: ObligationSchedule, override?: OwnerDueOverri
     case "quarterly_after_end":
     case "monthly":
       return schedule.dueDay;
+    case "days_after_quarter_end":
     case "quarterly_last_day_after":
     case "undated_year_end":
+    case "books_of_accounts":
       return null;
   }
 }
@@ -146,6 +209,13 @@ function effectiveDueMonth(schedule: ObligationSchedule, override?: OwnerDueOver
   return null;
 }
 
+export type GenerateOccurrencesOptions = {
+  override?: OwnerDueOverrides;
+  holidays?: readonly TaxHoliday[];
+  /** Books of accounts type — required for dated books_accounts rows. */
+  booksType?: "loose_leaf" | "computerized" | null;
+};
+
 /**
  * Generate occurrences for one obligation across [fromYear, toYear] inclusive
  * (calendar years used for filing windows). Pure — no DB.
@@ -154,27 +224,51 @@ export function generateOccurrences(
   key: TaxCalendarObligationKey,
   fromYear: number,
   toYear: number,
-  override?: OwnerDueOverrides,
+  overrideOrOpts?: OwnerDueOverrides | GenerateOccurrencesOptions,
 ): GeneratedOccurrence[] {
+  // Back-compat: third arg used to be OwnerDueOverrides only.
+  const opts: GenerateOccurrencesOptions =
+    overrideOrOpts && ("override" in overrideOrOpts || "holidays" in overrideOrOpts || "booksType" in overrideOrOpts)
+      ? (overrideOrOpts as GenerateOccurrencesOptions)
+      : { override: overrideOrOpts as OwnerDueOverrides | undefined };
+  const override = opts.override;
+  const holidays = opts.holidays ?? [];
+  const booksType = opts.booksType ?? null;
+
   const def = obligationByKey(key);
   const schedule = def.schedule;
   const out: GeneratedOccurrence[] = [];
 
-  const push = (periodKey: string, periodLabel: string, dueYmd: string | null) => {
-    const weekend = dueYmd
-      ? weekendRule(dueYmd)
-      : { legalDueYmd: "", fallsOnWeekend: false, fileByYmd: null, fileByHint: null };
+  const push = (periodKey: string, periodLabel: string, rawDueYmd: string | null) => {
+    if (!rawDueYmd) {
+      out.push({
+        obligationKey: key,
+        occurrenceKey: `${key}|${periodKey}`,
+        periodKey,
+        periodLabel,
+        dueYmd: null,
+        dueDisplay: TAX_CALENDAR_DATE_TO_CONFIRM,
+        legalDueYmd: "",
+        rolled: false,
+        fallsOnWeekend: false,
+        fileByYmd: null,
+        fileByHint: null,
+      });
+      return;
+    }
+    const rule = workingDayRule(rawDueYmd, holidays);
     out.push({
       obligationKey: key,
       occurrenceKey: `${key}|${periodKey}`,
       periodKey,
       periodLabel,
-      dueYmd,
-      dueDisplay: dueYmd ?? TAX_CALENDAR_DATE_TO_CONFIRM,
-      legalDueYmd: weekend.legalDueYmd || (dueYmd ?? ""),
-      fallsOnWeekend: weekend.fallsOnWeekend,
-      fileByYmd: weekend.fileByYmd,
-      fileByHint: weekend.fileByHint,
+      dueYmd: rule.dueYmd,
+      dueDisplay: rule.dueYmd,
+      legalDueYmd: rule.legalDueYmd,
+      rolled: rule.rolled,
+      fallsOnWeekend: isWeekendYmd(rawDueYmd),
+      fileByYmd: rule.fileByYmd,
+      fileByHint: rule.fileByHint,
     });
   };
 
@@ -217,6 +311,19 @@ export function generateOccurrences(
       }
       break;
     }
+    case "days_after_quarter_end": {
+      // e.g. 2551Q under Graduated: 25 days after quarter end.
+      // Ignore owner dueDay — stale Settings from the old quarterly_after_end
+      // seed (dueDay: 15) must not replace catalog daysAfter.
+      for (let year = fromYear; year <= toYear; year++) {
+        for (const q of [1, 2, 3, 4] as const) {
+          const endMonth = q * 3;
+          const endYmd = lastDayOfMonth(year, endMonth);
+          push(`${year}-Q${q}`, periodQuarterLabel(year, q), addDaysYmd(endYmd, schedule.daysAfter));
+        }
+      }
+      break;
+    }
     case "monthly": {
       const day = effectiveDueDay(schedule, override) ?? schedule.dueDay;
       for (let year = fromYear; year <= toYear; year++) {
@@ -237,7 +344,6 @@ export function generateOccurrences(
             dueMonth -= 12;
             dueYear += 1;
           }
-          // Owner dueDay override: if set, use that day instead of last day.
           const dueYmd =
             override?.dueDay != null
               ? ymdOnOrLast(dueYear, dueMonth, override.dueDay)
@@ -248,12 +354,26 @@ export function generateOccurrences(
       break;
     }
     case "undated_year_end": {
-      // If owner sets month+day, use it; otherwise blank ("date to confirm").
       const month = override?.dueMonth ?? null;
       const day = override?.dueDay ?? null;
       for (let year = fromYear; year <= toYear; year++) {
         const dueYmd = month != null && day != null ? ymdOnOrLast(year, month, day) : null;
         push(String(year), String(year), dueYmd);
+      }
+      break;
+    }
+    case "books_of_accounts": {
+      // Jan 15 loose-leaf / Jan 30 computerized, else "date to confirm".
+      for (let year = fromYear; year <= toYear; year++) {
+        let raw: string | null = null;
+        if (booksType === "loose_leaf") {
+          raw = ymdOnOrLast(year, 1, schedule.looseLeafDay);
+        } else if (booksType === "computerized") {
+          raw = ymdOnOrLast(year, 1, schedule.computerizedDay);
+        } else if (override?.dueMonth != null && override?.dueDay != null) {
+          raw = ymdOnOrLast(year, override.dueMonth, override.dueDay);
+        }
+        push(String(year), String(year), raw);
       }
       break;
     }

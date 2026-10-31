@@ -102,8 +102,14 @@ export function formatNonVatPctLabel(pct: number): string {
   return `${(Math.floor(pct * 10) / 10).toFixed(1)}%`;
 }
 
+/** Fields the meter needs from Settings → Tax year (ignores method/holidays/books). */
+export type NonVatTaxYear = Pick<
+  Settings["taxYear"],
+  "year" | "nonVatLimit" | "warnFirstPct" | "warnSecondPct"
+>;
+
 /** Pure: turns gross sales and the tax-year settings into the meter shown in the sidebar. */
-export function nonVatMeter(used: number, taxYear: Settings["taxYear"]): NonVatMeter {
+export function nonVatMeter(used: number, taxYear: NonVatTaxYear): NonVatMeter {
   const { year, nonVatLimit: limit, warnFirstPct, warnSecondPct } = taxYear;
   const pct = limit > 0 ? (used / limit) * 100 : 0;
   const level: NonVatLevel = pct >= 100 ? "over" : pct >= warnSecondPct ? "second" : pct >= warnFirstPct ? "first" : "ok";
@@ -121,7 +127,7 @@ export function nonVatMeter(used: number, taxYear: Settings["taxYear"]): NonVatM
 }
 
 export async function getNonVatMeter(
-  taxYear: Settings["taxYear"],
+  taxYear: NonVatTaxYear,
   now: Date = new Date(),
   source: GrossSalesSource = billingsGrossSales,
 ): Promise<NonVatMeter> {
