@@ -18,6 +18,7 @@ import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { parseWithholdingPick } from "./withholding-defaults";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 
@@ -180,6 +181,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   });
   if (!q) return null;
   const withholding = snapshotList(q.withholding);
+  const withholdingPick = parseWithholdingPick(q.withholdingPick);
   const stored = {
     contractPrice: money(q.contractPrice),
     withholdingTotal: money(q.withholdingTotal),
@@ -202,6 +204,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     customer: q.customer,
     contact: q.contact,
     withholding,
+    withholdingPick,
     items: q.items.map((i) => itemView(i, withCosts)),
     totals,
     approval: await approvalFor(q.settingsVersionId, money(q.contractPrice), money(q.netMarginPct), withCosts),

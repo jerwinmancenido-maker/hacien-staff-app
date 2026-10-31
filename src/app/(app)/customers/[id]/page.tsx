@@ -23,6 +23,8 @@ import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
 import { resolveCompanyTab } from "@/lib/company-tabs";
+import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
+import { allowGovVatOption, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
 import { CustomerForm } from "../CustomerForm";
 import { saveCustomerAction, setCustomerActiveAction } from "../actions";
 
@@ -41,6 +43,10 @@ export default async function CustomerPage({
   if (!customer) notFound();
   const { settings } = await getSettingsSnapshot();
   const canEdit = can(user, "edit_data");
+  const whRates = (await listWithholdingRates(undefined, { activeOnly: true })).map(toSnapshot);
+  const rates = allowGovVatOption()
+    ? whRates
+    : whRates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
   const { contacts, ...record } = customer;
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "customer", id } as const;
@@ -181,6 +187,7 @@ export default async function CustomerPage({
           <CustomerForm
             customer={record}
             terms={settings.lists.paymentTerms}
+            rates={rates}
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
           />

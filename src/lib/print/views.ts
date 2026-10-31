@@ -11,7 +11,7 @@ import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
-import { ratePctLabel, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
 import { printablePersonName } from "./signatory";
@@ -46,7 +46,11 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
   ];
 }
 
-/** Totals for customer quotes/SOs: Subtotal, Total, optional est. WHT + net. */
+/**
+ * Totals for customer quotes/SOs: Subtotal + Total (contract price) only.
+ * Withholding is internal staff math — never printed (no Less/Net/WHT/ATC/%).
+ * Amount in words must match this printed Total.
+ */
 export function customerMoneyTotals(opts: {
   contractPrice: string;
   withholdingTotal: string;
@@ -54,16 +58,10 @@ export function customerMoneyTotals(opts: {
   withholding: WithholdingSnapshot[];
 }): PrintMoneyLine[] {
   const total = opts.contractPrice;
-  const lines: PrintMoneyLine[] = [
+  return [
     { label: "Subtotal", amount: total },
     { label: "Total", amount: total, emphasize: true },
   ];
-  if (Number(opts.withholdingTotal) > 0) {
-    const pct = opts.withholding.map((w) => ratePctLabel(w.rate)).join(" + ");
-    lines.push({ label: `Less: withholding tax (est.) ${pct}`, amount: opts.withholdingTotal });
-    lines.push({ label: "Net amount due", amount: opts.netReceived, emphasize: true });
-  }
-  return lines;
 }
 
 const day = (ymdStr: string | null | undefined) =>

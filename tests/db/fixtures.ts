@@ -3,7 +3,7 @@
 // database without cleaning it (nothing is ever deleted).
 
 import { randomBytes } from "node:crypto";
-import type { WithholdingType } from "@prisma/client";
+import { Prisma, type WithholdingType } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { DocActor } from "@/lib/services/quotes";
 import type { QuoteInput } from "@/lib/validation/quotes";
@@ -40,25 +40,29 @@ export async function makeUser(kind: "costs" | "staff" | "viewer"): Promise<DocA
 }
 
 /**
- * `defaultWithholding` is legacy (kept on the row). New quotes derive rates from
- * `withholdingType`. When the type is omitted, infer a type that matches the
- * legacy codes so older fixtures still get the rates they expect.
+ * `defaultWithholding` is the saved pick copied onto new quotes:
+ *   null  = not set (default)
+ *   []    = explicit none
+ *   [codes] = those rates (they ARE the pick; type is only a label)
+ * When type is omitted, infer a label from the codes for convenience.
  */
-export async function makeCustomer(defaultWithholding: string[] = [], withholdingType?: WithholdingType) {
+export async function makeCustomer(defaultWithholding: string[] | null = null, withholdingType?: WithholdingType) {
   const t = tag();
   const inferred: WithholdingType =
     withholdingType ??
-    (defaultWithholding.some((c) => c.startsWith("GOV"))
-      ? "GOVERNMENT"
-      : defaultWithholding.length > 0
-        ? "TOP_WITHHOLDING_AGENT"
-        : "NONE");
+    (defaultWithholding == null
+      ? "NONE"
+      : defaultWithholding.some((c) => c.startsWith("GOV"))
+        ? "GOVERNMENT"
+        : defaultWithholding.length > 0
+          ? "TOP_WITHHOLDING_AGENT"
+          : "NONE");
   return db.customer.create({
     data: {
       name: `Test Customer ${t}`,
       withholdingType: inferred,
       address: "Test address",
-      defaultWithholding,
+      defaultWithholding: defaultWithholding === null ? Prisma.DbNull : defaultWithholding,
       contacts: { create: [{ name: `Buyer ${t}`, email: `buyer-${t}@test.example.com`, isMain: true }] },
     },
     include: { contacts: true },

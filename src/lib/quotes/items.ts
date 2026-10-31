@@ -1,8 +1,8 @@
 // Turning submitted item rows into stored rows (shared by quotes and sales orders).
 
-import { lineAmounts, type ItemKind, type LineAmounts } from "./calc";
+import { lineAmounts, type ItemKind, type LineAmounts, type WithholdingSnapshot } from "./calc";
 import type { ItemInput } from "../validation/quotes";
-import { lineWithholdingSnapshot } from "./withholding-defaults";
+import { lineWithholdingSnapshotFromPicks } from "./withholding-defaults";
 
 export type StoredItem = {
   id: string;
@@ -31,10 +31,14 @@ export type PlannedItem = LineAmounts & {
 };
 
 export type PlanItemsOpts = {
-  /** Customer withholding type used to default new lines when the payload omits rate/ATC. */
-  customerWithholdingType?: string | null;
   /**
-   * When true, non-override lines are re-snapshotted from the customer type.
+   * Document-level withholding pick resolved to rate snapshots.
+   * Empty array = explicit none; omitted/undefined with no reapply keeps
+   * submitted / stored line values.
+   */
+  withholdingPicks?: readonly WithholdingSnapshot[];
+  /**
+   * When true, non-override lines are re-snapshotted from withholdingPicks.
    * Lines with withholdingOverride=true keep their submitted rate/ATC/flag.
    */
   reapplyWithholding?: boolean;
@@ -59,10 +63,11 @@ function resolveLineWithholding(
   old: StoredItem | undefined,
   opts: PlanItemsOpts,
 ): { withholdingRate: string | null; withholdingAtc: string | null; withholdingOverride: boolean } {
+  const picks = opts.withholdingPicks ?? [];
   if (opts.reapplyWithholding) {
     // Manual overrides survive re-apply (UI + server share this rule).
     if (input.withholdingOverride === true) return fromInputFields(input);
-    return lineWithholdingSnapshot(opts.customerWithholdingType, input.kind);
+    return lineWithholdingSnapshotFromPicks(picks, input.kind);
   }
   if (input.withholdingRate !== undefined || input.withholdingAtc !== undefined || input.withholdingOverride !== undefined) {
     return fromInputFields(input);
@@ -74,8 +79,8 @@ function resolveLineWithholding(
       withholdingOverride: old.withholdingOverride ?? false,
     };
   }
-  // New line with no payload fields: snapshot from the customer type.
-  return lineWithholdingSnapshot(opts.customerWithholdingType, input.kind);
+  // New line with no payload fields: snapshot from the document pick.
+  return lineWithholdingSnapshotFromPicks(picks, input.kind);
 }
 
 /**

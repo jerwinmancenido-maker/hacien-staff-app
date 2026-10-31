@@ -10,12 +10,13 @@ import { assertCan, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
-import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
+import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
+import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
-import { snapshotList } from "./withholding";
+import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -40,6 +41,7 @@ export function quoteAudit(q: QuoteWithItems) {
     notes: q.notes,
     settingsVersionId: q.settingsVersionId,
     withholding: withholdingCodes(snapshotList(q.withholding)),
+    withholdingPick: parseWithholdingPick(q.withholdingPick),
     contractPrice: money(q.contractPrice),
     withholdingTotal: money(q.withholdingTotal),
     netReceived: money(q.netReceived),
@@ -50,9 +52,12 @@ export function quoteAudit(q: QuoteWithItems) {
   };
 }
 
-/** Money fields from per-line rates (round per line, then sum). */
-function totalsData(items: PlannedItem[]) {
-  const t = docTotals(items);
+/**
+ * Money fields. When picks are non-empty, breakdown is one row per pick
+ * (whole-total rates as their own lines) and withholdingTotal = sum of parts.
+ */
+function totalsData(items: PlannedItem[], picks: WithholdingSnapshot[] = []) {
+  const t = docTotals(items, picks.length ? picks : undefined);
   return {
     contractPrice: t.contractPrice,
     withholdingTotal: t.withholdingTotal,
@@ -63,9 +68,31 @@ function totalsData(items: PlannedItem[]) {
   };
 }
 
-/** Read-only document JSON summary derived from line rates (not a second rate source). */
-function withholdingFromItems(items: PlannedItem[]) {
+/** Document JSON: pick snapshots when picks drive the math; else line-derived summary. */
+function withholdingFromItems(items: PlannedItem[], picks: WithholdingSnapshot[] = []) {
+  if (picks.length) return picks;
   return withholdingSnapshotFromLines(items);
+}
+
+/**
+ * Resolve quote-level pick codes → rate snapshots (skip unknown/inactive on copy).
+ * null pick → empty snapshots (0 WH); [] → empty; [codes] → active rates.
+ */
+async function resolvePickSnapshots(codes: string[] | null): Promise<WithholdingSnapshot[]> {
+  if (!codes || codes.length === 0) return [];
+  const current = await listWithholdingRates(db, { activeOnly: false });
+  return buildWithholdingSnapshot(codes, current, [], { skipUnknown: true });
+}
+
+/** Decide the stored withholdingPick JSON from the input + existing quote/customer. */
+function resolveWithholdingPickInput(
+  input: QuoteInput,
+  fallback: string[] | null,
+): string[] | null {
+  if (input.withholdingExplicitNone === true) return [];
+  if (input.withholdingCodes === null) return null;
+  if (input.withholdingCodes !== undefined) return [...new Set(input.withholdingCodes)];
+  return fallback;
 }
 
 async function lockQuote(tx: Tx, id: string): Promise<QuoteWithItems> {
@@ -108,10 +135,15 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
 
+  // Copy the customer's saved pick unless the payload overrides it.
+  const customerPick = parseWithholdingPick(customer.defaultWithholding);
+  const pick = resolveWithholdingPickInput(input, customerPick);
+  const pickSnapshots = await resolvePickSnapshots(pick);
   // Line rates drive totals; document withholding JSON is a read-only summary.
   const { items } = planItems([], input.items, withCosts, {
-    customerWithholdingType: customer.withholdingType,
-    reapplyWithholding: input.reapplyWithholding === true,
+    withholdingPicks: pickSnapshots,
+    // Always apply the pick on create so blank lines get the customer's rates.
+    reapplyWithholding: input.reapplyWithholding === true || input.items.every((i) => i.withholdingRate === undefined),
   });
   const withholding = withholdingFromItems(items);
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
@@ -133,6 +165,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           notes: input.notes,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
+          withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...totalsData(items),
           createdById: actor.id,
           updatedById: actor.id,
@@ -169,8 +202,11 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
+      const existingPick = parseWithholdingPick(before.withholdingPick);
+      const pick = resolveWithholdingPickInput(input, existingPick);
+      const pickSnapshots = await resolvePickSnapshots(pick);
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
-        customerWithholdingType: customer.withholdingType,
+        withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
       });
       // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
@@ -196,6 +232,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           terms: input.terms,
           notes: input.notes,
           withholding: withholding as unknown as Prisma.InputJsonValue,
+          withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...preserved.totals,
           updatedById: actor.id,
         },
@@ -210,6 +247,33 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
 // ---------------------------------------------------------------------------
 // Status changes
 // ---------------------------------------------------------------------------
+
+/** Save explicit none ([]), then mark the draft as sent. Used by the submit confirm. */
+export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): Promise<QuoteWithItems> {
+  assertCan(actor, "edit_data");
+  return db.$transaction(async (tx) => {
+    const before = await lockQuote(tx, id);
+    if (before.status !== "DRAFT") throw new DocRuleError("Only a draft quote can be marked as sent.");
+    const after = await tx.quote.update({
+      where: { id },
+      data: {
+        withholdingPick: [] as unknown as Prisma.InputJsonValue,
+        status: "SENT",
+        updatedById: actor.id,
+      },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { status: before.status, withholdingPick: parseWithholdingPick(before.withholdingPick) },
+      after: { status: after.status, withholdingPick: [] },
+    });
+    return after;
+  }, DOC_TX);
+}
 
 async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string) {
   assertCan(actor, "edit_data");

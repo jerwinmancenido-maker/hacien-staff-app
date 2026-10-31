@@ -17,9 +17,25 @@ import { DEFAULT_SETTINGS } from "../src/lib/settings/defaults.ts";
 import { seedRefusal } from "../src/lib/seed-guard.ts";
 import { manilaToday } from "../src/lib/format.ts";
 import { formatAddress } from "../src/lib/addresses/format.ts";
-import { docTotals, lineAmounts, withholdingSnapshotFromLines } from "../src/lib/quotes/calc.ts";
-import { lineWithholdingSnapshot } from "../src/lib/quotes/withholding-defaults.ts";
+import { docTotals, lineAmounts, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../src/lib/quotes/calc.ts";
+import {
+  WITHHOLDING_DEFAULT_ROWS,
+  lineWithholdingSnapshotFromPicks,
+  parseWithholdingPick,
+} from "../src/lib/quotes/withholding-defaults.ts";
 import { allocateDocNumber, ensureSeries, type NumberFormat } from "../src/lib/documents/series.ts";
+
+/** Resolve pick codes to snapshots from the shared default rate rows. */
+function snapshotsFromCodes(codes: readonly string[]): WithholdingSnapshot[] {
+  const byCode = new Map(Object.values(WITHHOLDING_DEFAULT_ROWS).map((r) => [r.code, r]));
+  const out: WithholdingSnapshot[] = [];
+  for (const code of codes) {
+    const r = byCode.get(code);
+    if (!r) continue;
+    out.push({ code: r.code, label: r.label, lineKind: r.lineKind, rate: r.rate, atcCode: r.atcCode });
+  }
+  return out;
+}
 
 type SeedUser = {
   email: string;
@@ -291,10 +307,11 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
   const validUntil = new Date(today.getTime() + settings.quotes.defaultValidityDays * 86_400_000);
 
   async function makeQuote(customer: NonNullable<typeof tesda>, codes: string[], lines: SeedLine[], status: "DRAFT" | "WON") {
-    // Prefer per-line snapshots from the customer's type; `codes` kept for audit of intent.
-    void codes;
+    // Prefer the customer's saved pick; fall back to the example codes passed in.
+    const pick = parseWithholdingPick(customer.defaultWithholding) ?? codes;
+    const picks = snapshotsFromCodes(pick);
     const items = lines.map((l, i) => {
-      const wh = lineWithholdingSnapshot(customer.withholdingType, l.kind);
+      const wh = lineWithholdingSnapshotFromPicks(picks, l.kind);
       return {
         sortOrder: i + 1,
         description: l.description,
@@ -335,6 +352,7 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
           notes: SAMPLE_NOTE,
           settingsVersionId: version!.id,
           withholding,
+          withholdingPick: pick,
           ...totals,
           createdById: author!.id,
           updatedById: author!.id,

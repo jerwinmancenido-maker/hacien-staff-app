@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { canSeeCosts, type PermissionUser } from "@/lib/permissions";
 import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
-import { allowGovVatOption, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
+import { allowGovVatOption, parseWithholdingPick, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
 import type { EditorCustomer } from "@/components/docs/DocumentEditor";
 
 export async function editorCustomers(where: { id?: string } = {}): Promise<EditorCustomer[]> {
@@ -20,6 +20,7 @@ export async function editorCustomers(where: { id?: string } = {}): Promise<Edit
     address: c.address,
     defaultTerms: c.defaultTerms,
     withholdingType: c.withholdingType,
+    defaultWithholding: parseWithholdingPick(c.defaultWithholding),
     contacts: c.contacts.map((k) => ({ id: k.id, name: k.name, isMain: k.isMain })),
   }));
 }

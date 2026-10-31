@@ -5,11 +5,22 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { db } from "@/lib/db";
 import { saveCustomer, setCustomerActive } from "@/lib/services/companies";
-import { codeList } from "@/lib/services/withholding";
+import { listWithholdingRates } from "@/lib/services/withholding";
 import { customerSchema } from "@/lib/validation/companies";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+
+function parsePickFromForm(form: FormData): string[] | null {
+  const raw = str(form, "defaultWithholdingJson");
+  if (raw === "") return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
+}
 
 export async function saveCustomerAction(id: string | null, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);
@@ -17,17 +28,22 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
     const { settings } = await getSettingsSnapshot();
-    // Keep existing defaultWithholding keys as-is (no destructive wipe). UI no longer edits them.
-    const current = id ? codeList((await db.customer.findUnique({ where: { id }, select: { defaultWithholding: true } }))?.defaultWithholding) : [];
-    const parsed = customerSchema(settings.lists.paymentTerms).safeParse({
+    const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
+    const pick = parsePickFromForm(form);
+    const parsed = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),
       withholdingType: str(form, "withholdingType") || undefined,
-      defaultWithholding: current,
+      defaultWithholding: pick,
       defaultTerms: str(form, "defaultTerms"),
       notes: str(form, "notes"),
     });
-    if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
+    if (!parsed.success) {
+      return {
+        values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
+        fieldErrors: zodFieldErrors(parsed.error),
+      };
+    }
     const saved = await saveCustomer(id, parsed.data, user.id);
     if (!id) createdId = saved.id;
     revalidatePath("/customers");

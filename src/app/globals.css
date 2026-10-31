@@ -4894,3 +4894,15 @@ button.contact-card-add {
 .tax-cal-tasks {
   margin: 4px 0 0;
 }
+
+/* Manual withholding picks (quote editor / customer pick field) */
+.wh-pick-list { display: flex; flex-direction: column; gap: 6px; }
+.wh-pick-row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
+.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: 12px; margin-top: 12px; background: var(--bg-muted, #f7f7f5); }
+.wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+.quote-drawer-root { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; }
+.quote-drawer-backdrop { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.35); }
+.quote-drawer { position: relative; width: min(420px, 100%); background: var(--bg, #fff); height: 100%; overflow: auto; padding: 16px; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
+.quote-drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.quote-drawer-foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+.quote-drawer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

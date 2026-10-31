@@ -3,12 +3,21 @@
 // Top-right of the quote page: one primary button for the next step, plus
 // Actions ▾ (Edit, Print / Save PDF, Email, Convert to SO, Mark lost, Void).
 // Viewers only get Print. The server re-checks every action.
+//
+// When withholding is not set on a draft, Mark as sent asks
+// "No withholding on this quote?" — Yes, none / Pick rates.
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
 import { ConvertDialog, EmailDialog, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import {
+  WITHHOLDING_NONE_CONFIRM_PICK,
+  WITHHOLDING_NONE_CONFIRM_TITLE,
+  WITHHOLDING_NONE_CONFIRM_YES,
+} from "@/lib/quotes/withholding-defaults";
 import type { FormState } from "@/lib/validation/forms";
 
 type Props = {
@@ -21,8 +30,12 @@ type Props = {
   /** Suggested delivery address (default delivery, else billing), editable in the dialog. */
   customerAddress: string;
   addressOptions?: AddressOption[];
+  /** When true, Mark as sent shows the no-withholding confirm first. */
+  withholdingNotSet?: boolean;
   actions: {
     markSent: (id: string) => Promise<FormState>;
+    /** Saves explicit none then marks sent (Yes, none). */
+    confirmNoneAndMarkSent?: (id: string) => Promise<FormState>;
     markLost: (id: string) => Promise<FormState>;
     void: (id: string, reason: string) => Promise<FormState>;
     convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }) => Promise<FormState>;
@@ -32,8 +45,19 @@ type Props = {
   };
 };
 
-export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, customerAddress, addressOptions, actions }: Props) {
-  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | null>(null);
+export function QuoteActions({
+  id,
+  number,
+  status,
+  canEdit,
+  openSalesOrderId,
+  customerAddress,
+  addressOptions,
+  withholdingNotSet = false,
+  actions,
+}: Props) {
+  const router = useRouter();
+  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [okMessage, setOkMessage] = useState<string | null>(null);
@@ -65,6 +89,14 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
   if (canEdit && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
+  function onMarkSent() {
+    if (withholdingNotSet) {
+      setDialog("wh-none");
+      return;
+    }
+    run(() => actions.markSent(id));
+  }
+
   let primary: React.ReactNode = null;
   if (status === "WON" && openSalesOrderId) {
     primary = (
@@ -74,7 +106,7 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
     );
   } else if (canEdit && status === "DRAFT") {
     primary = (
-      <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.markSent(id))}>
+      <button type="button" className="btn" disabled={pending} onClick={onMarkSent}>
         Mark as sent
       </button>
     );
@@ -121,6 +153,22 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
         onConfirm={() => {
           setDialog(null);
           run(() => actions.markLost(id));
+        }}
+      />
+      <ConfirmDialog
+        open={dialog === "wh-none"}
+        title={WITHHOLDING_NONE_CONFIRM_TITLE}
+        body="No rates are picked. Save as none, or go back and pick rates."
+        confirmLabel={WITHHOLDING_NONE_CONFIRM_YES}
+        cancelLabel={WITHHOLDING_NONE_CONFIRM_PICK}
+        onCancel={() => {
+          setDialog(null);
+          router.push(`/quotes/${id}/edit`);
+        }}
+        onConfirm={() => {
+          setDialog(null);
+          const fn = actions.confirmNoneAndMarkSent ?? actions.markSent;
+          run(() => fn(id));
         }}
       />
       {draft && <EmailDialog draft={draft} onClose={() => setDraft(null)} />}

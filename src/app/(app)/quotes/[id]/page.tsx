@@ -13,6 +13,7 @@ import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
 import {
+  confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
   emailDraftAction,
   markQuoteLostAction,
@@ -20,6 +21,7 @@ import {
   refreshQuoteCompanyDetailsAction,
   voidQuoteAction,
 } from "../actions";
+import { WITHHOLDING_INTERNAL_PANEL_LABEL, WITHHOLDING_NOT_SET_NOTICE, isWithholdingNotSet } from "@/lib/quotes/withholding-defaults";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
@@ -64,8 +66,10 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={suggestedAddress}
             addressOptions={addressOptions}
+            withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             actions={{
               markSent: markQuoteSentAction,
+              confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
               markLost: markQuoteLostAction,
               void: voidQuoteAction,
               convert: convertQuoteAction,
@@ -78,6 +82,11 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       {q.status === "VOID" && (
         <div className="alert error" role="status">
           <b>Void.</b> {q.voidReason} This quote is read-only.
+        </div>
+      )}
+      {isWithholdingNotSet(q.withholdingPick) && q.status === "DRAFT" && (
+        <div className="alert warn" role="status">
+          {WITHHOLDING_NOT_SET_NOTICE}
         </div>
       )}
       {q.approval.needed && q.approval.reasons && q.status !== "VOID" && (
@@ -102,7 +111,16 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               <dt>Terms</dt>
               <dd>{q.terms ?? "—"}</dd>
               <dt>Withholding</dt>
-              <dd>{q.withholding.length ? q.withholding.map((w) => w.label).join(", ") : "None"}</dd>
+              <dd>
+                {q.withholdingPick == null
+                  ? "not set"
+                  : q.withholdingPick.length === 0
+                    ? "none"
+                    : q.withholding.length
+                      ? q.withholding.map((w) => w.label).join(", ")
+                      : "none"}
+                <div className="small faint">Internal estimate — not on the printed quote</div>
+              </dd>
               {q.notes && (
                 <>
                   <dt>Notes</dt>
@@ -159,7 +177,10 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           showCosts={q.canSeeCosts}
         />
         <div className="totals-wrap">
-          <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
+          <div className="wh-internal-panel">
+            <div className="wh-internal-panel-label">{WITHHOLDING_INTERNAL_PANEL_LABEL}</div>
+            <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
+          </div>
         </div>
       </div>
     </>

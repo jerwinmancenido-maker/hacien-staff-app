@@ -173,7 +173,18 @@ describe("planItems re-apply respects overrides", () => {
         },
       ],
       false,
-      { customerWithholdingType: "GOVERNMENT", reapplyWithholding: true },
+      {
+        withholdingPicks: [
+          {
+            code: "GOV_PT_3",
+            label: "Government percentage tax 3% (code to confirm)",
+            lineKind: "GOV_PT",
+            rate: "0.0300",
+            atcCode: "WG010",
+          },
+        ],
+        reapplyWithholding: true,
+      },
     );
     expect(items[0]).toMatchObject({ withholdingRate: "0.0150", withholdingAtc: "WI158", withholdingOverride: true });
     expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WG010", withholdingOverride: false });

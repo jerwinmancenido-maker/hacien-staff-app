@@ -97,11 +97,17 @@ export const quoteInputSchema = z
     terms: optionalText(100),
     notes: optionalText(5000),
     /**
-     * Withholding rate codes for the document snapshot. Omitted → derive from
-     * the customer's withholding type + line kinds (not Customer.defaultWithholding).
+     * Quote-level withholding pick (codes from Settings → Withholding).
+     * null = not set; [] = explicit none; [codes] = picks.
+     * Omitted on update → keep the stored pick.
      */
-    withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).optional(),
-    /** When true, every line is re-snapshotted from the customer's current type. */
+    withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).nullable().optional(),
+    /**
+     * When true with an empty/omitted withholdingCodes, treat the pick as
+     * explicit none ([]). Used by the "Yes, none" confirm on submit.
+     */
+    withholdingExplicitNone: z.boolean().optional(),
+    /** When true, non-override lines are re-snapshotted from the quote pick. */
     reapplyWithholding: z.boolean().optional(),
     items,
   })
@@ -124,8 +130,10 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   contactId: optionalId,
   terms: optionalText(100),
   notes: optionalText(5000),
-  /** When true, every line is re-snapshotted from the customer's current type. */
+  /** When true, non-override lines are re-snapshotted from the SO's stored rates / customer pick. */
   reapplyWithholding: z.boolean().optional(),
+  /** Optional pick codes when re-applying from the customer's saved pick. */
+  withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).nullable().optional(),
   items,
 });
 export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;

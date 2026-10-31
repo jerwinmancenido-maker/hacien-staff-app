@@ -172,54 +172,126 @@ function summaryLineKind(rate: string, atc: string | null, kind: ItemKind): With
   return kind;
 }
 
-/**
- * Document totals from per-line rates.
- *
- * For each line: withholding = round_half_up(line.total × line.rate) to ₱0.01.
- * Then sum those amounts. Null/blank rates contribute 0 (legacy unsapped rows).
- * The `withholding` array is a read-only grouping for display / stored JSON.
- */
-export function docTotals(lines: LineForDocTotals[]): DocTotals {
+function basesFromLines(lines: LineForDocTotals[]): {
+  contract: bigint;
+  goods: bigint;
+  services: bigint;
+  supplier: bigint;
+} {
   let contract = 0n;
+  let goods = 0n;
+  let services = 0n;
   let supplier = 0n;
-  let withheld = 0n;
-
-  type Acc = { rate: string; atc: string | null; kind: ItemKind; base: bigint; amount: bigint };
-  const groups = new Map<string, Acc>();
-
   for (const raw of lines) {
     const line = resolveAmounts(raw);
     const total = toScaled(line.total, CENTS);
     contract += total;
+    if (line.kind === "GOODS") goods += total;
+    else services += total;
     supplier += toScaled(line.supplierTotal, CENTS);
-
-    const rateRaw = raw.withholdingRate;
-    if (!hasLineWithholdingRate(rateRaw)) continue;
-    const rate = Number(String(rateRaw).trim()).toFixed(4);
-    if (rate === "0.0000") continue; // explicit zero — no withholding row
-    const atc = raw.withholdingAtc != null && String(raw.withholdingAtc).trim() !== "" ? String(raw.withholdingAtc).trim() : null;
-    const amount = lineWithholdingAmountCents(line.total, rate);
-    withheld += amount;
-
-    const key = groupKey(rate, atc, line.kind);
-    const prev = groups.get(key);
-    if (prev) {
-      prev.base += total;
-      prev.amount += amount;
-    } else {
-      groups.set(key, { rate, atc, kind: line.kind, base: total, amount });
-    }
   }
+  return { contract, goods, services, supplier };
+}
 
-  const withholding: WithholdingLine[] = [...groups.values()].map((g) => ({
-    code: summaryCode(g.rate, g.atc, g.kind),
-    label: summaryLabel(g.rate, g.atc, g.kind),
-    lineKind: summaryLineKind(g.rate, g.atc, g.kind),
-    rate: g.rate,
-    atcCode: g.atc,
-    base: fromScaled(g.base, CENTS),
-    amount: fromScaled(g.amount, CENTS),
-  }));
+function baseForPick(lineKind: WithholdingLineKind, bases: { contract: bigint; goods: bigint; services: bigint }): bigint {
+  if (lineKind === "GOODS") return bases.goods;
+  if (lineKind === "SERVICES") return bases.services;
+  // GOV_PT / GOV_VAT — whole total
+  return bases.contract;
+}
+
+/**
+ * Internal breakdown from the quote-level pick list.
+ * Each pick is its own line (whole-total rates such as WG010 / GOV_PT stay separate).
+ * Total withholding MUST equal the sum of these parts (half-up per part).
+ */
+export function withholdingBreakdownFromPicks(
+  lines: LineForDocTotals[],
+  picks: readonly WithholdingSnapshot[],
+): WithholdingLine[] {
+  const bases = basesFromLines(lines);
+  return picks.map((p) => {
+    const rate = Number(p.rate).toFixed(4);
+    const base = baseForPick(p.lineKind, bases);
+    const amount = mulToCents(base, CENTS, toScaled(rate, RATE), RATE);
+    return {
+      code: p.code,
+      label: p.label,
+      lineKind: p.lineKind,
+      rate,
+      atcCode: p.atcCode,
+      base: fromScaled(base, CENTS),
+      amount: fromScaled(amount, CENTS),
+    };
+  });
+}
+
+/** Sum of breakdown part amounts (string pesos) → pesos string. */
+export function sumWithholdingParts(parts: readonly { amount: string }[]): string {
+  let total = 0n;
+  for (const p of parts) total += toScaled(p.amount, CENTS);
+  return fromScaled(total, CENTS);
+}
+
+/**
+ * Document totals.
+ *
+ * When `picks` is a non-empty list, the internal breakdown is one row per pick
+ * (Goods / Services / whole-total each as its own line) and
+ * `withholdingTotal` is exactly the sum of those parts.
+ *
+ * When `picks` is omitted or empty, totals come from per-line rates
+ * (round_half_up(line.total × line.rate) per line, then sum). Null/blank rates
+ * contribute 0. The `withholding` array is a read-only grouping for display.
+ */
+export function docTotals(lines: LineForDocTotals[], picks?: readonly WithholdingSnapshot[]): DocTotals {
+  const bases = basesFromLines(lines);
+  const { contract, supplier } = bases;
+
+  let withholding: WithholdingLine[];
+  let withheld: bigint;
+
+  if (picks && picks.length > 0) {
+    withholding = withholdingBreakdownFromPicks(lines, picks);
+    withheld = 0n;
+    for (const w of withholding) withheld += toScaled(w.amount, CENTS);
+  } else {
+    type Acc = { rate: string; atc: string | null; kind: ItemKind; base: bigint; amount: bigint };
+    const groups = new Map<string, Acc>();
+    withheld = 0n;
+
+    for (const raw of lines) {
+      const line = resolveAmounts(raw);
+      const total = toScaled(line.total, CENTS);
+
+      const rateRaw = raw.withholdingRate;
+      if (!hasLineWithholdingRate(rateRaw)) continue;
+      const rate = Number(String(rateRaw).trim()).toFixed(4);
+      if (rate === "0.0000") continue; // explicit zero — no withholding row
+      const atc = raw.withholdingAtc != null && String(raw.withholdingAtc).trim() !== "" ? String(raw.withholdingAtc).trim() : null;
+      const amount = lineWithholdingAmountCents(line.total, rate);
+      withheld += amount;
+
+      const key = groupKey(rate, atc, line.kind);
+      const prev = groups.get(key);
+      if (prev) {
+        prev.base += total;
+        prev.amount += amount;
+      } else {
+        groups.set(key, { rate, atc, kind: line.kind, base: total, amount });
+      }
+    }
+
+    withholding = [...groups.values()].map((g) => ({
+      code: summaryCode(g.rate, g.atc, g.kind),
+      label: summaryLabel(g.rate, g.atc, g.kind),
+      lineKind: summaryLineKind(g.rate, g.atc, g.kind),
+      rate: g.rate,
+      atcCode: g.atc,
+      base: fromScaled(g.base, CENTS),
+      amount: fromScaled(g.amount, CENTS),
+    }));
+  }
 
   const netReceived = contract - withheld;
   const netMargin = netReceived - supplier;

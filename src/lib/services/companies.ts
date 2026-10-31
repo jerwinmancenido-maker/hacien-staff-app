@@ -58,17 +58,34 @@ async function assertTinFree(find: TinOwnerLookup, tin: string | null, exceptId:
 const customerTinOwner: TinOwnerLookup = (args) => db.customer.findFirst(args);
 const supplierTinOwner: TinOwnerLookup = (args) => db.supplier.findFirst(args);
 
+/** Prisma JSON columns reject plain `null`; use DbNull for "not set". */
+function defaultWithholdingData(
+  pick: CustomerInput["defaultWithholding"],
+): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
+  if (pick === undefined) return undefined;
+  if (pick === null) return Prisma.DbNull;
+  return pick;
+}
+
 export async function saveCustomer(id: string | null, input: CustomerInput, actorId: string) {
   await assertTinFree(customerTinOwner, input.tin, id);
+  const data = {
+    name: input.name,
+    tin: input.tin,
+    withholdingType: input.withholdingType,
+    defaultWithholding: defaultWithholdingData(input.defaultWithholding),
+    defaultTerms: input.defaultTerms,
+    notes: input.notes,
+  };
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
-        const created = await tx.customer.create({ data: input });
+        const created = await tx.customer.create({ data });
         await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: created.id, action: "create", after: created });
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
-      const after = await tx.customer.update({ where: { id }, data: input });
+      const after = await tx.customer.update({ where: { id }, data });
       await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: id, action: "update", before, after });
       return after;
     });

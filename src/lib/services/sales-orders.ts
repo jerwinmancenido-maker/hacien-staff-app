@@ -8,9 +8,10 @@ import { assertCan, canSeeCosts } from "../permissions";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
+import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import type { SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
-import { snapshotList } from "./withholding";
+import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
 type SoWithItems = SalesOrder & { items: SalesOrderItem[] };
 
@@ -67,8 +68,19 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
+      // Re-apply uses the customer's current saved pick (explicit staff action).
+      // Changing the customer pick alone never rewrites this SO.
+      const pickCodes =
+        input.withholdingCodes !== undefined
+          ? input.withholdingCodes
+          : parseWithholdingPick(customer.defaultWithholding);
+      const rates = await listWithholdingRates(tx, { activeOnly: false });
+      const pickSnapshots =
+        pickCodes && pickCodes.length
+          ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+          : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
-        customerWithholdingType: customer.withholdingType,
+        withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
       });
       // Legacy NULL line rates must not recompute stored WH to ₱0 on save.

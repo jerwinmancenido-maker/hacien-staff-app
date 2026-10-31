@@ -16,7 +16,7 @@ describe("customerMoneyTotals", () => {
     ]);
   });
 
-  it("appends est. WHT and Net amount due from stored rates without changing tax math", () => {
+  it("even with withholdingTotal > 0, only Subtotal + Total (no Less / Net)", () => {
     const lines = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "20800.00",
@@ -29,8 +29,7 @@ describe("customerMoneyTotals", () => {
     expect(lines).toEqual([
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
-      { label: "Less: withholding tax (est.) 1% + 3%", amount: "20800.00" },
-      { label: "Net amount due", amount: "499200.00", emphasize: true },
     ]);
+    expect(lines.map((l) => l.label).join(" ")).not.toMatch(/Less|Net|withholding|WHT/i);
   });
 });

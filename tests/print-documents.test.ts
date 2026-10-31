@@ -186,11 +186,19 @@ describe("professional print documents", () => {
     expect(markup).toContain("Ana Cruz");
   });
 
-  it("shows Valid until on quotes and est. WHT lines when the customer withholds", () => {
+  it("shows Valid until on quotes; print never shows withholding / WHT / ATC / %", () => {
     expect(html(quotePrintFixture())).toContain("Valid until");
     const wht = html(withholdingQuotePrintFixture());
-    expect(wht).toContain("Less: withholding tax (est.)");
-    expect(wht).toContain("Net amount due");
+    const lower = wht.toLowerCase();
+    expect(lower).not.toContain("less: withholding");
+    expect(lower).not.toContain("net amount due");
+    expect(lower).not.toContain("withholding");
+    expect(lower).not.toContain("wht");
+    expect(lower).not.toContain("atc");
+    expect(wht).not.toMatch(/%/);
+    expect(lower).not.toContain("internal");
+    expect(lower).not.toContain("unit cost");
+    expect(lower).not.toContain("margin");
   });
 
   it("never prints QA admin on signature lines", () => {

@@ -7,16 +7,14 @@
 // Cost fields (supplier, supplier unit cost, margins) only exist when the
 // server says the user can see costs; otherwise they're never rendered or sent.
 //
-// Line withholding defaults come from the customer's withholding type + kind.
-// Staff can override a line (flag + note). "Re-apply customer's withholding"
-// refreshes non-override lines from the customer's current type; lines with
-// withholdingOverride=true are left alone.
-//
-// Expected withholding = sum of (each line's total × that line's rate), rounded
-// per line to the centavo. The document-level withholding summary is read-only.
+// Line withholding defaults come from the quote-level pick (or the customer's
+// defaultWithholding on re-apply / sales orders), not from customer type.
+// Staff can override a line (flag + note). Changing the pick re-applies to
+// non-override lines. Draft save is never blocked by a null (not set) pick.
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { WithholdingPickField } from "@/components/WithholdingPickField";
 import {
   docTotals,
   lineAmounts,
@@ -27,10 +25,11 @@ import {
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
 import {
-  lineDiffersFromUsual,
-  lineWithholdingSnapshot,
-  MISSING_WITHHOLDING_TYPE_WARNING,
-  needsWithholdingTypeWarning,
+  lineDiffersFromUsualPicks,
+  lineWithholdingSnapshotFromPicks,
+  WITHHOLDING_NOT_SET_NOTICE,
+  WITHHOLDING_INTERNAL_PANEL_LABEL,
+  customerWithholdingHint,
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
   allowGovVatOption,
@@ -42,6 +41,7 @@ import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
+import { AddCustomerDialog } from "./AddCustomerDialog";
 
 export type EditorCustomer = {
   id: string;
@@ -49,6 +49,8 @@ export type EditorCustomer = {
   address: string | null;
   defaultTerms: string | null;
   withholdingType: string;
+  /** null = not set, [] = none, [codes] = picks. */
+  defaultWithholding: string[] | null;
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 
@@ -74,7 +76,13 @@ export type EditorInitial = {
   validUntil: string;
   terms: string;
   notes: string;
-  withholdingCodes: string[];
+  /**
+   * Quote-level pick: null = not set, [] = none, [codes] = picks.
+   * Prefer this over withholdingCodes when both are present.
+   */
+  withholdingPick?: string[] | null;
+  /** Kept in sync with withholdingPick for the save payload / legacy callers. */
+  withholdingCodes?: string[] | null;
   buyerPoNo: string;
   buyerPoDate: string;
   deliveryAddress: string;
@@ -98,8 +106,35 @@ type Props = {
 let seq = 0;
 const newKey = () => `n${++seq}`;
 
-function blankItem(customerType: string | null | undefined): EditorItem {
-  const wh = lineWithholdingSnapshot(customerType, "GOODS");
+function filterGovVatCodes(codes: string[] | null): string[] | null {
+  if (codes == null) return null;
+  return codes.filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption());
+}
+
+/** Resolve the initial pick: prefer withholdingPick, else withholdingCodes, else null. */
+function resolveInitialPick(initial: EditorInitial): string[] | null {
+  if (initial.withholdingPick !== undefined) return filterGovVatCodes(initial.withholdingPick);
+  if (initial.withholdingCodes !== undefined) return filterGovVatCodes(initial.withholdingCodes);
+  return null;
+}
+
+function pickSnapshotsFromCodes(
+  pick: string[] | null,
+  rates: WithholdingSnapshot[],
+): WithholdingSnapshot[] | null {
+  if (pick == null) return null;
+  if (pick.length === 0) return [];
+  const byCode = new Map(rates.map((r) => [r.code, r]));
+  const out: WithholdingSnapshot[] = [];
+  for (const code of pick) {
+    const snap = byCode.get(code);
+    if (snap) out.push(snap);
+  }
+  return out;
+}
+
+function blankItem(picks: readonly WithholdingSnapshot[]): EditorItem {
+  const wh = lineWithholdingSnapshotFromPicks(picks, "GOODS");
   return {
     key: newKey(),
     id: null,
@@ -129,36 +164,59 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const withCosts = suppliers !== null;
   const rates = visibleRates(allRates);
-  const [h, setH] = useState(() => ({
-    ...initial,
-    withholdingCodes: initial.withholdingCodes.filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption()),
-  }));
+  const [customerList, setCustomerList] = useState(customersProp);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+
+  const [h, setH] = useState(() => {
+    const pick = resolveInitialPick(initial);
+    return {
+      customerId: initial.customerId,
+      contactId: initial.contactId,
+      date: initial.date,
+      validUntil: initial.validUntil,
+      terms: initial.terms,
+      notes: initial.notes,
+      buyerPoNo: initial.buyerPoNo,
+      buyerPoDate: initial.buyerPoDate,
+      deliveryAddress: initial.deliveryAddress,
+      withholdingPick: pick,
+      withholdingCodes: pick,
+    };
+  });
+
+  const initialPickSnaps = pickSnapshotsFromCodes(resolveInitialPick(initial), rates) ?? [];
   const [items, setItems] = useState<EditorItem[]>(() =>
     initial.items.length
       ? initial.items.map((i) => ({
           ...i,
           key: newKey(),
-          // Keep null as null — "not snapshotted yet" must not look like an override.
           withholdingRate: i.withholdingRate,
           withholdingAtc: i.withholdingAtc ?? null,
           withholdingOverride: i.withholdingOverride ?? false,
         }))
-      : [blankItem(customers.find((c) => c.id === initial.customerId)?.withholdingType)],
+      : [blankItem(initialPickSnaps)],
   );
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
   /** Per-line WH% field errors (client-side 0–15% check). */
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
   /** Raw WH% text while typing (so "1." is not snapped away by the controlled rate). */
   const [whPctDrafts, setWhPctDrafts] = useState<Record<string, string>>({});
+
   const e = state.fieldErrors ?? {};
-  const customer = customers.find((c) => c.id === h.customerId);
+  const customer = customerList.find((c) => c.id === h.customerId);
   const contacts = customer?.contacts ?? [];
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
-  const typeWarning = customer ? needsWithholdingTypeWarning(customer.withholdingType) : false;
+
+  const pick = h.withholdingPick;
+  // Quotes use the quote-level pick; sales orders re-apply / compare against the customer's saved pick.
+  const usualPick = mode === "salesOrder" ? (customer?.defaultWithholding ?? null) : pick;
+  const pickSnapshots = pickSnapshotsFromCodes(pick, rates);
+  const usualSnapshots = pickSnapshotsFromCodes(usualPick, rates);
+  const linePicks = (mode === "salesOrder" ? usualSnapshots : pickSnapshots) ?? [];
 
   const lineInputs = items.map((i) => {
     const a = safeLine(i);
@@ -185,42 +243,47 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
     });
 
   /**
-   * Refresh lines from the customer type.
+   * Refresh non-override lines from pick snapshots.
    * When `skipOverrides` is true (Re-apply button), lines with
    * withholdingOverride=true keep their rate/ATC/flag.
    */
-  function applyCustomerDefaults(
-    type: string | null | undefined,
+  function applyPickDefaults(
+    nextPick: string[] | null,
     nextItems: EditorItem[],
     headerPatch: Partial<typeof h> = {},
     opts: { skipOverrides?: boolean } = {},
   ) {
+    const snaps = pickSnapshotsFromCodes(nextPick, rates) ?? [];
     const refreshed = nextItems.map((i) => {
       if (opts.skipOverrides && i.withholdingOverride) return i;
-      const wh = lineWithholdingSnapshot(type, i.kind);
+      const wh = lineWithholdingSnapshotFromPicks(snaps, i.kind);
       return { ...i, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
     });
     setItems(refreshed);
     setWhPctDrafts({});
     setWhPctErrors({});
-    const codes = withholdingSnapshotFromLines(
-      refreshed.map((i) => {
-        const a = safeLine(i);
-        return { kind: i.kind, total: a.total, supplierTotal: a.supplierTotal, margin: a.margin, withholdingRate: i.withholdingRate, withholdingAtc: i.withholdingAtc };
-      }),
-    ).map((w) => w.code);
-    setH((v) => ({ ...v, ...headerPatch, withholdingCodes: codes }));
+    setH((v) => ({
+      ...v,
+      ...headerPatch,
+      withholdingPick: nextPick,
+      withholdingCodes: nextPick,
+    }));
     setReapplyWithholding(true);
   }
 
   function pickCustomer(id: string) {
-    const c = customers.find((x) => x.id === id);
-    // Changing customer resets every line (including prior overrides).
-    applyCustomerDefaults(c?.withholdingType, items, {
+    const c = customerList.find((x) => x.id === id);
+    // Changing customer resets every line (including prior overrides) from their saved pick.
+    applyPickDefaults(c?.defaultWithholding ?? null, items, {
       customerId: id,
       contactId: c?.contacts.find((k) => k.isMain)?.id ?? "",
       terms: c?.defaultTerms ?? h.terms,
     });
+  }
+
+  function changeQuotePick(next: string[] | null) {
+    const filtered = filterGovVatCodes(next);
+    applyPickDefaults(filtered, items, {}, { skipOverrides: true });
   }
 
   function changeKind(key: string, kind: ItemKind) {
@@ -228,7 +291,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       xs.map((x) => {
         if (x.key !== key) return x;
         if (x.withholdingOverride) return { ...x, kind };
-        const wh = lineWithholdingSnapshot(customer?.withholdingType, kind);
+        const wh = lineWithholdingSnapshotFromPicks(linePicks, kind);
         return { ...x, kind, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
       }),
     );
@@ -239,10 +302,28 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       xs.map((x) => {
         if (x.key !== key) return x;
         const next = { ...x, ...patch };
-        const differs = lineDiffersFromUsual(customer?.withholdingType, next.kind, { rate: next.withholdingRate, atc: next.withholdingAtc });
+        const differs = lineDiffersFromUsualPicks(linePicks, next.kind, { rate: next.withholdingRate, atc: next.withholdingAtc });
         return { ...next, withholdingOverride: differs };
       }),
     );
+  }
+
+  function reapplyFromCustomer() {
+    const customerPick = customer?.defaultWithholding ?? null;
+    applyPickDefaults(customerPick, items, {}, { skipOverrides: true });
+  }
+
+  function onCustomerSaved(c: EditorCustomer) {
+    setCustomerList((xs) => {
+      if (xs.some((x) => x.id === c.id)) return xs.map((x) => (x.id === c.id ? c : x));
+      return [...xs, c].sort((a, b) => a.name.localeCompare(b.name));
+    });
+    setAddCustomerOpen(false);
+    applyPickDefaults(c.defaultWithholding ?? null, items, {
+      customerId: c.id,
+      contactId: c.contacts.find((k) => k.isMain)?.id ?? "",
+      terms: c.defaultTerms ?? h.terms,
+    });
   }
 
   const payload =
@@ -254,7 +335,9 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
           validUntil: h.validUntil,
           terms: h.terms,
           notes: h.notes,
-          withholdingCodes: computedDocRates.map((w) => w.code),
+          // null = not set (server stores not set); [] = explicit none.
+          withholdingCodes: pick,
+          withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
           reapplyWithholding: reapplyWithholding || undefined,
           items: items.map(itemPayload),
         }
@@ -285,6 +368,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
   }
 
   const itemErrors = Object.entries(e).filter(([k]) => k.startsWith("items"));
+  const notSet = pick == null;
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -295,9 +379,9 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
         </div>
       )}
 
-      {typeWarning && (
+      {mode === "quote" && notSet && (
         <div className="alert warn" role="alert">
-          {MISSING_WITHHOLDING_TYPE_WARNING}
+          {WITHHOLDING_NOT_SET_NOTICE}
         </div>
       )}
 
@@ -309,14 +393,20 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
               <label htmlFor="customerId">
                 Customer<span className="req"> *</span>
               </label>
-              <select id="customerId" value={h.customerId} onChange={(ev) => pickCustomer(ev.target.value)}>
-                <option value="">Pick a customer…</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <select id="customerId" value={h.customerId} onChange={(ev) => pickCustomer(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
+                  <option value="">Pick a customer…</option>
+                  {customerList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddCustomerOpen(true)}>
+                  Add customer
+                </button>
+              </div>
+              <div className="hint">{customerWithholdingHint(pickSnapshots)}</div>
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
           ) : (
@@ -325,6 +415,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
               <div className="strong" style={{ padding: "8px 0" }}>
                 {customer?.name}
               </div>
+              <div className="hint">{customerWithholdingHint(usualSnapshots)}</div>
             </div>
           )}
           <div className={`field${e.contactId ? " has-error" : ""}`}>
@@ -384,28 +475,48 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
               ))}
             </select>
           </div>
-          <div className={`field${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
-            <span className="label">Withholding</span>
-            <div className="wh-computed" role="status" aria-label="Withholding from line rates">
-              {computedDocRates.length === 0 ? (
-                <span className="small faint">None from line rates</span>
-              ) : (
-                computedDocRates.map((r) => (
-                  <span key={r.code} className="chip">
-                    {r.label}
-                    {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
-                  </span>
-                ))
+          {mode === "quote" ? (
+            <div className={`field full${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+              <WithholdingPickField
+                rates={rates}
+                value={pick}
+                onChange={changeQuotePick}
+                error={e.withholdingCodes ?? e.withholding}
+                clearToNotSet
+              />
+              {computedDocRates.length > 0 && (
+                <div className="wh-computed" role="status" aria-label="Withholding from line rates" style={{ marginTop: 8 }}>
+                  {computedDocRates.map((r) => (
+                    <span key={r.code} className="chip">
+                      {r.label}
+                      {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
-            {e.withholdingCodes || e.withholding ? (
-              <div className="error">{e.withholdingCodes ?? e.withholding}</div>
-            ) : (
-              <div className="hint">From each line&apos;s WH% · ATC (read-only). Change a line to update the total.</div>
-            )}
-            {/* rates kept available for label lookup; unused pick list intentionally omitted */}
-            {rates.length === 0 && null}
-          </div>
+          ) : (
+            <div className={`field${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+              <span className="label">Withholding</span>
+              <div className="wh-computed" role="status" aria-label="Withholding from line rates">
+                {computedDocRates.length === 0 ? (
+                  <span className="small faint">None from line rates</span>
+                ) : (
+                  computedDocRates.map((r) => (
+                    <span key={r.code} className="chip">
+                      {r.label}
+                      {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                    </span>
+                  ))
+                )}
+              </div>
+              {e.withholdingCodes || e.withholding ? (
+                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+              ) : (
+                <div className="hint">From each line&apos;s WH% · ATC (read-only). Re-apply customer&apos;s withholding to refresh.</div>
+              )}
+            </div>
+          )}
           <div className="field full">
             <label htmlFor="notes">Notes</label>
             <textarea id="notes" rows={2} value={h.notes} onChange={(ev) => setH({ ...h, notes: ev.target.value })} />
@@ -417,15 +528,10 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
         <div className="card-head">
           <h2>Items</h2>
           <div className="right" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={!customer}
-              onClick={() => applyCustomerDefaults(customer?.withholdingType, items, {}, { skipOverrides: true })}
-            >
+            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={reapplyFromCustomer}>
               {REAPPLY_WITHHOLDING_LABEL}
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(customer?.withholdingType)])}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
               Add line
             </button>
           </div>
@@ -465,8 +571,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                     : (Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "");
                 const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                 const showOverride =
-                  i.withholdingOverride ||
-                  lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
+                  i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
                 const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
                 return (
                   <tr key={i.key}>
@@ -527,7 +632,6 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                         onChange={(ev) => {
                           const raw = ev.target.value;
                           setWhPctDrafts((prev) => ({ ...prev, [i.key]: raw }));
-                          // Allow in-progress decimals ("1.") without clearing the rate yet.
                           if (/^\d+\.$/.test(raw.trim())) {
                             setWhPctErrors((prev) => {
                               if (!prev[i.key]) return prev;
@@ -590,7 +694,10 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
           </table>
         </div>
         <div className="totals-wrap">
-          <TotalsBox totals={totals} showCosts={withCosts} />
+          <div className="wh-internal-panel">
+            <div className="wh-internal-panel-label">{WITHHOLDING_INTERNAL_PANEL_LABEL}</div>
+            <TotalsBox totals={totals} showCosts={withCosts} />
+          </div>
         </div>
       </div>
 
@@ -606,6 +713,10 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
           Cancel
         </a>
       </div>
+
+      {mode === "quote" && (
+        <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} />
+      )}
     </form>
   );
 }
