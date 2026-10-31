@@ -138,6 +138,9 @@ export function quoteInput(customerId: string, year: number, extra: Partial<Quot
     validUntil: undefined,
     terms: "Net 30",
     notes: null,
+    internalNotes: null,
+    subject: null,
+    buyerPoNo: null,
     items: [
       { id: null, description: "Laptop i5", kind: "GOODS", qty: "10", unit: "pc", supplierId, supplierUnitCost: "45000", unitPrice: "52000" },
       { id: null, description: "Installation", kind: "SERVICES", qty: "1", unit: "lot", supplierId: null, supplierUnitCost: "5000", unitPrice: "20000" },

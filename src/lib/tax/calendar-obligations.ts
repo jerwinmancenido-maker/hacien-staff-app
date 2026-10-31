@@ -222,6 +222,43 @@ export function obligationByKey(key: TaxCalendarObligationKey): TaxCalendarOblig
   return def;
 }
 
+/**
+ * Due month is editable for every obligation in Settings (same as main), including
+ * undated_year_end / inventory — calendar-dates.ts reads override month+day for
+ * confirmed dates.
+ */
+export function obligationUsesDueMonth(_def?: TaxCalendarObligationDef): boolean {
+  void _def;
+  return true;
+}
+
+/** Default due-day hint shared by most rows (shown once in the column header). */
+export function obligationDueDayHintDefault(): string {
+  return "1–31. Used with the catalog month rule for this form.";
+}
+
+/** Exact Settings → Tax calendar due-day field hints (match main wording). */
+export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
+  switch (def.schedule.kind) {
+    case "undated_year_end":
+      return "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.";
+    case "quarterly_last_day_after":
+      return "Leave blank to use the last day of the month after the quarter.";
+    default:
+      return obligationDueDayHintDefault();
+  }
+}
+
+/** True when the row uses the shared default due-day hint (not a special per-row hint). */
+export function obligationDueDayHintIsShared(def: TaxCalendarObligationDef): boolean {
+  return obligationDueDayHint(def) === obligationDueDayHintDefault();
+}
+
+/** Exact Settings → Tax calendar due-month field hint (match main wording). */
+export function obligationDueMonthHint(): string {
+  return "1–12. Used for 1701 annual and year-end items; leave blank otherwise.";
+}
+
 /** Human Applies? label from key (empty string for unverified — not shown on rows). */
 export function appliesLabel(key: TaxCalendarAppliesKey): string {
   return TAX_CALENDAR_APPLIES[key];

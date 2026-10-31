@@ -16,7 +16,8 @@ import { HardDeleteError } from "@/lib/no-delete";
 import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { allocateDocNumber, ensureSeries, formatDocNumber } from "@/lib/documents/series";
-import { DocRuleError } from "@/lib/documents/common";
+import { DocRuleError, ymd } from "@/lib/documents/common";
+import { addDays } from "@/lib/format";
 import { LEGACY_WITHHOLDING_REAPPLY_REQUIRED } from "@/lib/quotes/legacy-withholding";
 import {
   buildQuoteEmailDraft,
@@ -806,6 +807,49 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
         expect(JSON.stringify(doc)).not.toContain(supplier.name);
         expect(doc?.contractPrice).toBe("540000.00");
       }
+    });
+
+    it("customer notes print; internal notes never appear on quote/SO print models", async () => {
+      const customer = await makeCustomer();
+      const year = await freshYear();
+      const q = await createQuote(
+        quoteInput(customer.id, year, {
+          notes: "CUSTOMER_NOTE_PRINT_ME",
+          internalNotes: "INTERNAL_SECRET_NEVER_PRINT",
+          subject: "Subject line prints",
+          buyerPoNo: "RFQ-PHASE1-1",
+        }),
+        costUser,
+      );
+      const view = await getQuoteView(q.id, costUser);
+      expect(view?.notes).toBe("CUSTOMER_NOTE_PRINT_ME");
+      expect(view?.internalNotes).toBe("INTERNAL_SECRET_NEVER_PRINT");
+      expect(view?.subject).toBe("Subject line prints");
+      expect(view?.buyerPoNo).toBe("RFQ-PHASE1-1");
+
+      const print = await getQuotePrint(q.id);
+      expect(print?.notes).toBe("CUSTOMER_NOTE_PRINT_ME");
+      expect(print?.subject).toBe("Subject line prints");
+      expect(print?.buyerPoNo).toBe("RFQ-PHASE1-1");
+      const blob = JSON.stringify(print);
+      expect(blob).not.toContain("INTERNAL_SECRET_NEVER_PRINT");
+      expect(blob).not.toContain("internalNotes");
+
+      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
+      const soPrint = await getSalesOrderPrint(order.id);
+      // SO keeps customer notes from the quote; still no internal notes key.
+      expect(soPrint?.notes).toBe("CUSTOMER_NOTE_PRINT_ME");
+      expect(JSON.stringify(soPrint)).not.toContain("INTERNAL_SECRET_NEVER_PRINT");
+      expect(JSON.stringify(soPrint)).not.toContain("internalNotes");
+    });
+
+    it("valid until defaults from Settings when omitted on create", async () => {
+      const { settings } = await getSettingsSnapshot();
+      const customer = await makeCustomer();
+      const year = await freshYear();
+      const q = await createQuote(quoteInput(customer.id, year, { validUntil: undefined }), costUser);
+      const expected = addDays(q.date, settings.quotes.defaultValidityDays);
+      expect(ymd(q.validUntil)).toBe(ymd(expected));
     });
 
     it("email builds a draft only and logs email_draft", async () => {
