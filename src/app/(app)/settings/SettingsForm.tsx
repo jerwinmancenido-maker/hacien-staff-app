@@ -52,8 +52,8 @@ export function SettingsForm({
   };
 
   return (
-    <div className="card">
-      <h2>{title}</h2>
+    <div className="card settings-section">
+      <h2 className="settings-section-title">{title}</h2>
       <form
         ref={formRef}
         noValidate
@@ -73,38 +73,56 @@ export function SettingsForm({
             if (f.kind === "hidden") {
               return <input key={f.name} type="hidden" name={f.name} value={valueOf(f)} />;
             }
-            const groupHeader = f.group && f.group !== fields[i - 1]?.group ? <h3 className="section-title">{f.group}</h3> : null;
+            const groupHeader =
+              f.group && f.group !== fields[i - 1]?.group ? (
+                <h3 className="section-title">{f.group}</h3>
+              ) : null;
             const err = e[f.name];
-            const control =
-              f.kind === "checkbox" ? (
-                <label className="check" htmlFor={f.name}>
-                  <input type="hidden" name={f.name} value="false" />
-                  <input id={f.name} name={f.name} type="checkbox" value="true" defaultChecked={state.values?.[f.name] ? state.values[f.name] === "true" : !!f.value} />
-                  {f.label}
-                </label>
-              ) : f.kind === "lines" || f.kind === "textarea" ? (
-                <textarea id={f.name} name={f.name} defaultValue={valueOf(f)} rows={f.kind === "lines" ? 8 : 3} />
-              ) : f.kind === "select" ? (
-                <select id={f.name} name={f.name} defaultValue={valueOf(f)}>
-                  {(f.options ?? []).map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {f.prefix && <span className="muted">{f.prefix}</span>}
-                  <input id={f.name} name={f.name} type={f.kind === "number" ? "number" : "text"} step="any" defaultValue={valueOf(f)} />
-                  {f.suffix && <span className="muted">{f.suffix}</span>}
-                </div>
-              );
+            const isCheck = f.kind === "checkbox";
+            const control = isCheck ? (
+              <label className="check" htmlFor={f.name}>
+                <input type="hidden" name={f.name} value="false" />
+                <input
+                  id={f.name}
+                  name={f.name}
+                  type="checkbox"
+                  value="true"
+                  defaultChecked={state.values?.[f.name] ? state.values[f.name] === "true" : !!f.value}
+                />
+                <span className="check-label-text">{f.label}</span>
+              </label>
+            ) : f.kind === "lines" || f.kind === "textarea" ? (
+              <textarea id={f.name} name={f.name} defaultValue={valueOf(f)} rows={f.kind === "lines" ? 8 : 3} />
+            ) : f.kind === "select" ? (
+              <select id={f.name} name={f.name} defaultValue={valueOf(f)}>
+                {(f.options ?? []).map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="field-control-row">
+                {f.prefix && <span className="muted">{f.prefix}</span>}
+                <input
+                  id={f.name}
+                  name={f.name}
+                  type={f.kind === "number" ? "number" : "text"}
+                  step="any"
+                  defaultValue={valueOf(f)}
+                />
+                {f.suffix && <span className="muted">{f.suffix}</span>}
+              </div>
+            );
             return (
               <div key={f.name} style={{ display: "contents" }}>
                 {groupHeader}
-                <div className={`field${err ? " has-error" : ""}${f.full || f.kind === "lines" || f.kind === "textarea" ? " full" : ""}`}>
-                  {f.kind !== "checkbox" && <label htmlFor={f.name}>{f.label}</label>}
-                  {f.kind === "checkbox" && <span className="label">&nbsp;</span>}
+                <div
+                  className={`field${isCheck ? " field-check" : ""}${err ? " has-error" : ""}${
+                    f.full || f.kind === "lines" || f.kind === "textarea" ? " full" : ""
+                  }`}
+                >
+                  {!isCheck && <label htmlFor={f.name}>{f.label}</label>}
                   {control}
                   {err ? (
                     <div className="error" role="alert">
@@ -118,13 +136,13 @@ export function SettingsForm({
             );
           })}
         </div>
-        <div className="form-actions">
+        <div className="form-actions settings-form-actions">
+          {showDocumentsOnlyFooter && (
+            <span className="small faint settings-form-footnote">Changes apply to new documents only.</span>
+          )}
           <button className="btn" type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save changes"}
           </button>
-          {showDocumentsOnlyFooter && (
-            <span className="small faint">Changes apply to new documents only.</span>
-          )}
         </div>
       </form>
       <ConfirmDialog
