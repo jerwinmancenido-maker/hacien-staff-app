@@ -595,7 +595,11 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       </div>
 
       <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending || (mode === "quote" && !h.customerId)}>
+        <button
+          className="btn"
+          type="submit"
+          disabled={pending || (mode === "quote" && !h.customerId) || Object.keys(whPctErrors).length > 0}
+        >
           {pending ? "Saving…" : isNew ? "Create quote" : "Save changes"}
         </button>
         <a className="btn btn-secondary" href={cancelHref}>

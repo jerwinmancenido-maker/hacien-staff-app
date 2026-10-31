@@ -1,20 +1,10 @@
 // Legacy docs (pre line-rate snapshot) keep a document-level withholding JSON
 // and withholdingTotal while line rates are NULL. Saving must not recompute
 // those to ₱0. Prefer backfilling rates from the stored JSON; if that still
-// yields ₱0, keep the stored WH money fields.
+// yields ₱0, refuse the save (never keep mismatched WH vs contract/supplier).
 
-import { docTotals, fromScaled, toScaled, type WithholdingSnapshot } from "./calc";
+import { docTotals, type WithholdingSnapshot } from "./calc";
 import type { PlannedItem } from "./items";
-
-/** Half-up division matching calc.ts docTotals margin %. */
-function divRound(num: bigint, den: bigint): bigint {
-  if (den === 0n) return 0n;
-  const negative = num < 0n !== den < 0n;
-  const a = num < 0n ? -num : num;
-  const b = den < 0n ? -den : den;
-  const q = (a * 2n + b) / (b * 2n);
-  return negative ? -q : q;
-}
 
 type DocMoney = {
   contractPrice: { toString(): string } | string | number;
@@ -29,6 +19,10 @@ type DocMoney = {
 function money(v: { toString(): string } | string | number): string {
   return Number(v.toString()).toFixed(2);
 }
+
+/** Plain staff message when a legacy save cannot reconstruct line rates. */
+export const LEGACY_WITHHOLDING_REAPPLY_REQUIRED =
+  "Re-apply this customer's withholding before saving.";
 
 function asSnapshots(raw: unknown): WithholdingSnapshot[] {
   if (!Array.isArray(raw)) return [];
@@ -50,7 +44,11 @@ function asSnapshots(raw: unknown): WithholdingSnapshot[] {
   return out;
 }
 
-/** Pick a rate/ATC for a line kind from the document withholding JSON. */
+/**
+ * Pick a rate/ATC for a line kind from the document withholding JSON.
+ * Government docs: prefer GOV_PT over GOV_VAT when both are present (same
+ * priority as migration 20261031140000 Pass 2).
+ */
 export function rateFromDocWithholding(
   withholding: unknown,
   kind: "GOODS" | "SERVICES",
@@ -58,12 +56,14 @@ export function rateFromDocWithholding(
   const rows = asSnapshots(withholding);
   const byKind = rows.find((r) => r.lineKind === kind);
   if (byKind) return { withholdingRate: byKind.rate, withholdingAtc: byKind.atcCode };
-  const gov = rows.find((r) => r.lineKind === "GOV_PT" || r.lineKind === "GOV_VAT");
-  if (gov) return { withholdingRate: gov.rate, withholdingAtc: gov.atcCode };
+  const govPt = rows.find((r) => r.lineKind === "GOV_PT");
+  if (govPt) return { withholdingRate: govPt.rate, withholdingAtc: govPt.atcCode };
+  const govVat = rows.find((r) => r.lineKind === "GOV_VAT");
+  if (govVat) return { withholdingRate: govVat.rate, withholdingAtc: govVat.atcCode };
   return null;
 }
 
-/** Fill NULL line rates from the document snapshot (does not touch override lines with a rate). */
+/** Fill NULL line rates from the document snapshot (does not touch lines that already have a rate). */
 export function fillNullLineRatesFromDocWithholding(items: PlannedItem[], withholding: unknown): PlannedItem[] {
   return items.map((item) => {
     if (item.withholdingRate != null && item.withholdingRate !== "") return item;
@@ -87,88 +87,66 @@ export type PreservedTotals = {
   netMarginPct: string;
 };
 
-export type PreserveLegacyResult = {
+export type PreserveLegacyOk = {
+  ok: true;
   items: PlannedItem[];
   totals: PreservedTotals;
   withholding: WithholdingSnapshot[];
-  /** True when stored WH was kept because null rates would have wiped it. */
+  /** True when null rates were backfilled from the doc JSON. */
   preserved: boolean;
 };
 
+export type PreserveLegacyErr = { ok: false; message: string };
+
+export type PreserveLegacyResult = PreserveLegacyOk | PreserveLegacyErr;
+
+function hasMissingLineRate(items: PlannedItem[]): boolean {
+  return items.some((i) => i.withholdingRate == null || i.withholdingRate === "");
+}
+
+function passThrough(items: PlannedItem[], totals: ReturnType<typeof docTotals>, preserved: boolean): PreserveLegacyOk {
+  return {
+    ok: true,
+    items,
+    totals: {
+      contractPrice: totals.contractPrice,
+      withholdingTotal: totals.withholdingTotal,
+      netReceived: totals.netReceived,
+      supplierCost: totals.supplierCost,
+      netMargin: totals.netMargin,
+      netMarginPct: totals.netMarginPct,
+    },
+    withholding: totals.withholding.map(({ code, label, lineKind, rate, atcCode }) => ({
+      code,
+      label,
+      lineKind,
+      rate,
+      atcCode,
+    })),
+    preserved,
+  };
+}
+
 /**
  * After planItems: if the doc has stored WH ≠ 0 but planned lines would total
- * WH 0 (typical legacy NULL rates), backfill from the doc JSON; if still 0,
- * keep the stored WH amount (and recompute net from the new contract price).
+ * WH 0 *and* some rates are still missing/NULL (true legacy rows), backfill from
+ * the doc JSON. Explicit 0 / 0.0000 (or Re-apply → NONE) must save ₱0 — do not
+ * treat those as legacy. If the JSON cannot supply rates, fail closed.
  */
 export function preserveLegacyWithholdingOnSave(before: DocMoney, items: PlannedItem[]): PreserveLegacyResult {
   const storedWh = Number(money(before.withholdingTotal));
   const first = docTotals(items);
-  if (!(storedWh !== 0 && Number(first.withholdingTotal) === 0)) {
-    return {
-      items,
-      totals: {
-        contractPrice: first.contractPrice,
-        withholdingTotal: first.withholdingTotal,
-        netReceived: first.netReceived,
-        supplierCost: first.supplierCost,
-        netMargin: first.netMargin,
-        netMarginPct: first.netMarginPct,
-      },
-      withholding: first.withholding.map(({ code, label, lineKind, rate, atcCode }) => ({
-        code,
-        label,
-        lineKind,
-        rate,
-        atcCode,
-      })),
-      preserved: false,
-    };
+  if (!(storedWh !== 0 && Number(first.withholdingTotal) === 0 && hasMissingLineRate(items))) {
+    return passThrough(items, first, false);
   }
 
   const filled = fillNullLineRatesFromDocWithholding(items, before.withholding);
   const second = docTotals(filled);
   if (Number(second.withholdingTotal) !== 0) {
-    return {
-      items: filled,
-      totals: {
-        contractPrice: second.contractPrice,
-        withholdingTotal: second.withholdingTotal,
-        netReceived: second.netReceived,
-        supplierCost: second.supplierCost,
-        netMargin: second.netMargin,
-        netMarginPct: second.netMarginPct,
-      },
-      withholding: second.withholding.map(({ code, label, lineKind, rate, atcCode }) => ({
-        code,
-        label,
-        lineKind,
-        rate,
-        atcCode,
-      })),
-      preserved: true,
-    };
+    return passThrough(filled, second, true);
   }
 
-  // Still zero — keep stored WH money; contract/supplier follow the edited lines.
-  const contract = first.contractPrice;
-  const supplier = first.supplierCost;
-  const withholdingTotal = money(before.withholdingTotal);
-  const netReceived = fromScaled(toScaled(contract, 2) - toScaled(withholdingTotal, 2), 2);
-  const netMargin = fromScaled(toScaled(netReceived, 2) - toScaled(supplier, 2), 2);
-  const contractCents = toScaled(contract, 2);
-  const pct = contractCents === 0n ? "0.00" : fromScaled(divRound(toScaled(netMargin, 2) * 10_000n, contractCents), 2);
-  const snapshots = asSnapshots(before.withholding);
-  return {
-    items: filled,
-    totals: {
-      contractPrice: contract,
-      withholdingTotal,
-      netReceived,
-      supplierCost: supplier,
-      netMargin,
-      netMarginPct: pct,
-    },
-    withholding: snapshots,
-    preserved: true,
-  };
+  // Still zero after backfill — JSON could not reconstruct rates. Refuse rather
+  // than keep old WH money against the edited contract/supplier totals.
+  return { ok: false, message: LEGACY_WITHHOLDING_REAPPLY_REQUIRED };
 }

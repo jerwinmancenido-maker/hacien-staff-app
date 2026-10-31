@@ -7,9 +7,12 @@ import { isRateLimited, MAX_FAILED_LOGINS } from "@/lib/auth/rate-limit";
 import { formatDate, formatPeso } from "@/lib/format";
 import { itemSchema } from "@/lib/validation/quotes";
 import {
+  WITHHOLDING_PERCENT_NON_NUMERIC_ERROR,
   WITHHOLDING_PERCENT_RANGE_ERROR,
   parseWithholdingPercentInput,
 } from "@/lib/quotes/withholding-percent";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const TERMS = ["COD", "Net 30"];
 const ROLES = ["Procurement", "Accounting"];
@@ -155,6 +158,11 @@ describe("line withholding percent (0–15%)", () => {
     expect(itemSchema.safeParse({ ...base, withholdingRate: "0.1500" }).success).toBe(true);
   });
 
+  it("treats a cleared (empty) field as explicit 0% so the server can tell it from legacy NULL", () => {
+    expect(parseWithholdingPercentInput("")).toEqual({ ok: true, rate: "0.0000" });
+    expect(parseWithholdingPercentInput("   ")).toEqual({ ok: true, rate: "0.0000" });
+  });
+
   it("rejects a negative percent with the plain range error", () => {
     expect(parseWithholdingPercentInput("-1")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
     const r = itemSchema.safeParse({ ...base, withholdingRate: "-0.0100" });
@@ -170,11 +178,18 @@ describe("line withholding percent (0–15%)", () => {
     expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_RANGE_ERROR);
   });
 
-  it("rejects non-numeric input with the plain range error", () => {
-    expect(parseWithholdingPercentInput("abc")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
-    expect(parseWithholdingPercentInput("1%")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
+  it("rejects non-numeric input with a plain non-numeric error", () => {
+    expect(parseWithholdingPercentInput("abc")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_NON_NUMERIC_ERROR });
+    expect(parseWithholdingPercentInput("1%")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_NON_NUMERIC_ERROR });
     const r = itemSchema.safeParse({ ...base, withholdingRate: "nope" });
     expect(r.success).toBe(false);
-    expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_RANGE_ERROR);
+    expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_NON_NUMERIC_ERROR);
+  });
+
+  it("DocumentEditor disables submit when whPctErrors is non-empty", () => {
+    const src = readFileSync(resolve(__dirname, "../src/components/docs/DocumentEditor.tsx"), "utf8");
+    expect(src).toMatch(
+      /disabled=\{pending \|\| \(mode === "quote" && !h\.customerId\) \|\| Object\.keys\(whPctErrors\)\.length > 0\}/,
+    );
   });
 });

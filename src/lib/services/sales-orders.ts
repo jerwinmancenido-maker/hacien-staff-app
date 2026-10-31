@@ -73,6 +73,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       });
       // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
+      if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });

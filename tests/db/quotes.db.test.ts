@@ -17,6 +17,7 @@ import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { allocateDocNumber, ensureSeries, formatDocNumber } from "@/lib/documents/series";
 import { DocRuleError } from "@/lib/documents/common";
+import { LEGACY_WITHHOLDING_REAPPLY_REQUIRED } from "@/lib/quotes/legacy-withholding";
 import {
   buildQuoteEmailDraft,
   convertQuoteToSalesOrder,
@@ -368,6 +369,105 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       for (const i of saved.items.filter((x) => !x.removedAt)) {
         expect(i.withholdingRate).not.toBeNull();
       }
+    });
+
+    it("explicit 0% on every line clears WH to ₱0 on save", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(Number(q.withholdingTotal)).not.toBe(0);
+
+      const input = quoteInput(customer.id, 2026, {
+        items: q.items
+          .filter((i) => !i.removedAt)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+            withholdingRate: "0.0000",
+            withholdingAtc: null,
+            withholdingOverride: true,
+          })),
+      });
+      const saved = await updateQuote(q.id, { ...input, date: q.date }, costUser);
+      expect(saved.withholdingTotal.toFixed(2)).toBe("0.00");
+      expect(Number(saved.netReceived).toFixed(2)).toBe(Number(saved.contractPrice).toFixed(2));
+      for (const i of saved.items.filter((x) => !x.removedAt)) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0000");
+      }
+    });
+
+    it("Re-apply customer's withholding to NONE saves ₱0 WH", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(Number(q.withholdingTotal)).not.toBe(0);
+
+      await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "NONE" } });
+      const input = quoteInput(customer.id, 2026, {
+        reapplyWithholding: true,
+        items: q.items
+          .filter((i) => !i.removedAt)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+          })),
+      });
+      const saved = await updateQuote(q.id, { ...input, date: q.date }, costUser);
+      expect(saved.withholdingTotal.toFixed(2)).toBe("0.00");
+      expect(snapshotList(saved.withholding)).toEqual([]);
+      for (const i of saved.items.filter((x) => !x.removedAt)) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0000");
+        expect(i.withholdingOverride).toBe(false);
+      }
+    });
+
+    it("legacy NULL lines with empty doc JSON fail closed and ask to re-apply", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(Number(q.withholdingTotal)).not.toBe(0);
+
+      await db.quoteItem.updateMany({
+        where: { quoteId: q.id },
+        data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+      });
+      await db.quote.update({ where: { id: q.id }, data: { withholding: [] } });
+
+      const input = quoteInput(customer.id, 2026, {
+        items: q.items
+          .filter((i) => !i.removedAt)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+            withholdingRate: null,
+            withholdingAtc: null,
+            withholdingOverride: false,
+          })),
+      });
+      await expect(updateQuote(q.id, { ...input, date: q.date }, costUser)).rejects.toMatchObject({
+        name: "DocRuleError",
+        message: LEGACY_WITHHOLDING_REAPPLY_REQUIRED,
+      });
+      const unchanged = await db.quote.findUniqueOrThrow({ where: { id: q.id } });
+      expect(Number(unchanged.withholdingTotal).toFixed(2)).toBe(Number(q.withholdingTotal).toFixed(2));
     });
 
     it("legacy NULL line rates on an open SO keep WH amount unchanged on save", async () => {
@@ -783,6 +883,48 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       // Re-run backfill restores again (idempotent for null rows).
       for (const stmt of backfill) await db.$executeRawUnsafe(stmt);
       expect((await db.quoteItem.findMany({ where: { quoteId: q.id, removedAt: null } })).every((i) => i.withholdingRate != null)).toBe(true);
+    });
+
+    it("Pass 2 with both GOV_PT and GOV_VAT in the JSON picks GOV_PT (documented priority)", async () => {
+      const customer = await makeCustomer([], "GOVERNMENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(Number(q.withholdingTotal)).not.toBe(0);
+
+      // Both gov kinds in one snapshot (ambiguous under the old IN (...) join).
+      await db.quote.update({
+        where: { id: q.id },
+        data: {
+          withholding: [
+            {
+              code: "GOV_VAT_5",
+              label: "Government VAT 5%",
+              lineKind: "GOV_VAT",
+              rate: "0.0500",
+              atcCode: "WV050",
+            },
+            {
+              code: "GOV_PT_3",
+              label: "Government percentage tax 3%",
+              lineKind: "GOV_PT",
+              rate: "0.0300",
+              atcCode: "WG010",
+            },
+          ],
+        },
+      });
+      await db.quoteItem.updateMany({
+        where: { quoteId: q.id },
+        data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+      });
+
+      for (const stmt of backfill) await db.$executeRawUnsafe(stmt);
+
+      const items = await db.quoteItem.findMany({ where: { quoteId: q.id, removedAt: null } });
+      expect(items.length).toBeGreaterThan(0);
+      for (const i of items) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
+        expect(i.withholdingAtc).toBe("WG010");
+      }
     });
   });
 });

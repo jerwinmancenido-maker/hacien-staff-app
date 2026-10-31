@@ -169,6 +169,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       });
       // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
+      if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
       const withholding = preserved.withholding;
 
