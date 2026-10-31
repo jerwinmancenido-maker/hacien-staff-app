@@ -2,8 +2,10 @@ import Link from "next/link";
 import type { Address, Contact, Customer, WithholdingType } from "@prisma/client";
 import { formatDateTime, formatPeso, initials } from "@/lib/format";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
+import type { AgingAmounts } from "@/lib/billing/aging";
 import { Avatar, Chip, type ChipTone } from "./ui";
 import { Activity } from "./Activity";
+import { OverdueBadge } from "./billing/BillingParts";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
 import { formatAddress } from "@/lib/addresses/format";
 import { PlusIcon } from "./Icons";
@@ -24,6 +26,7 @@ export async function CustomerOverview({
   docCounts,
   docStats,
   warnDays,
+  ar,
 }: {
   customer: Customer;
   contacts: Contact[];
@@ -34,6 +37,7 @@ export async function CustomerOverview({
   docCounts: DocCounts;
   docStats: OpenDocStats;
   warnDays: number;
+  ar?: { aging: AgingAmounts; overdue: string; credit: string; anyOverdue: boolean; balanceDue: string; overdueLabel?: string | null };
 }) {
   const basePath = `/customers/${customer.id}`;
   const activeAddresses = addresses.filter((a) => !a.archivedAt);
@@ -61,6 +65,7 @@ export async function CustomerOverview({
               ) : (
                 <Chip tone="green">Active</Chip>
               )}
+              {ar?.anyOverdue && <OverdueBadge label={ar.overdueLabel ?? "Overdue"} />}
             </div>
             <div className="overview-meta-grid">
               <div>
@@ -97,11 +102,13 @@ export async function CustomerOverview({
 
       {/* 2. Stat Cards Grid */}
       <div className="stat-grid">
-        <div className="card stat">
+        <Link className={`card stat stat-link${ar && Number(ar.overdue) > 0 ? " stat-red" : ""}`} href={`${basePath}?tab=balances`}>
           <div className="label">Balance due</div>
-          <div className="value num">{formatPeso(0)}</div>
-          <div className="foot">Gross outstanding</div>
-        </div>
+          <div className="value num">{formatPeso(ar?.balanceDue ?? 0)}</div>
+          <div className="foot">
+            {ar && Number(ar.credit) > 0 ? `Credit ${formatPeso(ar.credit)}` : "Gross outstanding"}
+          </div>
+        </Link>
         <OpenDocsCards stats={docStats} basePath={basePath} showTotals />
         <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />
         <div className="card stat">
@@ -119,46 +126,37 @@ export async function CustomerOverview({
           <div className="card-head">
             <h2>AR aging (gross)</h2>
             <div className="right">
-              <span className="faint small">₱0.00 total</span>
+              <span className="faint small">{formatPeso(ar?.aging.total ?? 0)} total</span>
             </div>
           </div>
           <div className="aging-bar-track" aria-hidden>
-            <div className="aging-bar-fill empty" />
+            <div className={`aging-bar-fill${!ar || Number(ar.aging.total) === 0 ? " empty" : ""}`} style={ar && Number(ar.aging.total) > 0 ? { width: "100%" } : undefined} />
           </div>
           <div className="aging-buckets-grid">
-            <div className="aging-bucket">
-              <div className="aging-dot-label">
-                <span className="aging-dot green" /> Current
+            {(
+              [
+                ["current", "green", "Current"],
+                ["d1_30", "amber", "1–30 d"],
+                ["d31_60", "orange", "31–60 d"],
+                ["d61_90", "red", "61–90 d"],
+                ["d90_plus", "dark-red", "90+ d"],
+              ] as const
+            ).map(([key, tone, label]) => (
+              <div key={key} className="aging-bucket">
+                <div className="aging-dot-label">
+                  <span className={`aging-dot ${tone}`} /> {label}
+                </div>
+                <div className="aging-amt num">{formatPeso(ar?.aging[key] ?? 0)}</div>
               </div>
-              <div className="aging-amt num">₱0.00</div>
-            </div>
-            <div className="aging-bucket">
-              <div className="aging-dot-label">
-                <span className="aging-dot amber" /> 1–30 d
-              </div>
-              <div className="aging-amt num">₱0.00</div>
-            </div>
-            <div className="aging-bucket">
-              <div className="aging-dot-label">
-                <span className="aging-dot orange" /> 31–60 d
-              </div>
-              <div className="aging-amt num">₱0.00</div>
-            </div>
-            <div className="aging-bucket">
-              <div className="aging-dot-label">
-                <span className="aging-dot red" /> 61–90 d
-              </div>
-              <div className="aging-amt num">₱0.00</div>
-            </div>
-            <div className="aging-bucket">
-              <div className="aging-dot-label">
-                <span className="aging-dot dark-red" /> 90+ d
-              </div>
-              <div className="aging-amt num">₱0.00</div>
-            </div>
+            ))}
           </div>
           <div className="aging-note faint small" style={{ marginTop: 14 }}>
-            Nothing billed yet. Open bills and collections will show here once billing is built.
+            {!ar || Number(ar.aging.total) === 0
+              ? "Nothing billed yet."
+              : Number(ar.overdue) > 0
+                ? `Overdue ${formatPeso(ar.overdue)}. `
+                : ""}
+            <Link href={`/print/statements/${customer.id}`}>Print statement</Link>
           </div>
         </div>
 

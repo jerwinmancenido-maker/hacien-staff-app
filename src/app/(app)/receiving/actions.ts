@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
+import { db } from "@/lib/db";
+import { DocRuleError } from "@/lib/documents/common";
 import { postReceivingReport, ReceiptError, voidReceivingReport } from "@/lib/services/receiving";
 import { receiptInputSchema } from "@/lib/validation/purchasing";
 import { voidReasonSchema } from "@/lib/validation/quotes";
@@ -54,7 +56,25 @@ export async function voidReceivingReportAction(purchaseOrderId: string, id: str
     const user = await requireActionPermission("edit_data");
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
-    await voidReceivingReport(id, parsed.data, user);
+    try {
+      await voidReceivingReport(id, parsed.data, user);
+    } catch (e) {
+      if (e instanceof DocRuleError && e.message === "Void the supplier bill first.") {
+        const bill = await db.supplierBill.findFirst({
+          where: { purchaseOrderId, status: { not: "VOID" } },
+          select: { id: true, billNumber: true },
+          orderBy: { createdAt: "asc" },
+        });
+        return {
+          message: "Void the supplier bill first.",
+          values: {
+            billHref: `/purchase-orders/${purchaseOrderId}`,
+            billLabel: bill ? `bill ${bill.billNumber}` : "supplier bill",
+          },
+        };
+      }
+      throw e;
+    }
     refresh(purchaseOrderId);
     return { ok: true, message: "Receiving report voided." };
   });

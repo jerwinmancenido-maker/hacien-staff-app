@@ -405,6 +405,36 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
       await expect(recordSupplierBill(po!.id, { billNumber: "X1", billDate: new Date(Date.UTC(year, 3, 5)), amount: "1", notes: null, lines: [] }, buyer)).rejects.toThrow(DocRuleError);
     });
+
+    it("cannot void a receiving report while a non-void supplier bill exists; void the bill first", async () => {
+      const year = await freshYear();
+      const { po, lines } = await sentPo(year);
+      const rr = await postReceivingReport(
+        po.id,
+        receipt(year, [{ lineId: lines[0]!.id, qty: "10" }, { lineId: lines[1]!.id, qty: "10" }], staff.id),
+        staff,
+      );
+      const bill = await recordSupplierBill(
+        po.id,
+        {
+          billNumber: `SI-RR-${tag()}`,
+          billDate: new Date(Date.UTC(year, 3, 5)),
+          amount: "455000.00",
+          notes: null,
+          lines: [],
+        },
+        buyer,
+      );
+
+      await expect(voidReceivingReport(rr.id, "Undo receipt", staff)).rejects.toThrow(/Void the supplier bill first/);
+      expect((await db.receivingReport.findUniqueOrThrow({ where: { id: rr.id } })).status).toBe("POSTED");
+      expect((await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: lines[0]!.id } })).receivedQty.toFixed(2)).toBe("10.00");
+
+      await voidSupplierBill(bill.id, "Wrong bill — void before RR", buyer);
+      await voidReceivingReport(rr.id, "Undo receipt after bill void", staff);
+      expect((await db.receivingReport.findUniqueOrThrow({ where: { id: rr.id } })).status).toBe("VOID");
+      expect((await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: lines[0]!.id } })).receivedQty.toFixed(2)).toBe("0.00");
+    });
   });
 
   // -------------------------------------------------------------------------

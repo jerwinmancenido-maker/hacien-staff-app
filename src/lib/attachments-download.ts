@@ -29,7 +29,14 @@ export async function attachmentDownload(user: (PermissionUser & { id: string })
     entityType: "DocumentAttachment",
     entityId: att.id,
     action: "download",
-    after: { fileName: att.fileName, receivingReportId: att.receivingReportId, supplierBillId: att.supplierBillId },
+    after: {
+      fileName: att.fileName,
+      receivingReportId: att.receivingReportId,
+      supplierBillId: att.supplierBillId,
+      billingId: att.billingId,
+      collectionId: att.collectionId,
+      withholding2307Id: att.withholding2307Id,
+    },
     diff: false,
     ip: meta.ip ?? null,
   });

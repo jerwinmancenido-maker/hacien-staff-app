@@ -18,7 +18,7 @@ const LATER: Item[] = [
   { href: "/sales-orders", label: "Sales Orders", icon: <CartIcon /> },
   { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon />, costsOnly: true },
   { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
-  { href: "/billing", label: "Billing & Collections", icon: <CoinIcon />, soon: true },
+  { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
   { href: "/books", label: "Books", icon: <BookIcon />, soon: true },
 ];
 
@@ -66,6 +66,11 @@ const CRUMB_LABELS: Record<string, string> = {
   receiving: "Receiving",
   bill: "Record bill",
   billing: "Billing & Collections",
+  billings: "Billings",
+  collections: "Collections",
+  aging: "Aging",
+  booklet: "Booklet",
+  "2307": "2307s",
   books: "Books",
   new: "New",
   edit: "Edit",

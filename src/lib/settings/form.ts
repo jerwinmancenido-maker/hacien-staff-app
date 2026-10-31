@@ -18,6 +18,8 @@ export const NUMBERED_DOCS = [
   { key: "salesOrder", label: "Sales orders" },
   { key: "supplierPo", label: "Supplier POs" },
   { key: "receivingReport", label: "Receiving reports" },
+  { key: "billing", label: "Billings (internal)" },
+  { key: "collection", label: "Collections (internal)" },
 ] as const;
 
 export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
@@ -50,6 +52,14 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
     case "documents":
       return { expiryWarningDays: get("expiryWarningDays") };
+    case "invoiceBooklet":
+      return {
+        seriesFrom: get("seriesFrom"),
+        seriesTo: get("seriesTo"),
+        label: get("label") ?? "",
+      };
+    case "collections":
+      return { overdueGraceDays: get("overdueGraceDays") };
   }
 }
 
