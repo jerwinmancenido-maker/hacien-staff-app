@@ -3,8 +3,9 @@
 
 import { db } from "@/lib/db";
 import { canSeeCosts, type PermissionUser } from "@/lib/permissions";
-import { codeList, listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
+import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import { allowGovVatOption, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
 import type { EditorCustomer } from "@/components/docs/DocumentEditor";
 
 export async function editorCustomers(where: { id?: string } = {}): Promise<EditorCustomer[]> {
@@ -18,16 +19,18 @@ export async function editorCustomers(where: { id?: string } = {}): Promise<Edit
     name: c.name,
     address: c.address,
     defaultTerms: c.defaultTerms,
-    defaultWithholding: codeList(c.defaultWithholding),
+    withholdingType: c.withholdingType,
     contacts: c.contacts.map((k) => ({ id: k.id, name: k.name, isMain: k.isMain })),
   }));
 }
 
-/** Active rates, plus the snapshotted values of rates already on the document. */
+/** Active rates, plus the snapshotted values of rates already on the document. Hides Gov VAT when non-VAT. */
 export async function editorRates(existing: WithholdingSnapshot[] = []): Promise<WithholdingSnapshot[]> {
   const active = (await listWithholdingRates(db, { activeOnly: true })).map(toSnapshot);
   const kept = existing.map((e) => e);
-  return [...kept, ...active.filter((a) => !kept.some((k) => k.code === a.code))];
+  const merged = [...kept, ...active.filter((a) => !kept.some((k) => k.code === a.code))];
+  if (allowGovVatOption()) return merged;
+  return merged.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
 export async function editorSuppliers(user: PermissionUser) {

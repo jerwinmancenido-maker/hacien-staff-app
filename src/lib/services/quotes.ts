@@ -10,11 +10,12 @@ import { assertCan, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
-import { docTotals, type WithholdingSnapshot } from "../quotes/calc";
+import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
+import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
-import { buildWithholdingSnapshot, codeList, listWithholdingRates, snapshotList } from "./withholding";
+import { snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -43,8 +44,9 @@ export function quoteAudit(q: QuoteWithItems) {
   };
 }
 
-function totalsData(items: PlannedItem[], withholding: WithholdingSnapshot[]) {
-  const t = docTotals(items, withholding);
+/** Money fields from per-line rates (round per line, then sum). */
+function totalsData(items: PlannedItem[]) {
+  const t = docTotals(items);
   return {
     contractPrice: t.contractPrice,
     withholdingTotal: t.withholdingTotal,
@@ -53,6 +55,11 @@ function totalsData(items: PlannedItem[], withholding: WithholdingSnapshot[]) {
     netMargin: t.netMargin,
     netMarginPct: t.netMarginPct,
   };
+}
+
+/** Read-only document JSON summary derived from line rates (not a second rate source). */
+function withholdingFromItems(items: PlannedItem[]) {
+  return withholdingSnapshotFromLines(items);
 }
 
 async function lockQuote(tx: Tx, id: string): Promise<QuoteWithItems> {
@@ -95,13 +102,12 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
 
-  const rates = await listWithholdingRates();
-  // The quote copies the customer's default unless staff picked rates on the form.
-  const withholding =
-    input.withholdingCodes === undefined
-      ? buildWithholdingSnapshot(codeList(customer.defaultWithholding), rates, [], { skipUnknown: true })
-      : buildWithholdingSnapshot(input.withholdingCodes, rates);
-  const { items } = planItems([], input.items, withCosts);
+  // Line rates drive totals; document withholding JSON is a read-only summary.
+  const { items } = planItems([], input.items, withCosts, {
+    customerWithholdingType: customer.withholdingType,
+    reapplyWithholding: input.reapplyWithholding === true,
+  });
+  const withholding = withholdingFromItems(items);
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
@@ -121,7 +127,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           notes: input.notes,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
-          ...totalsData(items, withholding),
+          ...totalsData(items),
           createdById: actor.id,
           updatedById: actor.id,
           items: { create: items.map(itemData) },
@@ -139,9 +145,8 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   const withCosts = canSeeCosts(actor);
   const current = await db.quote.findUnique({ where: { id } });
   if (!current) throw new DocRuleError("Quote not found.");
-  await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
+  const customer = await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
-  const rates = await listWithholdingRates();
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -149,13 +154,24 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       if (!(EDITABLE_QUOTE_STATUSES as readonly string[]).includes(before.status)) {
         throw new DocRuleError("Only draft or sent quotes can be edited.");
       }
-      const existingWithholding = snapshotList(before.withholding);
-      const withholding =
-        input.withholdingCodes === undefined
-          ? existingWithholding
-          : buildWithholdingSnapshot(input.withholdingCodes, rates, existingWithholding);
-      const stored = before.items.map((i) => ({ id: i.id, kind: i.kind, supplierId: i.supplierId, supplierUnitCost: money(i.supplierUnitCost) }));
-      const { items, removedIds } = planItems(stored, input.items, withCosts);
+      const stored = before.items.map((i) => ({
+        id: i.id,
+        kind: i.kind,
+        supplierId: i.supplierId,
+        supplierUnitCost: money(i.supplierUnitCost),
+        withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+        withholdingOverride: i.withholdingOverride,
+      }));
+      const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
+        customerWithholdingType: customer.withholdingType,
+        reapplyWithholding: input.reapplyWithholding === true,
+      });
+      // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
+      const preserved = preserveLegacyWithholdingOnSave(before, planned);
+      if (!preserved.ok) throw new DocRuleError(preserved.message);
+      const items = preserved.items;
+      const withholding = preserved.withholding;
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -174,7 +190,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           terms: input.terms,
           notes: input.notes,
           withholding: withholding as unknown as Prisma.InputJsonValue,
-          ...totalsData(items, withholding),
+          ...preserved.totals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
@@ -309,6 +325,10 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
                 total: i.total,
                 supplierTotal: i.supplierTotal,
                 margin: i.margin,
+                // Copy line rates and ATCs exactly — never re-derive from the customer.
+                withholdingRate: i.withholdingRate,
+                withholdingAtc: i.withholdingAtc,
+                withholdingOverride: i.withholdingOverride,
               })),
           },
         },

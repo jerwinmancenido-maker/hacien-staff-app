@@ -4,10 +4,15 @@
 //
 // Money is pesos with 2 decimals; quantities have 2 decimals; withholding rates
 // are fractions with 4 decimals (0.0100 = 1%). Rounding is half-up (away from
-// zero) to 2 decimals, done per line and per withholding rate.
+// zero) to 2 decimals, done per line (qty × price, and line × withholding rate).
 //
-// HACIEN is non-VAT: the withholding base is the gross contract price, never
+// HACIEN is non-VAT: the withholding base is the gross line total, never
 // divided by 1.12.
+//
+// Expected withholding = sum over lines of round_half_up(line.total × line.rate).
+// Lines with a null/empty rate contribute ₱0 (legacy rows that were never
+// snapshotted). Document-level withholding JSON is a read-only summary of the
+// line rates — not a second source of truth for the math.
 
 export type ItemKind = "GOODS" | "SERVICES";
 export type WithholdingLineKind = "GOODS" | "SERVICES" | "GOV_PT" | "GOV_VAT";
@@ -35,6 +40,13 @@ export type LineAmounts = {
   supplierTotal: string;
   /** total − supplier total */
   margin: string;
+};
+
+/** Line fields needed to total a document (amounts + optional per-line rate/ATC). */
+export type LineForDocTotals = (LineInput | (Pick<LineInput, "kind"> & LineAmounts)) & {
+  /** Fraction string; null/undefined/"" → no withholding on this line. */
+  withholdingRate?: string | null;
+  withholdingAtc?: string | null;
 };
 
 export type WithholdingLine = WithholdingSnapshot & { base: string; amount: string };
@@ -108,37 +120,109 @@ export function lineAmounts(line: LineInput): LineAmounts {
   };
 }
 
+/** True when the line has a snapshotted rate (legacy null/blank → not snapshotted). */
+export function hasLineWithholdingRate(rate: string | null | undefined): boolean {
+  return rate != null && String(rate).trim() !== "";
+}
+
+/** Round half-up: one line's total × rate → centavos. Null rate → 0. */
+export function lineWithholdingAmountCents(lineTotal: string, rate: string | null | undefined): bigint {
+  if (!hasLineWithholdingRate(rate)) return 0n;
+  return mulToCents(toScaled(lineTotal, CENTS), CENTS, toScaled(String(rate).trim(), RATE), RATE);
+}
+
+function resolveAmounts(line: LineForDocTotals): LineAmounts & { kind: ItemKind } {
+  const amounts = "total" in line && line.total != null ? { total: line.total, supplierTotal: line.supplierTotal, margin: line.margin ?? "0.00" } : lineAmounts(line as LineInput);
+  return { kind: line.kind, ...amounts };
+}
+
+/** Group key for the read-only document withholding summary. */
+function groupKey(rate: string, atc: string | null, kind: ItemKind): string {
+  // Government ATC shares one bucket across goods/services (same rate on every line).
+  if (atc === "WG010" || atc === "WV050") return `${rate}|${atc}`;
+  return `${rate}|${atc ?? ""}|${kind}`;
+}
+
+function summaryCode(rate: string, atc: string | null, kind: ItemKind): string {
+  const r = Number(rate).toFixed(4);
+  if (kind === "GOODS" && r === "0.0100" && atc === "WI158") return "GOODS_1";
+  if (kind === "SERVICES" && r === "0.0200" && atc === "WI160") return "SERVICES_2";
+  if (r === "0.0300" && atc === "WG010") return "GOV_PT_3";
+  if (r === "0.0500" && atc === "WV050") return "GOV_VAT_5";
+  const atcPart = atc ? `_${atc}` : "";
+  return `LINE_${kind}_${r.replace(".", "")}${atcPart}`;
+}
+
+function summaryLabel(rate: string, atc: string | null, kind: ItemKind): string {
+  const pct = ratePctLabel(rate);
+  if (atc === "WG010" || atc === "WV050") {
+    return kind === "SERVICES" || kind === "GOODS"
+      ? `Government ${pct} (code to confirm)`
+      : `Government ${pct} (code to confirm)`;
+  }
+  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Goods 1%";
+  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI160") return "Services 2%";
+  const atcBit = atc ? ` · ${atc}` : "";
+  return `${kind === "GOODS" ? "Goods" : "Services"} ${pct}${atcBit}`;
+}
+
+function summaryLineKind(rate: string, atc: string | null, kind: ItemKind): WithholdingLineKind {
+  if (atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WG010" || atc == null))) return "GOV_PT";
+  if (atc === "WV050" || Number(rate).toFixed(4) === "0.0500") return "GOV_VAT";
+  return kind;
+}
+
 /**
- * Document totals. Goods rates apply to the goods lines, services rates to the
- * services lines, and the government percentage tax / VAT rates to the whole
- * contract price.
+ * Document totals from per-line rates.
+ *
+ * For each line: withholding = round_half_up(line.total × line.rate) to ₱0.01.
+ * Then sum those amounts. Null/blank rates contribute 0 (legacy unsapped rows).
+ * The `withholding` array is a read-only grouping for display / stored JSON.
  */
-export function docTotals(lines: (LineInput | (Pick<LineInput, "kind"> & LineAmounts))[], rates: WithholdingSnapshot[]): DocTotals {
+export function docTotals(lines: LineForDocTotals[]): DocTotals {
   let contract = 0n;
-  let goods = 0n;
-  let services = 0n;
   let supplier = 0n;
-  for (const line of lines) {
-    const amounts = "total" in line ? line : lineAmounts(line);
-    const total = toScaled(amounts.total, CENTS);
+  let withheld = 0n;
+
+  type Acc = { rate: string; atc: string | null; kind: ItemKind; base: bigint; amount: bigint };
+  const groups = new Map<string, Acc>();
+
+  for (const raw of lines) {
+    const line = resolveAmounts(raw);
+    const total = toScaled(line.total, CENTS);
     contract += total;
-    if (line.kind === "GOODS") goods += total;
-    else services += total;
-    supplier += toScaled(amounts.supplierTotal, CENTS);
+    supplier += toScaled(line.supplierTotal, CENTS);
+
+    const rateRaw = raw.withholdingRate;
+    if (!hasLineWithholdingRate(rateRaw)) continue;
+    const rate = Number(String(rateRaw).trim()).toFixed(4);
+    if (rate === "0.0000") continue; // explicit zero — no withholding row
+    const atc = raw.withholdingAtc != null && String(raw.withholdingAtc).trim() !== "" ? String(raw.withholdingAtc).trim() : null;
+    const amount = lineWithholdingAmountCents(line.total, rate);
+    withheld += amount;
+
+    const key = groupKey(rate, atc, line.kind);
+    const prev = groups.get(key);
+    if (prev) {
+      prev.base += total;
+      prev.amount += amount;
+    } else {
+      groups.set(key, { rate, atc, kind: line.kind, base: total, amount });
+    }
   }
 
-  const baseFor = (kind: WithholdingLineKind) => (kind === "GOODS" ? goods : kind === "SERVICES" ? services : contract);
-  let withheld = 0n;
-  const withholding = rates.map((r) => {
-    const base = baseFor(r.lineKind);
-    const amount = mulToCents(base, CENTS, toScaled(r.rate, RATE), RATE);
-    withheld += amount;
-    return { ...r, base: fromScaled(base, CENTS), amount: fromScaled(amount, CENTS) };
-  });
+  const withholding: WithholdingLine[] = [...groups.values()].map((g) => ({
+    code: summaryCode(g.rate, g.atc, g.kind),
+    label: summaryLabel(g.rate, g.atc, g.kind),
+    lineKind: summaryLineKind(g.rate, g.atc, g.kind),
+    rate: g.rate,
+    atcCode: g.atc,
+    base: fromScaled(g.base, CENTS),
+    amount: fromScaled(g.amount, CENTS),
+  }));
 
   const netReceived = contract - withheld;
   const netMargin = netReceived - supplier;
-  // Percent with 2 decimals = netMargin / contract × 100, scaled by 100.
   const pct = contract === 0n ? 0n : divRound(netMargin * 10_000n, contract);
 
   return {
@@ -150,6 +234,17 @@ export function docTotals(lines: (LineInput | (Pick<LineInput, "kind"> & LineAmo
     netMargin: fromScaled(netMargin, CENTS),
     netMarginPct: fromScaled(pct, 2),
   };
+}
+
+/** Read-only document snapshot derived from line rates (no second math source). */
+export function withholdingSnapshotFromLines(lines: LineForDocTotals[]): WithholdingSnapshot[] {
+  return docTotals(lines).withholding.map(({ code, label, lineKind, rate, atcCode }) => ({
+    code,
+    label,
+    lineKind,
+    rate,
+    atcCode,
+  }));
 }
 
 /** Rate fraction ("0.0100") → percent label ("1%", "1.5%"). */

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
 import { formatAddress } from "@/lib/addresses/format";
 import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
@@ -142,7 +143,13 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       </div>
       <div className="card">
         <h2>Items</h2>
-        <ItemsTable items={q.items} showCosts={q.canSeeCosts} />
+        <ItemsTable
+          items={q.items.map((i) => ({
+            ...i,
+            overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
+          }))}
+          showCosts={q.canSeeCosts}
+        />
         <div className="totals-wrap">
           <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
         </div>

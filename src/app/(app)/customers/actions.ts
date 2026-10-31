@@ -7,7 +7,7 @@ import { runAction } from "@/lib/actions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { db } from "@/lib/db";
 import { saveCustomer, setCustomerActive } from "@/lib/services/companies";
-import { codeList, listWithholdingRates } from "@/lib/services/withholding";
+import { codeList } from "@/lib/services/withholding";
 import { customerSchema } from "@/lib/validation/companies";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -17,14 +17,13 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
     const { settings } = await getSettingsSnapshot();
-    // Active rates, plus any (now inactive) rate this customer already has.
+    // Keep existing defaultWithholding keys as-is (no destructive wipe). UI no longer edits them.
     const current = id ? codeList((await db.customer.findUnique({ where: { id }, select: { defaultWithholding: true } }))?.defaultWithholding) : [];
-    const allowedRates = [...(await listWithholdingRates(db, { activeOnly: true })).map((r) => r.code), ...current];
-    const parsed = customerSchema(settings.lists.paymentTerms, allowedRates).safeParse({
+    const parsed = customerSchema(settings.lists.paymentTerms).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),
       withholdingType: str(form, "withholdingType") || undefined,
-      defaultWithholding: form.getAll("defaultWithholding").filter((v): v is string => typeof v === "string"),
+      defaultWithholding: current,
       defaultTerms: str(form, "defaultTerms"),
       notes: str(form, "notes"),
     });

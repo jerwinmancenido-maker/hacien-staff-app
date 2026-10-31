@@ -4,6 +4,12 @@
 // filing. This app never files returns and never connects to BIR or eBIRForms.
 // Values here are working assumptions for worksheets only.
 
+/**
+ * Existing business VAT registration setting. HACIEN is non-VAT (8% option).
+ * Used to hide the Gov VAT 5% withholding option. Flip only when registration changes.
+ */
+export const BUSINESS_IS_VAT_REGISTERED = false;
+
 /** Banner on every tax worksheet screen and print/PDF. */
 export const TAX_WORKSHEET_BANNER =
   "Worksheet only — check with your accountant before filing. Not filed by this app.";

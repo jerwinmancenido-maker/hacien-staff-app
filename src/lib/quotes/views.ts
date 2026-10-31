@@ -21,6 +21,15 @@ import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type Withholdi
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 
+type StoredMoney = {
+  contractPrice: string;
+  withholdingTotal: string;
+  netReceived: string;
+  supplierCost: string;
+  netMargin: string;
+  netMarginPct: string;
+};
+
 type Dec = { toFixed(n: number): string };
 
 type ItemRow = {
@@ -37,6 +46,9 @@ type ItemRow = {
   total: Dec;
   supplierTotal: Dec;
   margin: Dec;
+  withholdingRate?: Dec | null;
+  withholdingAtc?: string | null;
+  withholdingOverride?: boolean;
 };
 
 export type ItemView = {
@@ -47,6 +59,10 @@ export type ItemView = {
   unit: string;
   unitPrice: string;
   total: string;
+  /** Snapshotted withholding on the line (staff views / editor). */
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+  withholdingOverride: boolean;
   // Cost users only:
   supplierId?: string | null;
   supplierName?: string | null;
@@ -75,6 +91,9 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     unit: i.unit,
     unitPrice: money(i.unitPrice),
     total: money(i.total),
+    withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+    withholdingAtc: i.withholdingAtc ?? null,
+    withholdingOverride: i.withholdingOverride ?? false,
   };
   if (!withCosts) return base;
   return {
@@ -87,19 +106,35 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
   };
 }
 
-function totalsView(items: ItemRow[], withholding: WithholdingSnapshot[], withCosts: boolean): TotalsView {
-  const t = docTotals(
-    items.map((i) => ({ kind: i.kind, total: money(i.total), supplierTotal: money(i.supplierTotal), margin: money(i.margin) })),
-    withholding,
-  );
+/**
+ * Display totals. Money fields always come from the stored document row so
+ * legacy lines with NULL rates never silently change issued/won/void totals.
+ * Itemisation uses per-line rates when every line is snapshotted; otherwise
+ * the stored document withholding JSON (rates only — amounts left blank-safe).
+ */
+function totalsView(items: ItemRow[], withholding: WithholdingSnapshot[], stored: StoredMoney, withCosts: boolean): TotalsView {
+  const lineInputs = items.map((i) => ({
+    kind: i.kind,
+    total: money(i.total),
+    supplierTotal: money(i.supplierTotal),
+    margin: money(i.margin),
+    withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+    withholdingAtc: i.withholdingAtc ?? null,
+  }));
+  const allSnapshotted = lineInputs.length > 0 && lineInputs.every((i) => i.withholdingRate != null);
+  // Per-line itemisation when snapshotted; otherwise TotalsBox shows the stored total alone
+  // (null line rates must not invent a new breakdown that disagrees with stored money).
+  const itemised: (WithholdingLine & { pctLabel: string })[] = allSnapshotted
+    ? docTotals(lineInputs).withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) }))
+    : [];
   const base: TotalsView = {
-    contractPrice: t.contractPrice,
-    withholding: t.withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) })),
-    withholdingTotal: t.withholdingTotal,
-    netReceived: t.netReceived,
+    contractPrice: stored.contractPrice,
+    withholding: itemised,
+    withholdingTotal: stored.withholdingTotal,
+    netReceived: stored.netReceived,
   };
   if (!withCosts) return base;
-  return { ...base, supplierCost: t.supplierCost, netMargin: t.netMargin, netMarginPct: t.netMarginPct };
+  return { ...base, supplierCost: stored.supplierCost, netMargin: stored.netMargin, netMarginPct: stored.netMarginPct };
 }
 
 function approvalFromSnap(
@@ -135,7 +170,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: itemsInclude,
-      customer: { select: { id: true, name: true, address: true, tin: true, active: true } },
+      customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
       salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
@@ -145,7 +180,15 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   });
   if (!q) return null;
   const withholding = snapshotList(q.withholding);
-  const totals = totalsView(q.items, withholding, withCosts);
+  const stored = {
+    contractPrice: money(q.contractPrice),
+    withholdingTotal: money(q.withholdingTotal),
+    netReceived: money(q.netReceived),
+    supplierCost: money(q.supplierCost),
+    netMargin: money(q.netMargin),
+    netMarginPct: money(q.netMarginPct),
+  };
+  const totals = totalsView(q.items, withholding, stored, withCosts);
   return {
     id: q.id,
     number: q.number,
@@ -261,7 +304,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: itemsInclude,
-      customer: { select: { id: true, name: true, address: true, tin: true, active: true } },
+      customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true } },
       createdBy: { select: { name: true } },
@@ -270,6 +313,14 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
   });
   if (!so) return null;
   const withholding = snapshotList(so.withholding);
+  const stored = {
+    contractPrice: money(so.contractPrice),
+    withholdingTotal: money(so.withholdingTotal),
+    netReceived: money(so.netReceived),
+    supplierCost: money(so.supplierCost),
+    netMargin: money(so.netMargin),
+    netMarginPct: money(so.netMarginPct),
+  };
   return {
     id: so.id,
     number: so.number,
@@ -286,7 +337,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     quote: so.quote,
     withholding,
     items: so.items.map((i) => itemView(i, withCosts)),
-    totals: totalsView(so.items, withholding, withCosts),
+    totals: totalsView(so.items, withholding, stored, withCosts),
     approval: await approvalFor(so.settingsVersionId, money(so.contractPrice), money(so.netMarginPct), withCosts),
     createdBy: so.createdBy.name,
     updatedBy: so.updatedBy.name,
@@ -458,13 +509,26 @@ export type EditableItem = {
   qty: string;
   unit: string;
   unitPrice: string;
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+  withholdingOverride: boolean;
   supplierId?: string | null;
   supplierUnitCost?: string;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
   return items.map((i) => {
-    const base = { id: i.id, description: i.description, kind: i.kind, qty: i.qty, unit: i.unit, unitPrice: i.unitPrice };
+    const base = {
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: i.qty,
+      unit: i.unit,
+      unitPrice: i.unitPrice,
+      withholdingRate: i.withholdingRate,
+      withholdingAtc: i.withholdingAtc,
+      withholdingOverride: i.withholdingOverride,
+    };
     return withCosts ? { ...base, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "0.00" } : base;
   });
 }

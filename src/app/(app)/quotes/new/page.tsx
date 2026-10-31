@@ -3,6 +3,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { DocumentEditor } from "@/components/docs/DocumentEditor";
+import { documentWithholdingFromCustomer, allowGovVatOption } from "@/lib/quotes/withholding-defaults";
 import { editorCustomers, editorRates, editorSuppliers } from "../editor-data";
 import { saveQuoteAction } from "../actions";
 
@@ -13,6 +14,12 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
   const [customers, rates, suppliers] = await Promise.all([editorCustomers(), editorRates(), editorSuppliers(user)]);
   const today = manilaToday();
   const preset = customers.find((c) => c.id === customerParam);
+  const withholdingCodes = preset
+    ? documentWithholdingFromCustomer(preset.withholdingType, ["GOODS", "SERVICES"], {
+        includeGovVat: false,
+        businessIsVatRegistered: allowGovVatOption(),
+      }).map((w) => w.code)
+    : [];
 
   return (
     <>
@@ -33,7 +40,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           validUntil: isoDate(addDays(today, settings.quotes.defaultValidityDays)),
           terms: preset?.defaultTerms ?? "",
           notes: "",
-          withholdingCodes: preset?.defaultWithholding.filter((c) => rates.some((r) => r.code === c)) ?? [],
+          withholdingCodes,
           buyerPoNo: "",
           buyerPoDate: "",
           deliveryAddress: "",
