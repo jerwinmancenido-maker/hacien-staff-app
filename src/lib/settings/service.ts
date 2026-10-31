@@ -74,14 +74,25 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
           (v.data as Partial<Settings>).taxYear?.incomeTaxMethod ??
           DEFAULT_SETTINGS.taxYear.incomeTaxMethod,
       },
-      taxCalendar: {
-        ...DEFAULT_SETTINGS.taxCalendar,
-        ...(v.data as Partial<Settings>).taxCalendar,
-        obligations: {
+      taxCalendar: (() => {
+        const obligations = {
           ...DEFAULT_SETTINGS.taxCalendar.obligations,
           ...((v.data as Partial<Settings>).taxCalendar?.obligations ?? {}),
-        },
-      },
+        };
+        // Migrate on read: drop stale 2551q.dueDay (old catalog used day-of-month 15).
+        if (obligations["2551q"]) {
+          obligations["2551q"] = {
+            ...obligations["2551q"],
+            dueDay: null,
+            dueMonth: null,
+          };
+        }
+        return {
+          ...DEFAULT_SETTINGS.taxCalendar,
+          ...(v.data as Partial<Settings>).taxCalendar,
+          obligations,
+        };
+      })(),
       print: {
         ...DEFAULT_SETTINGS.print,
         ...(v.data as Partial<Settings>).print,

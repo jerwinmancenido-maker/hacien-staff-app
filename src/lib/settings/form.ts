@@ -43,8 +43,8 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         ]),
       );
     case "taxYear": {
-      const year = get("year");
-      const incomeTaxMethod = get("incomeTaxMethod") === "GRADUATED" ? "GRADUATED" : "EIGHT_PERCENT";
+      const yearRaw = (get("year") ?? "").trim();
+      const yearNum = Number(yearRaw);
       const booksRaw = (get("booksType") ?? "").trim();
       const booksType =
         booksRaw === "loose_leaf" || booksRaw === "computerized" ? booksRaw : null;
@@ -65,7 +65,8 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         const name = nameParts.join(" ").trim();
         return name ? [{ ymd, kind, name }] : [{ ymd, kind }];
       });
-      const priorRaw = get("incomeTaxMethodsByYear") ?? "";
+      // Preserve years outside the visible selects (hidden prior map).
+      const priorRaw = get("incomeTaxMethodsByYearPrior") ?? "";
       let incomeTaxMethodsByYear: Record<string, "EIGHT_PERCENT" | "GRADUATED"> = {};
       if (priorRaw.trim()) {
         try {
@@ -74,12 +75,34 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
             if (v === "EIGHT_PERCENT" || v === "GRADUATED") incomeTaxMethodsByYear[k] = v;
           }
         } catch {
+          // Invalid prior JSON is ignored; per-year selects still apply.
           incomeTaxMethodsByYear = {};
         }
       }
-      if (year) incomeTaxMethodsByYear[String(year)] = incomeTaxMethod;
+      // Per-year selects: methodByYear.YYYY
+      const selectYearsRaw = (get("methodByYearYears") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      const selectYears = selectYearsRaw.length
+        ? selectYearsRaw
+        : Number.isInteger(yearNum)
+          ? [String(yearNum - 1), String(yearNum), String(yearNum + 1)]
+          : [];
+      for (const y of selectYears) {
+        const raw = (get(`methodByYear.${y}`) ?? "").trim();
+        if (raw === "EIGHT_PERCENT" || raw === "GRADUATED") {
+          incomeTaxMethodsByYear[y] = raw;
+        }
+      }
+      const activeKey = Number.isInteger(yearNum) ? String(yearNum) : "";
+      const fromActiveSelect = activeKey ? get(`methodByYear.${activeKey}`) : null;
+      const incomeTaxMethod =
+        fromActiveSelect === "GRADUATED" || fromActiveSelect === "EIGHT_PERCENT"
+          ? fromActiveSelect
+          : get("incomeTaxMethod") === "GRADUATED"
+            ? "GRADUATED"
+            : "EIGHT_PERCENT";
+      if (activeKey) incomeTaxMethodsByYear[activeKey] = incomeTaxMethod;
       return {
-        year,
+        year: yearRaw,
         nonVatLimit: get("nonVatLimit"),
         warnFirstPct: get("warnFirstPct"),
         warnSecondPct: get("warnSecondPct"),

@@ -3,6 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import {
   TAX_CALENDAR_DISCLAIMER,
+  TAX_CALENDAR_DUE_UNCONFIRMED_NOTE,
   TAX_CALENDAR_EMPTY_ALL,
   TAX_CALENDAR_EMPTY_UPCOMING,
   TAX_CALENDAR_OVERDUE_SECTION_HINT,
@@ -106,6 +107,9 @@ function MobileCards({
             <RowTasks r={r} />
             <div className="tax-cal-card-period">{r.periodLabel}</div>
             <div className="tax-cal-card-due">{r.dueDisplay}</div>
+            {r.dueUnconfirmed ? (
+              <div className="faint small">{TAX_CALENDAR_DUE_UNCONFIRMED_NOTE}</div>
+            ) : null}
             {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
             <div className="tax-cal-card-chips">
               <StatusChip r={r} />
@@ -201,7 +205,7 @@ export default async function TaxCalendarPage({
   const sp = await searchParams;
   const view = sp.view === "all" ? "all" : "upcoming";
   const showNotApplicable = sp.showNa === "1" || sp.showNa === "true";
-  const { rows, overdue, provisional } = await listTaxCalendar(user, {
+  const { rows, overdue, provisional, missingHolidayBanners } = await listTaxCalendar(user, {
     view,
     showNotApplicable,
   });
@@ -228,7 +232,7 @@ export default async function TaxCalendarPage({
         }
       />
       <BooksNav active="tax-calendar" />
-      <TaxCalendarBanner provisional={provisional} />
+      <TaxCalendarBanner provisional={provisional} missingHolidayBanners={missingHolidayBanners} />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>

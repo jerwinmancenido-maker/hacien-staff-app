@@ -103,3 +103,47 @@ export function formatHolidayLines(holidays: readonly TaxHoliday[]): string {
     })
     .join("\n");
 }
+
+/** Calendar years that have at least one holiday entry. */
+export function yearsWithHolidays(holidays: readonly TaxHoliday[]): Set<number> {
+  const years = new Set<number>();
+  for (const h of normalizeHolidays(holidays)) {
+    const y = Number(h.ymd.slice(0, 4));
+    if (Number.isInteger(y)) years.add(y);
+  }
+  return years;
+}
+
+/**
+ * Years in [fromYear, toYear] inclusive with no holiday entries.
+ * Owner must enter them — do not invent dates.
+ */
+export function yearsMissingHolidays(
+  holidays: readonly TaxHoliday[],
+  fromYear: number,
+  toYear: number,
+): number[] {
+  const have = yearsWithHolidays(holidays);
+  const missing: number[] = [];
+  for (let y = fromYear; y <= toYear; y++) {
+    if (!have.has(y)) missing.push(y);
+  }
+  return missing;
+}
+
+/** Exact banner copy for a year with no holiday list. */
+export function holidaysNotSetBanner(year: number): string {
+  return `Holidays for ${year} not set, dates may be early`;
+}
+
+/** True when a YYYY-MM-DD falls in a year that has no holiday entries. */
+export function ymdYearMissingHolidays(
+  ymd: string | null | undefined,
+  missingYears: ReadonlySet<number> | readonly number[],
+): boolean {
+  if (!ymd || ymd.length < 4) return false;
+  const y = Number(ymd.slice(0, 4));
+  if (!Number.isInteger(y)) return false;
+  const set = missingYears instanceof Set ? missingYears : new Set(missingYears);
+  return set.has(y);
+}

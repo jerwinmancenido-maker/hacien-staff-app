@@ -108,7 +108,29 @@ export const settingsSections = {
        * Per-year history lives in incomeTaxMethodsByYear.
        */
       incomeTaxMethod: incomeTaxMethod.default("EIGHT_PERCENT"),
-      incomeTaxMethodsByYear: z.record(z.string(), incomeTaxMethod).default({}),
+      incomeTaxMethodsByYear: z
+        .record(z.string(), incomeTaxMethod)
+        .default({})
+        .superRefine((map, ctx) => {
+          for (const key of Object.keys(map)) {
+            if (!/^\d{4}$/.test(key)) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Income tax method year "${key}" must be a four-digit year (e.g. 2026).`,
+                path: [key],
+              });
+              continue;
+            }
+            const y = Number(key);
+            if (y < 2000 || y > 2100) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Income tax method year ${key} must be between 2000 and 2100.`,
+                path: [key],
+              });
+            }
+          }
+        }),
       /** Editable PH holiday list used to roll tax due dates (RMC 65-2016). */
       holidays: z.array(taxHoliday).default([]),
       /**
@@ -120,6 +142,11 @@ export const settingsSections = {
     .refine((v) => v.warnFirstPct < v.warnSecondPct, {
       message: "First warning must be lower than the second.",
       path: ["warnSecondPct"],
+    })
+    .transform((v) => {
+      // Keep active-year method and map in sync on every successful parse.
+      const map = { ...v.incomeTaxMethodsByYear, [String(v.year)]: v.incomeTaxMethod };
+      return { ...v, incomeTaxMethodsByYear: map };
     }),
   company: z.object({
     /** Registered business name (letterhead). */

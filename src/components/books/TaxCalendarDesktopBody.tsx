@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { TaxCalendarRow } from "@/lib/tax/calendar-build";
 import {
+  TAX_CALENDAR_DUE_UNCONFIRMED_NOTE,
   TAX_CALENDAR_FILE_BY_PREFIX,
   TAX_CALENDAR_FILE_BY_SUFFIX,
 } from "@/lib/tax/calendar-constants";
@@ -120,6 +121,9 @@ function DesktopRow({
         <td className="tax-cal-period">{r.periodLabel}</td>
         <td className="tax-cal-due">
           <div>{r.dueDisplay}</div>
+          {r.dueUnconfirmed ? (
+            <div className="faint small">{TAX_CALENDAR_DUE_UNCONFIRMED_NOTE}</div>
+          ) : null}
           {r.fileByHint && r.fileByYmd ? (
             <div className="faint small tax-cal-fileby">
               {TAX_CALENDAR_FILE_BY_PREFIX}

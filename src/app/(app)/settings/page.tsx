@@ -16,6 +16,10 @@ import {
   TAX_CALENDAR_PROVISIONAL_BANNER,
 } from "@/lib/tax/calendar-constants";
 import { formatHolidayLines } from "@/lib/tax/holidays";
+import {
+  incomeTaxMethodForYear,
+  incomeTaxMethodSelectYears,
+} from "@/lib/tax/income-tax-method";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
@@ -122,24 +126,44 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             fields={[
               { name: "year", label: "Tax year", kind: "number", value: s.taxYear.year },
               {
-                name: "incomeTaxMethod",
-                label: "Income tax method",
-                kind: "select",
-                value: s.taxYear.incomeTaxMethod,
-                options: [
-                  { value: "EIGHT_PERCENT", label: INCOME_TAX_METHOD_LABELS.EIGHT_PERCENT },
-                  { value: "GRADUATED", label: INCOME_TAX_METHOD_LABELS.GRADUATED },
-                ],
-                hint: "Per tax year. Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A.",
+                name: "incomeTaxMethodsByYearPrior",
+                label: "method prior",
+                kind: "hidden",
+                value: JSON.stringify(s.taxYear.incomeTaxMethodsByYear ?? {}),
               },
               {
-                name: "incomeTaxMethodsByYear",
-                label: "Method history (JSON)",
-                kind: "textarea",
-                value: JSON.stringify(s.taxYear.incomeTaxMethodsByYear ?? {}, null, 0),
-                hint: "Auto-updated when you save. Keep as JSON year→method map.",
-                full: true,
+                name: "methodByYearYears",
+                label: "method years",
+                kind: "hidden",
+                value: incomeTaxMethodSelectYears(
+                  s.taxYear.year,
+                  s.taxYear.incomeTaxMethodsByYear ?? {},
+                ).join(","),
               },
+              ...incomeTaxMethodSelectYears(s.taxYear.year, s.taxYear.incomeTaxMethodsByYear ?? {}).map(
+                (y) => ({
+                  name: `methodByYear.${y}`,
+                  label: `Income tax method — ${y}${y === s.taxYear.year ? " (active tax year)" : ""}`,
+                  kind: "select" as const,
+                  value: incomeTaxMethodForYear(
+                    {
+                      year: s.taxYear.year,
+                      incomeTaxMethod: s.taxYear.incomeTaxMethod,
+                      incomeTaxMethodsByYear: s.taxYear.incomeTaxMethodsByYear ?? {},
+                    },
+                    y,
+                  ),
+                  options: [
+                    { value: "EIGHT_PERCENT", label: INCOME_TAX_METHOD_LABELS.EIGHT_PERCENT },
+                    { value: "GRADUATED", label: INCOME_TAX_METHOD_LABELS.GRADUATED },
+                  ],
+                  hint:
+                    y === s.taxYear.year
+                      ? "Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A."
+                      : "Saving another year’s method leaves other years untouched.",
+                  group: "Income tax method by year",
+                }),
+              ),
               {
                 name: "booksType",
                 label: "Books of accounts type",
@@ -160,7 +184,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Holiday list (YYYY-MM-DD [regular|special] [name])",
                 kind: "lines",
                 value: formatHolidayLines(s.taxYear.holidays ?? []),
-                hint: "Editable. Due dates on a weekend or holiday move to the next working day (RMC 65-2016). Seeded with 2026 PH regular and special holidays.",
+                hint: "Editable. Seeded with 2026 only — add 2025 / 2027 (and later) yourself; the calendar warns when a year has no holidays. Due dates on a weekend or holiday move to the next working day (RMC 65-2016).",
                 full: true,
               },
             ]}

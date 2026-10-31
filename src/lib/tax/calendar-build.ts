@@ -3,6 +3,7 @@
 import { csvCell } from "../books/csv";
 import {
   TAX_CALENDAR_APPLIES,
+  TAX_CALENDAR_DUE_UNCONFIRMED_NOTE,
   TAX_CALENDAR_SAWT_TASK,
   TAX_CALENDAR_STATUS,
   TAX_CALENDAR_UPCOMING_DAYS,
@@ -22,11 +23,17 @@ import {
 import {
   TAX_CALENDAR_OBLIGATIONS,
   defaultTaxCalendarSettings,
+  obligationByKey,
   type ObligationSettingsRow,
   type TaxCalendarObligationKey,
   type TaxCalendarSettingsShape,
 } from "./calendar-obligations";
-import type { TaxHoliday } from "./holidays";
+import {
+  holidaysNotSetBanner,
+  yearsMissingHolidays,
+  ymdYearMissingHolidays,
+  type TaxHoliday,
+} from "./holidays";
 import { incomeTaxMethodForYear, isEightPercent, isGraduated } from "./income-tax-method";
 
 export type { ObligationSettingsRow, TaxCalendarSettingsShape };
@@ -72,6 +79,11 @@ export type TaxCalendarRow = {
   notApplicable: boolean;
   /** Tax year used for method resolution (filing year or TY). */
   taxYearForMethod: number;
+  /**
+   * True when the due date's calendar year has no holiday list — weekend-only
+   * roll may leave the date early. Show as unconfirmed; do not invent holidays.
+   */
+  dueUnconfirmed: boolean;
 };
 
 export type BuildCalendarInput = {
@@ -130,7 +142,27 @@ function overrideFor(
   key: TaxCalendarObligationKey,
 ): OwnerDueOverrides {
   const row = settings.obligations[key];
+  const schedule = obligationByKey(key).schedule;
+  // Stale Settings may still carry 2551q.dueDay: 15 from the old catalog —
+  // days_after_quarter_end ignores dueDay (see generateOccurrences).
+  if (schedule.kind === "days_after_quarter_end") {
+    return { dueDay: null, dueMonth: null };
+  }
   return { dueDay: row?.dueDay ?? null, dueMonth: row?.dueMonth ?? null };
+}
+
+/** Years in the build window (plus one for spillover dues) with no holidays. */
+export function missingHolidayYearsForWindow(
+  holidays: readonly TaxHoliday[],
+  fromYear: number,
+  toYear: number,
+): number[] {
+  // Due dates can land in toYear+1 (e.g. Q4 → Jan); include that year too.
+  return yearsMissingHolidays(holidays, fromYear, toYear + 1);
+}
+
+export function missingHolidaysBanners(missingYears: readonly number[]): string[] {
+  return missingYears.map(holidaysNotSetBanner);
 }
 
 function isEnabled(settings: TaxCalendarSettingsShape, key: TaxCalendarObligationKey): boolean {
@@ -264,6 +296,7 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
     incomeTaxMethod: "EIGHT_PERCENT" as IncomeTaxMethod,
     incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" as IncomeTaxMethod },
   };
+  const missingHolidayYearSet = new Set(missingHolidayYearsForWindow(holidays, fromYear, toYear));
 
   const rows: TaxCalendarRow[] = [];
 
@@ -322,6 +355,11 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         tasks.push(TAX_CALENDAR_SAWT_TASK);
       }
 
+      const dueUnconfirmed =
+        !!occ.dueYmd &&
+        (ymdYearMissingHolidays(occ.dueYmd, missingHolidayYearSet) ||
+          ymdYearMissingHolidays(occ.legalDueYmd, missingHolidayYearSet));
+
       rows.push({
         obligationKey: def.key,
         occurrenceKey: occ.occurrenceKey,
@@ -358,6 +396,7 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         tasks,
         notApplicable,
         taxYearForMethod: taxYear,
+        dueUnconfirmed,
       });
     }
   }

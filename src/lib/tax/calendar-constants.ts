@@ -34,6 +34,12 @@ export const TAX_CALENDAR_OVERDUE_SECTION_HINT = "Already filed? Mark as done.";
 /** Toggle label for forms that do not apply. */
 export const TAX_CALENDAR_SHOW_NOT_APPLICABLE = "Show forms that don't apply";
 
+/**
+ * Shown under a due date when that calendar year has no holiday list
+ * (weekend-only roll may leave the date early). Exact stem shared with the banner.
+ */
+export const TAX_CALENDAR_DUE_UNCONFIRMED_NOTE = "unconfirmed — holidays not set for this year";
+
 /** Status labels shown on each row (exact wording). */
 export const TAX_CALENDAR_STATUS = {
   upcoming: "Upcoming",

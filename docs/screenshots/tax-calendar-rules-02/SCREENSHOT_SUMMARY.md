@@ -100,6 +100,16 @@ App: http://127.0.0.1:3000
 - **Holidays List**: In settings tax-year tab but below fold, not captured in 05 screenshot
 - **2551Q/2550Q Muted**: Mentioned in requirements but not visible in N/A toggle screenshot (may require 8% tax year context to trigger)
 
+## CTO review fix screenshots (Oct 31, 2026)
+
+- **13-missing-holidays-banner-1280.png** ✓
+  - Yellow banners: "Holidays for 2025/2027/2028 not set, dates may be early"
+  - Due column note: "unconfirmed — holidays not set for this year"
+- **14-settings-method-selects-1280.png** ✓
+  - Per-year Income tax method selects for 2025 / 2026 (active) / 2027 — no JSON textarea
+- **15-header-books-tabs-360.png** ✓
+  - 360px topbar + search + Books pill tabs (Tax calendar active)
+
 ## Screenshot Locations
 All screenshots saved to BOTH:
 1. `/opt/cursor/artifacts/screenshots/tax-calendar-rules-02/`

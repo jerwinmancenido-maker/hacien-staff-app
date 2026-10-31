@@ -313,23 +313,13 @@ export function generateOccurrences(
     }
     case "days_after_quarter_end": {
       // e.g. 2551Q under Graduated: 25 days after quarter end.
+      // Ignore owner dueDay — stale Settings from the old quarterly_after_end
+      // seed (dueDay: 15) must not replace catalog daysAfter.
       for (let year = fromYear; year <= toYear; year++) {
         for (const q of [1, 2, 3, 4] as const) {
           const endMonth = q * 3;
           const endYmd = lastDayOfMonth(year, endMonth);
-          const raw =
-            override?.dueDay != null
-              ? (() => {
-                  let dueMonth = endMonth + 1;
-                  let dueYear = year;
-                  if (dueMonth > 12) {
-                    dueMonth -= 12;
-                    dueYear += 1;
-                  }
-                  return ymdOnOrLast(dueYear, dueMonth, override.dueDay);
-                })()
-              : addDaysYmd(endYmd, schedule.daysAfter);
-          push(`${year}-Q${q}`, periodQuarterLabel(year, q), raw);
+          push(`${year}-Q${q}`, periodQuarterLabel(year, q), addDaysYmd(endYmd, schedule.daysAfter));
         }
       }
       break;

@@ -12,6 +12,8 @@ import {
   buildTaxCalendarRows,
   buildTaxCalendarSections,
   defaultTaxCalendarSettings,
+  missingHolidayYearsForWindow,
+  missingHolidaysBanners,
   type CompletionRow,
   type TaxCalendarRow,
   type TaxCalendarSettingsShape,
@@ -23,6 +25,21 @@ import {
   type TaxCalendarObligationKey,
 } from "../tax/calendar-obligations";
 import { normalizeHolidays, type TaxHoliday } from "../tax/holidays";
+
+/** Drop stale 2551q.dueDay from older Settings snapshots (was 15 under old catalog). */
+export function sanitizeTaxCalendarSettings(
+  settings: TaxCalendarSettingsShape,
+): TaxCalendarSettingsShape {
+  const row = settings.obligations["2551q"];
+  if (!row || row.dueDay == null) return settings;
+  return {
+    ...settings,
+    obligations: {
+      ...settings.obligations,
+      "2551q": { ...row, dueDay: null, dueMonth: null },
+    },
+  };
+}
 
 function parseOccurrenceKey(occurrenceKey: string): {
   obligationKey: TaxCalendarObligationKey;
@@ -93,6 +110,10 @@ export type ListTaxCalendarResult = {
   holidays: TaxHoliday[];
   booksType: BooksOfAccountsType | null;
   incomeTaxMethod: IncomeTaxMethod;
+  /** Calendar years in the window with no holiday entries (owner must enter). */
+  missingHolidayYears: number[];
+  /** Banner lines for missing holiday years. */
+  missingHolidayBanners: string[];
 };
 
 export async function listTaxCalendar(
@@ -105,7 +126,9 @@ export async function listTaxCalendar(
 ): Promise<ListTaxCalendarResult> {
   assertCan(actor, "view_books");
   const snap = await getSettingsSnapshot();
-  const settings = snap.settings.taxCalendar ?? defaultTaxCalendarSettings();
+  const settings = sanitizeTaxCalendarSettings(
+    snap.settings.taxCalendar ?? defaultTaxCalendarSettings(),
+  );
   const taxYear = snap.settings.taxYear;
   const completions = await loadActiveCompletions();
   const now = opts.now ?? new Date();
@@ -114,6 +137,7 @@ export async function listTaxCalendar(
   const fromYear = thisYear - 1;
   const toYear = thisYear + 1;
   const holidays = normalizeHolidays(taxYear.holidays ?? []);
+  const missingHolidayYears = missingHolidayYearsForWindow(holidays, fromYear, toYear);
   const showNotApplicable = opts.showNotApplicable === true;
   const quartersWith2307 = await quartersWithCustomer2307(fromYear, toYear);
 
@@ -153,6 +177,8 @@ export async function listTaxCalendar(
     holidays,
     booksType: taxYear.booksType ?? null,
     incomeTaxMethod: taxYear.incomeTaxMethod,
+    missingHolidayYears,
+    missingHolidayBanners: missingHolidaysBanners(missingHolidayYears),
   };
 }
 

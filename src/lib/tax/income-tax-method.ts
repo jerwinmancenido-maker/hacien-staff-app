@@ -14,6 +14,12 @@ export type IncomeTaxMethodSettings = {
   incomeTaxMethodsByYear: Record<string, IncomeTaxMethod>;
 };
 
+/** Seed default when no explicit per-year override exists. */
+export function seedIncomeTaxMethodForYear(year: number): IncomeTaxMethod {
+  if (year <= 2026) return INCOME_TAX_METHOD.EIGHT_PERCENT;
+  return INCOME_TAX_METHOD.GRADUATED;
+}
+
 /**
  * Seed rule: 2026 → 8%; 2027 onward → Graduated.
  * Explicit per-year overrides and the active-year field win when set.
@@ -27,8 +33,20 @@ export function incomeTaxMethodForYear(
     return fromMap;
   }
   if (year === settings.year) return settings.incomeTaxMethod;
-  if (year <= 2026) return INCOME_TAX_METHOD.EIGHT_PERCENT;
-  return INCOME_TAX_METHOD.GRADUATED;
+  return seedIncomeTaxMethodForYear(year);
+}
+
+/** Years shown as method selects around the active tax year (and any stored keys). */
+export function incomeTaxMethodSelectYears(
+  activeYear: number,
+  methodsByYear: Record<string, IncomeTaxMethod>,
+): number[] {
+  const years = new Set<number>([activeYear - 1, activeYear, activeYear + 1]);
+  for (const k of Object.keys(methodsByYear)) {
+    const y = Number(k);
+    if (Number.isInteger(y) && y >= 2000 && y <= 2100) years.add(y);
+  }
+  return [...years].sort((a, b) => a - b);
 }
 
 /** Persist the active-year method into the by-year map. */

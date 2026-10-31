@@ -37,7 +37,11 @@ import {
 } from "@/lib/tax/calendar-dates";
 import { buildTaxCalendarIcs, icsEscapeText } from "@/lib/tax/calendar-ics";
 import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
-import { PH_HOLIDAYS_2026 } from "@/lib/tax/holidays";
+import {
+  holidaysNotSetBanner,
+  PH_HOLIDAYS_2026,
+  yearsMissingHolidays,
+} from "@/lib/tax/holidays";
 import { incomeTaxMethodForYear } from "@/lib/tax/income-tax-method";
 import {
   COLLECTED_REFERENCE_HINT,
@@ -47,6 +51,11 @@ import {
 } from "@/lib/tax/constants";
 import { booksEnabledFromEnv } from "@/lib/books/features";
 import { filterDealsNavItems } from "@/components/Sidebar";
+import {
+  missingHolidayYearsForWindow,
+  missingHolidaysBanners,
+} from "@/lib/tax/calendar-build";
+import { sanitizeTaxCalendarSettings } from "@/lib/services/tax-calendar";
 
 function user(roles: Role[]): PermissionUser {
   return { ...roleFlags(roles), active: true, canSeeCosts: false };
@@ -109,7 +118,77 @@ describe("view_books + booksEnabled gate tax calendar", () => {
   });
 });
 
+describe("HIGH: missing holiday years banner + unconfirmed dues", () => {
+  it("2025 and 2027 are missing when only 2026 holidays are seeded", () => {
+    expect(yearsMissingHolidays(PH_HOLIDAYS_2026, 2025, 2027)).toEqual([2025, 2027]);
+    expect(missingHolidayYearsForWindow(PH_HOLIDAYS_2026, 2025, 2026)).toEqual([2025, 2027]);
+    expect(missingHolidaysBanners([2025, 2027])).toEqual([
+      holidaysNotSetBanner(2025),
+      holidaysNotSetBanner(2027),
+    ]);
+    expect(holidaysNotSetBanner(2025)).toBe("Holidays for 2025 not set, dates may be early");
+  });
+
+  it("marks dues in years without holidays as unconfirmed; 2026 dues stay confirmed", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2025,
+        toYear: 2027,
+        holidays: PH_HOLIDAYS_2026,
+        incomeTax: {
+          year: 2026,
+          incomeTaxMethod: "EIGHT_PERCENT",
+          incomeTaxMethodsByYear: {
+            "2025": "EIGHT_PERCENT",
+            "2026": "EIGHT_PERCENT",
+            "2027": "GRADUATED",
+          },
+        },
+      }),
+    );
+    const q3 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q3");
+    expect(q3?.dueYmd).toBe("2026-11-16");
+    expect(q3?.dueUnconfirmed).toBe(false);
+
+    const annual2027 = rows.find((r) => r.occurrenceKey === "1701a|TY2026");
+    // Due Apr 15 2027 — 2027 holidays not set
+    expect(annual2027?.dueYmd?.startsWith("2027-")).toBe(true);
+    expect(annual2027?.dueUnconfirmed).toBe(true);
+  });
+});
+
 describe("rule 1: weekend/holiday roll (RMC 65-2016) + file-early hint", () => {
+  it("rolls across year boundary when Dec 31 and Jan 1 are holidays", () => {
+    const holidays = [
+      { ymd: "2026-12-31", kind: "special" as const, name: "New Year's Eve" },
+      { ymd: "2027-01-01", kind: "regular" as const, name: "New Year's Day" },
+    ];
+    // 2026-12-31 Thu holiday → 2027-01-01 Fri holiday → 2027-01-02 Sat → 2027-01-03 Sun → Mon Jan 4
+    expect(nextWorkingDay("2026-12-31", holidays)).toBe("2027-01-04");
+    expect(workingDayRule("2026-12-31", holidays).dueYmd).toBe("2027-01-04");
+  });
+
+  it("rolls through back-to-back Maundy Thursday → Black Saturday chain", () => {
+    // 2026-04-02 Thu, 04-03 Fri, 04-04 Sat (all non-working) → Mon Apr 6
+    expect(nextWorkingDay("2026-04-02", PH_HOLIDAYS_2026)).toBe("2026-04-06");
+    expect(nextWorkingDay("2026-04-03", PH_HOLIDAYS_2026)).toBe("2026-04-06");
+    expect(nextWorkingDay("2026-04-04", PH_HOLIDAYS_2026)).toBe("2026-04-06");
+  });
+
+  it("leap-year Feb 29 weekend/holiday roll", () => {
+    // 2028 is a leap year; 2028-02-29 is Wednesday.
+    expect(ymdOnOrLast(2028, 2, 31)).toBe("2028-02-29");
+    expect(manilaWeekday("2028-02-29")).toBe(2);
+    expect(workingDayRule("2028-02-29", []).dueYmd).toBe("2028-02-29");
+    // If due were Sat 2028-02-26 → Mon Feb 28 (still leap Feb)
+    expect(manilaWeekday("2028-02-26")).toBe(6);
+    expect(nextWorkingDay("2028-02-26", [])).toBe("2028-02-28");
+    // Feb 29 + holiday that day → Mar 1
+    expect(nextWorkingDay("2028-02-29", [{ ymd: "2028-02-29", kind: "regular" }])).toBe("2028-03-01");
+  });
+
   it("Q3 2026 1701Q shows Mon Nov 16, 2026 (Sun Nov 15 rolled)", () => {
     expect(manilaWeekday("2026-11-15")).toBe(0);
     expect(isWeekendYmd("2026-11-15")).toBe(true);
@@ -185,6 +264,7 @@ describe("rule 2: income tax method 8% vs Graduated form sets", () => {
         fromYear: 2027,
         toYear: 2027,
         incomeTax: incomeTaxGraduated,
+        holidays: [], // 2027 has no seed holidays
       }),
     );
     const q1 = rows.find((r) => r.occurrenceKey === "2551q|2027-Q1");
@@ -194,10 +274,33 @@ describe("rule 2: income tax method 8% vs Graduated form sets", () => {
     expect(q1?.legalDueYmd).toBe("2027-04-25");
     expect(manilaWeekday("2027-04-25")).toBe(0);
     expect(q1?.dueYmd).toBe("2027-04-26");
+    expect(q1?.dueUnconfirmed).toBe(true);
     expect(rows.some((r) => r.obligationKey === "1701")).toBe(true);
     expect(rows.some((r) => r.obligationKey === "1701a")).toBe(true);
     const annualNote = rows.find((r) => r.obligationKey === "1701")?.appliesNote;
     expect(annualNote).toMatch(/1701 or 1701A/);
+  });
+
+  it("ignores stale Settings 2551q.dueDay: 15 so Graduated Q1 2027 is 2027-04-26", () => {
+    const settings = defaultTaxCalendarSettings();
+    settings.obligations["2551q"] = { enabled: true, dueDay: 15, dueMonth: null };
+    expect(sanitizeTaxCalendarSettings(settings).obligations["2551q"].dueDay).toBeNull();
+
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        settings,
+        view: "all",
+        now: new Date("2027-02-01T08:00:00.000Z"),
+        fromYear: 2027,
+        toYear: 2027,
+        incomeTax: incomeTaxGraduated,
+        holidays: [],
+      }),
+    );
+    const q1 = rows.find((r) => r.occurrenceKey === "2551q|2027-Q1");
+    // Must NOT be 2027-04-15 (stale day-of-month override).
+    expect(q1?.legalDueYmd).toBe("2027-04-25");
+    expect(q1?.dueYmd).toBe("2027-04-26");
   });
 
   it("8% with showNotApplicable shows 2551Q as N/A (never overdue, no mark done path)", () => {
@@ -476,15 +579,18 @@ describe("seed obligations and settings defaults", () => {
     expect(TAX_CALENDAR_EMPTY_ALL.length).toBeGreaterThan(0);
   });
 
-  it("settings form round-trips taxYear holidays, method, books type", () => {
+  it("settings form round-trips taxYear holidays, method selects, books type", () => {
     const get = (name: string) => {
       const map: Record<string, string> = {
         year: "2026",
         nonVatLimit: "3000000",
         warnFirstPct: "70",
         warnSecondPct: "90",
-        incomeTaxMethod: "EIGHT_PERCENT",
-        incomeTaxMethodsByYear: JSON.stringify({ "2026": "EIGHT_PERCENT" }),
+        incomeTaxMethodsByYearPrior: JSON.stringify({ "2026": "EIGHT_PERCENT" }),
+        methodByYearYears: "2025,2026,2027",
+        "methodByYear.2025": "EIGHT_PERCENT",
+        "methodByYear.2026": "EIGHT_PERCENT",
+        "methodByYear.2027": "GRADUATED",
         booksType: "loose_leaf",
         holidays: "2026-01-01 regular New Year's Day\n2026-02-17 special Chinese New Year",
       };
@@ -499,6 +605,47 @@ describe("seed obligations and settings defaults", () => {
       { ymd: "2026-02-17", kind: "special", name: "Chinese New Year" },
     ]);
     expect(parsed.incomeTaxMethodsByYear["2026"]).toBe("EIGHT_PERCENT");
+    expect(parsed.incomeTaxMethodsByYear["2027"]).toBe("GRADUATED");
+  });
+
+  it("saving 2027 Graduated leaves 2026 EIGHT_PERCENT untouched", () => {
+    const get = (name: string) => {
+      const map: Record<string, string> = {
+        year: "2027",
+        nonVatLimit: "3000000",
+        warnFirstPct: "70",
+        warnSecondPct: "90",
+        incomeTaxMethodsByYearPrior: JSON.stringify({ "2026": "EIGHT_PERCENT" }),
+        methodByYearYears: "2026,2027,2028",
+        "methodByYear.2026": "EIGHT_PERCENT",
+        "methodByYear.2027": "GRADUATED",
+        "methodByYear.2028": "GRADUATED",
+        booksType: "",
+        holidays: "",
+      };
+      return map[name] ?? null;
+    };
+    const parsed = settingsSchema.shape.taxYear.parse(settingsValueFromForm("taxYear", get));
+    expect(parsed.year).toBe(2027);
+    expect(parsed.incomeTaxMethod).toBe("GRADUATED");
+    expect(parsed.incomeTaxMethodsByYear["2026"]).toBe("EIGHT_PERCENT");
+    expect(parsed.incomeTaxMethodsByYear["2027"]).toBe("GRADUATED");
+  });
+
+  it("rejects non-year keys in incomeTaxMethodsByYear with a clear error", () => {
+    const res = settingsSchema.shape.taxYear.safeParse({
+      year: 2026,
+      nonVatLimit: 3_000_000,
+      warnFirstPct: 70,
+      warnSecondPct: 90,
+      incomeTaxMethod: "EIGHT_PERCENT",
+      incomeTaxMethodsByYear: { nope: "EIGHT_PERCENT" },
+      holidays: [],
+      booksType: null,
+    });
+    expect(res.success).toBe(false);
+    if (res.success) throw new Error("expected fail");
+    expect(JSON.stringify(res.error.issues)).toMatch(/four-digit year/i);
   });
 
   it("settings form round-trips taxCalendar including 1701a", () => {

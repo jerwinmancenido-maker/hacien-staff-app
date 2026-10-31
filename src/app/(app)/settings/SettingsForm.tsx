@@ -11,7 +11,7 @@ import type { FormState } from "@/lib/validation/forms";
 export type FieldSpec = {
   name: string;
   label: string;
-  kind: "number" | "text" | "checkbox" | "lines" | "textarea" | "select";
+  kind: "number" | "text" | "checkbox" | "lines" | "textarea" | "select" | "hidden";
   value: string | number | boolean | string[];
   hint?: string;
   prefix?: string;
@@ -70,6 +70,9 @@ export function SettingsForm({
         <input type="hidden" name="baseVersionId" value={versionId} />
         <div className="form-grid">
           {fields.map((f, i) => {
+            if (f.kind === "hidden") {
+              return <input key={f.name} type="hidden" name={f.name} value={valueOf(f)} />;
+            }
             const groupHeader = f.group && f.group !== fields[i - 1]?.group ? <h3 className="section-title">{f.group}</h3> : null;
             const err = e[f.name];
             const control =
