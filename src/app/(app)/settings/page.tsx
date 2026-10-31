@@ -184,6 +184,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.cashEnabled,
                 hint: "OFF by default. Turn on for staging to use /cash. Or set env CASH_ENABLED=true (env wins when set).",
               },
+              {
+                name: "booksEnabled",
+                label: "Enable Books (read-only registers / export)",
+                kind: "checkbox",
+                value: s.features.booksEnabled,
+                hint: "OFF by default. Turn on for staging to use /books. Or set env BOOKS_ENABLED=true (env wins when set). Draft BIR format — confirm with accountant/RDO.",
+              },
             ]}
           />
         )}

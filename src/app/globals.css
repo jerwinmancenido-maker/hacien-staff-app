@@ -574,8 +574,12 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: 6px 10px;
-  overflow: auto;
+  overflow: auto; /* vertical + horizontal (phone: sideways scroll) */
   max-height: calc(100vh - 260px);
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap table.list {
+  min-width: 640px; /* wider than 360px phone so .table-wrap scrolls sideways */
 }
 /* Cost & margin purchases: keep money columns readable on narrow viewports. */
 .table-wrap.cost-margin-purchases {
@@ -2559,6 +2563,64 @@ button.contact-card-add {
   .statement-doc table { page-break-inside: auto; }
   .statement-doc tr { page-break-inside: avoid; }
 }
+
+/* ---------- Books registers (Part 7b) ---------- */
+.books-draft-stamp {
+  margin-top: 6px;
+  color: var(--amber, #b45309);
+  font-weight: 600;
+}
+.books-register-doc .books-register-page {
+  margin-top: 1rem;
+}
+.books-register-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11pt;
+}
+.books-register-table th,
+.books-register-table td {
+  border: 1px solid #222;
+  padding: 4px 6px;
+  vertical-align: top;
+}
+.books-register-table thead th {
+  background: #f3f3f0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.books-register-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.books-register-table tfoot .books-page-total td {
+  font-weight: 600;
+  background: #fafaf8;
+}
+.books-period-total {
+  display: flex;
+  gap: 1.5rem;
+  align-items: baseline;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid #222;
+  font-size: 12pt;
+}
+@media print {
+  .books-register-page {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .books-register-table thead {
+    display: table-header-group;
+  }
+  .books-register-table tr {
+    break-inside: avoid;
+  }
+}
+
 
 /* ---------- Professional print layout (shared) ---------- */
 .print-shell-letter .print-toolbar,

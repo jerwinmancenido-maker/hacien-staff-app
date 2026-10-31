@@ -76,6 +76,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return {
         payablesEnabled: checked(get("payablesEnabled")),
         cashEnabled: checked(get("cashEnabled")),
+        booksEnabled: checked(get("booksEnabled")),
       };
     case "print": {
       const bankCount = Math.max(0, Number(get("bankCount") ?? "0") || 0);

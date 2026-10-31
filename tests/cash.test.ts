@@ -205,6 +205,31 @@ describe("ledger running balance + CSV", () => {
     expect(csv).toContain("0.30");
     expect(csv.split("\n")[0]).toMatch(/Date,Type,Number/);
   });
+
+  it("CSV uses Books csvCell: formula cells escaped, plain negatives numeric", () => {
+    const rows = buildLedger({
+      openingBalance: "-500.00",
+      openingDate: "2026-04-01",
+      entries: [
+        {
+          id: "x",
+          kind: "COLLECTION",
+          number: "CR-1",
+          date: "2026-04-02",
+          amount: "10.00",
+          direction: "IN",
+          description: "=1+1",
+          href: null,
+        },
+      ],
+    });
+    const csv = ledgerToCsv(rows);
+    // Description starting with = must get the leading apostrophe
+    expect(csv).toContain("'=1+1");
+    // Plain numeric opening/running balances stay numeric (no apostrophe)
+    expect(csv).toMatch(/(^|,)-500\.00(,|$)/m);
+    expect(csv).not.toMatch(/'-500\.00/);
+  });
 });
 
 describe("ymd helpers", () => {

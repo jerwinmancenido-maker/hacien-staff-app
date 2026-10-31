@@ -78,7 +78,7 @@ export default async function HomePage() {
       </div>
       <div className="card">
         <h2>Coming next</h2>
-        <div className="muted">Quotes, Sales Orders, Supplier POs, Billing &amp; Collections and Books are on the way.</div>
+        <div className="muted">More staff tools are on the way. Books (when enabled) is a read-only export of existing records.</div>
       </div>
     </>
   );

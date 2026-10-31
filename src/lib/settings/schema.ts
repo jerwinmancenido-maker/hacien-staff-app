@@ -123,10 +123,11 @@ export const settingsSections = {
   collections: z.object({
     overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),
   }),
-  // Feature flags (OFF by default). Staging: turn on here or set PAYABLES_ENABLED / CASH_ENABLED.
+  // Feature flags (OFF by default). Staging: turn on here or set PAYABLES_ENABLED / CASH_ENABLED / BOOKS_ENABLED.
   features: z.object({
     payablesEnabled: z.boolean(),
     cashEnabled: z.boolean(),
+    booksEnabled: z.boolean(),
   }),
   // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
   print: z.object({

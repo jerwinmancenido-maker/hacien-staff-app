@@ -13,6 +13,7 @@ type Item = {
   adminOnly?: boolean;
   costsOnly?: boolean;
   editOnly?: boolean;
+  booksOnly?: boolean;
   cashOnly?: boolean;
   payablesOnly?: boolean;
 };
@@ -31,7 +32,7 @@ const LATER: Item[] = [
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
   { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },
   { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
-  { href: "/books", label: "Books", icon: <BookIcon />, soon: true },
+  { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
 ];
 
 const ADMIN: Item[] = [
@@ -44,20 +45,35 @@ type DealsNavFlags = {
   canEdit?: boolean;
   cashEnabled?: boolean;
   payablesEnabled?: boolean;
+  booksEnabled?: boolean;
+  canViewBooks?: boolean;
 };
 
-/** Pure filter for Deals nav — unit-tested for CASH_ENABLED / PAYABLES_ENABLED gating. */
-export function filterDealsNavItems<T extends { costsOnly?: boolean; editOnly?: boolean; cashOnly?: boolean; payablesOnly?: boolean }>(
-  items: readonly T[],
-  flags: DealsNavFlags,
-): T[] {
-  const { canSeeCosts = false, canEdit = false, cashEnabled = false, payablesEnabled = false } = flags;
+/** Pure filter for Deals nav — unit-tested for CASH / PAYABLES / BOOKS feature gating. */
+export function filterDealsNavItems<
+  T extends {
+    costsOnly?: boolean;
+    editOnly?: boolean;
+    cashOnly?: boolean;
+    payablesOnly?: boolean;
+    booksOnly?: boolean;
+  },
+>(items: readonly T[], flags: DealsNavFlags): T[] {
+  const {
+    canSeeCosts = false,
+    canEdit = false,
+    cashEnabled = false,
+    payablesEnabled = false,
+    booksEnabled = false,
+    canViewBooks = false,
+  } = flags;
   return items.filter(
     (i) =>
       (!i.costsOnly || canSeeCosts) &&
       (!i.editOnly || canEdit) &&
       (!i.cashOnly || cashEnabled) &&
-      (!i.payablesOnly || payablesEnabled),
+      (!i.payablesOnly || payablesEnabled) &&
+      (!i.booksOnly || (booksEnabled && canViewBooks)),
   );
 }
 
@@ -70,12 +86,16 @@ export function SidebarNav({
   isAdmin,
   canSeeCosts = false,
   canEdit = false,
+  canViewBooks = false,
+  booksEnabled = false,
   cashEnabled = false,
   payablesEnabled = false,
 }: {
   isAdmin: boolean;
   canSeeCosts?: boolean;
   canEdit?: boolean;
+  canViewBooks?: boolean;
+  booksEnabled?: boolean;
   cashEnabled?: boolean;
   payablesEnabled?: boolean;
 }) {
@@ -92,7 +112,14 @@ export function SidebarNav({
     <nav aria-label="Main">
       {MAIN.map(render)}
       <div className="nav-label">Deals</div>
-      {filterDealsNavItems(LATER, { canSeeCosts, canEdit, cashEnabled, payablesEnabled }).map(render)}
+      {filterDealsNavItems(LATER, {
+        canSeeCosts,
+        canEdit,
+        cashEnabled,
+        payablesEnabled,
+        booksEnabled,
+        canViewBooks,
+      }).map(render)}
       {isAdmin && (
         <>
           <div className="nav-label">Admin</div>
@@ -130,6 +157,10 @@ const CRUMB_LABELS: Record<string, string> = {
   transfers: "Transfers",
   ledger: "Ledger",
   books: "Books",
+  sales: "Sales",
+  disbursements: "Cash disbursements",
+  purchases: "Purchases",
+  journal: "General journal",
   new: "New",
   edit: "Edit",
 };

@@ -4,6 +4,7 @@ import { isCashEnabled } from "@/lib/cash/features";
 import { isPayablesEnabled } from "@/lib/payables/features";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
+import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
@@ -19,6 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
+  const booksEnabled = await isBooksEnabled();
 
   return (
     <div className="frame">
@@ -31,6 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           isAdmin={can(user, "manage_settings")}
           canSeeCosts={canSeeCosts(user)}
           canEdit={can(user, "edit_data")}
+          canViewBooks={can(user, "view_books")}
+          booksEnabled={booksEnabled}
           cashEnabled={cashEnabled}
           payablesEnabled={payablesEnabled}
         />
