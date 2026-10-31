@@ -108,13 +108,13 @@ export function TaxCalendarForm({
                 <th scope="col">Form</th>
                 <th scope="col">Show</th>
                 <th scope="col" className="tax-cal-settings-day-head">
-                  <span className="tax-cal-th-label">Due day (1–31)</span>
+                  <span className="tax-cal-th-label">Due day of month</span>
                   <div className="hint tax-cal-col-hint" data-shared-hint="due-day">
                     {sharedDayHint}
                   </div>
                 </th>
                 <th scope="col" className="tax-cal-settings-month-head">
-                  <span className="tax-cal-th-label">Due month (1–12)</span>
+                  <span className="tax-cal-th-label">Due month (annual / year-end)</span>
                   <div className="hint tax-cal-col-hint" data-shared-hint="due-month">
                     {monthHint}
                   </div>
@@ -129,6 +129,7 @@ export function TaxCalendarForm({
                 const dueMonthName = `obligations.${def.key}.dueMonth`;
                 const dayHint = obligationDueDayHint(def);
                 const showRowDayHint = !obligationDueDayHintIsShared(def);
+                const showLabel = `Show ${def.form} on the calendar`;
                 const dayErr = e[dueDayName];
                 const monthErr = e[dueMonthName];
                 return (
@@ -148,15 +149,18 @@ export function TaxCalendarForm({
                             name={enabledName}
                             type="checkbox"
                             value="true"
-                            aria-label={`Show ${def.form} on the calendar`}
                             defaultChecked={checked(enabledName, o.enabled)}
                           />
-                          <span className="tax-cal-show-text">Show</span>
+                          {/* Short visible chrome; full main wording for assistive tech. */}
+                          <span className="tax-cal-show-text" aria-hidden="true">
+                            Show
+                          </span>
+                          <span className="sr-only">{showLabel}</span>
                         </label>
                       </td>
-                      <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day (1–31)">
+                      <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day of month">
                         <label className="sr-only" htmlFor={dueDayName}>
-                          Due day of month for {def.form}
+                          Due day of month
                         </label>
                         <input
                           id={dueDayName}
@@ -177,10 +181,10 @@ export function TaxCalendarForm({
                       </td>
                       <td
                         className={`tax-cal-settings-month${monthErr ? " has-error" : ""}`}
-                        data-label="Due month (1–12)"
+                        data-label="Due month (annual / year-end)"
                       >
                         <label className="sr-only" htmlFor={dueMonthName}>
-                          Due month (annual / year-end) for {def.form}
+                          Due month (annual / year-end)
                         </label>
                         <input
                           id={dueMonthName}

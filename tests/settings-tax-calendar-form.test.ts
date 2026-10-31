@@ -93,8 +93,11 @@ describe("TaxCalendarForm markup", () => {
     expect(html).toContain(">Form</th>");
     expect(html).toContain(">Show</th>");
     expect(html).toContain("tax-cal-th-label");
-    expect(html).toContain("Due day (1–31)");
-    expect(html).toContain("Due month (1–12)");
+    // Main field labels (ranges live in shared hints, not the header chrome).
+    expect(html).toContain("Due day of month");
+    expect(html).toContain("Due month (annual / year-end)");
+    expect(html).not.toContain("Due day (1–31)");
+    expect(html).not.toContain("Due month (1–12)");
     expect(html).toContain('data-shared-hint="due-day"');
     expect(html).toContain('data-shared-hint="due-month"');
     expect(html).toContain('data-shared-hints="mobile"');
@@ -127,8 +130,13 @@ describe("TaxCalendarForm markup", () => {
       expect(row).toContain(`data-uses-due-month="1"`);
       expect(row).toContain(`data-schedule="${def.schedule.kind}"`);
 
-      // Show toggle; sourceNote under Form column (not Show).
+      // Show toggle — main accessible wording; short visible "Show" is chrome only.
       expect(row).toContain(`name="obligations.${def.key}.enabled"`);
+      expect(row).toContain(`Show ${def.form} on the calendar`);
+      expect(row).toContain("sr-only");
+      expect(row).not.toMatch(
+        new RegExp(`aria-label="Show ${def.form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} on the calendar"`),
+      );
       expect(row).toContain("tax-cal-settings-form");
       expect(row).toContain("tax-cal-source-note");
       expect(row).toContain(def.sourceNote);
