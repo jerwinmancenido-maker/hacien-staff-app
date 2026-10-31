@@ -152,9 +152,11 @@ export default async function TaxCalendarPage({
                     {!doesNotApply ? <AppliesChip r={r} /> : null}
                   </div>
                   {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
-                  <div className="tax-cal-card-worksheet">
-                    <WorksheetCell r={r} />
-                  </div>
+                  {r.worksheetLink ? (
+                    <div className="tax-cal-card-worksheet">
+                      <Link href={r.worksheetLink}>Open worksheet</Link>
+                    </div>
+                  ) : null}
                   <div className="tax-cal-card-action">
                     <MarkDone r={r} doneDefault={doneDefault} />
                   </div>
@@ -184,14 +186,14 @@ export default async function TaxCalendarPage({
                     key={r.occurrenceKey}
                     className={r.applies === "does_not_apply" || r.greyedOut ? "tax-cal-row-muted" : undefined}
                   >
-                    <td>
+                    <td className="tax-cal-form">
                       <b>{r.form}</b>
                     </td>
                     <td className="tax-cal-desc">
                       <div>{r.description}</div>
                       {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
                     </td>
-                    <td>{r.periodLabel}</td>
+                    <td className="tax-cal-period">{r.periodLabel}</td>
                     <td className="tax-cal-due">
                       <div>{r.dueDisplay}</div>
                       {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
@@ -199,10 +201,10 @@ export default async function TaxCalendarPage({
                     <td>
                       <StatusChip r={r} />
                     </td>
-                    <td>
+                    <td className="tax-cal-applies">
                       <AppliesChip r={r} />
                     </td>
-                    <td>
+                    <td className="tax-cal-worksheet">
                       <WorksheetCell r={r} />
                     </td>
                     <td className="tax-cal-done">

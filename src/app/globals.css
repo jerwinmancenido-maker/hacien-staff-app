@@ -2974,38 +2974,54 @@ button.contact-card-add {
   font-size: 10px;
 }
 .tax-cal-table th:nth-child(1),
-.tax-cal-table td:nth-child(1) {
+.tax-cal-table td.tax-cal-form {
   width: 7%;
+  white-space: nowrap;
 }
 .tax-cal-table th:nth-child(2),
 .tax-cal-table td.tax-cal-desc {
-  width: 22%;
+  width: 18%;
 }
 .tax-cal-table th:nth-child(3),
-.tax-cal-table td:nth-child(3) {
+.tax-cal-table td.tax-cal-period {
   width: 8%;
+  white-space: nowrap;
 }
 .tax-cal-table th:nth-child(4),
 .tax-cal-table td.tax-cal-due {
-  width: 12%;
+  width: 11%;
   white-space: normal;
 }
 .tax-cal-table th:nth-child(5),
 .tax-cal-table td:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 .tax-cal-table th:nth-child(6),
-.tax-cal-table td:nth-child(6) {
-  width: 14%;
+.tax-cal-table td.tax-cal-applies {
+  width: 17%;
+  padding-right: 16px; /* clear gap before Worksheet so chips never touch the link */
+  overflow: hidden;
+  vertical-align: top;
+}
+.tax-cal-table td.tax-cal-applies .chip {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  height: auto;
+  line-height: 1.25;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  box-sizing: border-box;
 }
 .tax-cal-table th:nth-child(7),
-.tax-cal-table td:nth-child(7) {
-  width: 11%;
+.tax-cal-table td.tax-cal-worksheet {
+  width: 12%;
   white-space: nowrap;
+  padding-left: 12px;
 }
 .tax-cal-table th:nth-child(8),
 .tax-cal-table td.tax-cal-done {
-  width: 16%;
+  width: 18%;
 }
 .tax-cal-desc {
   white-space: normal;
@@ -3013,7 +3029,7 @@ button.contact-card-add {
 .tax-cal-desc .small {
   white-space: normal;
 }
-.tax-cal-table td:nth-child(7) a {
+.tax-cal-table td.tax-cal-worksheet a {
   white-space: nowrap;
   font-size: 12px;
 }
