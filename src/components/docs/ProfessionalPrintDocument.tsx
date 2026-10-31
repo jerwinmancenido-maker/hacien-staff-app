@@ -119,8 +119,8 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
         const position = printablePosition(s.position);
         return (
           <div key={s.role} className="pp-signatory">
+            <div className="pp-sign-line" aria-hidden="true" />
             <div className="pp-sign-role">{s.role}</div>
-            <div className="pp-sign-line" />
             <div className="pp-sign-name">{name ?? "\u00a0"}</div>
             {s.role === "Prepared by" && <div className="pp-sign-position">{position ?? "\u00a0"}</div>}
             {s.role === "Conforme" && (

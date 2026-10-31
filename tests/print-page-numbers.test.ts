@@ -46,6 +46,12 @@ describe("Page X of Y CSS", () => {
     expect(css).toMatch(/\.pp-party-box\s*\{[^}]*border:\s*none/s);
     expect(css).toMatch(/\.pp-totals\s*\{[^}]*background:\s*transparent/s);
     expect(css).toContain("border-top: 1px solid #e5e5e5");
+    // Receipt-style items header (no grey band); upright text; 60mm signature line
+    expect(css).toMatch(/\.pp-items thead th\s*\{[^}]*background:\s*transparent/s);
+    expect(css).not.toMatch(/\.pp-words\s*\{[^}]*font-style:\s*italic/s);
+    expect(css).not.toMatch(/\.pp-thank-you\s*\{[^}]*font-style:\s*italic/s);
+    expect(css).toMatch(/\.pp-sign-line\s*\{[^}]*width:\s*60mm/s);
+    expect(css).toMatch(/\.pp-foot\s*\{[^}]*margin-top:\s*14px/s);
   });
 });
 

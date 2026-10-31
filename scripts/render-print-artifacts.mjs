@@ -82,7 +82,7 @@ function itemsTable(rows) {
   return `<table class="pp-items"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function docArticle({ kind, title, number, date, metaRows, rows, totals, words, notes, tax, qr }) {
+function docArticle({ kind, title, number, date, metaRows, rows, totals, words, notes, tax }) {
   const meta = metaRows.map((m) => `<tr><th>${m[0]}</th><td>${m[1]}</td></tr>`).join("");
   const tot = totals
     .map((t) => `<tr class="${t[2] ? "pp-total-emph" : ""}"><th>${t[0]}</th><td class="num">${peso(t[1])}</td></tr>`)
@@ -107,8 +107,8 @@ function docArticle({ kind, title, number, date, metaRows, rows, totals, words, 
     <section class="pp-pay" aria-label="Payment instructions"><div class="pp-label">Bank / e-wallet details</div>
       <ul><li>Bank: Sample Bank · HACIEN Sample · ****1234</li></ul></section>
     <section class="pp-signatories" aria-label="Signatures">
-      <div class="pp-signatory"><div class="pp-sign-role">Prepared by</div><div class="pp-sign-line"></div><div class="pp-sign-name">Jerwin</div><div class="pp-sign-position">&nbsp;</div></div>
-      <div class="pp-signatory"><div class="pp-sign-role">Conforme</div><div class="pp-sign-line"></div><div class="pp-sign-name-hint">Printed name</div><div class="pp-sign-date">Date</div></div>
+      <div class="pp-signatory"><div class="pp-sign-line" aria-hidden="true"></div><div class="pp-sign-role">Prepared by</div><div class="pp-sign-name">Jerwin</div><div class="pp-sign-position">&nbsp;</div></div>
+      <div class="pp-signatory"><div class="pp-sign-line" aria-hidden="true"></div><div class="pp-sign-role">Conforme</div><div class="pp-sign-name-hint">Printed name</div><div class="pp-sign-date">Date</div></div>
     </section>
   </div>
   <footer class="pp-foot">
