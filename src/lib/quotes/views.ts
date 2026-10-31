@@ -20,6 +20,7 @@ import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
+import { mergeCompanyLetterhead } from "../print/company";
 
 type StoredMoney = {
   contractPrice: string;
@@ -455,10 +456,11 @@ export type PrintDoc = {
 
 const printItem = (i: ItemRow): PrintItem => ({ description: i.description, qty: money(i.qty), unit: i.unit, unitPrice: money(i.unitPrice), total: money(i.total) });
 
-/** Letterhead always from current Settings (pinned version may predate TIN/address). */
-async function companyFor() {
-  const snap = await getSettingsSnapshot();
-  return snap.settings.company;
+/** Pinned-first letterhead; blank pinned fields fall back to current Settings. */
+async function companyFor(settingsVersionId: string) {
+  const latest = await getSettingsSnapshot();
+  const pinned = await getSettingsVersion(settingsVersionId);
+  return mergeCompanyLetterhead(pinned?.settings.company, latest.settings.company);
 }
 
 export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
@@ -476,7 +478,7 @@ export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
     buyerPoNo: q.buyerPoNo,
     buyerPoDate: null,
     deliveryAddress: null,
-    company: await companyFor(),
+    company: await companyFor(q.settingsVersionId),
     customer: { name: q.customer.name, address: await customerBlockAddress(q.customer), tin: q.customer.tin },
     contact: q.contact ? { name: q.contact.name, email: q.contact.email, phone: q.contact.phone } : null,
     items: q.items.map(printItem),
@@ -503,7 +505,7 @@ export async function getSalesOrderPrint(id: string): Promise<PrintDoc | null> {
     buyerPoNo: so.buyerPoNo,
     buyerPoDate: ymd(so.buyerPoDate),
     deliveryAddress: so.deliveryAddress,
-    company: await companyFor(),
+    company: await companyFor(so.settingsVersionId),
     customer: { name: so.customer.name, address: await customerBlockAddress(so.customer), tin: so.customer.tin },
     contact: so.contact ? { name: so.contact.name, email: so.contact.email, phone: so.contact.phone } : null,
     items: so.items.map(printItem),

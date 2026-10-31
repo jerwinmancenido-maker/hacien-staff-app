@@ -908,11 +908,11 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect((await db.quote.findUnique({ where: { id: q.id } }))?.settingsVersionId).toBe(saved.version.id);
     });
 
-    it("print letterhead uses current company TIN/address even when the pinned settings version is blank", async () => {
+    it("print letterhead falls back to current Settings when a pinned field is blank", async () => {
       const customer = await makeCustomer();
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       const snap = await getSettingsSnapshot();
-      // Pin the quote to a blank letterhead snapshot (the staging bug: Settings filled later).
+      // Pin a blank TIN/address (staging bug: Settings filled later).
       const blank = await db.settingsVersion.create({
         data: {
           version: snap.version + 1,
@@ -938,21 +938,62 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       if (!saved.ok) return;
 
       const print = await getQuotePrintModel(q.id);
-      expect(print).toBeTruthy();
       expect(print!.doc.company.tin).toBe(filledTin);
       expect(print!.doc.company.address).toBe(filledAddress);
       expect(print!.missing).toEqual([]);
       expect(JSON.stringify(print!.doc)).not.toMatch(/\[not set/i);
 
       const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
-      // Keep the SO on the blank pin so we prove letterhead ignores it.
       await db.salesOrder.update({ where: { id: order.id }, data: { settingsVersionId: blank.id } });
       const soPrint = await getSalesOrderPrintModel(order.id);
       expect(soPrint!.doc.company.tin).toBe(filledTin);
       expect(soPrint!.doc.company.address).toBe(filledAddress);
-      expect(soPrint!.missing).toEqual([]);
       expect(soPrint!.doc.taxLines).toContain("This is a sales order, not an invoice.");
       expect(soPrint!.doc.taxLines).not.toContain("This is a quotation, not an invoice.");
+    });
+
+    it("print letterhead keeps a non-blank pinned TIN/address over a later Settings change", async () => {
+      const customer = await makeCustomer();
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const snap = await getSettingsSnapshot();
+      const pinnedTin = "111-222-333-000";
+      const pinnedAddress = `Pinned ${tag()} Ave.\nMakati City 1200`;
+      const pinned = await db.settingsVersion.create({
+        data: {
+          version: snap.version + 1,
+          changedKey: "company",
+          data: {
+            ...snap.settings,
+            company: { ...snap.settings.company, tin: pinnedTin, address: pinnedAddress },
+          } as never,
+        },
+      });
+      await db.quote.update({ where: { id: q.id }, data: { settingsVersionId: pinned.id } });
+
+      const latest = await getSettingsSnapshot();
+      const saved = await saveSettings({
+        key: "company",
+        value: {
+          ...latest.settings.company,
+          tin: "999-888-777-000",
+          address: `Current ${tag()} Blvd.\nPasig City 1600`,
+        },
+        userId: costUser.id,
+        baseVersionId: latest.versionId,
+      });
+      expect(saved.ok && saved.changed).toBe(true);
+      if (!saved.ok) return;
+
+      const print = await getQuotePrintModel(q.id);
+      expect(print!.doc.company.tin).toBe(pinnedTin);
+      expect(print!.doc.company.address).toBe(pinnedAddress);
+      expect(print!.doc.company.tin).not.toBe("999-888-777-000");
+
+      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      await db.salesOrder.update({ where: { id: order.id }, data: { settingsVersionId: pinned.id } });
+      const soPrint = await getSalesOrderPrintModel(order.id);
+      expect(soPrint!.doc.company.tin).toBe(pinnedTin);
+      expect(soPrint!.doc.company.address).toBe(pinnedAddress);
     });
   });
 

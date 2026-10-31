@@ -21,6 +21,7 @@ function assertCosts(viewer: PermissionUser) {
 }
 import {
   companyContactLine,
+  mergeCompanyLetterhead,
   missingCompanyPrintFields,
   paperSizeFromSettings,
   paymentInstructionsFromSettings,
@@ -70,21 +71,20 @@ const day = (ymdStr: string | null | undefined) =>
   ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—";
 
 /**
- * Letterhead for every professional print.
+ * Letterhead for professional prints.
  *
- * Company name / TIN / address / logo always come from the *current* Settings
- * snapshot — same rule as PO prints. Quote and sales-order rows still pin a
- * `settingsVersionId` for withholding / approval math elsewhere, but that older
- * snapshot often had a blank letterhead; reading it made prints show red
- * "[not set]" even after Settings → Print & company was filled in.
+ * Quote / SO (pinned settingsVersionId): each company letterhead field uses the
+ * pinned value when non-blank, otherwise the current Settings value — so a blank
+ * TIN/address filled in later still prints, but an issued rename/TIN change does
+ * not rewrite older documents on reprint.
  *
- * Print options (paper, banks, notes, input-tax toggle) still prefer the pinned
- * version when the document has one, falling back to current settings.
+ * Billing / collection / statements / PO path via this helper with no pin: current
+ * Settings only. Print options (paper, banks, notes) still prefer the pin when set.
  */
 async function letterhead(settingsVersionId?: string | null) {
   const latest = await getSettingsSnapshot();
   const pinned = settingsVersionId ? await getSettingsVersion(settingsVersionId) : null;
-  const company = latest.settings.company;
+  const company = mergeCompanyLetterhead(pinned?.settings.company, latest.settings.company);
   const print = (pinned ?? latest).settings.print;
   return {
     company: printCompanyBlock(company),
