@@ -14,13 +14,28 @@ export function missingCompanyPrintFields(company: CompanySettings): string[] {
   return missing;
 }
 
-/** Human warning for the Settings page and print toolbar. */
+/** Human warning for the Settings page and print toolbar — names only what is missing. */
 export function missingCompanyWarning(company: CompanySettings): string | null {
-  const missing = missingCompanyPrintFields(company);
+  return missingFieldsPrintWarning(missingCompanyPrintFields(company));
+}
+
+/**
+ * Print toolbar / confirm copy: name only the fields that are actually missing
+ * (TIN, address, or both) — same specificity as main.
+ */
+export function missingFieldsPrintWarning(missing: readonly string[]): string | null {
   if (missing.length === 0) return null;
   if (missing.includes("TIN") && missing.length === 1) return "Add your TIN so it prints on documents.";
   if (missing.includes("address") && missing.length === 1) return "Add your address so it prints on documents.";
-  return `Add your ${missing.join(" and ")} so they print on documents.`;
+  return `Add your ${missing.join(" and ")} so ${missing.length > 1 ? "they" : "it"} print${missing.length > 1 ? "" : "s"} on documents.`;
+}
+
+/** Confirm dialog when printing with missing letterhead fields. */
+export function missingFieldsPrintConfirm(missing: readonly string[]): string | null {
+  if (missing.length === 0) return null;
+  if (missing.includes("TIN") && missing.length === 1) return "TIN is missing. Print anyway?";
+  if (missing.includes("address") && missing.length === 1) return "Address is missing. Print anyway?";
+  return "TIN and address are missing. Print anyway?";
 }
 
 export function printCompanyBlock(company: CompanySettings): PrintCompanyBlock {

@@ -1794,6 +1794,13 @@ pre.json {
   gap: 8px;
   margin-top: 12px;
 }
+.aging-note {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em;
+}
 .aging-bucket {
   font-size: 12px;
 }

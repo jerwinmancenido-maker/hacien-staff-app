@@ -6,7 +6,7 @@ import type { WithholdingTypeValue } from "@/lib/validation/companies";
 /** Customer form field label for withholding type (stored enum unchanged). */
 export const WITHHOLDING_TYPE_FIELD_LABEL = "Does this customer withhold tax from your payment?";
 
-/** Hint under the withholding type field. */
+/** Hint under the withholding type field when the customer withholds (TWA / Government). */
 export const WITHHOLDING_TYPE_FIELD_HINT = "They'll give you a BIR 2307";
 
 /**
@@ -25,3 +25,12 @@ export const WITHHOLDING_TYPE_FORM_ORDER: readonly WithholdingTypeValue[] = [
   "TOP_WITHHOLDING_AGENT",
   "GOVERNMENT",
 ];
+
+/**
+ * BIR 2307 hint only when the customer withholds (TWA or Government).
+ * Never show it for "No, pays in full" (NONE) or an empty pick.
+ */
+export function withholdingTypeFieldHint(type: string): string | null {
+  if (type === "TOP_WITHHOLDING_AGENT" || type === "GOVERNMENT") return WITHHOLDING_TYPE_FIELD_HINT;
+  return null;
+}

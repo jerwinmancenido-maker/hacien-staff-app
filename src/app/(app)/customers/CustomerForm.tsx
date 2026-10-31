@@ -5,10 +5,10 @@ import { useFormAction } from "@/components/useFormAction";
 import type { Customer } from "@prisma/client";
 import { Field } from "@/components/Field";
 import {
-  WITHHOLDING_TYPE_FIELD_HINT,
   WITHHOLDING_TYPE_FIELD_LABEL,
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
+  withholdingTypeFieldHint,
 } from "@/lib/withholding/display";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -60,7 +60,7 @@ export function CustomerForm({
             name="withholdingType"
             required
             error={e.withholdingType}
-            hint={WITHHOLDING_TYPE_FIELD_HINT}
+            hint={withholdingTypeFieldHint(withholding) ?? undefined}
             full
           >
             <select id="withholdingType" name="withholdingType" value={withholding} onChange={(ev) => setWithholding(ev.target.value)}>

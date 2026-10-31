@@ -156,12 +156,12 @@ export async function CustomerOverview({
               </div>
             ))}
           </div>
-          <div className="aging-note faint small" style={{ marginTop: 14 }}>
-            {!ar || Number(ar.aging.total) === 0
-              ? "Nothing billed yet. "
-              : Number(ar.overdue) > 0
-                ? `Overdue ${formatPeso(ar.overdue)}. `
-                : ""}
+          <div className="aging-note faint small">
+            {!ar || Number(ar.aging.total) === 0 ? (
+              <span>Nothing billed yet.</span>
+            ) : Number(ar.overdue) > 0 ? (
+              <span>Overdue {formatPeso(ar.overdue)}.</span>
+            ) : null}
             <Link href={`/print/statements/${customer.id}`}>Print statement</Link>
           </div>
         </div>

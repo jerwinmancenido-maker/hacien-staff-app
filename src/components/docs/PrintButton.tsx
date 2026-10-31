@@ -1,5 +1,7 @@
 "use client";
 
+import { missingFieldsPrintConfirm } from "@/lib/print/company";
+
 /** Print / Save PDF. When company TIN/address are missing, confirm before printing. */
 export function PrintButton({ missing }: { missing?: string[] }) {
   return (
@@ -7,8 +9,9 @@ export function PrintButton({ missing }: { missing?: string[] }) {
       type="button"
       className="btn"
       onClick={() => {
-        if (missing && missing.length > 0) {
-          const ok = window.confirm("TIN and address are missing. Print anyway?");
+        const confirmMsg = missingFieldsPrintConfirm(missing ?? []);
+        if (confirmMsg) {
+          const ok = window.confirm(confirmMsg);
           if (!ok) return;
         }
         window.print();
