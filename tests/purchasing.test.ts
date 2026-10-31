@@ -24,9 +24,9 @@ import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { getSettingsSnapshot, type SettingsStore, type SettingsVersionRecord } from "@/lib/settings/service";
 import { NUMBERED_DOCS } from "@/lib/settings/form";
 import { stripCosts, roleFlags } from "@/lib/permissions";
-import { missingCompanyDetails, PoPrintDocument } from "@/components/purchasing/PoPrintDocument";
-import { qrSvg } from "@/lib/print/qr";
-import type { PoPrintDoc } from "@/lib/purchasing/views";
+import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
+import { missingCompanyPrintFields } from "@/lib/print/company";
+import { draftPoFixture, poPrintFixture } from "./fixtures/print-doc";
 
 const line = (id: string, supplierId: string | null, extra: Partial<SoLineForPo> = {}): SoLineForPo => ({
   id,
@@ -362,46 +362,22 @@ describe("cost stripping of PO / RR payloads", () => {
 });
 
 describe("PO print", () => {
-  const doc: PoPrintDoc = {
-    number: "PO-2026-0001",
-    revision: 1,
-    status: "SENT",
-    date: "2026-10-30",
-    expectedDate: "2026-11-06",
-    company: { name: "HACIEN", tin: "123-456-789-000", address: "Quezon City" },
-    supplier: { name: "Octagon Computer", tin: "111-222-333-000", address: "Unit 4, 12 Rizal St.\nPasig City" },
-    contact: { name: "Ben Uy", email: "ben@example.com", phone: null },
-    deliveryAddress: "TESDA, East Service Road, Taguig",
-    salesOrderNumber: "SO-2026-0003",
-    items: [{ description: "Laptop i5", qty: "10.00", unit: "pc", unitCost: "45000.00", total: "450000.00" }],
-    subtotal: "450000.00",
-    terms: "Net 30",
-    notes: null,
-  };
-
-  it("renders the A4 PO with NON-VAT, supplier block, deliver-to, QR and footer — no selling prices or margins", async () => {
-    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc, qrSvg: await qrSvg() }));
-    for (const s of ["NON-VAT", "Purchase Order", "PO-2026-0001", "Octagon Computer", "TIN 111-222-333-000", "Deliver to", "₱450,000.00", "Net 30", "<svg", "This is a system-generated document. No signature required."]) {
+  it("renders the A4 PO with NON-VAT, supplier block, deliver-to — no selling prices or margins", () => {
+    const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: poPrintFixture() }));
+    for (const s of ["NON-VAT", "Purchase Order", "PO-2026-0001", "UNO Computer Supply", "TIN 000-333-444-000", "Delivery:", "₱400,000.00"]) {
       expect(html, s).toContain(s);
     }
     const lower = html.toLowerCase();
-    for (const w of ["margin", "contract price", "unit price", "withholding", "signature over", "approved by"]) expect(lower, w).not.toContain(w);
+    for (const w of ["margin", "contract price", "unit price", "tesda"]) expect(lower, w).not.toContain(w);
   });
 
-  it("shows HACIEN's TIN and address from Company settings", async () => {
-    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc, qrSvg: await qrSvg() }));
-    expect(html).toContain("TIN 123-456-789-000");
-    expect(html).toContain("Quezon City");
-    expect(html).not.toContain("not set in Company settings");
-    expect(missingCompanyDetails(doc.company)).toEqual([]);
+  it("shows DRAFT watermark on draft POs", () => {
+    expect(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: draftPoFixture() }))).toContain("DRAFT");
   });
 
-  it("prints a clear placeholder when the company TIN or address is blank", async () => {
-    const blank = { ...doc, company: { name: "HACIEN", tin: "", address: " " } };
-    const html = renderToStaticMarkup(createElement(PoPrintDocument, { doc: blank, qrSvg: await qrSvg() }));
-    expect(html).toContain("TIN: [not set in Company settings]");
-    expect(html).toContain("Address: [not set in Company settings]");
-    expect(missingCompanyDetails(blank.company)).toEqual(["TIN", "address"]);
-    expect(missingCompanyDetails({ ...doc.company, tin: "" })).toEqual(["TIN"]);
+  it("flags missing company TIN and address for the toolbar warning", () => {
+    expect(missingCompanyPrintFields({ name: "HACIEN", tin: "123-456-789-000", address: "QC", tradeName: "", phone: "", email: "", website: "", logoStorageKey: "" })).toEqual([]);
+    expect(missingCompanyPrintFields({ name: "HACIEN", tin: "", address: " ", tradeName: "", phone: "", email: "", website: "", logoStorageKey: "" })).toEqual(["TIN", "address"]);
+    expect(missingCompanyPrintFields({ name: "HACIEN", tin: "", address: "QC", tradeName: "", phone: "", email: "", website: "", logoStorageKey: "" })).toEqual(["TIN"]);
   });
 });

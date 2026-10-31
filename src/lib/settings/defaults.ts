@@ -16,7 +16,16 @@ export const DEFAULT_SETTINGS: Settings = {
     cashTransfer: { prefix: "TRF", padding: 4, resetYearly: true },
   },
   taxYear: { year: 2026, nonVatLimit: 3_000_000, warnFirstPct: 70, warnSecondPct: 90 },
-  company: { name: "HACIEN", tin: "", address: "" },
+  company: {
+    name: "HACIEN",
+    tradeName: "",
+    tin: "",
+    address: "",
+    phone: "",
+    email: "",
+    website: "",
+    logoStorageKey: "",
+  },
   lists: {
     paymentTerms: ["COD", "Net 15", "Net 30", "Net 60", "50% down, 50% on delivery"],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
@@ -25,4 +34,14 @@ export const DEFAULT_SETTINGS: Settings = {
   invoiceBooklet: { seriesFrom: 1, seriesTo: 500, label: "Booklet 1" },
   collections: { overdueGraceDays: 0 },
   features: { payablesEnabled: false, cashEnabled: false },
+  print: {
+    paperSize: "A4",
+    showInputTaxDisclaimer: true,
+    showReceivingReportCosts: false,
+    quoteTerms: "",
+    deliveryNotes: "",
+    warrantyNotes: "",
+    banks: [],
+    eWallets: [],
+  },
 };

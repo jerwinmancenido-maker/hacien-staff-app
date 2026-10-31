@@ -43,14 +43,19 @@ export default async function ExpenseDetailPage({
         }
         subtitle={`${payee} · ${CASH_DISCLAIMER}`}
         actions={
-          canVoid && (
-            <VoidButton
-              label="Void expense"
-              docLabel={`expense ${e.number}`}
-              body="Voiding removes this expense from the account balance. Give a short reason. The expense number stays used and is never reused."
-              onVoid={voidExpenseAction.bind(null, id)}
-            />
-          )
+          <>
+            <Link className="btn btn-secondary" href={`/print/expenses/${id}`} target="_blank">
+              Print / Save PDF
+            </Link>
+            {canVoid && (
+              <VoidButton
+                label="Void expense"
+                docLabel={`expense ${e.number}`}
+                body="Voiding removes this expense from the account balance. Give a short reason. The expense number stays used and is never reused."
+                onVoid={voidExpenseAction.bind(null, id)}
+              />
+            )}
+          </>
         }
       />
       <CashNav active="expenses" />

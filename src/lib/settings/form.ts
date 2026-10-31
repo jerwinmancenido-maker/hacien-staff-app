@@ -50,7 +50,16 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         warnSecondPct: get("warnSecondPct"),
       };
     case "company":
-      return { name: get("name") ?? "", tin: get("tin") ?? "", address: get("address") ?? "" };
+      return {
+        name: get("name") ?? "",
+        tradeName: get("tradeName") ?? "",
+        tin: get("tin") ?? "",
+        address: get("address") ?? "",
+        phone: get("phone") ?? "",
+        email: get("email") ?? "",
+        website: get("website") ?? "",
+        logoStorageKey: get("logoStorageKey") ?? "",
+      };
     case "lists":
       return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
     case "documents":
@@ -68,6 +77,34 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         payablesEnabled: checked(get("payablesEnabled")),
         cashEnabled: checked(get("cashEnabled")),
       };
+    case "print": {
+      const bankCount = Math.max(0, Number(get("bankCount") ?? "0") || 0);
+      const eWalletCount = Math.max(0, Number(get("eWalletCount") ?? "0") || 0);
+      const banks = Array.from({ length: Math.min(bankCount, 5) }, (_, i) => ({
+        bankName: get(`banks.${i}.bankName`) ?? "",
+        accountName: get(`banks.${i}.accountName`) ?? "",
+        accountLast4: get(`banks.${i}.accountLast4`) ?? "",
+        printFullAccountNumber: checked(get(`banks.${i}.printFullAccountNumber`)),
+        accountNumberFull: get(`banks.${i}.accountNumberFull`) ?? "",
+      })).filter((b) => b.bankName || b.accountName || b.accountLast4 || b.accountNumberFull);
+      const eWallets = Array.from({ length: Math.min(eWalletCount, 5) }, (_, i) => ({
+        provider: get(`eWallets.${i}.provider`) ?? "",
+        accountName: get(`eWallets.${i}.accountName`) ?? "",
+        accountLast4: get(`eWallets.${i}.accountLast4`) ?? "",
+        printFullAccountNumber: checked(get(`eWallets.${i}.printFullAccountNumber`)),
+        accountNumberFull: get(`eWallets.${i}.accountNumberFull`) ?? "",
+      })).filter((b) => b.provider || b.accountName || b.accountLast4 || b.accountNumberFull);
+      return {
+        paperSize: get("paperSize") ?? "A4",
+        showInputTaxDisclaimer: checked(get("showInputTaxDisclaimer")),
+        showReceivingReportCosts: checked(get("showReceivingReportCosts")),
+        quoteTerms: get("quoteTerms") ?? "",
+        deliveryNotes: get("deliveryNotes") ?? "",
+        warrantyNotes: get("warrantyNotes") ?? "",
+        banks,
+        eWallets,
+      };
+    }
   }
 }
 

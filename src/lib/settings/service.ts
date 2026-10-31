@@ -4,6 +4,7 @@
 // The logic is written against a tiny store interface so it can be tested
 // without a database; src/lib/settings/index.ts wires it to Prisma.
 
+import { redactPrintAccountNumbers } from "@/lib/print/account-number";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { settingsSchema, settingsSections, type Settings, type SettingsKey } from "./schema";
 
@@ -54,6 +55,15 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       invoiceBooklet: { ...DEFAULT_SETTINGS.invoiceBooklet, ...(v.data as Partial<Settings>).invoiceBooklet },
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
+      company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
+      print: {
+        ...DEFAULT_SETTINGS.print,
+        ...(v.data as Partial<Settings>).print,
+        showReceivingReportCosts:
+          (v.data as Partial<Settings>).print?.showReceivingReportCosts ?? DEFAULT_SETTINGS.print.showReceivingReportCosts,
+        banks: (v.data as Partial<Settings>).print?.banks ?? DEFAULT_SETTINGS.print.banks,
+        eWallets: (v.data as Partial<Settings>).print?.eWallets ?? DEFAULT_SETTINGS.print.eWallets,
+      },
     }),
   };
 }
@@ -120,12 +130,17 @@ export async function saveSettingsSection<K extends SettingsKey>(
     return { ok: true, version: latest, changed: false };
   }
 
+  // Full receiving-account numbers must never appear in the change-log before/after
+  // columns (they remain in the settings snapshot `data` so prints can use them).
+  const beforeForLog = input.key === "print" ? redactPrintAccountNumbers(before) : before;
+  const afterForLog = input.key === "print" ? redactPrintAccountNumbers(after) : after;
+
   const version = await store.create({
     version: current.version + 1,
     data: { ...current.settings, [input.key]: after },
     changedKey: input.key,
-    before,
-    after,
+    before: beforeForLog,
+    after: afterForLog,
     createdById: input.userId,
   });
   return { ok: true, version, changed: true };
