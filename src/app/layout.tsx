@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 
-/** HACIEN brand kit: Inter (OFL) is the single UI/print font. */
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
+/** Fonts: self-hosted Inter + Archivo Black in public/fonts (see globals.css @font-face). */
 
 export const metadata: Metadata = {
   title: "HACIEN Staff",
@@ -21,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

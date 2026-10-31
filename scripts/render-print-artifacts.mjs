@@ -19,7 +19,11 @@ const require = createRequire(import.meta.url);
 const { createCanvas } = require("canvas");
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-const css = readFileSync(path.join(root, "src/app/globals.css"), "utf8");
+const fontsDir = pathToFileURL(path.join(root, "public/fonts")).href;
+const css = readFileSync(path.join(root, "src/app/globals.css"), "utf8").replaceAll(
+  'url("/fonts/',
+  `url("${fontsDir}/`,
+);
 const logoSrc = pathToFileURL(path.join(root, "public/brand/logo-full.svg")).href;
 
 function shellHtml(inner, title) {
@@ -30,9 +34,10 @@ function shellHtml(inner, title) {
 <title>${title}</title>
 <style>
 ${css}
-body { margin: 0; background: #fff; }
+body { margin: 0; background: #fff; font-family: var(--font); }
 .print-shell { padding: 0; background: #fff; min-height: 0; }
 .pp-page { box-shadow: none; margin: 0; }
+.no-print, .pp-status-row { display: none !important; }
 </style>
 </head>
 <body>

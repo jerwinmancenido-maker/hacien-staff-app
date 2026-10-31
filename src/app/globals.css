@@ -1,6 +1,43 @@
 /* HACIEN Staff App — visual style from docs/design-brief.md.
    Monochrome: black, white, warm greys. Muted status colors only for chips. */
 
+/* Brand kit v1.1: self-hosted Inter (body) + Archivo Black (titles). No CDN. */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Archivo Black";
+  src: url("/fonts/ArchivoBlack-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #f4f4f2;
   --card: #ffffff;
@@ -22,7 +59,7 @@
   --radius: 12px;
   --shadow-frame: 0 10px 40px rgba(21, 21, 21, 0.06), 0 1px 3px rgba(21, 21, 21, 0.04);
   --shadow-pill: 0 1px 2px rgba(21, 21, 21, 0.06), 0 1px 6px rgba(21, 21, 21, 0.04);
-  /* Brand kit tokens (print + UI). Inter via next/font → --font-inter. */
+  /* Brand kit tokens (print + UI). Self-hosted Inter + Archivo Black. */
   --ink: #0a0a0a;
   --white: #ffffff;
   --grey-50: #fafafa;
@@ -34,7 +71,8 @@
   --blue: #2563eb;
   --blue-dark: #1d4ed8;
   --blue-tint: #eff6ff;
-  --font: var(--font-inter), Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Archivo Black", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -2652,7 +2690,7 @@ button.contact-card-add {
 
 
 /* ---------- Professional print layout (shared) ---------- */
-/* One sans-serif family; black/grey + one accent (ink) for the document title. */
+/* Inter body + Archivo Black titles; black/grey + Pixel Blue title square only. */
 .print-shell-letter .print-toolbar,
 .print-shell-letter .print-toolbar-alert {
   width: 8.5in;
@@ -2661,8 +2699,8 @@ button.contact-card-add {
   /* HACIEN brand kit print: ink + greys; Pixel Blue only as title marker. */
   --pp-ink: var(--ink, #0a0a0a);
   --pp-accent: var(--blue, #2563eb);
-  --pp-rule: var(--grey-200, #e5e5e5);
-  --pp-rule-soft: var(--grey-200, #e5e5e5);
+  --pp-rule: #e5e5e5;
+  --pp-rule-soft: #e5e5e5;
   --pp-muted: var(--grey-600, #525252);
   --pp-label: var(--grey-700, #404040);
   --pp-fill: var(--grey-100, #f5f5f5);
@@ -2785,10 +2823,11 @@ button.contact-card-add {
 }
 .pp-title-block h1 {
   margin: 0 0 8px;
+  font-family: var(--font-display);
   font-size: 18pt;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--pp-ink);
   line-height: 1.1;
   display: inline-flex;
@@ -2824,12 +2863,15 @@ button.contact-card-add {
   z-index: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 12px 0;
+  gap: 14px 28px;
+  margin: 14px 0;
+  padding-top: 10px;
+  border-top: 1px solid #e5e5e5;
 }
 .pp-party-box {
-  border: 0.5pt solid var(--pp-rule);
-  padding: 8px 10px;
+  /* No boxes — thin rule + plain spacing (Jerwin: avoid boxy print). */
+  border: none;
+  padding: 0;
   font-size: 9.5pt;
   line-height: 1.4;
   min-height: 4.5em;
@@ -2903,12 +2945,13 @@ button.contact-card-add {
 }
 .pp-totals {
   margin-left: auto;
-  margin-top: 4px;
+  margin-top: 8px;
   border-collapse: collapse;
   font-size: 9.75pt;
   min-width: 52%;
-  background: var(--pp-fill);
+  background: transparent;
   padding: 0;
+  border-top: 1px solid #e5e5e5;
 }
 .pp-totals th {
   text-align: right;
@@ -2924,7 +2967,7 @@ button.contact-card-add {
 .pp-total-emph td {
   font-weight: 700;
   font-size: 10.5pt;
-  border-top: 0.5pt solid var(--pp-rule);
+  border-top: 1px solid #e5e5e5;
   padding-top: 6px;
   color: var(--pp-ink);
 }

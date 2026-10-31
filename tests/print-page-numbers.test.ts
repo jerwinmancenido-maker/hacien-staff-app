@@ -28,8 +28,12 @@ describe("Page X of Y CSS", () => {
     expect(css).toMatch(/display:\s*none\s*!important/);
   });
 
-  it("uses HACIEN brand kit: Inter, ink text, #E5E5E5 rules, #2563EB title pixel only", () => {
-    expect(css).toContain("--font-inter");
+  it("uses HACIEN brand kit: Inter + Archivo Black, ink text, #E5E5E5 rules, #2563EB title pixel only", () => {
+    expect(css).toContain('font-family: "Inter"');
+    expect(css).toContain('font-family: "Archivo Black"');
+    expect(css).toContain("--font-display:");
+    expect(css).toContain('url("/fonts/Inter-Regular.woff2")');
+    expect(css).toContain('url("/fonts/ArchivoBlack-Regular.woff2")');
     expect(css).toContain("--blue: #2563eb");
     expect(css).toContain("--ink: #0a0a0a");
     expect(css).toContain("--grey-200: #e5e5e5");
@@ -37,7 +41,11 @@ describe("Page X of Y CSS", () => {
     expect(css).toContain("width: 45mm"); // logo-full letterhead (≥40mm)
     expect(css).toContain(".pp-logo-clearspace");
     expect(css).toContain("padding: 2.2mm"); // clear space ≈ 2× blue square at 45mm
-    expect(css).toContain("font-size: 18pt"); // document title (ink)
+    expect(css).toContain("font-size: 18pt"); // document title (Archivo Black)
+    // Unboxed Bill/Deliver + totals: thin #E5E5E5 rules, no shaded totals fill
+    expect(css).toMatch(/\.pp-party-box\s*\{[^}]*border:\s*none/s);
+    expect(css).toMatch(/\.pp-totals\s*\{[^}]*background:\s*transparent/s);
+    expect(css).toContain("border-top: 1px solid #e5e5e5");
   });
 });
 
