@@ -228,6 +228,52 @@ describe("settings versioning", () => {
     expect(snap.settings.taxCalendar.obligations["2551q"].dueMonth).toBe(3);
   });
 
+  it("round-trips a custom 2551q dueDay through save then read", async () => {
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    const withDay = {
+      ...v1.settings.taxCalendar,
+      obligations: {
+        ...v1.settings.taxCalendar.obligations,
+        "2551q": { enabled: true, dueDay: 20, dueMonth: null },
+      },
+    };
+    const res = await saveSettingsSection(store, {
+      key: "taxCalendar",
+      value: withDay,
+      userId: "a",
+      baseVersionId: v1.versionId,
+    });
+    expect(res.ok && res.changed).toBe(true);
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.settings.taxCalendar.obligations["2551q"].dueDay).toBe(20);
+    expect(snap.settings.taxCalendar.obligations["2551q"].dueMonth).toBeNull();
+  });
+
+  it("regression: stored 2551q.dueDay 15 still clears on read", async () => {
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    await store.create({
+      version: 2,
+      data: {
+        ...v1.settings,
+        taxCalendar: {
+          ...v1.settings.taxCalendar,
+          obligations: {
+            ...v1.settings.taxCalendar.obligations,
+            "2551q": { enabled: true, dueDay: 15, dueMonth: null },
+          },
+        },
+      },
+      changedKey: "taxCalendar",
+      before: v1.settings.taxCalendar,
+      after: null,
+      createdById: "a",
+    });
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.settings.taxCalendar.obligations["2551q"].dueDay).toBeNull();
+  });
+
   it("round-trips other forms' dueDay and dueMonth through save then read", async () => {
     const store = memoryStore();
     const v1 = await getSettingsSnapshot(store);
