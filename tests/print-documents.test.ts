@@ -12,6 +12,7 @@ import {
   NON_VAT_LABEL,
   NOT_OFFICIAL_INVOICE,
   QUOTATION_NOT_INVOICE,
+  SALES_ORDER_NOT_INVOICE,
   STATEMENT_NOT_OFFICIAL,
   taxFooterLines,
 } from "@/lib/print/tax-wording";
@@ -120,11 +121,47 @@ describe("professional print documents", () => {
     ]);
     expect(taxFooterLines("billing", { showInputTaxDisclaimer: false })).toEqual([NOT_OFFICIAL_INVOICE]);
     expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE]);
-    expect(taxFooterLines("sales_order")).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE]);
     expect(taxFooterLines("collection", { showInputTaxDisclaimer: true })).toEqual([
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
     ]);
+  });
+
+  it("each document type gets its own footer (snapshot of tax lines)", () => {
+    const byKind: Record<string, string[]> = {
+      quote: taxFooterLines("quote"),
+      sales_order: taxFooterLines("sales_order"),
+      billing: taxFooterLines("billing", { showInputTaxDisclaimer: true }),
+      collection: taxFooterLines("collection", { showInputTaxDisclaimer: true }),
+      customer_statement: taxFooterLines("customer_statement"),
+      supplier_statement: taxFooterLines("supplier_statement"),
+      supplier_po: taxFooterLines("supplier_po"),
+      receiving_report: taxFooterLines("receiving_report"),
+      supplier_payment: taxFooterLines("supplier_payment"),
+      expense: taxFooterLines("expense"),
+    };
+    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE]);
+    expect(byKind.billing).toEqual([NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(html(quotePrintFixture())).toContain(QUOTATION_NOT_INVOICE);
+    expect(html(salesOrderPrintFixture())).toContain(SALES_ORDER_NOT_INVOICE);
+    expect(html(salesOrderPrintFixture())).not.toContain(QUOTATION_NOT_INVOICE);
+    expect(byKind).toMatchSnapshot();
+  });
+
+  it("never puts [not set] placeholders in print HTML; empty address/TIN omit the line", () => {
+    const empty = html({
+      ...quotePrintFixture(),
+      company: { ...quotePrintFixture().company, tin: "", address: "" },
+    });
+    expect(empty.toLowerCase()).not.toContain("[not set");
+    expect(empty).not.toContain("pp-missing");
+    expect(empty).toContain(NON_VAT_LABEL);
+    expect(empty).not.toMatch(/>TIN\s*</);
+    const filled = html(quotePrintFixture());
+    expect(filled).toContain("TIN 123-456-789-000");
+    expect(filled).toContain("Unit 1, Sample St.");
   });
 
   it("masks payment accounts to last 4 digits only", () => {

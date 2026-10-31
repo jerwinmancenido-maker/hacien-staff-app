@@ -456,7 +456,7 @@ export type PrintDoc = {
 const printItem = (i: ItemRow): PrintItem => ({ description: i.description, qty: money(i.qty), unit: i.unit, unitPrice: money(i.unitPrice), total: money(i.total) });
 
 /** Letterhead always from current Settings (pinned version may predate TIN/address). */
-async function companyFor(_settingsVersionId: string) {
+async function companyFor() {
   const snap = await getSettingsSnapshot();
   return snap.settings.company;
 }
@@ -476,7 +476,7 @@ export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
     buyerPoNo: q.buyerPoNo,
     buyerPoDate: null,
     deliveryAddress: null,
-    company: await companyFor(q.settingsVersionId),
+    company: await companyFor(),
     customer: { name: q.customer.name, address: await customerBlockAddress(q.customer), tin: q.customer.tin },
     contact: q.contact ? { name: q.contact.name, email: q.contact.email, phone: q.contact.phone } : null,
     items: q.items.map(printItem),
@@ -503,7 +503,7 @@ export async function getSalesOrderPrint(id: string): Promise<PrintDoc | null> {
     buyerPoNo: so.buyerPoNo,
     buyerPoDate: ymd(so.buyerPoDate),
     deliveryAddress: so.deliveryAddress,
-    company: await companyFor(so.settingsVersionId),
+    company: await companyFor(),
     customer: { name: so.customer.name, address: await customerBlockAddress(so.customer), tin: so.customer.tin },
     contact: so.contact ? { name: so.contact.name, email: so.contact.email, phone: so.contact.phone } : null,
     items: so.items.map(printItem),
