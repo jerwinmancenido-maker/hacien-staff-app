@@ -8,6 +8,7 @@ import {
   TAX_CALENDAR_PAGE,
 } from "@/lib/tax/calendar-constants";
 import { defaultDoneDateYmd, listTaxCalendar } from "@/lib/services/tax-calendar";
+import type { TaxCalendarRow } from "@/lib/tax/calendar-build";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxCalendarBanner } from "@/components/books/TaxCalendarBanner";
 import { TaxCalendarMarkDoneForm } from "@/components/books/TaxCalendarMarkDoneForm";
@@ -26,6 +27,25 @@ const APPLIES_TONE: Record<string, ChipTone> = {
   unverified: "amber",
   does_not_apply: "grey",
 };
+
+function MarkDone({
+  r,
+  doneDefault,
+}: {
+  r: TaxCalendarRow;
+  doneDefault: string;
+}) {
+  return (
+    <TaxCalendarMarkDoneForm
+      occurrenceKey={r.occurrenceKey}
+      dueYmd={r.dueYmd}
+      defaultDoneDate={doneDefault}
+      markedDone={r.markedDone}
+      doneDateYmd={r.doneDateYmd}
+      doneNote={r.doneNote}
+    />
+  );
+}
 
 export default async function TaxCalendarPage({
   searchParams,
@@ -87,67 +107,88 @@ export default async function TaxCalendarPage({
           />
         </div>
       ) : (
-        <div className="card" style={{ overflowX: "auto" }}>
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Form</th>
-                <th>Description</th>
-                <th>Period</th>
-                <th>Due (PHT)</th>
-                <th>Status</th>
-                <th>Applies?</th>
-                <th>Worksheet</th>
-                <th>Done</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.occurrenceKey}
-                  style={r.greyedOut ? { opacity: 0.55 } : undefined}
-                  className={r.greyedOut ? "faint" : undefined}
-                >
-                  <td>
-                    <b>{r.form}</b>
-                  </td>
-                  <td>
-                    <div>{r.description}</div>
-                    {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
-                  </td>
-                  <td>{r.periodLabel}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <div>{r.dueDisplay}</div>
-                    {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
-                  </td>
-                  <td>
-                    <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
-                  </td>
-                  <td>
-                    <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>
-                  </td>
-                  <td>
-                    {r.worksheetLink ? (
-                      <Link href={r.worksheetLink}>Open worksheet</Link>
-                    ) : (
-                      <span className="faint">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <TaxCalendarMarkDoneForm
-                      occurrenceKey={r.occurrenceKey}
-                      dueYmd={r.dueYmd}
-                      defaultDoneDate={doneDefault}
-                      markedDone={r.markedDone}
-                      doneDateYmd={r.doneDateYmd}
-                      doneNote={r.doneNote}
-                    />
-                  </td>
+        <>
+          {/* Phone (below sm / 640px): one stacked card per obligation. */}
+          <div className="tax-cal-mobile" role="list">
+            {rows.map((r) => (
+              <div
+                key={r.occurrenceKey}
+                className={`card tax-cal-card${r.greyedOut ? " faint" : ""}`}
+                role="listitem"
+                style={r.greyedOut ? { opacity: 0.55 } : undefined}
+              >
+                <div className="tax-cal-card-name">
+                  <b>{r.form}</b>
+                  <span className="tax-cal-card-desc">{r.description}</span>
+                </div>
+                <div className="tax-cal-card-due">{r.dueDisplay}</div>
+                {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
+                <div className="tax-cal-card-status">
+                  <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
+                </div>
+                <div className="tax-cal-card-action">
+                  <MarkDone r={r} doneDefault={doneDefault} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop (sm+): table with tighter row padding. */}
+          <div className="card tax-cal-desktop">
+            <table className="list tax-cal-table">
+              <thead>
+                <tr>
+                  <th>Form</th>
+                  <th>Description</th>
+                  <th>Period</th>
+                  <th>Due (PHT)</th>
+                  <th>Status</th>
+                  <th>Applies?</th>
+                  <th>Worksheet</th>
+                  <th>Done</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr
+                    key={r.occurrenceKey}
+                    style={r.greyedOut ? { opacity: 0.55 } : undefined}
+                    className={r.greyedOut ? "faint" : undefined}
+                  >
+                    <td>
+                      <b>{r.form}</b>
+                    </td>
+                    <td>
+                      <div>{r.description}</div>
+                      {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
+                    </td>
+                    <td>{r.periodLabel}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div>{r.dueDisplay}</div>
+                      {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
+                    </td>
+                    <td>
+                      <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
+                    </td>
+                    <td>
+                      <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>
+                    </td>
+                    <td>
+                      {r.worksheetLink ? (
+                        <Link href={r.worksheetLink}>Open worksheet</Link>
+                      ) : (
+                        <span className="faint">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <MarkDone r={r} doneDefault={doneDefault} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   );
