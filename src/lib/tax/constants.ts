@@ -38,15 +38,16 @@ export const OVER_THRESHOLD_WARNING =
   "Cumulative sales exceed ₱3,000,000. The 8% option and non-VAT status may no longer apply — consult your accountant before filing.";
 
 /**
- * Shown on the 1701Q worksheet until the accountant confirms tax basis.
- * Do not pick invoiced vs collected in the app.
+ * 1701Q worksheet basis: Invoiced is the main column (EOPT, RR 3-2024).
+ * Collected stays as a small reference only — 8% math unchanged.
  */
 export const TAX_BASIS_UNVERIFIED_NOTE =
-  "Basis UNVERIFIED: accountant to confirm invoiced vs collected.";
+  "Invoiced is the main basis (EOPT, RR 3-2024). Collected is shown as a reference only.";
 
-/** Staff-facing labels for the two cumulative figures (not a chosen basis). */
-export const INVOICED_TOTAL_LABEL = "Invoiced total";
-export const COLLECTED_TOTAL_LABEL = "Collected total";
+/** Staff-facing labels for the two cumulative figures. */
+export const INVOICED_TOTAL_LABEL = "Invoiced (main basis)";
+export const COLLECTED_TOTAL_LABEL = "Collected (reference)";
+export const COLLECTED_REFERENCE_HINT = "Reference only — not the filing basis under EOPT / RR 3-2024.";
 
 /** Note on the supplier EWT worksheet (HACIEN may or may not be a withholding agent). */
 export const SUPPLIER_EWT_RDO_NOTE =

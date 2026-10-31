@@ -1,4 +1,4 @@
-// Tax calendar (Part 7d) — read deadlines + mark-as-done notes.
+// Tax calendar — read deadlines + mark-as-done notes.
 // Behind view_books + BOOKS_ENABLED (layout / callers enforce the flag).
 // Never files, pays, or sends anything.
 
@@ -10,16 +10,36 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import {
   buildTaxCalendarRows,
+  buildTaxCalendarSections,
   defaultTaxCalendarSettings,
+  missingHolidayYearsForWindow,
+  missingHolidaysLine,
   type CompletionRow,
   type TaxCalendarRow,
   type TaxCalendarSettingsShape,
 } from "../tax/calendar-build";
-import { ymdToDate } from "../tax/quarters";
+import type { BooksOfAccountsType, IncomeTaxMethod } from "../tax/calendar-constants";
+import { ymdToDate, quarterBounds, type Quarter } from "../tax/quarters";
 import {
   isTaxCalendarObligationKey,
   type TaxCalendarObligationKey,
 } from "../tax/calendar-obligations";
+import { normalizeHolidays, type TaxHoliday } from "../tax/holidays";
+
+/** Drop stale 2551q.dueDay from older Settings snapshots (was 15 under old catalog). */
+export function sanitizeTaxCalendarSettings(
+  settings: TaxCalendarSettingsShape,
+): TaxCalendarSettingsShape {
+  const row = settings.obligations["2551q"];
+  if (!row || row.dueDay == null) return settings;
+  return {
+    ...settings,
+    obligations: {
+      ...settings.obligations,
+      "2551q": { ...row, dueDay: null, dueMonth: null },
+    },
+  };
+}
 
 function parseOccurrenceKey(occurrenceKey: string): {
   obligationKey: TaxCalendarObligationKey;
@@ -52,27 +72,113 @@ async function loadActiveCompletions(): Promise<CompletionRow[]> {
   }));
 }
 
-export async function listTaxCalendar(
-  actor: PermissionUser,
-  opts: { view?: "upcoming" | "all"; now?: Date } = {},
-): Promise<{
+/**
+ * Period keys (`YYYY-Qn`) that have at least one customer 2307 (amount > 0)
+ * on a POSTED collection in that quarter — used for the SAWT task.
+ */
+export async function quartersWithCustomer2307(
+  fromYear: number,
+  toYear: number,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let year = fromYear; year <= toYear; year++) {
+    for (const q of [1, 2, 3, 4] as Quarter[]) {
+      const b = quarterBounds(year, q);
+      const hit = await db.withholding2307.findFirst({
+        where: {
+          amount: { gt: 0 },
+          collection: {
+            status: "POSTED",
+            date: { gte: ymdToDate(b.fromYmd), lte: ymdToDate(b.toYmd) },
+          },
+        },
+        select: { id: true },
+      });
+      if (hit) out.add(`${year}-Q${q}`);
+    }
+  }
+  return out;
+}
+
+export type ListTaxCalendarResult = {
   rows: TaxCalendarRow[];
+  overdue: TaxCalendarRow[];
+  upcoming: TaxCalendarRow[];
   settings: TaxCalendarSettingsShape;
   provisional: boolean;
-}> {
+  showNotApplicable: boolean;
+  holidays: TaxHoliday[];
+  booksType: BooksOfAccountsType | null;
+  incomeTaxMethod: IncomeTaxMethod;
+  /** Calendar years in the window with no holiday entries (owner must enter). */
+  missingHolidayYears: number[];
+  /** One notice line listing missing years, or null when none. */
+  missingHolidaysLine: string | null;
+};
+
+export async function listTaxCalendar(
+  actor: PermissionUser,
+  opts: {
+    view?: "upcoming" | "all";
+    now?: Date;
+    showNotApplicable?: boolean;
+  } = {},
+): Promise<ListTaxCalendarResult> {
   assertCan(actor, "view_books");
-  const settings = await loadTaxCalendarSettings();
+  const snap = await getSettingsSnapshot();
+  const settings = sanitizeTaxCalendarSettings(
+    snap.settings.taxCalendar ?? defaultTaxCalendarSettings(),
+  );
+  const taxYear = snap.settings.taxYear;
   const completions = await loadActiveCompletions();
-  const rows = buildTaxCalendarRows({
+  const now = opts.now ?? new Date();
+  const todayYmd = isoDate(manilaToday(now));
+  const thisYear = Number(todayYmd.slice(0, 4));
+  const fromYear = thisYear - 1;
+  const toYear = thisYear + 1;
+  const holidays = normalizeHolidays(taxYear.holidays ?? []);
+  const missingHolidayYears = missingHolidayYearsForWindow(holidays, fromYear, toYear);
+  const showNotApplicable = opts.showNotApplicable === true;
+  const quartersWith2307 = await quartersWithCustomer2307(fromYear, toYear);
+
+  const buildInput = {
     settings,
     completions,
-    view: opts.view ?? "upcoming",
-    now: opts.now,
-  });
+    now,
+    fromYear,
+    toYear,
+    holidays,
+    incomeTax: {
+      year: taxYear.year,
+      incomeTaxMethod: taxYear.incomeTaxMethod,
+      incomeTaxMethodsByYear: taxYear.incomeTaxMethodsByYear ?? {},
+    },
+    isNonVat: true, // HACIEN business setting: non-VAT
+    booksType: taxYear.booksType ?? null,
+    showNotApplicable,
+    quartersWith2307,
+  };
+
+  const sections = buildTaxCalendarSections(buildInput);
+  const view = opts.view ?? "upcoming";
+  const rows =
+    view === "all"
+      ? sections.all
+      : // Upcoming page: overdue section is separate; main list is the 90-day window.
+        sections.upcoming;
+
   return {
     rows,
+    overdue: view === "upcoming" ? sections.overdue : [],
+    upcoming: sections.upcoming,
     settings,
     provisional: settings.corUploadedAndChecked !== true,
+    showNotApplicable,
+    holidays,
+    booksType: taxYear.booksType ?? null,
+    incomeTaxMethod: taxYear.incomeTaxMethod,
+    missingHolidayYears,
+    missingHolidaysLine: missingHolidaysLine(missingHolidayYears),
   };
 }
 
@@ -195,3 +301,6 @@ export async function undoTaxCalendarDone(
 export function defaultDoneDateYmd(now: Date = new Date()): string {
   return isoDate(manilaToday(now));
 }
+
+/** Re-export builder for ICS route convenience. */
+export { buildTaxCalendarRows };

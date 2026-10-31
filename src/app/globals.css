@@ -2078,13 +2078,40 @@ pre.json {
     border-radius: 0;
   }
   .topbar {
-    padding: 12px 16px;
+    padding: 10px 12px;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px 8px;
+    align-items: center;
+  }
+  .crumbs {
+    font-size: 12px;
+    line-height: 1.3;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .topbar .user-name {
+    display: none; /* free space next to Sign out at phone widths */
+  }
+  .topbar .right {
+    gap: 6px;
   }
   .topbar-search {
-    min-width: 100%;
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
     order: 3;
+    height: 36px;
+  }
+  .topbar-search input {
+    font-size: 14px;
+  }
+  /* Books / tax section tabs: keep one row, scroll instead of wrapping cramped */
+  .pill-tabs-wrap {
+    margin-bottom: 10px;
+  }
+  .pill-tabs-track {
+    gap: 4px;
   }
   .content {
     padding: 16px;
@@ -3057,6 +3084,28 @@ button.contact-card-add {
 /* ---------- Tax calendar (Part 7d) — phone cards / desktop table ---------- */
 /* sm breakpoint (~640px), matching Tailwind sm: */
 
+/* One calm notice (BIR rules + missing holidays + provisional) — not stacked alert boxes. */
+.tax-cal-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text);
+  border-radius: var(--radius);
+  background: var(--fill);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.tax-cal-notice-line {
+  margin: 0;
+}
+.tax-cal-notice-line + .tax-cal-notice-line {
+  margin-top: 6px;
+}
+.tax-cal-notice-provisional {
+  color: var(--text-3);
+}
+
 .tax-cal-mobile {
   display: none;
   flex-direction: column;
@@ -3513,4 +3562,22 @@ button.contact-card-add {
     font-size: 11px;
     max-width: 100%;
   }
+}
+
+/* 1701Q worksheet: Invoiced main / Collected reference */
+.tax-income-worksheet th.tax-income-main,
+.tax-income-worksheet td.tax-income-main {
+  min-width: 7.5rem;
+}
+.tax-income-worksheet th.tax-income-ref,
+.tax-income-worksheet td.tax-income-ref {
+  min-width: 6rem;
+  color: var(--muted, #667);
+}
+.tax-cal-form .tax-cal-plain {
+  margin-top: 2px;
+  font-weight: 400;
+}
+.tax-cal-tasks {
+  margin: 4px 0 0;
 }

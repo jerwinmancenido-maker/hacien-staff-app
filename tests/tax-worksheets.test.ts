@@ -158,9 +158,10 @@ describe("1701Q worksheet lines (scaled decimals)", () => {
     expect(eitherOverThreshold("500000.00", "200000.00")).toBe(false);
     expect(eitherOverThreshold("3000000.01", "0.00")).toBe(true);
     expect(eitherOverThreshold("0.00", "3000000.01")).toBe(true);
-    expect(TAX_BASIS_UNVERIFIED_NOTE).toBe("Basis UNVERIFIED: accountant to confirm invoiced vs collected.");
-    expect(INVOICED_TOTAL_LABEL).toBe("Invoiced total");
-    expect(COLLECTED_TOTAL_LABEL).toBe("Collected total");
+    expect(TAX_BASIS_UNVERIFIED_NOTE).toMatch(/EOPT, RR 3-2024/);
+    expect(INVOICED_TOTAL_LABEL).toMatch(/Invoiced/);
+    expect(COLLECTED_TOTAL_LABEL).toMatch(/Collected/);
+    expect(COLLECTED_TOTAL_LABEL).toMatch(/reference/i);
   });
 
   it("earlierQuarters lists prior quarters only", () => {
