@@ -11,13 +11,15 @@ import type { FormState } from "@/lib/validation/forms";
 export type FieldSpec = {
   name: string;
   label: string;
-  kind: "number" | "text" | "checkbox" | "lines" | "textarea";
+  kind: "number" | "text" | "checkbox" | "lines" | "textarea" | "select";
   value: string | number | boolean | string[];
   hint?: string;
   prefix?: string;
   suffix?: string;
   full?: boolean;
   group?: string;
+  /** Options for kind=select. */
+  options?: { value: string; label: string }[];
 };
 
 export function SettingsForm({
@@ -78,7 +80,15 @@ export function SettingsForm({
                   {f.label}
                 </label>
               ) : f.kind === "lines" || f.kind === "textarea" ? (
-                <textarea id={f.name} name={f.name} defaultValue={valueOf(f)} rows={f.kind === "lines" ? 6 : 3} />
+                <textarea id={f.name} name={f.name} defaultValue={valueOf(f)} rows={f.kind === "lines" ? 8 : 3} />
+              ) : f.kind === "select" ? (
+                <select id={f.name} name={f.name} defaultValue={valueOf(f)}>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {f.prefix && <span className="muted">{f.prefix}</span>}

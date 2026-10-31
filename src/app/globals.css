@@ -3400,3 +3400,21 @@ button.contact-card-add {
     max-width: 100%;
   }
 }
+
+/* 1701Q worksheet: Invoiced main / Collected reference */
+.tax-income-worksheet th.tax-income-main,
+.tax-income-worksheet td.tax-income-main {
+  min-width: 7.5rem;
+}
+.tax-income-worksheet th.tax-income-ref,
+.tax-income-worksheet td.tax-income-ref {
+  min-width: 6rem;
+  color: var(--muted, #667);
+}
+.tax-cal-form .tax-cal-plain {
+  margin-top: 2px;
+  font-weight: 400;
+}
+.tax-cal-tasks {
+  margin: 4px 0 0;
+}

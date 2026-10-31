@@ -161,16 +161,34 @@ const CRUMB_LABELS: Record<string, string> = {
   disbursements: "Cash disbursements",
   purchases: "Purchases",
   journal: "General journal",
+  tax: "Tax worksheets",
+  calendar: "Tax calendar",
+  income: "1701Q",
+  "2307-received": "2307s received",
+  "ewt-withheld": "EWT withheld",
+  "sales-summary": "Sales summary",
   new: "New",
   edit: "Edit",
 };
 
+/** Tax calendar pages → "Books / Tax calendar"; worksheet pages → "Books / Tax worksheets". */
+export function breadcrumbLabelsForPath(path: string): string[] {
+  const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "books" && parts[1] === "tax" && parts[2] === "calendar") {
+    return ["Books", "Tax calendar"];
+  }
+  if (parts[0] === "books" && parts[1] === "tax") {
+    const rest = parts.slice(2).map((p) => CRUMB_LABELS[p] ?? "Record");
+    return ["Books", "Tax worksheets", ...rest.filter((l, i) => !(l === "Record" && rest[i - 1] === "Record"))];
+  }
+  const labels = parts.length ? parts.map((p) => CRUMB_LABELS[p] ?? "Record") : ["Home"];
+  return labels.filter((l, i) => !(l === "Record" && labels[i - 1] === "Record"));
+}
+
 export function Breadcrumb() {
   const path = usePathname();
-  const parts = path.split("/").filter(Boolean);
-  const labels = parts.length ? parts.map((p) => CRUMB_LABELS[p] ?? "Record") : ["Home"];
-  // Collapse repeated "Record" crumbs.
-  const crumbs = ["HACIEN", "Staff", ...labels.filter((l, i) => !(l === "Record" && labels[i - 1] === "Record"))];
+  const labels = breadcrumbLabelsForPath(path);
+  const crumbs = ["HACIEN", "Staff", ...labels];
   return (
     <div className="crumbs">
       {crumbs.map((c, i) => (

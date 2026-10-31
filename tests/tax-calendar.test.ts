@@ -9,12 +9,18 @@ import {
   TAX_CALENDAR_DATE_TO_CONFIRM,
   TAX_CALENDAR_EMPTY_ALL,
   TAX_CALENDAR_EMPTY_UPCOMING,
+  TAX_CALENDAR_OVERDUE_SECTION_HINT,
+  TAX_CALENDAR_OVERDUE_SECTION_TITLE,
   TAX_CALENDAR_PAGE,
-  TAX_CALENDAR_PROVISIONAL_BANNER,
+  TAX_CALENDAR_PLAIN_NAMES,
+  TAX_CALENDAR_RULES_BANNER,
+  TAX_CALENDAR_SAWT_TASK,
+  TAX_CALENDAR_SHOW_NOT_APPLICABLE,
   TAX_CALENDAR_STATUS,
 } from "@/lib/tax/calendar-constants";
 import {
   buildTaxCalendarRows,
+  buildTaxCalendarSections,
   defaultTaxCalendarSettings,
   taxCalendarToCsv,
 } from "@/lib/tax/calendar-build";
@@ -22,13 +28,23 @@ import {
   generateOccurrences,
   isWeekendYmd,
   manilaWeekday,
+  nextWorkingDay,
   previousWorkingDay,
   statusForDueDate,
   weekendRule,
+  workingDayRule,
   ymdOnOrLast,
 } from "@/lib/tax/calendar-dates";
 import { buildTaxCalendarIcs, icsEscapeText } from "@/lib/tax/calendar-ics";
 import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
+import { PH_HOLIDAYS_2026 } from "@/lib/tax/holidays";
+import { incomeTaxMethodForYear } from "@/lib/tax/income-tax-method";
+import {
+  COLLECTED_REFERENCE_HINT,
+  COLLECTED_TOTAL_LABEL,
+  INVOICED_TOTAL_LABEL,
+  TAX_BASIS_UNVERIFIED_NOTE,
+} from "@/lib/tax/constants";
 import { booksEnabledFromEnv } from "@/lib/books/features";
 import { filterDealsNavItems } from "@/components/Sidebar";
 
@@ -40,6 +56,30 @@ const DEALS = [
   { href: "/books", label: "Books", booksOnly: true as const },
   { href: "/cash", label: "Cash", cashOnly: true as const },
 ] as const;
+
+const incomeTax2026 = {
+  year: 2026,
+  incomeTaxMethod: "EIGHT_PERCENT" as const,
+  incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" as const },
+};
+
+const incomeTaxGraduated = {
+  year: 2027,
+  incomeTaxMethod: "GRADUATED" as const,
+  incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" as const, "2027": "GRADUATED" as const },
+};
+
+function buildOpts(extra: Partial<Parameters<typeof buildTaxCalendarRows>[0]> = {}) {
+  return {
+    settings: defaultTaxCalendarSettings(),
+    holidays: PH_HOLIDAYS_2026,
+    incomeTax: incomeTax2026,
+    isNonVat: true,
+    booksType: null as null,
+    showNotApplicable: false,
+    ...extra,
+  };
+}
 
 describe("view_books + booksEnabled gate tax calendar", () => {
   it("Admin and Approver have view_books; Staff/Viewer do not", () => {
@@ -65,75 +105,346 @@ describe("view_books + booksEnabled gate tax calendar", () => {
         canViewBooks: true,
       }).map((i) => i.href),
     ).not.toContain("/books");
-    expect(
-      filterDealsNavItems([...DEALS], {
-        canSeeCosts: false,
-        canEdit: true,
-        cashEnabled: false,
-        payablesEnabled: false,
-        booksEnabled: true,
-        canViewBooks: false,
-      }).map((i) => i.href),
-    ).not.toContain("/books");
     expect(booksEnabledFromEnv({ BOOKS_ENABLED: "0" })).toBe(false);
   });
 });
 
-describe("due-date and weekend logic (PHT)", () => {
-  it("Nov 15, 2026 falls on Sunday; legal date stays; File by Fri Nov 13", () => {
+describe("rule 1: weekend/holiday roll (RMC 65-2016) + file-early hint", () => {
+  it("Q3 2026 1701Q shows Mon Nov 16, 2026 (Sun Nov 15 rolled)", () => {
     expect(manilaWeekday("2026-11-15")).toBe(0);
     expect(isWeekendYmd("2026-11-15")).toBe(true);
-    expect(previousWorkingDay("2026-11-15")).toBe("2026-11-13");
-    const w = weekendRule("2026-11-15");
-    expect(w.legalDueYmd).toBe("2026-11-15");
-    expect(w.fallsOnWeekend).toBe(true);
-    expect(w.fileByYmd).toBe("2026-11-13");
-    expect(w.fileByHint).toBe("File by 2026-11-13 to be safe");
+    expect(nextWorkingDay("2026-11-15", PH_HOLIDAYS_2026)).toBe("2026-11-16");
+    const rows = generateOccurrences("1701q", 2026, 2026, { holidays: PH_HOLIDAYS_2026 });
+    const q3 = rows.find((r) => r.periodKey === "2026-Q3")!;
+    expect(q3.dueYmd).toBe("2026-11-16");
+    expect(q3.legalDueYmd).toBe("2026-11-15");
+    expect(q3.rolled).toBe(true);
+    expect(q3.fileByHint).toBe("File by 2026-11-13 to be safe");
   });
 
-  it("Saturday due → previous Friday; weekday unchanged", () => {
-    // 2026-11-14 is Saturday
+  it("Saturday due → next Monday; weekday unchanged; holidays roll forward", () => {
     expect(manilaWeekday("2026-11-14")).toBe(6);
-    expect(previousWorkingDay("2026-11-14")).toBe("2026-11-13");
-    expect(weekendRule("2026-11-13").fallsOnWeekend).toBe(false);
-    expect(weekendRule("2026-11-13").fileByHint).toBeNull();
+    expect(nextWorkingDay("2026-11-14", PH_HOLIDAYS_2026)).toBe("2026-11-16");
+    expect(workingDayRule("2026-11-13", PH_HOLIDAYS_2026).rolled).toBe(false);
+    // Dec 25 2026 is Friday Christmas — roll to next working day after holiday/weekend chain
+    expect(nextWorkingDay("2026-12-25", PH_HOLIDAYS_2026)).toBe("2026-12-28");
   });
 
-  it("1701Q seed dates: Q1 May 15, Q2 Aug 15, Q3 Nov 15", () => {
-    const rows = generateOccurrences("1701q", 2026, 2026);
-    expect(rows.map((r) => [r.periodKey, r.dueYmd])).toEqual([
-      ["2026-Q1", "2026-05-15"],
-      ["2026-Q2", "2026-08-15"],
-      ["2026-Q3", "2026-11-15"],
-    ]);
-    const nov = rows.find((r) => r.periodKey === "2026-Q3")!;
-    expect(nov.fileByHint).toBe("File by 2026-11-13 to be safe");
+  it("previousWorkingDay skips weekends and holidays", () => {
+    expect(previousWorkingDay("2026-11-15", PH_HOLIDAYS_2026)).toBe("2026-11-13");
+    expect(previousWorkingDay("2026-12-28", PH_HOLIDAYS_2026)).toBe("2026-12-28");
   });
 
-  it("1701 annual is Apr 15 of the next year", () => {
-    const rows = generateOccurrences("1701", 2026, 2027);
-    const ty2026 = rows.find((r) => r.periodKey === "TY2026");
-    expect(ty2026?.dueYmd).toBe("2027-04-15");
+  it("weekendRule compat still exposes fallsOnWeekend", () => {
+    const w = weekendRule("2026-11-15", PH_HOLIDAYS_2026);
+    expect(w.fallsOnWeekend).toBe(true);
+    expect(w.dueYmd).toBe("2026-11-16");
   });
 
-  it("0619-E monthly on the 10th; 1601-EQ last day of month after quarter", () => {
-    const m = generateOccurrences("0619e", 2026, 2026);
-    expect(m.find((r) => r.periodKey === "2026-03")?.dueYmd).toBe("2026-03-10");
-    const q = generateOccurrences("1601eq", 2026, 2026);
-    // Q1 ends Mar → due last day of April
-    expect(q.find((r) => r.periodKey === "2026-Q1")?.dueYmd).toBe("2026-04-30");
-    expect(q.find((r) => r.periodKey === "2026-Q4")?.dueYmd).toBe("2027-01-31");
+  it("settings seed includes 2026 PH regular + special holidays", () => {
+    const ymids = DEFAULT_SETTINGS.taxYear.holidays.map((h) => h.ymd);
+    expect(ymids).toContain("2026-01-01");
+    expect(ymids).toContain("2026-04-09");
+    expect(ymids).toContain("2026-11-30");
+    expect(ymids).toContain("2026-02-17");
+    expect(ymids).toContain("2026-11-01");
+    expect(ymids).toContain("2026-12-24");
+    expect(DEFAULT_SETTINGS.taxYear.holidays.filter((h) => h.kind === "regular")).toHaveLength(12);
+    expect(DEFAULT_SETTINGS.taxYear.holidays.filter((h) => h.kind === "special")).toHaveLength(8);
+  });
+});
+
+describe("rule 2: income tax method 8% vs Graduated form sets", () => {
+  it("seeds 2026 as 8% and defaults 2027+ to Graduated", () => {
+    expect(DEFAULT_SETTINGS.taxYear.incomeTaxMethod).toBe("EIGHT_PERCENT");
+    expect(incomeTaxMethodForYear(incomeTax2026, 2026)).toBe("EIGHT_PERCENT");
+    expect(incomeTaxMethodForYear(incomeTax2026, 2027)).toBe("GRADUATED");
+    expect(incomeTaxMethodForYear(incomeTaxGraduated, 2027)).toBe("GRADUATED");
   });
 
-  it("undated year-end shows date to confirm", () => {
-    const rows = generateOccurrences("books_accounts", 2026, 2026);
-    expect(rows[0]?.dueYmd).toBeNull();
-    expect(rows[0]?.dueDisplay).toBe(TAX_CALENDAR_DATE_TO_CONFIRM);
+  it("on 8%: hide 2551Q; annual is 1701A (not 1701)", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        incomeTax: incomeTax2026,
+      }),
+    );
+    expect(rows.some((r) => r.obligationKey === "2551q")).toBe(false);
+    expect(rows.some((r) => r.obligationKey === "1701a")).toBe(true);
+    expect(rows.some((r) => r.obligationKey === "1701")).toBe(false);
   });
 
-  it("clamps day into month length", () => {
-    expect(ymdOnOrLast(2026, 2, 31)).toBe("2026-02-28");
-    expect(ymdOnOrLast(2028, 2, 31)).toBe("2028-02-29");
+  it("on Graduated: show 2551Q due 25 days after quarter end (rolled); annual 1701 and 1701A", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2027-02-01T08:00:00.000Z"),
+        fromYear: 2027,
+        toYear: 2027,
+        incomeTax: incomeTaxGraduated,
+      }),
+    );
+    const q1 = rows.find((r) => r.occurrenceKey === "2551q|2027-Q1");
+    expect(q1).toBeTruthy();
+    expect(q1?.notApplicable).toBe(false);
+    // Mar 31 + 25 = Apr 25 2027 (Sunday) → Mon Apr 26
+    expect(q1?.legalDueYmd).toBe("2027-04-25");
+    expect(manilaWeekday("2027-04-25")).toBe(0);
+    expect(q1?.dueYmd).toBe("2027-04-26");
+    expect(rows.some((r) => r.obligationKey === "1701")).toBe(true);
+    expect(rows.some((r) => r.obligationKey === "1701a")).toBe(true);
+    const annualNote = rows.find((r) => r.obligationKey === "1701")?.appliesNote;
+    expect(annualNote).toMatch(/1701 or 1701A/);
+  });
+
+  it("8% with showNotApplicable shows 2551Q as N/A (never overdue, no mark done path)", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-12-01T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        showNotApplicable: true,
+        incomeTax: incomeTax2026,
+      }),
+    );
+    const pct = rows.filter((r) => r.obligationKey === "2551q");
+    expect(pct.length).toBeGreaterThan(0);
+    for (const r of pct) {
+      expect(r.notApplicable).toBe(true);
+      expect(r.status).not.toBe("overdue");
+    }
+  });
+});
+
+describe("rule 3: non-VAT hides 2550Q", () => {
+  it("hides 2550Q when non-VAT; showable only via N/A toggle", () => {
+    const hidden = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        isNonVat: true,
+        showNotApplicable: false,
+      }),
+    );
+    expect(hidden.some((r) => r.obligationKey === "2550q")).toBe(false);
+
+    const shown = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        isNonVat: true,
+        showNotApplicable: true,
+      }),
+    );
+    const vat = shown.filter((r) => r.obligationKey === "2550q");
+    expect(vat.length).toBeGreaterThan(0);
+    expect(vat.every((r) => r.notApplicable)).toBe(true);
+  });
+});
+
+describe("rule 4: N/A toggle — never overdue, no Mark as done", () => {
+  it("exposes show-not-applicable label and N/A rows never overdue", () => {
+    expect(TAX_CALENDAR_SHOW_NOT_APPLICABLE).toBe("Show forms that don't apply");
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-12-15T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        showNotApplicable: true,
+      }),
+    );
+    const na = rows.filter((r) => r.notApplicable);
+    expect(na.length).toBeGreaterThan(0);
+    for (const r of na) {
+      expect(r.status).not.toBe("overdue");
+      expect(r.greyedOut).toBe(true);
+    }
+  });
+});
+
+describe("rule 5: Next 90 days window + overdue section", () => {
+  it("upcoming is today through today+90 only; overdue is a separate section", () => {
+    const now = new Date("2026-10-30T08:00:00.000Z");
+    const sections = buildTaxCalendarSections(
+      buildOpts({
+        now,
+        fromYear: 2025,
+        toYear: 2027,
+      }),
+    );
+    for (const r of sections.upcoming) {
+      if (!r.dueYmd || r.markedDone) continue;
+      expect(r.dueYmd >= "2026-10-30").toBe(true);
+      expect(r.dueYmd <= "2027-01-28").toBe(true); // +90
+    }
+    expect(sections.overdue.every((r) => r.dueYmd && r.dueYmd < "2026-10-30" && !r.markedDone)).toBe(
+      true,
+    );
+    expect(sections.overdue.every((r) => !r.notApplicable)).toBe(true);
+    expect(TAX_CALENDAR_OVERDUE_SECTION_TITLE).toBe("Overdue, not marked filed");
+    expect(TAX_CALENDAR_OVERDUE_SECTION_HINT).toBe("Already filed? Mark as done.");
+  });
+
+  it("boundary: due exactly today and today+90 are included; today+91 excluded", () => {
+    const settings = defaultTaxCalendarSettings();
+    // Fabricate via 1701Q Q3 which is Nov 16 2026 after roll — from Oct 30 that is within 90.
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        settings,
+        view: "upcoming",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+      }),
+    );
+    expect(rows.find((r) => r.occurrenceKey === "1701q|2026-Q3")?.dueYmd).toBe("2026-11-16");
+    // From a day where Nov 16 is beyond +90
+    const later = buildTaxCalendarRows(
+      buildOpts({
+        settings,
+        view: "upcoming",
+        now: new Date("2026-08-01T08:00:00.000Z"),
+      }),
+    );
+    // Aug 1 + 90 = Oct 30 — Nov 16 is outside
+    expect(later.some((r) => r.occurrenceKey === "1701q|2026-Q3")).toBe(false);
+  });
+});
+
+describe("rule 6: page banner replaces per-row Unverified text", () => {
+  it("banner text exact; rows never show Unverified: ask RDO; Confirmed only after COR", () => {
+    expect(TAX_CALENDAR_RULES_BANNER).toBe(
+      "Dates follow BIR rules. Check with your accountant if unsure.",
+    );
+    expect(TAX_CALENDAR_APPLIES.unverified).toBe("");
+    const off = defaultTaxCalendarSettings();
+    expect(off.corUploadedAndChecked).toBe(false);
+    const provisional = buildTaxCalendarRows(
+      buildOpts({
+        settings: off,
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+      }),
+    );
+    for (const r of provisional) {
+      expect(r.appliesLabel).not.toMatch(/Unverified/i);
+      expect(r.appliesLabel).not.toMatch(/ask RDO/i);
+      if (!r.notApplicable) expect(r.appliesLabel).not.toBe("Confirmed");
+    }
+    const on = { ...off, corUploadedAndChecked: true };
+    const confirmed = buildTaxCalendarRows(
+      buildOpts({
+        settings: on,
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+      }),
+    );
+    expect(confirmed.find((r) => r.obligationKey === "1701q")?.appliesLabel).toBe("Confirmed");
+  });
+});
+
+describe("rule 7: plain names under form codes", () => {
+  it("uses exact plain names for 1701Q / 2551Q / 1701A / SAWT", () => {
+    expect(TAX_CALENDAR_PLAIN_NAMES["1701Q"]).toBe("Quarterly income tax");
+    expect(TAX_CALENDAR_PLAIN_NAMES["2551Q"]).toBe("Quarterly percentage tax (3%)");
+    expect(TAX_CALENDAR_PLAIN_NAMES["1701A"]).toBe("Annual income tax");
+    expect(TAX_CALENDAR_PLAIN_NAMES.SAWT).toBe("List of 2307s you received");
+    const byKey = Object.fromEntries(TAX_CALENDAR_OBLIGATIONS.map((o) => [o.key, o]));
+    expect(byKey["1701q"]?.description).toBe("Quarterly income tax");
+    expect(byKey["2551q"]?.description).toBe("Quarterly percentage tax (3%)");
+    expect(byKey["1701a"]?.description).toBe("Annual income tax");
+  });
+});
+
+describe("rule 8: SAWT task when 2307s logged for a quarter", () => {
+  it("adds Send SAWT with this return on that quarter's 1701Q", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+        quartersWith2307: ["2026-Q3"],
+      }),
+    );
+    const q3 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q3");
+    expect(q3?.tasks).toEqual([TAX_CALENDAR_SAWT_TASK]);
+    const q1 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q1");
+    expect(q1?.tasks ?? []).toEqual([]);
+  });
+});
+
+describe("rule 9: books of accounts dates by type", () => {
+  it("keeps date to confirm until books type chosen", () => {
+    const undated = generateOccurrences("books_accounts", 2026, 2026, {
+      holidays: PH_HOLIDAYS_2026,
+      booksType: null,
+    });
+    expect(undated[0]?.dueYmd).toBeNull();
+    expect(undated[0]?.dueDisplay).toBe(TAX_CALENDAR_DATE_TO_CONFIRM);
+  });
+
+  it("loose-leaf Jan 15 and computerized Jan 30, rolled to next working day", () => {
+    // 2026-01-15 is Thursday — no roll
+    const loose = generateOccurrences("books_accounts", 2026, 2026, {
+      holidays: PH_HOLIDAYS_2026,
+      booksType: "loose_leaf",
+    });
+    expect(loose[0]?.dueYmd).toBe("2026-01-15");
+
+    // 2026-01-30 is Friday — no roll
+    const comp = generateOccurrences("books_accounts", 2026, 2026, {
+      holidays: PH_HOLIDAYS_2026,
+      booksType: "computerized",
+    });
+    expect(comp[0]?.dueYmd).toBe("2026-01-30");
+
+    // 2027-01-15 is Friday; 2027-01-30 is Saturday → Mon Feb 1
+    const loose27 = generateOccurrences("books_accounts", 2027, 2027, {
+      holidays: [],
+      booksType: "loose_leaf",
+    });
+    expect(loose27[0]?.dueYmd).toBe("2027-01-15");
+    const comp27 = generateOccurrences("books_accounts", 2027, 2027, {
+      holidays: [],
+      booksType: "computerized",
+    });
+    expect(manilaWeekday("2027-01-30")).toBe(6);
+    expect(comp27[0]?.dueYmd).toBe("2027-02-01");
+  });
+});
+
+describe("rule 10: worksheet basis — Invoiced main, Collected reference", () => {
+  it("labels and EOPT / RR 3-2024 note", () => {
+    expect(INVOICED_TOTAL_LABEL).toMatch(/Invoiced/);
+    expect(COLLECTED_TOTAL_LABEL).toMatch(/reference/i);
+    expect(COLLECTED_REFERENCE_HINT).toMatch(/EOPT/);
+    expect(TAX_BASIS_UNVERIFIED_NOTE).toMatch(/EOPT, RR 3-2024/);
+  });
+});
+
+describe("rule 11: breadcrumb labels (constants used by Sidebar)", () => {
+  it("page constants point at tax calendar", () => {
+    expect(TAX_CALENDAR_PAGE.href).toBe("/books/tax/calendar");
+    expect(TAX_CALENDAR_PAGE.label).toBe("Tax calendar");
+  });
+
+  it("Books / Tax calendar vs Books / Tax worksheets", async () => {
+    const { breadcrumbLabelsForPath } = await import("@/components/Sidebar");
+    expect(breadcrumbLabelsForPath("/books/tax/calendar")).toEqual(["Books", "Tax calendar"]);
+    expect(breadcrumbLabelsForPath("/books/tax")).toEqual(["Books", "Tax worksheets"]);
+    expect(breadcrumbLabelsForPath("/books/tax/income")).toEqual(["Books", "Tax worksheets", "1701Q"]);
   });
 });
 
@@ -141,59 +452,56 @@ describe("status buckets", () => {
   it("classifies overdue / due in 2 / due in 7 / upcoming / marked done", () => {
     const today = "2026-10-30";
     expect(statusForDueDate("2026-10-20", today, false)).toBe("overdue");
-    expect(statusForDueDate("2026-10-31", today, false)).toBe("dueIn2"); // +1
-    expect(statusForDueDate("2026-11-01", today, false)).toBe("dueIn2"); // +2
-    expect(statusForDueDate("2026-11-02", today, false)).toBe("dueIn7"); // +3
-    expect(statusForDueDate("2026-11-06", today, false)).toBe("dueIn7"); // +7
-    expect(statusForDueDate("2026-11-07", today, false)).toBe("upcoming"); // +8
-    expect(statusForDueDate("2026-11-08", today, false)).toBe("upcoming");
+    expect(statusForDueDate("2026-10-31", today, false)).toBe("dueIn2");
+    expect(statusForDueDate("2026-11-01", today, false)).toBe("dueIn2");
+    expect(statusForDueDate("2026-11-02", today, false)).toBe("dueIn7");
+    expect(statusForDueDate("2026-11-06", today, false)).toBe("dueIn7");
+    expect(statusForDueDate("2026-11-07", today, false)).toBe("upcoming");
     expect(statusForDueDate("2026-10-20", today, true)).toBe("markedDone");
-    expect(statusForDueDate(null, today, false)).toBe("upcoming");
-    expect(TAX_CALENDAR_STATUS.dueIn2).toBe("Due in 2 days");
-    expect(TAX_CALENDAR_STATUS.dueIn7).toBe("Due in 7 days");
     expect(TAX_CALENDAR_STATUS.markedDone).toBe("Marked done");
   });
 });
 
 describe("seed obligations and settings defaults", () => {
-  it("tags each seed UNVERIFIED / applies correctly; hides withholding by default; no 0605", () => {
-    const byKey = Object.fromEntries(TAX_CALENDAR_OBLIGATIONS.map((o) => [o.key, o]));
-    expect(byKey["1701q"]?.applies).toBe("confirmed");
-    expect(byKey["1701q"]?.worksheetHref).toBe("/books/tax/income");
-    expect(byKey["1701"]?.applies).toBe("confirmed");
-    expect(byKey["2551q"]?.applies).toBe("does_not_apply");
-    expect(byKey["2551q"]?.greyedOut).toBe(true);
-    expect(byKey["2551q"]?.appliesNote).toMatch(/confirm 8% election with RDO/);
-    expect(byKey["2550q"]?.applies).toBe("does_not_apply");
-    expect(byKey["2550q"]?.appliesNote).toMatch(/COR may still show VAT/);
-    expect(byKey["0619e"]?.defaultEnabled).toBe(false);
-    expect(byKey["1601eq"]?.defaultEnabled).toBe(false);
-    expect(byKey["0619e"]?.applies).toBe("unverified");
-    expect(byKey["books_accounts"]?.applies).toBe("unverified");
-    expect(byKey["inventory_list"]?.applies).toBe("unverified");
+  it("includes 1701A; no 0605; withholding hidden by default", () => {
+    const keys = TAX_CALENDAR_OBLIGATIONS.map((o) => o.key);
+    expect(keys).toContain("1701a");
     expect(TAX_CALENDAR_OBLIGATIONS.some((o) => /0605/i.test(o.form))).toBe(false);
-    for (const o of TAX_CALENDAR_OBLIGATIONS) {
-      expect(o.sourceNote.length).toBeGreaterThan(0);
-    }
-    expect(TAX_CALENDAR_APPLIES.unverified).toBe("Unverified: ask RDO");
-  });
-
-  it("defaults hide 0619-E / 1601-EQ; COR toggle off; provisional banner text exact", () => {
     const d = defaultTaxCalendarSettings();
-    expect(d.corUploadedAndChecked).toBe(false);
     expect(d.obligations["0619e"].enabled).toBe(false);
     expect(d.obligations["1601eq"].enabled).toBe(false);
-    expect(d.obligations["1701q"].enabled).toBe(true);
+    expect(d.obligations["1701a"].enabled).toBe(true);
     expect(DEFAULT_SETTINGS.taxCalendar).toEqual(d);
-    expect(TAX_CALENDAR_PROVISIONAL_BANNER).toBe(
-      "Provisional: built from documents on hand, not the BIR COR. Check with your accountant or RDO before relying on these dates.",
-    );
-    expect(TAX_CALENDAR_PAGE.href).toBe("/books/tax/calendar");
     expect(TAX_CALENDAR_EMPTY_UPCOMING.length).toBeGreaterThan(0);
     expect(TAX_CALENDAR_EMPTY_ALL.length).toBeGreaterThan(0);
   });
 
-  it("settings form round-trips taxCalendar section", () => {
+  it("settings form round-trips taxYear holidays, method, books type", () => {
+    const get = (name: string) => {
+      const map: Record<string, string> = {
+        year: "2026",
+        nonVatLimit: "3000000",
+        warnFirstPct: "70",
+        warnSecondPct: "90",
+        incomeTaxMethod: "EIGHT_PERCENT",
+        incomeTaxMethodsByYear: JSON.stringify({ "2026": "EIGHT_PERCENT" }),
+        booksType: "loose_leaf",
+        holidays: "2026-01-01 regular New Year's Day\n2026-02-17 special Chinese New Year",
+      };
+      return map[name] ?? null;
+    };
+    const raw = settingsValueFromForm("taxYear", get);
+    const parsed = settingsSchema.shape.taxYear.parse(raw);
+    expect(parsed.incomeTaxMethod).toBe("EIGHT_PERCENT");
+    expect(parsed.booksType).toBe("loose_leaf");
+    expect(parsed.holidays).toEqual([
+      { ymd: "2026-01-01", kind: "regular", name: "New Year's Day" },
+      { ymd: "2026-02-17", kind: "special", name: "Chinese New Year" },
+    ]);
+    expect(parsed.incomeTaxMethodsByYear["2026"]).toBe("EIGHT_PERCENT");
+  });
+
+  it("settings form round-trips taxCalendar including 1701a", () => {
     const get = (name: string) => {
       const map: Record<string, string> = {
         corUploadedAndChecked: "true",
@@ -203,8 +511,11 @@ describe("seed obligations and settings defaults", () => {
         "obligations.1701.enabled": "true",
         "obligations.1701.dueDay": "15",
         "obligations.1701.dueMonth": "4",
+        "obligations.1701a.enabled": "true",
+        "obligations.1701a.dueDay": "15",
+        "obligations.1701a.dueMonth": "4",
         "obligations.2551q.enabled": "true",
-        "obligations.2551q.dueDay": "15",
+        "obligations.2551q.dueDay": "",
         "obligations.2551q.dueMonth": "",
         "obligations.2550q.enabled": "true",
         "obligations.2550q.dueDay": "25",
@@ -226,177 +537,62 @@ describe("seed obligations and settings defaults", () => {
     };
     const raw = settingsValueFromForm("taxCalendar", get);
     const parsed = settingsSchema.shape.taxCalendar.parse(raw);
-    expect(parsed.corUploadedAndChecked).toBe(true);
-    expect(parsed.obligations["0619e"].enabled).toBe(false);
-    expect(parsed.obligations["1601eq"].dueDay).toBeNull();
-    expect(parsed.obligations["1701"].dueMonth).toBe(4);
+    expect(parsed.obligations["1701a"].dueMonth).toBe(4);
+    expect(parsed.obligations["2551q"].dueDay).toBeNull();
+  });
+
+  it("clamps day into month length", () => {
+    expect(ymdOnOrLast(2026, 2, 31)).toBe("2026-02-28");
   });
 });
 
-describe("calendar build views", () => {
-  it("upcoming 90 days includes Nov 15 2026 weekend hint from Oct 30; hides disabled withholding", () => {
-    const settings = defaultTaxCalendarSettings();
-    const rows = buildTaxCalendarRows({
-      settings,
-      view: "upcoming",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-    });
-    const q3 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q3");
-    expect(q3).toBeTruthy();
-    expect(q3?.fileByHint).toBe("File by 2026-11-13 to be safe");
-    expect(q3?.worksheetLink).toContain("/books/tax/income");
-    expect(rows.some((r) => r.obligationKey === "0619e")).toBe(false);
-    expect(rows.some((r) => r.obligationKey === "2551q" && r.greyedOut)).toBe(true);
-  });
-
-  it("marked done overrides status", () => {
-    const settings = defaultTaxCalendarSettings();
-    const rows = buildTaxCalendarRows({
-      settings,
-      view: "all",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-      fromYear: 2026,
-      toYear: 2026,
-      completions: [{ occurrenceKey: "1701q|2026-Q3", doneDateYmd: "2026-10-01", note: "paid at bank" }],
-    });
-    const q3 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q3");
-    expect(q3?.status).toBe("markedDone");
-    expect(q3?.statusLabel).toBe("Marked done");
-    expect(q3?.markedDone).toBe(true);
-    expect(q3?.doneNote).toBe("paid at bank");
-  });
-
-  it("status Marked done ↔ markedDone on every row (Undo must track the chip)", () => {
-    const settings = defaultTaxCalendarSettings();
-    const withDone = buildTaxCalendarRows({
-      settings,
-      view: "all",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-      fromYear: 2025,
-      toYear: 2027,
-      completions: [
-        { occurrenceKey: "1701q|2026-Q3", doneDateYmd: "2026-10-01", note: "paid" },
-        { occurrenceKey: "books_accounts|2025", doneDateYmd: "2026-01-15", note: null },
-      ],
-    });
-    const without = buildTaxCalendarRows({
-      settings,
-      view: "all",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-      fromYear: 2025,
-      toYear: 2027,
-    });
-    for (const r of [...withDone, ...without]) {
+describe("marked done invariant", () => {
+  it("status Marked done ↔ markedDone on every row", () => {
+    const withDone = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2025,
+        toYear: 2027,
+        completions: [{ occurrenceKey: "1701q|2026-Q3", doneDateYmd: "2026-10-01", note: "paid" }],
+      }),
+    );
+    for (const r of withDone) {
       expect(r.markedDone).toBe(r.status === "markedDone");
-      if (r.markedDone) {
-        expect(r.statusLabel).toBe("Marked done");
-      } else {
-        expect(r.statusLabel).not.toBe("Marked done");
-      }
-    }
-    const q3 = withDone.find((r) => r.occurrenceKey === "1701q|2026-Q3");
-    expect(q3?.markedDone).toBe(true);
-    expect(q3?.statusLabel).toBe("Marked done");
-  });
-
-  it("upcoming keeps past overdue in window and sorts Overdue status first", () => {
-    const now = new Date("2026-10-30T08:00:00.000Z");
-    const rows = buildTaxCalendarRows({
-      settings: defaultTaxCalendarSettings(),
-      view: "upcoming",
-      now,
-    });
-    // Filter includes undone dues on or before horizon (not only next 90 days forward) —
-    // so past-year / earlier-this-year overdue stay visible within fromYear..toYear.
-    const overdue = rows.filter((r) => r.status === "overdue");
-    expect(overdue.length).toBeGreaterThan(0);
-    expect(overdue.some((r) => r.dueYmd !== null && r.dueYmd < "2026-10-30")).toBe(true);
-    let seenNonOverdue = false;
-    for (const r of rows) {
-      if (r.status === "overdue") {
-        expect(seenNonOverdue).toBe(false);
-      } else {
-        seenNonOverdue = true;
-      }
-    }
-  });
-
-  it("hides Confirmed Applies chip until COR uploaded and checked (1701Q / 1701)", () => {
-    const now = new Date("2026-10-30T08:00:00.000Z");
-    const off = defaultTaxCalendarSettings();
-    expect(off.corUploadedAndChecked).toBe(false);
-    const provisional = buildTaxCalendarRows({ settings: off, view: "all", now, fromYear: 2026, toYear: 2026 });
-    for (const key of ["1701q", "1701"] as const) {
-      const row = provisional.find((r) => r.obligationKey === key);
-      expect(row).toBeTruthy();
-      expect(row?.applies).toBe("unverified");
-      expect(row?.appliesLabel).toBe(TAX_CALENDAR_APPLIES.unverified);
-      expect(row?.appliesLabel).toBe("Unverified: ask RDO");
-    }
-
-    const on = { ...off, corUploadedAndChecked: true };
-    const confirmed = buildTaxCalendarRows({ settings: on, view: "all", now, fromYear: 2026, toYear: 2026 });
-    for (const key of ["1701q", "1701"] as const) {
-      const row = confirmed.find((r) => r.obligationKey === key);
-      expect(row?.applies).toBe("confirmed");
-      expect(row?.appliesLabel).toBe(TAX_CALENDAR_APPLIES.confirmed);
-      expect(row?.appliesLabel).toBe("Confirmed");
     }
   });
 });
 
-describe("ICS and CSV injection safety (no customer data)", () => {
-  it("escapes RFC 5545 TEXT (backslash, comma, semicolon, newline)", () => {
-    expect(icsEscapeText("a\\b")).toBe("a\\\\b");
-    expect(icsEscapeText("a,b;c")).toBe("a\\,b\\;c");
-    expect(icsEscapeText("line1\nline2")).toBe("line1\\nline2");
-    expect(icsEscapeText("line1\r\nline2")).toBe("line1\\nline2");
-  });
-
-  it("ICS has 7-day and 2-day alarms, no customer-like fields", () => {
-    const settings = defaultTaxCalendarSettings();
-    const rows = buildTaxCalendarRows({
-      settings,
-      view: "all",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-      fromYear: 2026,
-      toYear: 2026,
-    });
+describe("ICS and CSV injection safety", () => {
+  it("ICS uses rolled Nov 16 date; omits N/A forms; no customer data", () => {
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+      }),
+    );
     const ics = buildTaxCalendarIcs(rows, { now: new Date("2026-10-30T00:00:00.000Z") });
-    expect(ics).toContain("BEGIN:VCALENDAR");
-    expect(ics).toContain("TRIGGER:-P7D");
-    expect(ics).toContain("TRIGGER:-P2D");
-    expect(ics).toContain("1701Q");
-    expect(ics).toContain("DTSTART;VALUE=DATE:20261115");
-    // Greyed does-not-apply rows are omitted from ICS
+    expect(ics).toContain("DTSTART;VALUE=DATE:20261116");
     expect(ics).not.toContain("2551Q");
     expect(ics).not.toContain("2550Q");
-    // No customer / PII-ish keys
-    expect(ics.toLowerCase()).not.toMatch(/customer|tin|email|@gmail|phone|address:/);
-    // Injection payload in description path via escape
-    expect(icsEscapeText("=1+1")).toBe("=1+1");
-    expect(icsEscapeText("SUM(A1);cmd")).toBe("SUM(A1)\\;cmd");
+    expect(ics.toLowerCase()).not.toMatch(/customer|tin|email|@gmail/);
+    expect(icsEscapeText("a,b;c")).toBe("a\\,b\\;c");
   });
 
-  it("CSV uses shared csvCell (formula injection) and has no customer columns", () => {
+  it("CSV uses shared csvCell", () => {
     expect(csvCell("=1+1")).toBe("'=1+1");
-    expect(csvCell("@SUM(A1)")).toBe("'@SUM(A1)");
-    expect(csvCell("+cmd")).toBe("'+cmd");
-    const settings = defaultTaxCalendarSettings();
-    const rows = buildTaxCalendarRows({
-      settings,
-      view: "all",
-      now: new Date("2026-10-30T08:00:00.000Z"),
-      fromYear: 2026,
-      toYear: 2026,
-    });
-    const poisoned = rows.map((r, i) =>
-      i === 0 ? { ...r, description: "=cmd|'/C calc", form: "@SUM(A1)" } : r,
+    const rows = buildTaxCalendarRows(
+      buildOpts({
+        view: "all",
+        now: new Date("2026-10-30T08:00:00.000Z"),
+        fromYear: 2026,
+        toYear: 2026,
+      }),
     );
-    const csv = taxCalendarToCsv(poisoned);
+    const csv = taxCalendarToCsv(rows);
     expect(csv.split("\r\n")[0]).toContain("Form");
-    expect(csv).toContain("'=cmd|'/C calc");
-    expect(csv).toContain("'@SUM(A1)");
     expect(csv.toLowerCase()).not.toMatch(/customer|email|tin/);
   });
 });

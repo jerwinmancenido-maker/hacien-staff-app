@@ -88,17 +88,28 @@ function DesktopRow({
   doneDefault: string;
 }) {
   const [open, setOpen] = useState(false);
-  const muted = r.applies === "does_not_apply" || r.greyedOut;
+  const muted = r.notApplicable || r.applies === "does_not_apply" || r.greyedOut;
   const openBtnClass = muted ? "btn btn-secondary btn-sm" : "btn btn-sm";
+  const showApplies = !!r.appliesLabel && r.applies !== "unverified";
 
   return (
     <>
       <tr className={muted ? "tax-cal-row-muted" : undefined}>
         <td className="tax-cal-form">
           <b>{r.form}</b>
+          {r.description ? <div className="faint small tax-cal-plain">{r.description}</div> : null}
         </td>
         <td className="tax-cal-desc">
           <div>{r.description}</div>
+          {r.tasks.length > 0 ? (
+            <ul className="tax-cal-tasks" style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+              {r.tasks.map((t) => (
+                <li key={t} className="small">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
           {r.worksheetLink ? (
             <div className="tax-cal-desc-worksheet">
@@ -123,13 +134,19 @@ function DesktopRow({
           <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
         </td>
         <td className="tax-cal-applies">
-          <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>
+          {showApplies ? (
+            <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>
+          ) : (
+            <span className="faint">—</span>
+          )}
         </td>
         <td className="tax-cal-worksheet">
           {r.worksheetLink ? <Link href={r.worksheetLink}>Open worksheet</Link> : <span className="faint">—</span>}
         </td>
         <td className="tax-cal-done">
-          {r.markedDone ? (
+          {r.notApplicable ? (
+            <span className="faint small">—</span>
+          ) : r.markedDone ? (
             <TaxCalendarMarkDoneForm
               occurrenceKey={r.occurrenceKey}
               dueYmd={r.dueYmd}
@@ -146,7 +163,7 @@ function DesktopRow({
           )}
         </td>
       </tr>
-      {open && !r.markedDone ? (
+      {open && !r.markedDone && !r.notApplicable ? (
         <tr className="tax-cal-done-form-row">
           <td colSpan={8}>
             <OpenMarkDoneForm r={r} doneDefault={doneDefault} onCancel={() => setOpen(false)} />

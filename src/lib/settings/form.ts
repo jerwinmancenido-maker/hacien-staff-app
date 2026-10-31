@@ -42,13 +42,53 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
           },
         ]),
       );
-    case "taxYear":
+    case "taxYear": {
+      const year = get("year");
+      const incomeTaxMethod = get("incomeTaxMethod") === "GRADUATED" ? "GRADUATED" : "EIGHT_PERCENT";
+      const booksRaw = (get("booksType") ?? "").trim();
+      const booksType =
+        booksRaw === "loose_leaf" || booksRaw === "computerized" ? booksRaw : null;
+      // Holiday lines: "YYYY-MM-DD" or "YYYY-MM-DD regular|special Optional name"
+      const holidays = lines(get("holidays")).flatMap((line) => {
+        if (line.startsWith("#")) return [];
+        const parts = line.split(/\s+/);
+        const ymd = parts[0] ?? "";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return [];
+        let kind: "regular" | "special" = "regular";
+        let nameParts: string[] = [];
+        if (parts[1] === "regular" || parts[1] === "special") {
+          kind = parts[1];
+          nameParts = parts.slice(2);
+        } else if (parts.length > 1) {
+          nameParts = parts.slice(1);
+        }
+        const name = nameParts.join(" ").trim();
+        return name ? [{ ymd, kind, name }] : [{ ymd, kind }];
+      });
+      const priorRaw = get("incomeTaxMethodsByYear") ?? "";
+      let incomeTaxMethodsByYear: Record<string, "EIGHT_PERCENT" | "GRADUATED"> = {};
+      if (priorRaw.trim()) {
+        try {
+          const parsed = JSON.parse(priorRaw) as Record<string, string>;
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v === "EIGHT_PERCENT" || v === "GRADUATED") incomeTaxMethodsByYear[k] = v;
+          }
+        } catch {
+          incomeTaxMethodsByYear = {};
+        }
+      }
+      if (year) incomeTaxMethodsByYear[String(year)] = incomeTaxMethod;
       return {
-        year: get("year"),
+        year,
         nonVatLimit: get("nonVatLimit"),
         warnFirstPct: get("warnFirstPct"),
         warnSecondPct: get("warnSecondPct"),
+        incomeTaxMethod,
+        incomeTaxMethodsByYear,
+        holidays,
+        booksType,
       };
+    }
     case "company":
       return {
         name: get("name") ?? "",
@@ -82,6 +122,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       const keys = [
         "1701q",
         "1701",
+        "1701a",
         "2551q",
         "2550q",
         "0619e",

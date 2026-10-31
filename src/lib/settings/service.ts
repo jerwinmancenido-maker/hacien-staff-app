@@ -57,6 +57,23 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
+      taxYear: {
+        ...DEFAULT_SETTINGS.taxYear,
+        ...(v.data as Partial<Settings>).taxYear,
+        incomeTaxMethodsByYear: {
+          ...DEFAULT_SETTINGS.taxYear.incomeTaxMethodsByYear,
+          ...((v.data as Partial<Settings>).taxYear?.incomeTaxMethodsByYear ?? {}),
+        },
+        holidays:
+          (v.data as Partial<Settings>).taxYear?.holidays ?? DEFAULT_SETTINGS.taxYear.holidays,
+        booksType:
+          (v.data as Partial<Settings>).taxYear?.booksType !== undefined
+            ? (v.data as Partial<Settings>).taxYear!.booksType
+            : DEFAULT_SETTINGS.taxYear.booksType,
+        incomeTaxMethod:
+          (v.data as Partial<Settings>).taxYear?.incomeTaxMethod ??
+          DEFAULT_SETTINGS.taxYear.incomeTaxMethod,
+      },
       taxCalendar: {
         ...DEFAULT_SETTINGS.taxCalendar,
         ...(v.data as Partial<Settings>).taxCalendar,

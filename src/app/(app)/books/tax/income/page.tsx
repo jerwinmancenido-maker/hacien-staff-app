@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import {
   ALLOWANCE_8PCT_LABEL,
+  COLLECTED_REFERENCE_HINT,
   COLLECTED_TOTAL_LABEL,
   INCOME_TAX_LINE_HINTS,
   INVOICED_TOTAL_LABEL,
@@ -61,10 +62,10 @@ function DualLine({
         <div>{label}</div>
         <div className="faint small">{hint}</div>
       </td>
-      <td className="num" style={{ whiteSpace: "nowrap" }}>
+      <td className="num tax-income-main" style={{ whiteSpace: "nowrap", fontWeight: 600, fontSize: "1.05em" }}>
         {cell(invoiced, invoicedHref, warnInvoiced)}
       </td>
-      <td className="num" style={{ whiteSpace: "nowrap" }}>
+      <td className="num tax-income-ref" style={{ whiteSpace: "nowrap", fontSize: "0.9em", opacity: 0.75 }}>
         {cell(collected, collectedHref, warnCollected)}
       </td>
     </tr>
@@ -112,8 +113,8 @@ export default async function IncomeTaxWorksheetPage({
         <div className="alert warn" role="status" style={{ marginBottom: 16 }}>
           <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
           <div className="small" style={{ marginTop: 4 }}>
-            {INCOME_TAX_LINE_HINTS.a}. This app does not pick a basis and does not use a combined
-            sales-plus-collections total.
+            {INCOME_TAX_LINE_HINTS.a}. The 8% math is unchanged; Collected is kept only as a reference
+            column.
           </div>
         </div>
 
@@ -127,13 +128,18 @@ export default async function IncomeTaxWorksheetPage({
           <EmptyState title="No figures yet" line={TAX_WORKSHEET_PAGES.income.empty} />
         ) : null}
 
-        <table className="data-table" style={{ marginTop: empty ? 16 : 0 }}>
+        <table className="data-table tax-income-worksheet" style={{ marginTop: empty ? 16 : 0 }}>
           <thead>
             <tr>
               <th></th>
               <th>Line</th>
-              <th className="num">{INVOICED_TOTAL_LABEL}</th>
-              <th className="num">{COLLECTED_TOTAL_LABEL}</th>
+              <th className="num tax-income-main">{INVOICED_TOTAL_LABEL}</th>
+              <th className="num tax-income-ref">
+                <div>{COLLECTED_TOTAL_LABEL}</div>
+                <div className="faint small" style={{ fontWeight: 400 }}>
+                  {COLLECTED_REFERENCE_HINT}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>

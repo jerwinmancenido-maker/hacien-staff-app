@@ -10,7 +10,12 @@ import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
-import { TAX_CALENDAR_PROVISIONAL_BANNER } from "@/lib/tax/calendar-constants";
+import {
+  BOOKS_OF_ACCOUNTS_TYPE_LABELS,
+  INCOME_TAX_METHOD_LABELS,
+  TAX_CALENDAR_PROVISIONAL_BANNER,
+} from "@/lib/tax/calendar-constants";
+import { formatHolidayLines } from "@/lib/tax/holidays";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
@@ -116,9 +121,48 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             action={save("taxYear")}
             fields={[
               { name: "year", label: "Tax year", kind: "number", value: s.taxYear.year },
+              {
+                name: "incomeTaxMethod",
+                label: "Income tax method",
+                kind: "select",
+                value: s.taxYear.incomeTaxMethod,
+                options: [
+                  { value: "EIGHT_PERCENT", label: INCOME_TAX_METHOD_LABELS.EIGHT_PERCENT },
+                  { value: "GRADUATED", label: INCOME_TAX_METHOD_LABELS.GRADUATED },
+                ],
+                hint: "Per tax year. Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A.",
+              },
+              {
+                name: "incomeTaxMethodsByYear",
+                label: "Method history (JSON)",
+                kind: "textarea",
+                value: JSON.stringify(s.taxYear.incomeTaxMethodsByYear ?? {}, null, 0),
+                hint: "Auto-updated when you save. Keep as JSON year→method map.",
+                full: true,
+              },
+              {
+                name: "booksType",
+                label: "Books of accounts type",
+                kind: "select",
+                value: s.taxYear.booksType ?? "",
+                options: [
+                  { value: "", label: "Not chosen yet (date to confirm)" },
+                  { value: "loose_leaf", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.loose_leaf },
+                  { value: "computerized", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.computerized },
+                ],
+                hint: "Loose-leaf due Jan 15; computerized due Jan 30 — both rolled to the next working day when they fall on a weekend or holiday.",
+              },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
               { name: "warnFirstPct", label: "First warning at", kind: "number", value: s.taxYear.warnFirstPct, suffix: "% of the limit" },
               { name: "warnSecondPct", label: "Second warning at", kind: "number", value: s.taxYear.warnSecondPct, suffix: "% of the limit" },
+              {
+                name: "holidays",
+                label: "Holiday list (YYYY-MM-DD [regular|special] [name])",
+                kind: "lines",
+                value: formatHolidayLines(s.taxYear.holidays ?? []),
+                hint: "Editable. Due dates on a weekend or holiday move to the next working day (RMC 65-2016). Seeded with 2026 PH regular and special holidays.",
+                full: true,
+              },
             ]}
           />
         )}

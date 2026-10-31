@@ -22,6 +22,15 @@ const taxCalendarObligationSettings = z.object({
   dueMonth: optionalMonth,
 });
 
+const taxHoliday = z.object({
+  ymd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD."),
+  kind: z.enum(["regular", "special"]),
+  name: z.string().trim().max(100).optional(),
+});
+
+const incomeTaxMethod = z.enum(["EIGHT_PERCENT", "GRADUATED"]);
+const booksOfAccountsType = z.enum(["loose_leaf", "computerized"]).nullable();
+
 const numberingFormat = z.object({
   prefix: z
     .string()
@@ -94,6 +103,19 @@ export const settingsSections = {
       nonVatLimit: z.coerce.number().positive("Must be more than 0."),
       warnFirstPct: z.coerce.number().min(1).max(100),
       warnSecondPct: z.coerce.number().min(1).max(100),
+      /**
+       * Income tax method for `year`. Seed: 2026 = 8%; 2027 onward default Graduated.
+       * Per-year history lives in incomeTaxMethodsByYear.
+       */
+      incomeTaxMethod: incomeTaxMethod.default("EIGHT_PERCENT"),
+      incomeTaxMethodsByYear: z.record(z.string(), incomeTaxMethod).default({}),
+      /** Editable PH holiday list used to roll tax due dates (RMC 65-2016). */
+      holidays: z.array(taxHoliday).default([]),
+      /**
+       * Books of accounts type. Null → calendar shows “date to confirm”.
+       * loose_leaf → Jan 15; computerized → Jan 30 (then rolled).
+       */
+      booksType: booksOfAccountsType.default(null),
     })
     .refine((v) => v.warnFirstPct < v.warnSecondPct, {
       message: "First warning must be lower than the second.",
@@ -147,13 +169,14 @@ export const settingsSections = {
     cashEnabled: z.boolean(),
     booksEnabled: z.boolean(),
   }),
-  // Part 7d tax calendar (provisional). Owner-only via manage_settings.
+  // Tax calendar. Owner-only via manage_settings.
   taxCalendar: z.object({
-    /** When true, the provisional banner may be cleared. Default false. */
+    /** When true, the provisional COR banner may be cleared. Default false. */
     corUploadedAndChecked: z.boolean(),
     obligations: z.object({
       "1701q": taxCalendarObligationSettings,
       "1701": taxCalendarObligationSettings,
+      "1701a": taxCalendarObligationSettings,
       "2551q": taxCalendarObligationSettings,
       "2550q": taxCalendarObligationSettings,
       "0619e": taxCalendarObligationSettings,
