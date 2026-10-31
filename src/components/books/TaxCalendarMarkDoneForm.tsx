@@ -32,7 +32,7 @@ export function TaxCalendarMarkDoneForm({
     return (
       <div className="stack" style={{ gap: 6 }}>
         <div className="small">
-          Done {doneDateYmd}
+          Done {doneDateYmd ? <span className="tax-cal-done-date">{doneDateYmd}</span> : null}
           {doneNote ? ` — ${doneNote}` : ""}
         </div>
         <form

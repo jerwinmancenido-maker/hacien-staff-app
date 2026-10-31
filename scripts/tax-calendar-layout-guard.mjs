@@ -2,9 +2,11 @@
 /**
  * Tax calendar layout regression guard (DOM via Chrome CDP).
  *
- * Checks at 360, 1024 and 1280:
- * - every due-date / file-by-date node is a single line box
- * - every status/applies chip is unclipped (scrollWidth <= clientWidth)
+ * Checks at 360, 768, 1024 and 1280:
+ * - every due-date / file-by-date / Done-note date node is a single line box
+ * - every status/applies chip is unclipped (scrollWidth <= clientWidth, and
+ *   not clipped by an overflow:hidden ancestor cell)
+ * - Description titles are at most 3 lines at 768 and 1024
  * - desktop table wrapper has no horizontal scroll (scrollWidth <= clientWidth)
  *
  * Requires a running app on BASE_URL (default http://localhost:3000) and
@@ -22,7 +24,7 @@ const BASE = (process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, ""
 const PORT = Number(process.env.GUARD_CDP_PORT || 9411);
 const email = process.env.GUARD_EMAIL || "jerwin@example.com";
 const password = process.env.GUARD_PASSWORD || process.env.SEED_PASSWORD || "TestPass123!";
-const VIEWPORTS = [360, 1024, 1280];
+const VIEWPORTS = [360, 768, 1024, 1280];
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -132,7 +134,7 @@ async function openCalendar(cdp, w) {
   await sleep(300);
 }
 
-async function measure(cdp, w) {
+async function measure(cdp) {
   const r = await cdp.send("Runtime.evaluate", {
     returnByValue: true,
     expression: `(() => {
@@ -153,6 +155,38 @@ async function measure(cdp, w) {
       function isIsoDate(t) {
         return /^\\d{4}-\\d{2}-\\d{2}$/.test((t || '').trim());
       }
+      function clipOverflowHidden(el) {
+        const er = el.getBoundingClientRect();
+        let p = el.parentElement;
+        while (p) {
+          const cs = getComputedStyle(p);
+          const ox = cs.overflowX;
+          const oy = cs.overflowY;
+          const hidden =
+            ox === 'hidden' || ox === 'clip' || oy === 'hidden' || oy === 'clip' ||
+            cs.overflow === 'hidden' || cs.overflow === 'clip';
+          if (hidden) {
+            const pr = p.getBoundingClientRect();
+            // Chip text clipped if any edge sits outside the overflow:hidden ancestor.
+            if (
+              er.left < pr.left - 0.5 ||
+              er.right > pr.right + 0.5 ||
+              er.top < pr.top - 0.5 ||
+              er.bottom > pr.bottom + 0.5
+            ) {
+              return {
+                ancestor: p.className || p.tagName,
+                overflow: cs.overflow + '/' + ox + '/' + oy,
+                chip: { left: er.left, right: er.right, top: er.top, bottom: er.bottom },
+                parent: { left: pr.left, right: pr.right, top: pr.top, bottom: pr.bottom },
+              };
+            }
+          }
+          if (p === document.body) break;
+          p = p.parentElement;
+        }
+        return null;
+      }
 
       const dateEls = isMobile
         ? [...document.querySelectorAll('.tax-cal-card-due')]
@@ -161,7 +195,9 @@ async function measure(cdp, w) {
             ...document.querySelectorAll('td.tax-cal-due .tax-cal-fileby-date'),
           ];
 
-      const splitDates = dateEls
+      const doneDateEls = [...document.querySelectorAll('.tax-cal-done-date')];
+
+      const splitDates = [...dateEls, ...doneDateEls]
         .filter((el) => {
           const t = (el.innerText || '').trim();
           // ISO dates must be single line; "date to confirm" may wrap at spaces.
@@ -174,12 +210,29 @@ async function measure(cdp, w) {
         ? '.tax-cal-card-chips .chip'
         : 'td.tax-cal-status .chip, td.tax-cal-applies .chip';
       const clippedChips = [...document.querySelectorAll(chipSel)]
-        .filter((c) => c.scrollWidth > c.clientWidth + 1)
-        .map((c) => ({
-          text: c.innerText.trim(),
-          scrollWidth: c.scrollWidth,
-          clientWidth: c.clientWidth,
-        }));
+        .map((c) => {
+          const selfClip = c.scrollWidth > c.clientWidth + 1;
+          const ancestorClip = clipOverflowHidden(c);
+          if (!selfClip && !ancestorClip) return null;
+          return {
+            text: c.innerText.trim(),
+            scrollWidth: c.scrollWidth,
+            clientWidth: c.clientWidth,
+            selfClip,
+            ancestorClip,
+          };
+        })
+        .filter(Boolean);
+
+      const descTitleSel = isMobile
+        ? '.tax-cal-card-desc'
+        : 'td.tax-cal-desc > div:first-child';
+      const descTitles = [...document.querySelectorAll(descTitleSel)].map((el) => ({
+        text: (el.innerText || '').trim().slice(0, 60),
+        lines: lineCount(el),
+        width: Math.round(el.getBoundingClientRect().width),
+      }));
+      const longDescTitles = descTitles.filter((d) => d.lines > 3);
 
       let hasHScroll = false;
       let scrollWidth = null;
@@ -193,9 +246,11 @@ async function measure(cdp, w) {
       return {
         iw: innerWidth,
         mode: isMobile ? 'phone' : 'desktop',
-        dateCount: dateEls.length,
+        dateCount: dateEls.length + doneDateEls.length,
         splitDates,
         clippedChips,
+        descTitles: descTitles.slice(0, 8),
+        longDescTitles,
         hasHScroll,
         scrollWidth,
         clientWidth,
@@ -249,7 +304,7 @@ async function main() {
   let failed = false;
   for (const w of VIEWPORTS) {
     await openCalendar(cdp, w);
-    const m = await measure(cdp, w);
+    const m = await measure(cdp);
     report.push(m);
     console.log(`viewport ${w}`, JSON.stringify(m));
     if (m.splitDates?.length) {
@@ -258,6 +313,10 @@ async function main() {
     }
     if (m.clippedChips?.length) {
       console.error(`FAIL ${w}: clipped chips:`, JSON.stringify(m.clippedChips));
+      failed = true;
+    }
+    if ((w === 768 || w === 1024) && m.longDescTitles?.length) {
+      console.error(`FAIL ${w}: Description >3 lines:`, JSON.stringify(m.longDescTitles));
       failed = true;
     }
     if (m.hasHScroll) {
