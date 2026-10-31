@@ -1,0 +1,75 @@
+{
+  "host": "127.0.0.1",
+  "report": [
+    {
+      "name": "quote-items-1280.png",
+      "width": 1280,
+      "height": 1412,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "quote-terms-1280.png",
+      "width": 1280,
+      "height": 1419,
+      "scrollWidth": 1250
+    },
+    {
+      "name": "quote-notes-1280.png",
+      "width": 1280,
+      "height": 1419,
+      "scrollWidth": 1250
+    },
+    {
+      "name": "quote-signoff-1280.png",
+      "width": 1280,
+      "height": 1419,
+      "scrollWidth": 1250
+    },
+    {
+      "name": "quote-add-customer-1280.png",
+      "width": 1280,
+      "height": 1419,
+      "scrollWidth": 1250
+    },
+    {
+      "name": "quote-items-360.png",
+      "width": 360,
+      "height": 1972,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-terms-360.png",
+      "width": 360,
+      "height": 1972,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-notes-360.png",
+      "width": 360,
+      "height": 1972,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-signoff-360.png",
+      "width": 360,
+      "height": 1972,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-add-customer-360.png",
+      "width": 360,
+      "height": 1972,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-print-preview-1280.png",
+      "width": 1280,
+      "height": 1600,
+      "scrollWidth": 1280,
+      "printCheck": {
+        "hasCustomerNote": true,
+        "hasInternal": false
+      }
+    }
+  ]
+}

@@ -45,9 +45,9 @@ export function WithholdingForm({
     ["code", "label", "lineKind", "atcCode", "ratePct", "note"].map((f) => e[`${i}.${f}`]).find(Boolean);
 
   return (
-    <div className="card">
-      <h2>Withholding rates</h2>
-      <div className="alert warn" role="note">
+    <div className="card settings-section">
+      <h2 className="settings-section-title">Withholding rates</h2>
+      <div className="settings-notice" role="note">
         <b>Rates must be verified with BIR / accountant.</b> These are examples only. Changes apply to new quotes; existing quotes keep the
         rates they were made with.
       </div>
@@ -66,29 +66,29 @@ export function WithholdingForm({
         )}
         <input type="hidden" name="baseVersionId" value={versionId} />
         <input type="hidden" name="rows" value={JSON.stringify(rows)} />
-        <div className="table-wrap edit-table">
+        <div className="table-wrap edit-table withholding-settings-table">
           <table className="list">
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Label</th>
-                <th>Applies to</th>
-                <th>ATC</th>
-                <th className="num">Rate %</th>
-                <th>Active</th>
-                <th>Note</th>
+                <th className="col-code">Code</th>
+                <th className="col-label">Label</th>
+                <th className="col-applies">Applies to</th>
+                <th className="col-atc">ATC</th>
+                <th className="col-rate num">Rate %</th>
+                <th className="col-active">Active</th>
+                <th className="col-note">Note</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id ?? `new-${i}`}>
-                  <td>
+                  <td className="col-code" data-label="Code">
                     <input
                       aria-label="Code"
                       value={r.code}
                       readOnly={!!r.id}
                       onChange={(ev) => set(i, { code: ev.target.value.toUpperCase() })}
-                      style={{ width: 120 }}
+                      className="withholding-code-input"
                     />
                     {rowError(i) && (
                       <div className="error small" role="alert">
@@ -96,11 +96,21 @@ export function WithholdingForm({
                       </div>
                     )}
                   </td>
-                  <td>
-                    <input aria-label="Label" value={r.label} onChange={(ev) => set(i, { label: ev.target.value })} />
+                  <td className="col-label" data-label="Label">
+                    <input
+                      aria-label="Label"
+                      value={r.label}
+                      onChange={(ev) => set(i, { label: ev.target.value })}
+                      className="withholding-label-input"
+                    />
                   </td>
-                  <td>
-                    <select aria-label="Applies to" value={r.lineKind} onChange={(ev) => set(i, { lineKind: ev.target.value })}>
+                  <td className="col-applies" data-label="Applies to">
+                    <select
+                      aria-label="Applies to"
+                      className="withholding-applies-select"
+                      value={r.lineKind}
+                      onChange={(ev) => set(i, { lineKind: ev.target.value })}
+                    >
                       {WITHHOLDING_LINE_KINDS.map((k) => (
                         <option key={k} value={k}>
                           {LINE_KIND_LABELS[k]}
@@ -108,27 +118,50 @@ export function WithholdingForm({
                       ))}
                     </select>
                   </td>
-                  <td>
-                    <input aria-label="ATC code" value={r.atcCode} onChange={(ev) => set(i, { atcCode: ev.target.value })} placeholder="—" style={{ width: 80 }} />
+                  <td className="col-atc" data-label="ATC">
+                    <input
+                      aria-label="ATC code"
+                      value={r.atcCode}
+                      onChange={(ev) => set(i, { atcCode: ev.target.value })}
+                      placeholder="—"
+                      className="withholding-atc-input"
+                    />
                   </td>
-                  <td className="num">
-                    <input aria-label="Rate percent" value={r.ratePct} inputMode="decimal" onChange={(ev) => set(i, { ratePct: ev.target.value })} style={{ width: 70, textAlign: "right" }} />
+                  <td className="col-rate num" data-label="Rate %">
+                    <input
+                      aria-label="Rate percent"
+                      value={r.ratePct}
+                      inputMode="decimal"
+                      onChange={(ev) => set(i, { ratePct: ev.target.value })}
+                      className="withholding-rate-input"
+                    />
                   </td>
-                  <td>
-                    <input aria-label="Active" type="checkbox" checked={r.active} onChange={(ev) => set(i, { active: ev.target.checked })} />
+                  <td className="col-active" data-label="Active">
+                    <label className="check withholding-active-check">
+                      <input
+                        aria-label="Active"
+                        type="checkbox"
+                        checked={r.active}
+                        onChange={(ev) => set(i, { active: ev.target.checked })}
+                      />
+                    </label>
                   </td>
-                  <td>
-                    <input aria-label="Note" value={r.note} onChange={(ev) => set(i, { note: ev.target.value })} />
+                  <td className="col-note" data-label="Note">
+                    <textarea
+                      aria-label="Note"
+                      className="withholding-note-input"
+                      rows={2}
+                      value={r.note}
+                      onChange={(ev) => set(i, { note: ev.target.value })}
+                    />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="form-actions">
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
+        <div className="form-actions settings-form-actions">
+          <span className="small faint settings-form-footnote">Rates can&apos;t be deleted; untick Active to stop offering one.</span>
           <button
             type="button"
             className="btn btn-secondary"
@@ -136,7 +169,9 @@ export function WithholdingForm({
           >
             Add rate
           </button>
-          <span className="small faint">Rates can&apos;t be deleted; untick Active to stop offering one.</span>
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
         </div>
       </form>
       <ConfirmDialog

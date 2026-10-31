@@ -1002,6 +1002,11 @@ tr.inactive .cell-primary .sub {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
 }
+/* Settings-only: top-align label/control pairs in the 2-col grid. */
+.settings-page .form-grid,
+.settings-shell .form-grid {
+  align-items: start;
+}
 .form-grid .full {
   grid-column: 1 / -1;
 }
@@ -1015,6 +1020,12 @@ tr.inactive .cell-primary .sub {
 .field .req {
   color: var(--red);
 }
+.field-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
 .input,
 .field input[type="text"],
 .field input[type="email"],
@@ -1023,7 +1034,7 @@ tr.inactive .cell-primary .sub {
 .field select,
 .field textarea {
   width: 100%;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1057,6 +1068,11 @@ tr.inactive .cell-primary .sub {
   color: var(--text-3);
   font-size: 12px;
   margin-top: 5px;
+  line-height: 1.35;
+}
+.field-check .check {
+  min-height: 40px;
+  align-items: center;
 }
 .check {
   display: inline-flex;
@@ -1065,8 +1081,9 @@ tr.inactive .cell-primary .sub {
   cursor: pointer;
 }
 .check input {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
   accent-color: var(--blue);
 }
 .form-actions {
@@ -1082,6 +1099,650 @@ tr.inactive .cell-primary .sub {
   color: var(--text-3);
   margin: 6px 0 0;
   grid-column: 1 / -1;
+}
+
+/* ---------- Settings page layout (Brief 08) ---------- */
+.settings-shell .page-header {
+  margin-bottom: 8px;
+}
+.settings-shell .page-header h1 {
+  font-size: 26px;
+  line-height: 1.15;
+}
+.settings-shell .page-header .subtitle {
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.settings-shell .settings-pill-tabs {
+  margin-bottom: 10px;
+}
+.settings-page {
+  max-width: 960px;
+  width: 100%;
+}
+.settings-tab-link {
+  margin: 8px 0 16px;
+}
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.settings-section .card-head .settings-section-title {
+  margin: 0;
+}
+.settings-form-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 18px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.settings-form-footnote {
+  margin-right: auto;
+  max-width: 42ch;
+}
+.settings-tax-cal-intro {
+  margin: 0 0 10px;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.settings-cor-row {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-cor-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.settings-cor-check input[type="checkbox"] {
+  margin: 0;
+  align-self: center;
+}
+.settings-cor-label {
+  line-height: 1.2;
+}
+.settings-cor-row .hint {
+  margin-top: 2px;
+  margin-left: 26px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.settings-section.tax-cal-card {
+  padding: 12px 14px;
+}
+.settings-section.tax-cal-card .settings-section-title {
+  margin-bottom: 6px;
+}
+.settings-section.tax-cal-card .settings-form-actions {
+  margin-top: 8px;
+  padding-top: 6px;
+  position: static;
+}
+.settings-tax-cal-intro {
+  margin-bottom: 8px;
+}
+.settings-cor-row {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+}
+.settings-cor-check {
+  min-height: 32px;
+}
+.settings-notice {
+  background: var(--fill);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+}
+.tax-cal-settings-wrap {
+  width: 100%;
+  overflow-x: visible;
+}
+.tax-cal-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.tax-cal-settings-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--fill);
+  text-align: left;
+  padding: 5px 8px;
+  vertical-align: bottom;
+}
+.tax-cal-settings-table th .tax-cal-th-label {
+  display: block;
+}
+.tax-cal-settings-table th .tax-cal-col-hint {
+  /* Shared default hints once under Due day / Due month headers (desktop). */
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: normal;
+}
+.tax-cal-shared-hints-mobile {
+  /* Phone only — desktop uses column-header hints. */
+  display: none;
+}
+.tax-cal-settings-table td {
+  padding: 3px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.tax-cal-settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.tax-cal-settings-table th:nth-child(1),
+.tax-cal-settings-table td:nth-child(1) {
+  /* Form + sourceNote under name — wider so notes wrap to 1–2 lines at 1280. */
+  width: 48%;
+}
+.tax-cal-settings-table th:nth-child(2),
+.tax-cal-settings-table td:nth-child(2) {
+  width: 8%;
+}
+.tax-cal-settings-table th:nth-child(3),
+.tax-cal-settings-table td:nth-child(3),
+.tax-cal-settings-table th:nth-child(4),
+.tax-cal-settings-table td:nth-child(4) {
+  width: 22%;
+}
+.tax-cal-settings-form .strong {
+  display: block;
+  line-height: 1.2;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tax-cal-settings-form .tax-cal-source-note {
+  /* One muted line under the form name (form-column width). */
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+.tax-cal-show-toggle {
+  min-height: 32px;
+  min-width: 32px;
+  align-items: flex-start;
+  padding-top: 0;
+}
+.tax-cal-show-text {
+  /* Column header already says Show; keep text for stacked phone rows only. */
+  display: none;
+  font-size: 13px;
+}
+.tax-cal-settings-day,
+.tax-cal-settings-month {
+  /* Keep input + special (non-default) hint on one compact block. */
+}
+.tax-cal-settings-day input,
+.tax-cal-settings-month input {
+  width: 100%;
+  max-width: 64px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  display: block;
+}
+.tax-cal-settings-day input:focus,
+.tax-cal-settings-month input:focus {
+  border-color: var(--blue);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.tax-cal-settings-day .hint,
+.tax-cal-settings-month .hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.25;
+}
+.print-company-preview > .pp-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+/* Settings tabs: fit all 11 at desktop; sideways scroll only below md */
+@media (min-width: 769px) {
+  .settings-pill-tabs.pill-tabs-wrap {
+    max-width: 100%;
+  }
+  .settings-pill-tabs .pill-tabs-track,
+  .settings-pill-tabs .pill-tabs-track.track-sm {
+    gap: 0;
+    padding: 2px;
+    overflow-x: visible;
+    flex-wrap: nowrap;
+  }
+  .settings-pill-tabs .pill-tab {
+    padding: 4px 7px;
+    font-size: 12px;
+    min-height: 40px;
+    letter-spacing: -0.01em;
+  }
+  .settings-pill-tabs .pill-tabs-track.track-sm .pill-tab {
+    padding: 4px 7px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  .settings-pill-tabs .pill-tabs-arrow {
+    display: none !important;
+  }
+  .settings-pill-tabs.has-overflow .pill-tabs-track {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+}
+
+/* Numbering compact table */
+.numbering-settings-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.numbering-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.numbering-settings-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--fill);
+  text-align: left;
+  padding: 8px 10px;
+}
+.numbering-settings-table td {
+  padding: 8px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.numbering-settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.numbering-settings-table th:nth-child(1),
+.numbering-settings-table td:nth-child(1) {
+  width: 26%;
+}
+.numbering-settings-table th:nth-child(2),
+.numbering-settings-table td:nth-child(2) {
+  width: 16%;
+  text-align: center;
+}
+.numbering-settings-table th:nth-child(3),
+.numbering-settings-table td:nth-child(3) {
+  width: 14%;
+}
+.numbering-settings-table th:nth-child(4),
+.numbering-settings-table td:nth-child(4) {
+  width: 12%;
+}
+.numbering-settings-table th:nth-child(5),
+.numbering-settings-table td:nth-child(5) {
+  width: 32%;
+}
+.numbering-doc .strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.numbering-reset-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+.numbering-reset {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 40px;
+  min-width: 40px;
+  margin: 0 auto;
+  font-size: 12px;
+  color: var(--text-2);
+  font-weight: 400;
+}
+.numbering-reset-text {
+  /* Header already names the column; keep label for stacked phone rows. */
+  display: none;
+  font-size: 12px;
+}
+.numbering-prefix input,
+.numbering-digits input {
+  width: 100%;
+  max-width: 120px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.numbering-example-code {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: transparent;
+}
+/* Desktop: table headers name the columns; keep labels for a11y + phone cards. */
+.numbering-field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Withholding: Code/Label/Applies full text; Note narrow + wraps; rows ≤48px.
+ * Beat later .edit-table table.list td padding/align with equal-or-higher specificity. */
+.withholding-settings-table {
+  overflow-x: visible;
+  max-height: none;
+}
+.edit-table.withholding-settings-table table.list,
+.withholding-settings-table.edit-table table.list,
+.withholding-settings-table table.list {
+  min-width: 0 !important;
+  width: 100%;
+  table-layout: fixed;
+}
+.edit-table.withholding-settings-table table.list th,
+.edit-table.withholding-settings-table table.list td,
+.withholding-settings-table table.list th,
+.withholding-settings-table table.list td {
+  white-space: normal;
+  vertical-align: middle;
+  padding: 3px 4px;
+  overflow: visible;
+}
+/* ~901px table at 1280: Code/ATC wide enough for SERVICES_2 / WI158; Note narrow. */
+.edit-table.withholding-settings-table table.list th.col-code,
+.edit-table.withholding-settings-table table.list td.col-code,
+.withholding-settings-table table.list th.col-code,
+.withholding-settings-table table.list td.col-code {
+  width: 11.5%;
+}
+.edit-table.withholding-settings-table table.list th.col-label,
+.edit-table.withholding-settings-table table.list td.col-label,
+.withholding-settings-table table.list th.col-label,
+.withholding-settings-table table.list td.col-label {
+  width: 31%;
+}
+.edit-table.withholding-settings-table table.list th.col-applies,
+.edit-table.withholding-settings-table table.list td.col-applies,
+.withholding-settings-table table.list th.col-applies,
+.withholding-settings-table table.list td.col-applies {
+  width: 27%;
+}
+.edit-table.withholding-settings-table table.list th.col-atc,
+.edit-table.withholding-settings-table table.list td.col-atc,
+.withholding-settings-table table.list th.col-atc,
+.withholding-settings-table table.list td.col-atc {
+  width: 8%;
+}
+.edit-table.withholding-settings-table table.list th.col-rate,
+.edit-table.withholding-settings-table table.list td.col-rate,
+.withholding-settings-table table.list th.col-rate,
+.withholding-settings-table table.list td.col-rate {
+  width: 6%;
+}
+.edit-table.withholding-settings-table table.list th.col-active,
+.edit-table.withholding-settings-table table.list td.col-active,
+.withholding-settings-table table.list th.col-active,
+.withholding-settings-table table.list td.col-active {
+  width: 6%;
+  text-align: center;
+}
+.edit-table.withholding-settings-table table.list th.col-note,
+.edit-table.withholding-settings-table table.list td.col-note,
+.withholding-settings-table table.list th.col-note,
+.withholding-settings-table table.list td.col-note {
+  width: 10.5%;
+  vertical-align: middle;
+}
+.edit-table.withholding-settings-table table.list thead th {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+/* Separate RATE % / ACTIVE / NOTE headers so they don't run together. */
+.edit-table.withholding-settings-table table.list th.col-rate,
+.withholding-settings-table table.list th.col-rate {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.edit-table.withholding-settings-table table.list th.col-active,
+.withholding-settings-table table.list th.col-active {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.edit-table.withholding-settings-table table.list th.col-note,
+.withholding-settings-table table.list th.col-note {
+  padding-left: 12px;
+}
+.withholding-settings-table table.list tbody tr {
+  height: 48px;
+}
+.edit-table.withholding-settings-table table.list input,
+.edit-table.withholding-settings-table table.list select,
+.edit-table.withholding-settings-table table.list textarea,
+.withholding-settings-table table.list input,
+.withholding-settings-table table.list select,
+.withholding-settings-table table.list textarea {
+  box-sizing: border-box;
+  max-width: none !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+.withholding-code-input,
+.withholding-label-input,
+.withholding-applies-select,
+.withholding-atc-input,
+.withholding-rate-input {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+}
+.withholding-code-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  padding: 0 4px;
+}
+.withholding-applies-select {
+  padding-right: 18px;
+  font-size: 12px;
+}
+.withholding-rate-input {
+  text-align: right;
+  padding-right: 4px;
+}
+.withholding-active-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 34px;
+  margin: 0 auto;
+  width: auto;
+}
+.withholding-active-check input {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+.edit-table.withholding-settings-table .withholding-note-input,
+.withholding-note-input {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 34px;
+  height: 34px;
+  max-height: 40px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  resize: none !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* Tax calendar: special due-day hints span Due day + empty Due month (1 line at 1280) */
+.tax-cal-hint-row td {
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px 6px;
+  vertical-align: top;
+}
+.tax-cal-hint-row .tax-cal-hint-pad {
+  border-bottom: 1px solid var(--border);
+}
+.tax-cal-hint-cell .hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tax-cal-settings-table tbody tr[data-obligation] td {
+  border-bottom: none;
+}
+.tax-cal-settings-table tbody tr.tax-cal-hint-row:last-child td,
+.tax-cal-settings-table tbody tr[data-obligation]:last-child td {
+  border-bottom: none;
+}
+.tax-cal-settings-table tbody tr[data-obligation]:not(:has(+ .tax-cal-hint-row)) td {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.tax-cal-settings-table tbody tr[data-obligation]:has(+ .tax-cal-hint-row) td {
+  padding-bottom: 2px;
+}
+
+/* Print & company: collapsible + sticky preview */
+.print-company-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .print-company-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  }
+  .print-company-preview {
+    position: sticky;
+    top: 12px;
+    margin-top: 0;
+  }
+}
+.print-collapse {
+  border-top: 1px solid var(--border);
+}
+.print-collapse:first-child {
+  border-top: none;
+}
+.print-collapse-head {
+  margin: 0;
+}
+.print-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.print-collapse-chevron {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--text-2);
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+.print-collapse-chevron.is-open {
+  transform: rotate(90deg);
+}
+.print-collapse-body.is-collapsed,
+.print-field-visually-hidden {
+  /* Keep mounted for form submit; hide from layout/AT when collapsed. */
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.print-collapse-body {
+  padding-bottom: 12px;
 }
 
 .alert {
@@ -1321,6 +1982,7 @@ pre.json {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
+  min-height: 40px;
   border-radius: 9px;
   border: none;
   background: transparent;
@@ -1329,6 +1991,7 @@ pre.json {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  flex: 0 0 auto;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   user-select: none;
 }
@@ -2406,6 +3069,250 @@ pre.json {
   .pill-tabs-track {
     gap: 4px;
   }
+  /* Settings-only mobile tab/form tweaks (do not affect Books/other PRs). */
+  .settings-shell .pill-tabs-track,
+  .settings-pill-tabs .pill-tabs-track {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .settings-shell .pill-tab,
+  .settings-pill-tabs .pill-tab {
+    min-height: 40px;
+  }
+  .settings-page .form-grid,
+  .settings-shell .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .tax-cal-settings-wrap {
+    overflow-x: visible;
+  }
+  .tax-cal-shared-hints-mobile {
+    display: block;
+    margin: 0 0 10px;
+    padding: 0;
+  }
+  .tax-cal-shared-hints-mobile .hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-3);
+    line-height: 1.35;
+  }
+  .tax-cal-shared-hints-mobile .hint + .hint {
+    margin-top: 4px;
+  }
+  .tax-cal-settings-table,
+  .tax-cal-settings-table thead,
+  .tax-cal-settings-table tbody,
+  .tax-cal-settings-table tr,
+  .tax-cal-settings-table th,
+  .tax-cal-settings-table td {
+    display: block;
+    width: 100%;
+  }
+  .tax-cal-settings-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .tax-cal-settings-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tax-cal-settings-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .tax-cal-settings-table td {
+    padding: 0;
+    border-bottom: none;
+  }
+  .tax-cal-settings-form {
+    grid-column: 1 / -1;
+  }
+  .tax-cal-settings-form .strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+  .tax-cal-settings-show {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .tax-cal-settings-day {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .tax-cal-settings-month {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .tax-cal-settings-month:has(.tax-cal-month-na) {
+    display: none;
+  }
+  .tax-cal-settings-day input,
+  .tax-cal-settings-month input {
+    max-width: none;
+  }
+  .tax-cal-show-text {
+    display: inline;
+  }
+  .settings-form-actions {
+    position: static;
+  }
+  /* Numbering cards are below 640px — keep table at tablet widths. */
+  .tax-cal-hint-cell .hint {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+  .tax-cal-hint-row {
+    display: block;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tax-cal-hint-row td {
+    display: block;
+    width: 100%;
+    border-bottom: none;
+    padding: 0;
+  }
+  .tax-cal-hint-pad {
+    display: none !important;
+  }
+  .withholding-settings-table {
+    overflow-x: visible;
+  }
+  .edit-table.withholding-settings-table table.list,
+  .withholding-settings-table.edit-table table.list,
+  .withholding-settings-table table.list {
+    table-layout: auto;
+  }
+  .edit-table.withholding-settings-table table.list,
+  .edit-table.withholding-settings-table table.list thead,
+  .edit-table.withholding-settings-table table.list tbody,
+  .edit-table.withholding-settings-table table.list tr,
+  .edit-table.withholding-settings-table table.list th,
+  .edit-table.withholding-settings-table table.list td,
+  .withholding-settings-table table.list,
+  .withholding-settings-table table.list thead,
+  .withholding-settings-table table.list tbody,
+  .withholding-settings-table table.list tr,
+  .withholding-settings-table table.list th,
+  .withholding-settings-table table.list td {
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .edit-table.withholding-settings-table table.list thead,
+  .withholding-settings-table table.list thead {
+    position: absolute;
+    width: 1px !important;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* Card grid: Code|ATC and Rate|Active side-by-side; rest full width. */
+  .edit-table.withholding-settings-table table.list tbody tr,
+  .withholding-settings-table table.list tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 4px;
+    height: auto;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .edit-table.withholding-settings-table table.list td,
+  .withholding-settings-table table.list td {
+    padding: 0 !important;
+    min-width: 0;
+  }
+  .edit-table.withholding-settings-table table.list td.col-code,
+  .withholding-settings-table table.list td.col-code {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .edit-table.withholding-settings-table table.list td.col-atc,
+  .withholding-settings-table table.list td.col-atc {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .edit-table.withholding-settings-table table.list td.col-label,
+  .withholding-settings-table table.list td.col-label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .edit-table.withholding-settings-table table.list td.col-applies,
+  .withholding-settings-table table.list td.col-applies {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .edit-table.withholding-settings-table table.list td.col-rate,
+  .withholding-settings-table table.list td.col-rate {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .edit-table.withholding-settings-table table.list td.col-active,
+  .withholding-settings-table table.list td.col-active {
+    grid-column: 2;
+    grid-row: 4;
+    text-align: left;
+  }
+  .edit-table.withholding-settings-table table.list td.col-note,
+  .withholding-settings-table table.list td.col-note {
+    grid-column: 1 / -1;
+    grid-row: 5;
+  }
+  .withholding-settings-table table.list td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 2px;
+  }
+  .edit-table.withholding-settings-table table.list input,
+  .edit-table.withholding-settings-table table.list select,
+  .edit-table.withholding-settings-table table.list textarea,
+  .withholding-settings-table table.list input,
+  .withholding-settings-table table.list select,
+  .withholding-settings-table table.list textarea {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .withholding-active-check {
+    justify-content: flex-start;
+    margin: 0;
+    min-height: 34px;
+  }
+  .edit-table.withholding-settings-table .withholding-note-input,
+  .withholding-note-input {
+    height: 34px;
+    min-height: 34px;
+    max-height: 40px;
+  }
+  .print-company-layout {
+    grid-template-columns: 1fr;
+  }
+  .print-company-preview {
+    position: static;
+  }
   .content {
     padding: 16px;
   }
@@ -2552,6 +3459,19 @@ pre.json {
   padding: 6px 6px;
   vertical-align: top;
 }
+/* Withholding keeps compact cells; restate after generic edit-table td rules. */
+.edit-table.withholding-settings-table table.list th,
+.edit-table.withholding-settings-table table.list td {
+  padding: 3px 4px;
+  vertical-align: middle;
+}
+.edit-table.withholding-settings-table .withholding-note-input {
+  min-width: 0 !important;
+  resize: none !important;
+}
+.edit-table.withholding-settings-table select.withholding-applies-select {
+  max-width: none !important;
+}
 /*
  * Quote/SO item editors: WH%/ATC stacked; Description sticky. Money cols fit
  * ₱999,999.99 (12px tabular-nums); Kind fits "Services"; line actions stack.
@@ -2610,33 +3530,35 @@ pre.json {
   width: 5rem;
 }
 .edit-table.items-edit .col-qty {
-  min-width: 2.35rem;
-  width: 2.35rem;
+  min-width: 3.25rem;
+  width: 3.25rem;
 }
 .edit-table.items-edit .col-unit {
   min-width: 2.5rem;
   width: 2.5rem;
 }
 .edit-table.items-edit .col-supplier {
-  min-width: 4.15rem;
-  width: 4.15rem;
+  min-width: 5.5rem;
+  width: 5.5rem;
 }
 .edit-table.items-edit .col-actions,
 .edit-table.items-edit td.line-actions {
-  min-width: 1.5rem;
-  width: 1.5rem;
+  min-width: 4.25rem;
+  width: 4.25rem;
 }
 .edit-table.items-edit td.line-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0;
-  white-space: normal;
+  white-space: nowrap;
 }
 .edit-table.items-edit .col-wh {
-  width: 3.1rem;
-  min-width: 3.1rem;
-  white-space: normal;
+  width: 3.75rem;
+  min-width: 3.75rem;
+  white-space: nowrap;
 }
 .edit-table.items-edit .w-wh,
 .edit-table.items-edit .w-atc {
@@ -2667,6 +3589,9 @@ pre.json {
   box-sizing: border-box;
   font-size: 11px;
   padding: 4px 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .edit-table.items-edit .w-num {
   width: 100%;
@@ -2783,7 +3708,7 @@ pre.json {
   min-width: 4.15rem;
 }
 .edit-table.items-edit .col-qty {
-  min-width: 2.5rem;
+  min-width: 3.25rem;
 }
 .edit-table .error {
   color: var(--red);
@@ -2792,7 +3717,7 @@ pre.json {
   white-space: nowrap;
 }
 .edit-table.items-edit td.line-actions {
-  white-space: normal;
+  white-space: nowrap;
 }
 .line-actions .btn-link {
   text-decoration: none;
@@ -2816,33 +3741,42 @@ pre.json {
     max-width: none;
   }
   .edit-table.items-edit .col-kind {
-    width: 84px;
-    min-width: 84px;
+    /* Native select must paint "Services" / "Goods" in full (+ dropdown chrome). */
+    width: 100px;
+    min-width: 100px;
   }
   .edit-table.items-edit .col-qty {
-    width: 40px;
-    min-width: 40px;
+    /* Integer-width field that fits 4 digits (e.g. 9999). */
+    width: 52px;
+    min-width: 52px;
   }
   .edit-table.items-edit .col-unit {
     width: 40px;
     min-width: 40px;
   }
   .edit-table.items-edit .col-supplier {
-    width: 66px;
-    min-width: 66px;
+    /* Short supplier name; longer names ellipsis + title tooltip. */
+    width: 88px;
+    min-width: 88px;
   }
   .edit-table.items-edit .col-money {
-    width: 84px;
-    min-width: 84px;
+    /* Trim a little so Kind can show "Services" in full. */
+    width: 72px;
+    min-width: 72px;
   }
   .edit-table.items-edit .col-wh {
-    width: 50px;
-    min-width: 50px;
+    width: 64px;
+    min-width: 64px;
+  }
+  .edit-table.items-edit table.list th.col-wh {
+    white-space: nowrap;
+    letter-spacing: 0;
+    font-size: 11px;
   }
   .edit-table.items-edit .col-actions,
   .edit-table.items-edit td.line-actions {
-    width: 24px;
-    min-width: 24px;
+    width: 72px;
+    min-width: 72px;
   }
 }
 .btn-link.danger {
@@ -2927,6 +3861,12 @@ pre.json {
 .print-toolbar-alert {
   width: 210mm;
   margin: 0 auto 12px;
+  box-sizing: border-box;
+}
+.print-toolbar-alert.tax-cal-notice {
+  /* Same grey box + black left bar as Settings / tax calendar notices. */
+  margin-left: auto;
+  margin-right: auto;
 }
 .print-missing {
   color: var(--red);
@@ -3385,9 +4325,12 @@ button.contact-card-add {
   gap: 20px;
   border-bottom: 0.5pt solid var(--pp-rule);
   padding-bottom: 10px;
+  min-width: 0;
 }
 .pp-letterhead {
-  max-width: 62%;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 11rem);
   font-size: 8.5pt;
   line-height: 1.35;
   color: var(--pp-label);
@@ -3456,7 +4399,9 @@ button.contact-card-add {
 }
 .pp-title-block {
   text-align: right;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 40%;
 }
 .pp-title-block h1 {
   margin: 0 0 8px;
@@ -3471,6 +4416,13 @@ button.contact-card-add {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.pp-title-block .pp-meta {
+  margin-left: auto;
+  width: max-content;
+  max-width: 100%;
 }
 /* Pixel Blue square — the only blue on the page besides the logo. */
 .pp-title-pixel {
@@ -3494,6 +4446,15 @@ button.contact-card-add {
 .pp-meta td {
   text-align: right;
   font-weight: 600;
+}
+.pp-subject {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: var(--pp-ink);
 }
 .pp-party-grid {
   position: relative;
@@ -4077,6 +5038,129 @@ button.contact-card-add {
   }
   .tax-cal-desktop {
     display: none;
+  }
+
+  /* Numbering: one compact card per doc type (hide table header). ~1400px page. */
+  .numbering-settings-wrap {
+    overflow-x: visible;
+  }
+  .numbering-settings-table,
+  .numbering-settings-table thead,
+  .numbering-settings-table tbody,
+  .numbering-settings-table tr,
+  .numbering-settings-table th,
+  .numbering-settings-table td {
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .numbering-settings-table {
+    table-layout: auto;
+  }
+  .numbering-settings-table thead {
+    position: absolute;
+    width: 1px !important;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .numbering-settings-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 4px;
+    align-items: start;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .numbering-settings-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .numbering-settings-table td {
+    padding: 0 !important;
+    border-bottom: none !important;
+    min-width: 0;
+  }
+  /* Row 1: doc name | Restart yearly */
+  .numbering-doc {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .numbering-reset-cell {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    justify-self: end;
+  }
+  .numbering-reset {
+    justify-content: flex-end;
+    margin: 0;
+    gap: 6px;
+    min-height: 32px;
+  }
+  .numbering-reset-text {
+    display: inline;
+    white-space: nowrap;
+  }
+  .numbering-doc .strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.2;
+    font-size: 13px;
+  }
+  /* Row 2: Prefix | Number length half width; values visible; ≥40px inputs */
+  .numbering-prefix {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .numbering-digits {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .numbering-field-label {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0 0 6px;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    border: 0;
+    display: block;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .numbering-prefix input,
+  .numbering-digits input {
+    display: block;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  /* Row 3: Example one line, monospace, no wrap */
+  .numbering-example {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .numbering-example-code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -4895,14 +5979,629 @@ button.contact-card-add {
   margin: 4px 0 0;
 }
 
-/* Manual withholding picks (quote editor / customer pick field) */
+/* ---------------------------------------------------------------------------
+   Quote editor Phase 1 (Brief 09) — layout only; do not change Home/Settings.
+   --------------------------------------------------------------------------- */
+.quote-editor {
+  padding-bottom: 88px;
+  max-width: 1000px;
+}
+.quote-details-card .card-head {
+  align-items: center;
+}
+.quote-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.quote-fg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 12px 14px 14px;
+}
+.quote-f {
+  min-width: 0;
+}
+.quote-f-w2 {
+  grid-column: span 2;
+}
+.quote-f-w3,
+.quote-f.full,
+.quote-fg > .field.full {
+  grid-column: 1 / -1;
+}
+.quote-tabs-wrap {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.quote-tabs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.quote-tabs::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 640px) {
+  .quote-tabs {
+    padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 32px), transparent 100%);
+  }
+  .quote-tab {
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 13px;
+  }
+}
+.quote-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 700;
+  padding: 11px 10px 9px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  flex: none;
+}
+.quote-tab-on {
+  color: var(--text);
+  border-bottom-color: var(--blue);
+}
+.quote-tab-badge {
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  background: #f1f2f4;
+  color: #404040;
+  border-radius: 99px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+.quote-tab-on .quote-tab-badge {
+  background: var(--blue-tint);
+  color: var(--blue-dark);
+}
+.quote-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex: none;
+}
+.quote-trow {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.quote-tbox {
+  width: 380px;
+  max-width: 100%;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fff;
+}
+.quote-int2 {
+  width: 300px;
+  max-width: 100%;
+  background: #f5f5f5;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.quote-int2 .alert {
+  margin: 8px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.quote-readonly-block {
+  white-space: pre-wrap;
+  padding: 8px 0;
+  color: var(--text);
+  min-height: 40px;
+}
+.quote-signoff-lines {
+  margin-top: 8px;
+}
+.quote-signoff-line {
+  width: min(240px, 100%);
+  height: 1px;
+  background: var(--text);
+  margin: 28px 0 6px;
+}
+.quote-sticky-act {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.quote-sticky-status {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--text-2);
+  min-width: 140px;
+}
+.quote-sticky-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.quote-sticky-buttons .btn {
+  min-height: 40px;
+}
+
+/* Add-customer drawer */
+.quote-drawer-root {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.quote-drawer-backdrop {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  cursor: pointer;
+}
+.quote-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(400px, 100%);
+  background: #fff;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+.quote-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.quote-drawer-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+.quote-drawer-x {
+  font-size: 22px;
+  line-height: 1;
+  min-width: 40px;
+  min-height: 40px;
+}
+.quote-drawer-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+}
+.quote-drawer-body .field {
+  min-width: 0;
+  width: 100%;
+}
+.quote-drawer-body .field input,
+.quote-drawer-body .field select,
+.quote-drawer-body .field textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.quote-drawer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: start;
+}
+.quote-drawer-row > .field {
+  min-width: 0;
+  max-width: 100%;
+}
+.quote-drawer-row > .field select {
+  max-width: 100%;
+}
+.quote-drawer-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.quote-drawer-foot .muted {
+  flex: 1;
+  min-width: 120px;
+}
+.quote-drawer-foot .btn {
+  min-height: 40px;
+}
+
+/* Quote items: auto-grow description + WH tip + mobile cards */
+.quote-editor .quote-desc {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  field-sizing: content;
+  min-height: 2.5em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--card);
+  font: inherit;
+}
+.quote-wh-tip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f1f2f4;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+/* Desktop mockup rows (≥640): Item | Qty | Unit | Unit price | Line total + chips + cost strip */
+.quote-items-desktop {
+  display: block;
+}
+.quote-lh,
+.quote-lr {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 56px 56px 96px 96px 48px;
+  gap: 8px;
+  align-items: start;
+}
+.quote-lh {
+  padding: 7px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  border-bottom: 1px solid #f1f2f4;
+}
+.quote-lh .num,
+.quote-lr .num {
+  text-align: right;
+}
+.quote-ln {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f2f4;
+}
+.quote-ln-no {
+  color: var(--text-3);
+  font-weight: 700;
+  padding-top: 8px;
+}
+.quote-ln-dsc {
+  min-width: 0;
+}
+.quote-ln-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  margin-top: 5px;
+}
+.quote-tg {
+  appearance: none;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: #fff;
+  height: 22px;
+  line-height: 18px;
+  max-width: 100%;
+}
+.quote-tg-wh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border-color: #dbeafe;
+  color: #1d4ed8;
+  height: auto;
+  min-height: 22px;
+  padding: 2px 8px;
+}
+.quote-tg-wh-label {
+  white-space: nowrap;
+}
+.quote-tg-atc {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.quote-tg-wh .w-wh {
+  width: 2.75rem;
+  max-width: 2.75rem;
+  text-align: right;
+  padding: 1px 4px;
+  font-size: 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.quote-tg-wh .w-atc {
+  width: 3.5rem;
+  max-width: 3.5rem;
+  padding: 1px 4px;
+  font-size: 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.quote-ln-qty input,
+.quote-ln-unit input,
+.quote-ln-price input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 6px;
+  background: var(--card);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.quote-ln-qty input,
+.quote-ln-price input {
+  text-align: right;
+}
+.quote-ln-total {
+  padding-top: 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.quote-ln .line-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding-top: 4px;
+}
+.quote-cost {
+  margin: 8px 0 0 28px;
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.quote-cost-warn {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.quote-cost-k {
+  font-weight: 800;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.quote-cost-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.quote-cost-field select,
+.quote-cost-field input {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  max-width: 160px;
+  box-sizing: border-box;
+}
+.quote-cost-field input {
+  width: 6.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.quote-cost-field.neg,
+.quote-cost-field.neg b {
+  color: var(--red);
+}
+.quote-items-mobile {
+  display: none;
+}
+.quote-line-card {
+  position: relative;
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quote-line-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 0;
+  z-index: 1;
+}
+.quote-line-card-desc {
+  padding-right: 72px;
+  min-width: 0;
+}
+.quote-line-card-desc .quote-desc {
+  width: 100%;
+}
+.quote-line-card-row3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  gap: 8px;
+}
+.quote-line-card-row2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.quote-line-card-price {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quote-line-card-price .field {
+  flex: 1;
+  min-width: 0;
+}
+.quote-line-card-total {
+  flex: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.quote-line-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.quote-line-card-wh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.quote-line-card-wh .w-wh {
+  width: 3.25rem;
+  max-width: 3.25rem;
+  text-align: right;
+  padding: 2px 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.quote-line-card-wh .w-atc {
+  width: 4.5rem;
+  max-width: 4.5rem;
+  padding: 2px 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.quote-line-card .field input,
+.quote-line-card .field select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+}
+
+@media (max-width: 639px) {
+  .quote-items-desktop {
+    display: none;
+  }
+  .quote-items-mobile {
+    display: block;
+  }
+}
+
+@media (max-width: 720px) {
+  .quote-fg {
+    grid-template-columns: 1fr 1fr;
+  }
+  .quote-f-w2 {
+    grid-column: 1 / -1;
+  }
+  .quote-trow {
+    flex-direction: column-reverse;
+  }
+  .quote-tbox,
+  .quote-int2 {
+    width: 100%;
+  }
+  .quote-sticky-act {
+    padding: 8px 0;
+  }
+  .quote-sticky-status {
+    flex-basis: 100%;
+  }
+  .quote-sticky-buttons {
+    width: 100%;
+  }
+  .quote-sticky-buttons .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  /* Keep TIN/Type and Contact/Position as equal pairs inside the drawer. */
+  .quote-drawer-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Manual withholding picks (brief 10) — pick field + internal WH panel */
 .wh-pick-list { display: flex; flex-direction: column; gap: 6px; }
 .wh-pick-row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
 .wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: 12px; margin-top: 12px; background: var(--bg-muted, #f7f7f5); }
 .wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
-.quote-drawer-root { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; }
-.quote-drawer-backdrop { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.35); }
-.quote-drawer { position: relative; width: min(420px, 100%); background: var(--bg, #fff); height: 100%; overflow: auto; padding: 16px; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
-.quote-drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.quote-drawer-foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; flex-wrap: wrap; }
-.quote-drawer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

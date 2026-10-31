@@ -2,9 +2,9 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
-import { DocumentEditor } from "@/components/docs/DocumentEditor";
+import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { editorCustomers, editorRates, editorSuppliers } from "../editor-data";
-import { saveQuoteAction } from "../actions";
+import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -18,15 +18,27 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="New quote" subtitle="Pick the customer, add the lines, and save. The quote number is given on save." />
-      <DocumentEditor
-        mode="quote"
+      <QuoteEditor
         isNew
+        quoteId={null}
+        quoteNumber={null}
+        revision={1}
+        status="DRAFT"
         customers={customers}
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        defaultValidityDays={settings.quotes.defaultValidityDays}
+        printDefaults={{
+          quoteTerms: settings.print.quoteTerms ?? "",
+          deliveryNotes: settings.print.deliveryNotes ?? "",
+          warrantyNotes: settings.print.warrantyNotes ?? "",
+        }}
+        preparedByName={user.name}
         action={saveQuoteAction.bind(null, null)}
         cancelHref="/quotes"
+        markSentAction={markQuoteSentAction}
+        confirmNoneAndMarkSentAction={confirmNoneAndMarkQuoteSentAction}
         initial={{
           customerId: preset?.id ?? "",
           contactId: preset?.contacts.find((c) => c.isMain)?.id ?? "",
@@ -34,6 +46,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           validUntil: isoDate(addDays(today, settings.quotes.defaultValidityDays)),
           terms: preset?.defaultTerms ?? "",
           notes: "",
+          internalNotes: "",
+          subject: "",
           withholdingPick,
           withholdingCodes: withholdingPick,
           buyerPoNo: "",

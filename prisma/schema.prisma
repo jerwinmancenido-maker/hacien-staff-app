@@ -487,7 +487,14 @@ model Quote {
   validUntil        DateTime    @db.Date
   status            QuoteStatus @default(DRAFT)
   terms             String?     @db.VarChar(100)
+  // Customer-facing notes — print on the quote (same place as today).
   notes             String?     @db.Text
+  // Staff-only. NEVER prints. NEVER on customer-facing pages. (Brief 09)
+  internalNotes     String?     @db.Text
+  // Short subject / project line; prints when set.
+  subject           String?     @db.VarChar(500)
+  // Customer PO / RFQ number; prints when set.
+  buyerPoNo         String?     @db.VarChar(64)
   settingsVersionId String
   withholding       Json
   // Quote-level pick (copied from Customer.defaultWithholding on create).

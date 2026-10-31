@@ -1,155 +1,212 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+// Right-side drawer: create a customer from the quote editor without leaving
+// the page. On save, the parent picks the new customer and keeps quote data.
+
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import {
-  WITHHOLDING_TYPE_FIELD_LABEL,
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
-  withholdingTypeFieldHint,
 } from "@/lib/withholding/display";
-import { createCustomerFromQuoteAction } from "@/app/(app)/quotes/create-customer-action";
-import type { EditorCustomer } from "./DocumentEditor";
+import {
+  createCustomerForQuoteAction,
+  type CreatedQuoteCustomer,
+  type CreateCustomerForQuoteState,
+} from "@/app/(app)/quotes/create-customer-action";
 
-export type AddCustomerDialogProps = {
+type Props = {
   open: boolean;
   onClose: () => void;
-  onSaved: (c: EditorCustomer) => void;
+  onSaved: (customer: CreatedQuoteCustomer) => void;
+  /** Active Settings → Withholding rates for the pick field. */
   rates: WithholdingSnapshot[];
 };
 
-export function AddCustomerDialog({ open, onClose, onSaved, rates }: AddCustomerDialogProps) {
-  const [name, setName] = useState("");
-  const [tin, setTin] = useState("");
-  const [withholdingType, setWithholdingType] = useState("");
+const empty = {
+  name: "",
+  tin: "",
+  withholdingType: "",
+  address: "",
+  contactName: "",
+  contactRole: "",
+  emailOrPhone: "",
+};
+
+export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
+  const titleId = useId();
+  const firstRef = useRef<HTMLInputElement>(null);
+  const [formKey, setFormKey] = useState(0);
+  const [v, setV] = useState(empty);
   const [pick, setPick] = useState<string[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [state, setState] = useState<CreateCustomerForQuoteState>({});
   const [pending, startTransition] = useTransition();
+  const e = state.fieldErrors ?? {};
+  const pickSnapshots =
+    pick == null
+      ? null
+      : rates.filter((r) => pick.includes(r.code));
+  const pickHint = customerWithholdingHint(pickSnapshots);
 
-  useEffect(() => {
-    if (!open) return;
-    setName("");
-    setTin("");
-    setWithholdingType("");
+  function close() {
+    if (pending) return;
+    onClose();
+    // Reset on next open via remount key (avoids setState-in-effect lint).
+    setFormKey((k) => k + 1);
+    setV(empty);
     setPick(null);
-    setError(null);
-    setFieldErrors({});
-  }, [open]);
+    setState({});
+  }
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const t = window.setTimeout(() => firstRef.current?.focus(), 40);
+    return () => window.clearTimeout(t);
+  }, [open, formKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape" && !pending) close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    // close is stable enough for escape; pending gates the handler.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [open, pending]);
 
   if (!open) return null;
 
-  function save() {
-    setError(null);
-    setFieldErrors({});
+  function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    const fd = new FormData();
+    for (const [k, val] of Object.entries(v)) fd.set(k, val);
+    fd.set("defaultWithholdingJson", pick == null ? "" : JSON.stringify(pick));
     startTransition(async () => {
-      const result = await createCustomerFromQuoteAction({
-        name,
-        tin,
-        withholdingType,
-        defaultWithholding: pick,
-      });
-      if (!result.ok) {
-        setError(result.message ?? "Could not save customer.");
-        setFieldErrors(result.fieldErrors ?? {});
-        return;
+      const res = await createCustomerForQuoteAction({}, fd);
+      setState(res);
+      if (res.ok && res.customer) {
+        onSaved(res.customer);
+        onClose();
       }
-      onSaved(result.customer);
     });
   }
 
-  const blocked = !name.trim() || !withholdingType;
-
   return (
-    <div className="quote-drawer-root" role="dialog" aria-modal="true" aria-labelledby="add-customer-title">
-      <button type="button" className="quote-drawer-backdrop" aria-label="Close" onClick={onClose} />
-      <div className="quote-drawer">
+    <div className="quote-drawer-root" role="presentation">
+      <button type="button" className="quote-drawer-backdrop" aria-label="Close" disabled={pending} onClick={close} />
+      <aside className="quote-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="quote-drawer-head">
-          <h2 id="add-customer-title">Add customer</h2>
-          <button type="button" className="btn-link" onClick={onClose}>
-            Close
+          <h2 id={titleId}>Add new customer</h2>
+          <button type="button" className="btn-link quote-drawer-x" aria-label="Close" disabled={pending} onClick={close}>
+            ×
           </button>
         </div>
-
-        {error && (
-          <div className="alert error" role="alert">
-            {error}
-          </div>
-        )}
-
-        <div className="form-grid">
-          <div className={`field full${fieldErrors.name ? " has-error" : ""}`}>
-            <label htmlFor="add-customer-name">
-              Name<span className="req"> *</span>
+        <form key={formKey} className="quote-drawer-body" onSubmit={submit} noValidate>
+          {state.message && !state.ok && (
+            <div className="alert error" role="alert">
+              {state.message}
+            </div>
+          )}
+          <div className={`field${e.name ? " has-error" : ""}`}>
+            <label htmlFor="acq-name">
+              Customer name<span className="req"> *</span>
             </label>
-            <input id="add-customer-name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} autoFocus />
-            {fieldErrors.name && <div className="error">{fieldErrors.name}</div>}
-          </div>
-
-          <div className={`field full${fieldErrors.withholdingType ? " has-error" : ""}`}>
-            <label htmlFor="add-customer-type">
-              {WITHHOLDING_TYPE_FIELD_LABEL}
-              <span className="req"> *</span>
-            </label>
-            <select id="add-customer-type" value={withholdingType} onChange={(ev) => setWithholdingType(ev.target.value)}>
-              <option value="">Pick one…</option>
-              {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
-                <option key={t} value={t}>
-                  {WITHHOLDING_TYPE_FORM_LABELS[t]}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.withholdingType ? (
-              <div className="error">{fieldErrors.withholdingType}</div>
-            ) : (
-              <div className="hint">{withholdingTypeFieldHint(withholdingType) ?? "Label only — rates are picked below."}</div>
-            )}
-          </div>
-
-          <div className="field full">
-            <WithholdingPickField
-              rates={rates}
-              value={pick}
-              onChange={setPick}
-              disabled={pending}
-              error={fieldErrors.defaultWithholding}
-            />
-          </div>
-
-          <div className={`field full${fieldErrors.tin ? " has-error" : ""}`}>
-            <label htmlFor="add-customer-tin">TIN</label>
             <input
-              id="add-customer-tin"
+              ref={firstRef}
+              id="acq-name"
               type="text"
-              value={tin}
-              onChange={(ev) => setTin(ev.target.value)}
-              inputMode="numeric"
-              placeholder="000-000-000-000"
+              value={v.name}
+              onChange={(ev) => setV({ ...v, name: ev.target.value })}
+              autoComplete="organization"
             />
-            {fieldErrors.tin ? <div className="error">{fieldErrors.tin}</div> : <div className="hint">Optional · 000-000-000-000</div>}
+            {e.name && <div className="error">{e.name}</div>}
           </div>
-        </div>
-
-        <div className="quote-drawer-foot">
-          {blocked && <span className="small faint">Name and type are required.</span>}
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
-            Cancel
-          </button>
-          <button type="button" className="btn" onClick={save} disabled={pending || blocked}>
-            {pending ? "Saving…" : "Save customer"}
-          </button>
-        </div>
-      </div>
+          <div className="quote-drawer-row">
+            <div className={`field${e.tin ? " has-error" : ""}`}>
+              <label htmlFor="acq-tin">TIN</label>
+              <input
+                id="acq-tin"
+                type="text"
+                value={v.tin}
+                onChange={(ev) => setV({ ...v, tin: ev.target.value })}
+                inputMode="numeric"
+                placeholder="000-000-000-000"
+              />
+              {e.tin && <div className="error">{e.tin}</div>}
+            </div>
+            <div className={`field${e.withholdingType ? " has-error" : ""}`}>
+              <label htmlFor="acq-type">
+                Type<span className="req"> *</span>
+              </label>
+              <select id="acq-type" value={v.withholdingType} onChange={(ev) => setV({ ...v, withholdingType: ev.target.value })}>
+                <option value="">Pick one…</option>
+                {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
+                  <option key={t} value={t}>
+                    {t === "NONE" ? "Private" : WITHHOLDING_TYPE_FORM_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">Label only — rates are picked in Withholding below.</div>
+              {e.withholdingType && <div className="error">{e.withholdingType}</div>}
+            </div>
+          </div>
+          <WithholdingPickField
+            rates={rates}
+            value={pick}
+            onChange={setPick}
+            disabled={pending}
+            error={e.defaultWithholding}
+          />
+          <div className="hint">{pickHint}</div>
+          <div className={`field${e.address ? " has-error" : ""}`}>
+            <label htmlFor="acq-address">Address</label>
+            <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} />
+          </div>
+          <div className="quote-drawer-row">
+            <div className={`field${e.contactName ? " has-error" : ""}`}>
+              <label htmlFor="acq-contact">Contact person</label>
+              <input
+                id="acq-contact"
+                type="text"
+                value={v.contactName}
+                onChange={(ev) => setV({ ...v, contactName: ev.target.value })}
+              />
+              {e.contactName && <div className="error">{e.contactName}</div>}
+            </div>
+            <div className={`field${e.contactRole ? " has-error" : ""}`}>
+              <label htmlFor="acq-role">Position</label>
+              <input
+                id="acq-role"
+                type="text"
+                value={v.contactRole}
+                onChange={(ev) => setV({ ...v, contactRole: ev.target.value })}
+              />
+            </div>
+          </div>
+          <div className={`field${e.emailOrPhone ? " has-error" : ""}`}>
+            <label htmlFor="acq-email">Email or phone</label>
+            <input
+              id="acq-email"
+              type="text"
+              value={v.emailOrPhone}
+              onChange={(ev) => setV({ ...v, emailOrPhone: ev.target.value })}
+            />
+            {e.emailOrPhone && <div className="error">{e.emailOrPhone}</div>}
+          </div>
+          <div className="quote-drawer-foot">
+            <span className="muted small">Saves and picks this customer</span>
+            <button type="button" className="btn btn-secondary" disabled={pending} onClick={close}>
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={pending || !v.name.trim() || !v.withholdingType}>
+              {pending ? "Saving…" : "Save customer"}
+            </button>
+          </div>
+        </form>
+      </aside>
     </div>
   );
 }

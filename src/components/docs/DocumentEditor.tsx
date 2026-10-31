@@ -86,6 +86,10 @@ export type EditorInitial = {
   buyerPoNo: string;
   buyerPoDate: string;
   deliveryAddress: string;
+  /** Staff-only; quote editor Phase 1. */
+  internalNotes?: string;
+  /** Quote subject / project line. */
+  subject?: string;
   items: Omit<EditorItem, "key">[];
 };
 

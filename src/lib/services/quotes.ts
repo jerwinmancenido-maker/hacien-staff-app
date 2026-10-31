@@ -39,6 +39,9 @@ export function quoteAudit(q: QuoteWithItems) {
     validUntil: ymd(q.validUntil),
     terms: q.terms,
     notes: q.notes,
+    internalNotes: q.internalNotes,
+    subject: q.subject,
+    buyerPoNo: q.buyerPoNo,
     settingsVersionId: q.settingsVersionId,
     withholding: withholdingCodes(snapshotList(q.withholding)),
     withholdingPick: parseWithholdingPick(q.withholdingPick),
@@ -145,7 +148,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
     // Always apply the pick on create so blank lines get the customer's rates.
     reapplyWithholding: input.reapplyWithholding === true || input.items.every((i) => i.withholdingRate === undefined),
   });
-  const withholding = withholdingFromItems(items);
+  const withholding = withholdingFromItems(items, pickSnapshots);
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
@@ -163,10 +166,13 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           validUntil,
           terms: input.terms,
           notes: input.notes,
+          internalNotes: input.internalNotes ?? null,
+          subject: input.subject ?? null,
+          buyerPoNo: input.buyerPoNo ?? null,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
-          ...totalsData(items),
+          ...totalsData(items, pickSnapshots),
           createdById: actor.id,
           updatedById: actor.id,
           items: { create: items.map(itemData) },
@@ -213,7 +219,10 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
       if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
-      const withholding = preserved.withholding;
+      // When picks drive the math, breakdown = one row per pick (whole-total as own line)
+      // and withholdingTotal = sum of parts. Otherwise keep legacy line-derived summary.
+      const withholding = pickSnapshots.length ? withholdingFromItems(items, pickSnapshots) : preserved.withholding;
+      const moneyTotals = pickSnapshots.length ? totalsData(items, pickSnapshots) : preserved.totals;
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -231,9 +240,12 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           validUntil: input.validUntil ?? before.validUntil,
           terms: input.terms,
           notes: input.notes,
+          internalNotes: input.internalNotes ?? null,
+          subject: input.subject ?? null,
+          buyerPoNo: input.buyerPoNo ?? null,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
-          ...preserved.totals,
+          ...moneyTotals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

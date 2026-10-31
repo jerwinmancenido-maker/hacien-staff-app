@@ -3,13 +3,11 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
 import { roleLabel } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { changedLeaves, NUMBERED_DOCS } from "@/lib/settings/form";
-import { formatDocNumber } from "@/lib/settings/numbering";
+import { changedLeaves } from "@/lib/settings/form";
 import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/withholding";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
-import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
 import {
   BOOKS_OF_ACCOUNTS_TYPE_LABELS,
   INCOME_TAX_METHOD_LABELS,
@@ -25,6 +23,8 @@ import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
+import { TaxCalendarForm } from "./TaxCalendarForm";
+import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
@@ -59,7 +59,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const save = (key: string) => saveSettingsAction.bind(null, key);
 
   return (
-    <>
+    <div className="settings-shell">
       <PageHeader
         title="Settings"
         subtitle={`Version ${snap.version} · in effect since ${formatDateTime(snap.effectiveFrom)}. Every save makes a new version; existing documents keep theirs.`}
@@ -73,9 +73,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       />
       <PillTabs
         active={tab}
+        size="sm"
+        className="settings-pill-tabs"
         tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
       />
-      <div style={{ maxWidth: tab === "withholding" ? 1100 : 880 }}>
+      <div className="settings-page">
         {tab === "users" && <UsersTab />}
 
         {tab === "approval" && (
@@ -101,19 +103,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "numbering" && (
-          <SettingsForm
-            title="Numbering"
+          <NumberingForm
             label={SETTINGS_LABELS.numbering}
             versionId={snap.versionId}
             action={save("numbering")}
-            fields={NUMBERED_DOCS.flatMap((d) => {
-              const f = s.numbering[d.key];
-              return [
-                { name: `${d.key}.prefix`, label: "Prefix", kind: "text" as const, value: f.prefix, group: d.label, hint: `First number: ${formatDocNumber(f, s.taxYear.year, 1)}` },
-                { name: `${d.key}.padding`, label: "Counter digits", kind: "number" as const, value: f.padding, group: d.label },
-                { name: `${d.key}.resetYearly`, label: "Restart the counter every year", kind: "checkbox" as const, value: f.resetYearly, group: d.label },
-              ];
-            })}
+            numbering={s.numbering}
+            taxYear={s.taxYear.year}
           />
         )}
 
@@ -192,64 +187,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "tax-calendar" && (
-          <>
-            <p className="faint small" style={{ marginTop: 0 }}>
-              Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is
-              uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee.
-            </p>
-            <SettingsForm
-              title="Tax calendar"
-              label={SETTINGS_LABELS.taxCalendar}
-              versionId={snap.versionId}
-              action={save("taxCalendar")}
-              showDocumentsOnlyFooter={false}
-              fields={[
-                {
-                  name: "corUploadedAndChecked",
-                  label: "COR uploaded and checked",
-                  kind: "checkbox" as const,
-                  value: s.taxCalendar.corUploadedAndChecked,
-                  hint: `When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`,
-                  group: "COR",
-                },
-                ...TAX_CALENDAR_OBLIGATIONS.flatMap((def) => {
-                  const o = s.taxCalendar.obligations[def.key];
-                  const group = `${def.form} — ${def.description}`;
-                  return [
-                    {
-                      name: `obligations.${def.key}.enabled`,
-                      label: `Show ${def.form} on the calendar`,
-                      kind: "checkbox" as const,
-                      value: o.enabled,
-                      hint: def.sourceNote,
-                      group,
-                    },
-                    {
-                      name: `obligations.${def.key}.dueDay`,
-                      label: "Due day of month",
-                      kind: "number" as const,
-                      value: o.dueDay ?? "",
-                      hint:
-                        def.schedule.kind === "undated_year_end"
-                          ? "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms."
-                          : def.schedule.kind === "quarterly_last_day_after"
-                            ? "Leave blank to use the last day of the month after the quarter."
-                            : "1–31. Used with the catalog month rule for this form.",
-                      group,
-                    },
-                    {
-                      name: `obligations.${def.key}.dueMonth`,
-                      label: "Due month (annual / year-end)",
-                      kind: "number" as const,
-                      value: o.dueMonth ?? "",
-                      hint: "1–12. Used for 1701 annual and year-end items; leave blank otherwise.",
-                      group,
-                    },
-                  ];
-                }),
-              ]}
-            />
-          </>
+          <TaxCalendarForm
+            label={SETTINGS_LABELS.taxCalendar}
+            versionId={snap.versionId}
+            action={save("taxCalendar")}
+            corUploadedAndChecked={s.taxCalendar.corUploadedAndChecked}
+            obligations={s.taxCalendar.obligations}
+            intro="Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee."
+            corHint={`When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`}
+          />
         )}
 
         {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}
@@ -273,7 +219,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 { name: "label", label: "Label", kind: "text", value: s.invoiceBooklet.label ?? "", hint: "e.g. Booklet 1" },
               ]}
             />
-            <p className="faint small" style={{ margin: "8px 0 16px" }}>
+            <p className="faint small settings-tab-link">
               <Link href="/billing/booklet">Open booklet usage grid →</Link> Voided invoice numbers are never reused.
             </p>
             <SettingsForm
@@ -376,7 +322,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {tab === "changelog" && <ChangeLog />}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -405,7 +351,7 @@ async function UsersTab() {
   const users = await db.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
   if (!users.length) {
     return (
-      <div className="card">
+      <div className="card settings-section">
         <EmptyState line="No users yet." />
       </div>
     );
@@ -468,16 +414,16 @@ async function ChangeLog() {
   });
   if (!versions.length) {
     return (
-      <div className="card">
+      <div className="card settings-section">
         <EmptyState line="No settings changes yet." />
       </div>
     );
   }
 
   return (
-    <div className="card changelog-card">
+    <div className="card settings-section changelog-card">
       <div className="card-head">
-        <h2>Settings change log</h2>
+        <h2 className="settings-section-title">Settings change log</h2>
         <div className="right">
           <span className="faint small">{versions.length} versions recorded</span>
         </div>

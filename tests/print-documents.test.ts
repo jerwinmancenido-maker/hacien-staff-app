@@ -188,15 +188,21 @@ describe("professional print documents", () => {
 
   it("shows Valid until on quotes; print never shows withholding / WHT / ATC / %", () => {
     expect(html(quotePrintFixture())).toContain("Valid until");
-    const wht = html(withholdingQuotePrintFixture());
-    const lower = wht.toLowerCase();
+    const markup = html(withholdingQuotePrintFixture());
+    const lower = markup.toLowerCase();
+    const totalsBlob = (markup.match(/pp-totals[\s\S]*?<\/table>/i)?.[0] ?? "").toLowerCase();
+    expect(totalsBlob).toContain("subtotal");
+    expect(totalsBlob).toContain("total");
+    expect(totalsBlob).not.toContain("less");
+    expect(totalsBlob).not.toContain("net");
+    expect(totalsBlob).not.toContain("withholding");
+    expect(totalsBlob).not.toContain("wht");
+    expect(totalsBlob).not.toContain("atc");
+    expect(totalsBlob).not.toMatch(/%/);
     expect(lower).not.toContain("less: withholding");
     expect(lower).not.toContain("net amount due");
-    expect(lower).not.toContain("withholding");
-    expect(lower).not.toContain("wht");
-    expect(lower).not.toContain("atc");
-    expect(wht).not.toMatch(/%/);
-    expect(lower).not.toContain("internal");
+    expect(lower).not.toContain("withholding tax");
+    expect(lower).not.toContain("internal — withholding");
     expect(lower).not.toContain("unit cost");
     expect(lower).not.toContain("margin");
   });
@@ -226,6 +232,8 @@ describe("print shell screen-only chrome", () => {
     expect(markup).toContain("no-print");
     expect(markup).toContain("Print / Save PDF");
     expect(markup).toContain("Back");
-    expect(markup).toMatch(/alert warn[^>]*no-print|no-print[^>]*alert warn/);
+    expect(markup).toMatch(/tax-cal-notice[^>]*no-print|no-print[^>]*tax-cal-notice/);
+    expect(markup).toContain("Add your TIN and address so they print on documents.");
   });
 });
+

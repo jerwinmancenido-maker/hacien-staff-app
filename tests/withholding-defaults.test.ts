@@ -72,7 +72,7 @@ describe("customerWithholdingHint", () => {
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
     expect(customerWithholdingHint([snap("GOODS_1")])).toBe("Withholding: Goods 1% (WI158)");
     expect(customerWithholdingHint([snap("GOODS_1"), snap("GOV_PT_3")])).toBe(
-      "Withholding: Goods 1% (WI158) + Government percentage tax 3% (code to confirm) (code to confirm)",
+      "Withholding: Goods 1% (WI158) + Government percentage tax 3% (code to confirm)",
     );
   });
 });

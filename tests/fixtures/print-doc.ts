@@ -94,7 +94,7 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
 export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
   base({
     ...quotePrintFixture(),
-    number: "QT-2026-WHT1",
+    number: "QT-2026-0002",
     totals: [
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },

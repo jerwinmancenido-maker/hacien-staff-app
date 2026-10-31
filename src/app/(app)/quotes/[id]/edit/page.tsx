@@ -4,9 +4,9 @@ import { canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
-import { DocumentEditor } from "@/components/docs/DocumentEditor";
+import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { editorCustomers, editorRates, editorSuppliers } from "../../editor-data";
-import { saveQuoteAction } from "../../actions";
+import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -26,16 +26,28 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <PageHeader title={`Edit ${quote.number}`} subtitle={`Rev ${quote.revision} · ${quote.customer.name}`} />
-      <DocumentEditor
-        mode="quote"
+      <PageHeader title={`Edit ${quote.number}`} subtitle={quote.customer.name} />
+      <QuoteEditor
         isNew={false}
+        quoteId={id}
+        quoteNumber={quote.number}
+        revision={quote.revision}
+        status={quote.status}
         customers={customers}
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        defaultValidityDays={settings.quotes.defaultValidityDays}
+        printDefaults={{
+          quoteTerms: settings.print.quoteTerms ?? "",
+          deliveryNotes: settings.print.deliveryNotes ?? "",
+          warrantyNotes: settings.print.warrantyNotes ?? "",
+        }}
+        preparedByName={quote.createdBy}
         action={saveQuoteAction.bind(null, id)}
         cancelHref={`/quotes/${id}`}
+        markSentAction={markQuoteSentAction}
+        confirmNoneAndMarkSentAction={confirmNoneAndMarkQuoteSentAction}
         initial={{
           customerId: quote.customer.id,
           contactId: quote.contact?.id ?? "",
@@ -43,9 +55,11 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           validUntil: quote.validUntil,
           terms: quote.terms ?? "",
           notes: quote.notes ?? "",
+          internalNotes: quote.internalNotes ?? "",
+          subject: quote.subject ?? "",
           withholdingPick: quote.withholdingPick,
           withholdingCodes: quote.withholdingPick,
-          buyerPoNo: "",
+          buyerPoNo: quote.buyerPoNo ?? "",
           buyerPoDate: "",
           deliveryAddress: "",
           items: editableItems(quote.items, withCosts).map((i) => ({
