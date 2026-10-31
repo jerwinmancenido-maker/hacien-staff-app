@@ -281,7 +281,12 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     });
   }
 
-  return mapped.map(({ settingsVersionId: _s, netMarginPctStored: _n, ...rest }) => rest) as ({
+  return mapped.map((row) => {
+    const { settingsVersionId, netMarginPctStored, ...rest } = row;
+    void settingsVersionId;
+    void netMarginPctStored;
+    return rest;
+  }) as ({
     id: string;
     number: string;
     revision: number;

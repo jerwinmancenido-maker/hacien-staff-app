@@ -176,7 +176,7 @@ const ACTION_LABELS: Record<HomeActionKind, string> = {
   posAwaitingReceipt: "POs to receive",
   billsOverPo: "Bills over PO",
   billingsOverdue: "Billings past due",
-  customersNoWithholding: "Customers missing WHT type",
+  customersNoWithholding: "No WHT type set",
 };
 
 const BADGE_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
@@ -248,7 +248,7 @@ function buildKpis(opts: {
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const collectedCaption =
     !Number.isFinite(collectedNum) || collectedNum <= 0
-      ? `No payments recorded in ${mon}`
+      ? "No payments yet"
       : `Posted collections in ${mon}`;
 
   const billingCount = openCount;

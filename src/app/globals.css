@@ -4265,7 +4265,11 @@ button.contact-card-add {
 .home-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   /* Scoped page atmosphere for Home cards */
   --home-page: #f8fafc;
   --home-card-border: #e5e7eb;
@@ -4291,6 +4295,11 @@ button.contact-card-add {
   border: 1px solid var(--home-card-border);
   border-radius: var(--home-card-radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .home-dashboard > .card {
   margin-top: 0;
@@ -4301,6 +4310,8 @@ button.contact-card-add {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
+  width: 100%;
+  min-width: 0;
 }
 /* Defeat global `.card + .card { margin-top }` so all four share one top + height. */
 .home-kps > .card,
@@ -4409,21 +4420,25 @@ button.contact-card-add {
 
 .home-mid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
   gap: 12px;
-  align-items: stretch;
+  align-items: start; /* Needs action stays content-height; do not stretch to chart */
+  width: 100%;
+  min-width: 0;
 }
 .home-mid-full {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 .home-dashboard.is-staff .home-mid {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 /* Defeat `.card + .card { margin-top }` so Sales billed + Needs action share one top. */
 .home-mid > .card {
   margin-top: 0;
-  height: 100%;
-  align-self: stretch;
+  align-self: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -4433,11 +4448,20 @@ button.contact-card-add {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.home-ct > div {
+  min-width: 0;
+  overflow: hidden;
 }
 .home-ct h3 {
   margin: 0;
   font-size: 13px;
   font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-lk {
   white-space: nowrap;
@@ -4445,6 +4469,7 @@ button.contact-card-add {
   font-weight: 600;
   text-decoration: none;
   font-size: 12px;
+  flex: none;
 }
 .home-lk:hover {
   text-decoration: underline;
@@ -4460,7 +4485,7 @@ button.contact-card-add {
 }
 .home-sales-chart {
   position: relative;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   max-width: 100%;
   overflow: hidden;
 }
@@ -4483,7 +4508,7 @@ button.contact-card-add {
   position: absolute;
   left: 12px;
   top: 6px;
-  height: 150px;
+  height: 114px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -4496,8 +4521,8 @@ button.contact-card-add {
   display: block;
   width: 100%;
   max-width: 100%;
-  height: 150px;
-  max-height: 150px;
+  height: 114px;
+  max-height: 114px;
   overflow: visible;
 }
 .home-sales-grid {
@@ -4640,12 +4665,14 @@ button.contact-card-add {
 
 .home-bot {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
   gap: 12px;
-  align-items: stretch;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
 }
 .home-bot-full {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 .home-dashboard.is-staff .home-bot {
   /* keep tax + activity side by side when both present */
@@ -4653,23 +4680,34 @@ button.contact-card-add {
 /* Defeat `.card + .card { margin-top }` so tax + Recent activity share one top. */
 .home-bot > .card {
   margin-top: 0;
-  height: 100%;
-  align-self: stretch;
+  align-self: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
 .home-tax {
   display: flex;
   gap: 12px;
-  align-items: flex-start; /* top-align like Recent activity; card still stretches */
+  align-items: flex-start;
   padding: 12px 14px;
   min-height: 72px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   color: inherit;
   text-decoration: none;
+  overflow: hidden;
 }
 .home-tax:hover {
   background: #fff;
+}
+.home-tax-body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 .home-db {
   width: 44px;
@@ -4699,11 +4737,17 @@ button.contact-card-add {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-tax-form {
   font-weight: 800;
   font-size: 13px;
   margin: 1px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-tax-due {
   white-space: nowrap;
@@ -4714,12 +4758,20 @@ button.contact-card-add {
   margin-top: 4px;
   color: var(--red);
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.home-activity-card {
+  overflow: hidden;
+}
 .home-ra {
   display: flex;
   flex-direction: column;
   padding: 2px 14px 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 .home-ra-row {
   display: flex;
@@ -4728,6 +4780,8 @@ button.contact-card-add {
   padding: 6px 0;
   color: inherit;
   text-decoration: none;
+  min-width: 0;
+  max-width: 100%;
 }
 .home-ra-row + .home-ra-row {
   border-top: 1px solid #f1f2f4;
@@ -4749,11 +4803,15 @@ button.contact-card-add {
 .home-ra-main {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 .home-ra-summary {
   font-weight: 600;
   font-size: 13px;
   line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-ra-meta {
   display: flex;
@@ -4761,6 +4819,7 @@ button.contact-card-add {
   gap: 8px;
   margin-top: 1px;
   min-width: 0;
+  max-width: 100%;
 }
 .home-ra-detail {
   flex: 1;
@@ -4852,11 +4911,11 @@ button.contact-card-add {
 
 @media (max-width: 900px) {
   .home-kps {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   .home-mid,
   .home-bot {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -4864,8 +4923,13 @@ button.contact-card-add {
   .home-dashboard {
     gap: 10px;
   }
+  .home-header-actions .btn {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 12px;
+  }
   .home-kps {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 10px;
   }
   .home-kv {
@@ -4873,6 +4937,7 @@ button.contact-card-add {
   }
   .home-kp {
     padding: 12px;
+    min-width: 0;
   }
   .home-ks {
     flex-wrap: wrap;
@@ -4881,22 +4946,46 @@ button.contact-card-add {
   }
   .home-mid,
   .home-bot {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
+  /* Consistent card chrome on phone */
+  .home-ct {
+    padding: 12px 12px 0;
+  }
+  .home-tax {
+    padding: 12px;
+  }
+  .home-ra {
+    padding: 2px 12px 10px;
+  }
+  .home-na {
+    padding: 4px 6px 8px;
+  }
+  .home-sales-empty {
+    padding: 0 12px 12px;
+  }
+  /* Compact but readable Y-axis (do not hide — Inter needs the gutter). */
   .home-sales-yl {
-    display: none;
+    display: flex;
+    left: 6px;
+    top: 4px;
+    height: 110px;
+    font-size: 9px;
+    line-height: 1;
   }
   .home-sales-chw,
   .home-sales-ml {
-    padding-left: 10px !important;
+    padding-left: 34px !important;
     padding-right: 10px;
   }
   .home-sales-ml {
-    font-size: 9.5px;
+    font-size: 10px;
+    padding-bottom: 10px;
   }
   .home-sales-ml span {
-    width: 18px;
+    width: 20px;
+    min-width: 0;
   }
   /* Every other month label at 360 — keep current month visible */
   .home-sales-ml span:nth-child(odd):not(.on) {
@@ -4904,16 +4993,31 @@ button.contact-card-add {
   }
   .home-sales-tip {
     right: 0;
+    max-width: 42%;
   }
   .home-sales-svg {
-    height: 130px;
-    max-height: 130px;
-  }
-  .home-sales-yl {
-    height: 130px;
+    height: 110px;
+    max-height: 110px;
   }
   .home-tax-due {
-    white-space: normal;
+    white-space: nowrap;
+  }
+  .home-sales-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Tap targets ≥ 44px */
+  .home-na-row {
+    min-height: 44px;
+    padding: 10px 6px;
+  }
+  .home-ra-row {
+    min-height: 44px;
+    align-items: center;
+    padding: 10px 0;
+  }
+  .home-ra-summary {
+    white-space: nowrap;
   }
 }
 

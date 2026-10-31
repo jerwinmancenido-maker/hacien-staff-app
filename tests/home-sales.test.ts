@@ -249,20 +249,36 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/home-sales-line/);
   });
 
-  it("keeps a compact Home: short labels, ~150px chart, 12px gaps, empty NA line", () => {
+  it("keeps a compact Home: short labels, ~114px chart, 12px gaps, empty NA line", () => {
     expect(dash).toMatch(/Quotes to approve/);
     expect(dash).toMatch(/SOs needing a PO/);
-    expect(dash).toMatch(/Customers missing WHT type/);
+    expect(dash).toMatch(/No WHT type set/);
+    expect(dash).toMatch(/No payments yet/);
+    expect(dash).not.toMatch(/Customers missing WHT type/);
+    expect(dash).not.toMatch(/No payments recorded in/);
     expect(dash).toMatch(/Billed \(\$\{mon\}\)/);
-    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*12px/s);
+    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*10px/s);
     expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*14px/s);
-    expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*150px/s);
+    expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*114px/s);
     expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/\.home-tax\s*\{[^}]*min-height:\s*72px/s);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
-    expect(chartSrc).toMatch(/const VB_H = 150/);
+    expect(chartSrc).toMatch(/const VB_H = 114/);
     const hrefs = readFileSync(path.join(root, "src/lib/home/hrefs.ts"), "utf8");
     expect(hrefs).not.toMatch(/billedThisMonthHref/);
+  });
+
+  it("prevents sideways overflow on narrow Home (min-width 0 + truncate)", () => {
+    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-dashboard\s+\.card\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-bot\s*>\s*\.card[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-tax-body\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-ra-summary\s*\{[^}]*text-overflow:\s*ellipsis/s);
+    expect(css).toMatch(/\.home-tax-due\s*\{[^}]*text-overflow:\s*ellipsis/s);
+    const shots = readFileSync(path.join(root, "scripts/home-a-shots.mjs"), "utf8");
+    expect(shots).toMatch(/scrollWidth/);
+    expect(shots).toMatch(/assertNoHorizontalScroll/);
   });
 
   it("keeps KPI cards equal height, left-aligned, and whole-peso amounts", () => {
@@ -278,8 +294,9 @@ describe("home concept A layout wiring", () => {
   });
 
   it("aligns mid/bot card rows at desktop and shortens the empty chart plot", () => {
-    expect(css).toMatch(/\.home-mid\s*\{[^}]*align-items:\s*stretch/s);
-    expect(css).toMatch(/\.home-bot\s*\{[^}]*align-items:\s*stretch/s);
+    // Mid/bot use start so Needs action / tax do not stretch to the tall neighbor.
+    expect(css).toMatch(/\.home-mid\s*\{[^}]*align-items:\s*start/s);
+    expect(css).toMatch(/\.home-bot\s*\{[^}]*align-items:\s*start/s);
     expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-bot\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-sales-chart\.is-empty\s+\.home-sales-svg[^}]*height:\s*28px/s);

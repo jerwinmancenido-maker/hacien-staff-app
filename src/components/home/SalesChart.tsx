@@ -10,8 +10,8 @@ const PAD_L_EMPTY_PX = 10;
 const PAD_T_PX = 8;
 const PAD_R_PX = 18;
 const PAD_B_PX = 0;
-/** Fixed viewBox height; width expands so the chart fills the row (~150px CSS). */
-const VB_H = 150;
+/** Fixed viewBox height; width expands so the chart fills the row (~114px CSS). */
+const VB_H = 114;
 /** Short empty-state plot; flat line near the top so little blank sits above it. */
 const VB_H_EMPTY = 28;
 

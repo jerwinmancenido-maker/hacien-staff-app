@@ -79,9 +79,8 @@ async function measurePageHeight(cdp) {
   const r = await cdp.send("Runtime.evaluate", {
     returnByValue: true,
     expression: `(() => {
-      // Content-only height from the page column — never use .sidebar / .main
-      // wrappers (they stretch to the provisional tall viewport).
-      const root = document.querySelector('main.content, main, .content');
+      // Content-only height: page header + Home cards. Do NOT use main.content's
+      // box (its padding-bottom / tall viewport stretch inflate the canvas).
       let bottom = 0;
       const bump = (el) => {
         if (!el) return;
@@ -91,24 +90,11 @@ async function measurePageHeight(cdp) {
       bump(document.querySelector('.page-header'));
       bump(document.querySelector('.home-dashboard'));
       bump(document.querySelector('.home-getting-started'));
-      bump(root);
-      if (root) {
-        for (const el of root.querySelectorAll('.card, .home-dashboard, .page-header, p, section, ul, div')) {
-          bump(el);
-        }
+      for (const el of document.querySelectorAll('.home-dashboard .card, .home-getting-started')) {
+        bump(el);
       }
-      // Small pad under the last card; clamp away from the tall viewport.
-      const pad = 16;
-      const measured = Math.ceil(bottom + pad);
-      const vh = window.innerHeight || 0;
-      // If somehow we only saw the stretched shell, fall back to home-dashboard.
-      const dash = document.querySelector('.home-dashboard, .home-getting-started');
-      if (dash) {
-        const dr = dash.getBoundingClientRect();
-        const dashBottom = Math.ceil(dr.bottom + window.scrollY + pad);
-        if (measured >= vh - 8) return Math.max(400, dashBottom);
-      }
-      return Math.max(400, measured);
+      const pad = 12;
+      return Math.max(400, Math.ceil(bottom + pad));
     })()`,
   });
   return Number(r.result?.value) || 800;
@@ -164,7 +150,59 @@ async function goHome(cdp, w, h) {
   await sleep(500);
 }
 
-async function shotHome(cdp, name, w, readyExpr) {
+/**
+ * Fail if the document (or Home cards) can scroll sideways.
+ * Used at 320 and 360 — nothing may overflow the viewport width.
+ */
+async function assertNoHorizontalScroll(cdp, viewportWidth, label) {
+  const r = await cdp.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      const doc = document.documentElement;
+      const body = document.body;
+      const scrollWidth = Math.max(doc.scrollWidth || 0, body.scrollWidth || 0);
+      const clientWidth = Math.min(doc.clientWidth || Infinity, window.innerWidth || Infinity);
+      const offenders = [];
+      for (const el of document.querySelectorAll('.home-dashboard, .home-dashboard .card, .home-tax, .home-activity-card, .home-ra-row, .home-ct, .page-header')) {
+        const r = el.getBoundingClientRect();
+        if (r.right > clientWidth + 1) {
+          offenders.push({
+            cls: (el.className || '').toString().slice(0, 60),
+            right: Math.round(r.right),
+            width: Math.round(r.width),
+          });
+        }
+      }
+      return {
+        scrollWidth,
+        clientWidth,
+        innerWidth: window.innerWidth,
+        ok: scrollWidth <= clientWidth + 1 && offenders.length === 0,
+        offenders: offenders.slice(0, 8),
+      };
+    })()`,
+  });
+  const info = r.result?.value ?? {};
+  console.log(
+    "scrollWidthCheck",
+    label,
+    `viewport=${viewportWidth}`,
+    `scrollWidth=${info.scrollWidth}`,
+    `clientWidth=${info.clientWidth}`,
+    info.ok ? "ok" : "FAIL",
+    info.offenders?.length ? JSON.stringify(info.offenders) : "",
+  );
+  if (!info.ok) {
+    throw new Error(
+      `Horizontal overflow at ${label} (viewport ${viewportWidth}): ` +
+        `scrollWidth=${info.scrollWidth} clientWidth=${info.clientWidth} ` +
+        `offenders=${JSON.stringify(info.offenders)}`,
+    );
+  }
+  return info;
+}
+
+async function shotHome(cdp, name, w, readyExpr, { checkScroll = false } = {}) {
   // Lay out at a tall provisional height so content is not clipped while measuring.
   await goHome(cdp, w, 2400);
   if (readyExpr) await waitFor(cdp, readyExpr);
@@ -180,9 +218,13 @@ async function shotHome(cdp, name, w, readyExpr) {
   await sleep(150);
   await cdp.send("Runtime.evaluate", { expression: `window.scrollTo(0, 0);` });
   await sleep(100);
+  let scrollInfo = null;
+  if (checkScroll || w <= 360) {
+    scrollInfo = await assertNoHorizontalScroll(cdp, w, name);
+  }
   await shot(cdp, name, { x: 0, y: 0, width: w, height, scale: 1 });
   console.log("pageHeight", name, `${w}x${height}`);
-  return height;
+  return { height, scrollInfo };
 }
 
 async function main() {
@@ -228,54 +270,42 @@ async function main() {
 
   const mode = process.argv[2] || "data";
   const heights = {};
+  const scrolls = {};
+  const readyData = `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`;
+  const readyEmpty = `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`;
+  const readyStaff = `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`;
+
+  async function record(name, w, readyExpr, opts) {
+    const r = await shotHome(cdp, name, w, readyExpr, opts);
+    heights[name] = r.height;
+    if (r.scrollInfo) {
+      scrolls[name] = {
+        viewport: w,
+        scrollWidth: r.scrollInfo.scrollWidth,
+        clientWidth: r.scrollInfo.clientWidth,
+        ok: r.scrollInfo.ok,
+      };
+    }
+  }
 
   if (mode === "staff") {
     await login(cdp, staffEmail);
-    heights["home-a-staff-1280.png"] = await shotHome(
-      cdp,
-      "home-a-staff-1280.png",
-      1280,
-      `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`,
-    );
-    heights["home-a-staff-360.png"] = await shotHome(
-      cdp,
-      "home-a-staff-360.png",
-      360,
-      `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`,
-    );
+    await record("home-a-staff-1280.png", 1280, readyStaff);
+    await record("home-a-staff-360.png", 360, readyStaff, { checkScroll: true });
   } else if (mode === "empty") {
     await login(cdp, adminEmail);
-    heights["home-a-empty-1280.png"] = await shotHome(
-      cdp,
-      "home-a-empty-1280.png",
-      1280,
-      `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`,
-    );
-    heights["home-a-empty-360.png"] = await shotHome(
-      cdp,
-      "home-a-empty-360.png",
-      360,
-      `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`,
-    );
+    await record("home-a-empty-1280.png", 1280, readyEmpty);
+    await record("home-a-empty-360.png", 360, readyEmpty, { checkScroll: true });
   } else {
     await login(cdp, adminEmail);
-    heights["home-a-data-1280.png"] = await shotHome(
-      cdp,
-      "home-a-data-1280.png",
-      1280,
-      `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`,
-    );
-    heights["home-a-data-360.png"] = await shotHome(
-      cdp,
-      "home-a-data-360.png",
-      360,
-      `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`,
-    );
+    await record("home-a-data-1280.png", 1280, readyData);
+    await record("home-a-data-360.png", 360, readyData, { checkScroll: true });
+    await record("home-a-data-320.png", 320, readyData, { checkScroll: true });
   }
 
   cdp.close();
   chrome.kill("SIGKILL");
-  console.log("shots done:", mode, JSON.stringify(heights));
+  console.log("shots done:", mode, JSON.stringify({ heights, scrolls }));
 }
 
 main().catch((e) => {
