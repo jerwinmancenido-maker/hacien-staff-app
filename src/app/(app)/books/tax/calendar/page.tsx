@@ -43,8 +43,23 @@ function MarkDone({
       markedDone={r.markedDone}
       doneDateYmd={r.doneDateYmd}
       doneNote={r.doneNote}
+      // Does-not-apply rows: outline so faded opacity doesn't look like a disabled control.
+      secondary={r.applies === "does_not_apply" || r.greyedOut}
     />
   );
+}
+
+function AppliesChip({ r }: { r: TaxCalendarRow }) {
+  return <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>;
+}
+
+function StatusChip({ r }: { r: TaxCalendarRow }) {
+  return <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>;
+}
+
+function WorksheetCell({ r }: { r: TaxCalendarRow }) {
+  if (r.worksheetLink) return <Link href={r.worksheetLink}>Open worksheet</Link>;
+  return <span className="faint">—</span>;
 }
 
 export default async function TaxCalendarPage({
@@ -77,18 +92,20 @@ export default async function TaxCalendarPage({
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <nav aria-label="Calendar view" style={{ display: "flex", gap: 8 }}>
+          <nav aria-label="Calendar view" style={{ display: "flex", gap: 8 }} role="tablist">
             <Link
-              className={`btn btn-sm${view === "upcoming" ? " btn-primary" : ""}`}
+              className={`btn btn-sm${view === "upcoming" ? "" : " btn-secondary"}`}
               href="/books/tax/calendar"
-              aria-current={view === "upcoming" ? "page" : undefined}
+              role="tab"
+              aria-selected={view === "upcoming"}
             >
               Next 90 days
             </Link>
             <Link
-              className={`btn btn-sm${view === "all" ? " btn-primary" : ""}`}
+              className={`btn btn-sm${view === "all" ? "" : " btn-secondary"}`}
               href="/books/tax/calendar?view=all"
-              aria-current={view === "all" ? "page" : undefined}
+              role="tab"
+              aria-selected={view === "all"}
             >
               All
             </Link>
@@ -108,32 +125,45 @@ export default async function TaxCalendarPage({
         </div>
       ) : (
         <>
-          {/* Phone (below sm / 640px): one stacked card per obligation. */}
+          {/* Phone (below sm / 640px): one stacked card per obligation — same fields as the table. */}
           <div className="tax-cal-mobile" role="list">
-            {rows.map((r) => (
-              <div
-                key={r.occurrenceKey}
-                className={`card tax-cal-card${r.greyedOut ? " faint" : ""}`}
-                role="listitem"
-                style={r.greyedOut ? { opacity: 0.55 } : undefined}
-              >
-                <div className="tax-cal-card-name">
-                  <b>{r.form}</b>
-                  <span className="tax-cal-card-desc">{r.description}</span>
+            {rows.map((r) => {
+              const doesNotApply = r.applies === "does_not_apply" || r.greyedOut;
+              return (
+                <div
+                  key={r.occurrenceKey}
+                  className={`card tax-cal-card${doesNotApply ? " tax-cal-card-muted" : ""}`}
+                  role="listitem"
+                >
+                  {doesNotApply ? (
+                    <div className="tax-cal-card-chips">
+                      <AppliesChip r={r} />
+                    </div>
+                  ) : null}
+                  <div className="tax-cal-card-name">
+                    <b>{r.form}</b>
+                    <span className="tax-cal-card-desc">{r.description}</span>
+                  </div>
+                  <div className="tax-cal-card-period">{r.periodLabel}</div>
+                  <div className="tax-cal-card-due">{r.dueDisplay}</div>
+                  {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
+                  <div className="tax-cal-card-chips">
+                    <StatusChip r={r} />
+                    {!doesNotApply ? <AppliesChip r={r} /> : null}
+                  </div>
+                  {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
+                  <div className="tax-cal-card-worksheet">
+                    <WorksheetCell r={r} />
+                  </div>
+                  <div className="tax-cal-card-action">
+                    <MarkDone r={r} doneDefault={doneDefault} />
+                  </div>
                 </div>
-                <div className="tax-cal-card-due">{r.dueDisplay}</div>
-                {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
-                <div className="tax-cal-card-status">
-                  <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
-                </div>
-                <div className="tax-cal-card-action">
-                  <MarkDone r={r} doneDefault={doneDefault} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Desktop (sm+): table with tighter row padding. */}
+          {/* Desktop (sm+): fit without horizontal clip at 1024 / 1280. */}
           <div className="card tax-cal-desktop">
             <table className="list tax-cal-table">
               <thead>
@@ -152,35 +182,30 @@ export default async function TaxCalendarPage({
                 {rows.map((r) => (
                   <tr
                     key={r.occurrenceKey}
-                    style={r.greyedOut ? { opacity: 0.55 } : undefined}
-                    className={r.greyedOut ? "faint" : undefined}
+                    className={r.applies === "does_not_apply" || r.greyedOut ? "tax-cal-row-muted" : undefined}
                   >
                     <td>
                       <b>{r.form}</b>
                     </td>
-                    <td>
+                    <td className="tax-cal-desc">
                       <div>{r.description}</div>
                       {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
                     </td>
                     <td>{r.periodLabel}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
+                    <td className="tax-cal-due">
                       <div>{r.dueDisplay}</div>
                       {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
                     </td>
                     <td>
-                      <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>
+                      <StatusChip r={r} />
                     </td>
                     <td>
-                      <Chip tone={APPLIES_TONE[r.applies] ?? "grey"}>{r.appliesLabel}</Chip>
+                      <AppliesChip r={r} />
                     </td>
                     <td>
-                      {r.worksheetLink ? (
-                        <Link href={r.worksheetLink}>Open worksheet</Link>
-                      ) : (
-                        <span className="faint">—</span>
-                      )}
+                      <WorksheetCell r={r} />
                     </td>
-                    <td>
+                    <td className="tax-cal-done">
                       <MarkDone r={r} doneDefault={doneDefault} />
                     </td>
                   </tr>

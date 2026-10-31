@@ -178,7 +178,12 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
   }
 
   rows.sort((a, b) => {
-    // Undated last among open items; then by due date; then form.
+    // Overdue first (past-year undone items stay in "Next 90 days"), then nearer due, then open, then done.
+    const statusRank = (s: TaxCalendarStatusKey): number =>
+      s === "overdue" ? 0 : s === "dueIn2" ? 1 : s === "dueIn7" ? 2 : s === "upcoming" ? 3 : 4;
+    const byStatus = statusRank(a.status) - statusRank(b.status);
+    if (byStatus !== 0) return byStatus;
+    // Undated last within a status band; then by due date; then form.
     if (a.dueYmd && b.dueYmd) {
       if (a.dueYmd !== b.dueYmd) return a.dueYmd.localeCompare(b.dueYmd);
     } else if (a.dueYmd && !b.dueYmd) return -1;
