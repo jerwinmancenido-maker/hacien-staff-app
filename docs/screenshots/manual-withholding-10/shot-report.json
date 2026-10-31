@@ -4,73 +4,85 @@
     {
       "name": "quote-editor-pick-1280.png",
       "width": 1280,
-      "height": 1739,
+      "height": 1593,
       "scrollWidth": 1265
     },
     {
       "name": "quote-editor-not-set-1280.png",
       "width": 1280,
-      "height": 1739,
-      "scrollWidth": 1265
+      "height": 1730,
+      "scrollWidth": 1250
     },
     {
       "name": "quote-submit-confirm-none-1280.png",
       "width": 1280,
-      "height": 1739,
-      "scrollWidth": 1265
+      "height": 1730,
+      "scrollWidth": 1250
     },
     {
       "name": "quote-add-customer-pick-1280.png",
       "width": 1280,
-      "height": 1739,
-      "scrollWidth": 1265
+      "height": 1730,
+      "scrollWidth": 1250
     },
     {
       "name": "customer-overview-pick-1280.png",
       "width": 1280,
-      "height": 1739,
-      "scrollWidth": 1265
+      "height": 1730,
+      "scrollWidth": 1250
     },
     {
-      "name": "customer-edit-pick-1280.png",
+      "name": "customer-edit-yes-1280.png",
       "width": 1280,
-      "height": 1739,
-      "scrollWidth": 1265
+      "height": 1730,
+      "scrollWidth": 1250
+    },
+    {
+      "name": "customer-edit-no-1280.png",
+      "width": 1280,
+      "height": 1730,
+      "scrollWidth": 1250
     },
     {
       "name": "quote-editor-pick-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2372,
       "scrollWidth": 360
     },
     {
       "name": "quote-editor-not-set-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2455,
       "scrollWidth": 360
     },
     {
       "name": "quote-submit-confirm-none-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2455,
       "scrollWidth": 360
     },
     {
       "name": "quote-add-customer-pick-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2455,
       "scrollWidth": 360
     },
     {
       "name": "customer-overview-pick-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2455,
       "scrollWidth": 360
     },
     {
-      "name": "customer-edit-pick-360.png",
+      "name": "customer-edit-yes-360.png",
       "width": 360,
-      "height": 2444,
+      "height": 2455,
+      "scrollWidth": 360
+    },
+    {
+      "name": "customer-edit-no-360.png",
+      "width": 360,
+      "height": 2455,
       "scrollWidth": 360
     },
     {

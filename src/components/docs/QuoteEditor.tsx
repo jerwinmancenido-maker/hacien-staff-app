@@ -22,6 +22,7 @@ import {
 } from "@/lib/quotes/calc";
 import {
   lineDiffersFromUsualPicks,
+  lineWithholdingFromPicks,
   lineWithholdingSnapshotFromPicks,
   WITHHOLDING_NOT_SET_NOTICE,
   WITHHOLDING_NONE_CONFIRM_TITLE,
@@ -659,7 +660,12 @@ export function QuoteEditor({
                   const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                   const showOverride =
                     i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
-                  const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
+                  const pickAtc = lineWithholdingFromPicks(linePicks, i.kind).atc;
+                  const displayAtc =
+                    i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
+                      ? i.withholdingAtc
+                      : pickAtc;
+                  const govAtc = isUnverifiedGovAtc(displayAtc);
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const below = toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -683,7 +689,7 @@ export function QuoteEditor({
                             </select>
                             <span
                               className="quote-tg quote-tg-wh"
-                              title={govAtc ? `${GOV_ATC_CODE_TO_CONFIRM}${i.withholdingAtc ? ` (${i.withholdingAtc})` : ""}` : i.withholdingAtc ?? undefined}
+                              title={govAtc ? `${GOV_ATC_CODE_TO_CONFIRM}${displayAtc ? ` (${displayAtc})` : ""}` : displayAtc ?? undefined}
                             >
                               <span className="quote-tg-wh-label">{whLabel}</span>
                               <input
@@ -701,9 +707,9 @@ export function QuoteEditor({
                               <input
                                 aria-label={`Line ${idx + 1} ATC`}
                                 className="w-atc"
-                                value={govAtc ? "" : (i.withholdingAtc ?? "")}
+                                value={govAtc ? "" : (displayAtc ?? "")}
                                 placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
-                                title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : i.withholdingAtc ?? undefined}
+                                title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : displayAtc ?? undefined}
                                 onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                               />
                             </span>
@@ -794,7 +800,12 @@ export function QuoteEditor({
                   const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                   const showOverride =
                     i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
-                  const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
+                  const pickAtc = lineWithholdingFromPicks(linePicks, i.kind).atc;
+                  const displayAtc =
+                    i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
+                      ? i.withholdingAtc
+                      : pickAtc;
+                  const govAtc = isUnverifiedGovAtc(displayAtc);
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   return (
                     <article key={`m-${i.key}`} className="quote-line-card">
@@ -920,9 +931,9 @@ export function QuoteEditor({
                           <input
                             aria-label={`Line ${idx + 1} ATC`}
                             className="w-atc"
-                            value={govAtc ? "" : (i.withholdingAtc ?? "")}
+                            value={govAtc ? "" : (displayAtc ?? "")}
                             placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
-                            title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : i.withholdingAtc ?? undefined}
+                            title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : displayAtc ?? undefined}
                             onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                           />
                         </span>

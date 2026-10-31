@@ -313,8 +313,11 @@ export function lineDiffersFromUsualPicks(
   if (stored.rate == null || String(stored.rate).trim() === "") return false;
   const usual = lineWithholdingFromPicks(picks, kind);
   const rate = Number(stored.rate).toFixed(4);
-  const atc = stored.atc ?? null;
-  return rate !== usual.rate || atc !== usual.atc;
+  if (rate !== usual.rate) return true;
+  const atc = stored.atc != null && String(stored.atc).trim() !== "" ? String(stored.atc).trim() : null;
+  // Blank ATC with a matching rate is not an override (legacy combined rows omitted ATC).
+  if (atc == null) return false;
+  return atc !== (usual.atc ?? null);
 }
 
 /**
