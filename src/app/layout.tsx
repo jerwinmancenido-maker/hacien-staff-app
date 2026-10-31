@@ -42,7 +42,7 @@ export const metadata: Metadata = {
       { url: "/brand/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/brand/icon.svg", type: "image/svg+xml" },
     ],
-    apple: [{ url: "/apple-icon.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/apple-icon", sizes: "512x512", type: "image/png" }],
   },
   manifest: "/site.webmanifest",
 };

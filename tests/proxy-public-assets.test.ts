@@ -14,13 +14,7 @@ import {
 function matcherHits(pathname: string): boolean {
   const patterns = Array.isArray(config.matcher) ? config.matcher : [config.matcher];
   return patterns.some((pattern) => {
-    // Next middleware matchers are path-to-regexp-ish; our patterns are a single
-    // negative-lookahead form. Compile the same way: strip leading slash from the
-    // pattern's "/((?!...).*)" and test against pathname without the leading slash
-    // for the inner group — or test the full pathname against a RegExp derived
-    // from the matcher string.
     const raw = pattern.startsWith("/") ? pattern.slice(1) : pattern;
-    // Escape only what's needed: the matcher is already a regex-ish string.
     const re = new RegExp(`^${raw}$`);
     const path = pathname.startsWith("/") ? pathname.slice(1) : pathname;
     return re.test(path);
@@ -33,22 +27,22 @@ function loggedOut(url: string) {
 
 describe("proxy public-asset allowlist (security)", () => {
   it("lists only exact icon/favicon/manifest names and brand/_next prefixes (no extension wildcard)", () => {
-    expect(PUBLIC_ASSET_EXACT).toEqual([
-      "/favicon.ico",
-      "/icon.png",
-      "/apple-icon.png",
-      "/icon",
-      "/apple-icon",
-      "/site.webmanifest",
-    ]);
+    // /icon and /apple-icon only — app/icon.png and app/apple-icon.png are file
+    // conventions served at those bare paths; there is no public/*.png for them.
+    expect(PUBLIC_ASSET_EXACT).toEqual(["/favicon.ico", "/icon", "/apple-icon", "/site.webmanifest"]);
     expect(PUBLIC_ASSET_PREFIXES).toEqual(["/_next/static", "/_next/image", "/brand/"]);
     const matcherLine = Array.isArray(config.matcher) ? config.matcher[0] : config.matcher;
     expect(matcherLine).toBe(PROXY_MATCHER);
     expect(matcherLine).not.toMatch(/\.\*\??\\\.\(\?:svg/);
     expect(matcherLine).not.toMatch(/svg\|png\|jpg/);
     expect(matcherLine).toContain("brand/");
-    expect(matcherLine).toContain("favicon\\.ico");
-    expect(matcherLine).toContain("site\\.webmanifest");
+    expect(matcherLine).toContain("favicon\\.ico$");
+    expect(matcherLine).toContain("icon$");
+    expect(matcherLine).toContain("apple-icon$");
+    expect(matcherLine).toContain("site\\.webmanifest$");
+    // No unanchored (?:/|$) — trailing segments must stay gated.
+    expect(matcherLine).not.toMatch(/favicon\\.ico\(\?:/);
+    expect(matcherLine).not.toMatch(/site\\.webmanifest\(\?:/);
   });
 
   it("matcher and isPublicAssetPath agree: session check skipped only for allowlisted assets", () => {
@@ -57,8 +51,6 @@ describe("proxy public-asset allowlist (security)", () => {
       "/brand/logo-wordmark.svg",
       "/brand/icon-32.png",
       "/favicon.ico",
-      "/icon.png",
-      "/apple-icon.png",
       "/icon",
       "/apple-icon",
       "/site.webmanifest",
@@ -80,6 +72,8 @@ describe("proxy public-asset allowlist (security)", () => {
       "/login.png",
       "/evil.ico",
       "/site.webmanifest.bak",
+      "/icon.png",
+      "/apple-icon.png",
       "/brand",
       "/customers",
       "/",
@@ -88,6 +82,17 @@ describe("proxy public-asset allowlist (security)", () => {
       expect(isPublicAssetPath(path), path).toBe(false);
       expect(shouldCheckSession(path), path).toBe(true);
       expect(matcherHits(path), `matcher should hit ${path}`).toBe(true);
+    }
+  });
+
+  it("logged out: trailing segments under favicon/icon/manifest stay gated", () => {
+    for (const path of ["/favicon.ico/anything", "/icon/x", "/site.webmanifest/x", "/apple-icon/180"]) {
+      expect(isPublicAssetPath(path), path).toBe(false);
+      expect(shouldCheckSession(path), path).toBe(true);
+      expect(matcherHits(path), `matcher should hit ${path}`).toBe(true);
+      const res = proxy(loggedOut(`http://localhost${path}`));
+      expect(res.status, path).toBe(307);
+      expect(res.headers.get("location"), path).toBe("http://localhost/login");
     }
   });
 
@@ -106,8 +111,6 @@ describe("proxy public-asset allowlist (security)", () => {
       "/brand/logo-full.svg",
       "/brand/logo-wordmark.svg",
       "/favicon.ico",
-      "/icon.png",
-      "/apple-icon.png",
       "/icon",
       "/apple-icon",
       "/site.webmanifest",
@@ -116,7 +119,6 @@ describe("proxy public-asset allowlist (security)", () => {
       expect(matcherHits(path)).toBe(false);
       const res = proxy(loggedOut(`http://localhost${path}`));
       expect(res.status, path).toBe(200);
-      // next() — no Location redirect
       expect(res.headers.get("location"), path).toBeNull();
     }
   });

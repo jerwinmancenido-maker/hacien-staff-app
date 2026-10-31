@@ -8,11 +8,13 @@ const PUBLIC = ["/login", "/forgot-password", "/reset-password"];
 /**
  * Exact public asset paths that skip the session gate (favicon, app icons, PWA
  * manifest). Prefixes are listed separately — never a generic file-extension rule.
+ *
+ * Kept `/icon` and `/apple-icon` (not `*.png`): `src/app/icon.png` and
+ * `src/app/apple-icon.png` are App Router metadata file conventions, which Next
+ * serves at those bare paths. There is no `public/icon.png` / `public/apple-icon.png`.
  */
 export const PUBLIC_ASSET_EXACT = [
   "/favicon.ico",
-  "/icon.png",
-  "/apple-icon.png",
   "/icon",
   "/apple-icon",
   "/site.webmanifest",
@@ -23,17 +25,14 @@ export const PUBLIC_ASSET_PREFIXES = ["/_next/static", "/_next/image", "/brand/"
 
 /**
  * Final middleware matcher (must be a static string for Next to parse at build time).
- * Skips: _next/static, _next/image, /brand/*, and the exact favicon / app-icon /
- * manifest paths. No generic "any .png/.svg" exception.
+ * Exact names are `$`-anchored so /favicon.ico/anything, /icon/x, etc. still hit the proxy.
  */
 export const PROXY_MATCHER =
-  "/((?!_next/static|_next/image|brand/|favicon\\.ico(?:/|$)|icon\\.png(?:/|$)|apple-icon\\.png(?:/|$)|icon(?:/|$)|apple-icon(?:/|$)|site\\.webmanifest(?:/|$)).*)";
+  "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon$|apple-icon$|site\\.webmanifest$).*)";
 
 /** True when the path is a no-auth static asset (matcher + proxy share this list). */
 export function isPublicAssetPath(pathname: string): boolean {
   if (PUBLIC_ASSET_EXACT.includes(pathname as (typeof PUBLIC_ASSET_EXACT)[number])) return true;
-  // Next metadata icons may append a size suffix: /icon/32, /apple-icon/180, etc.
-  if (pathname.startsWith("/icon/") || pathname.startsWith("/apple-icon/")) return true;
   if (pathname.startsWith("/_next/static/") || pathname === "/_next/static") return true;
   if (pathname.startsWith("/_next/image/") || pathname === "/_next/image") return true;
   // Brand kit folder only — bare /brand is not public.
@@ -70,6 +69,6 @@ export function proxy(req: NextRequest) {
 export const config = {
   // Static string required by Next — keep identical to PROXY_MATCHER (tested).
   matcher: [
-    "/((?!_next/static|_next/image|brand/|favicon\\.ico(?:/|$)|icon\\.png(?:/|$)|apple-icon\\.png(?:/|$)|icon(?:/|$)|apple-icon(?:/|$)|site\\.webmanifest(?:/|$)).*)",
+    "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon$|apple-icon$|site\\.webmanifest$).*)",
   ],
 };

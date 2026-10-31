@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { can, canSeeCosts, roleLabel } from "@/lib/permissions";
 import { isCashEnabled } from "@/lib/cash/features";
@@ -27,9 +28,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="frame">
       <aside className="sidebar">
         <div className="brand">
-          <a href="/" className="brand-link" aria-label="HACIEN home">
+          <Link href="/" className="brand-link" aria-label="HACIEN home">
             <BrandLogo variant="wordmark" />
-          </a>
+          </Link>
         </div>
         <SidebarNav
           isAdmin={can(user, "manage_settings")}
