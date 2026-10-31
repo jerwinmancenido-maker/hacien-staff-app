@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/format";
 import { agingBucket, sumAging } from "@/lib/billing/aging";
@@ -52,6 +54,12 @@ describe("Payables 2307 (withholding agent) flag", () => {
     const on = visiblePayablesNavTabs(true);
     expect(on.map((t) => t.key)).toEqual(["home", "payments", "aging", "2307"]);
     expect(on.find((t) => t.key === "2307")?.label).toBe("2307 to issue");
+  });
+
+  it("gates markSupplier2307IssuedAction with assertPayables2307Enabled", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/app/(app)/payables/actions.ts"), "utf8");
+    expect(src).toMatch(/assertPayables2307Enabled/);
+    expect(src).toMatch(/markSupplier2307IssuedAction[\s\S]*await assertPayables2307Enabled\(\)/);
   });
 });
 

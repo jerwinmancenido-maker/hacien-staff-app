@@ -3,7 +3,11 @@
 // Turn on in Settings → Features, or set PAYABLES_2307_ENABLED=true.
 // Env wins when set to "1" / "true" / "yes" / "on".
 
+import { DocRuleError } from "../documents/common";
 import { getSettingsSnapshot } from "../settings";
+
+export const PAYABLES_2307_OFF_MESSAGE =
+  "Issuing 2307 to suppliers is turned off. Enable it in Settings → Features (or set PAYABLES_2307_ENABLED=true).";
 
 /** Sync check from env only (useful in unit tests without DB). */
 export function payables2307EnabledFromEnv(
@@ -22,4 +26,9 @@ export async function isPayables2307Enabled(): Promise<boolean> {
   if (fromEnv !== null) return fromEnv;
   const snap = await getSettingsSnapshot();
   return snap.settings.features.payables2307Enabled === true;
+}
+
+/** Reject mark-issued mutations when the 2307-to-suppliers feature is off. */
+export async function assertPayables2307Enabled(): Promise<void> {
+  if (!(await isPayables2307Enabled())) throw new DocRuleError(PAYABLES_2307_OFF_MESSAGE);
 }

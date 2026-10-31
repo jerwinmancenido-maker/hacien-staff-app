@@ -767,10 +767,29 @@ a.tracker-card:hover {
   padding: 6px 10px;
   overflow: auto; /* vertical + horizontal (phone: sideways scroll) */
   max-height: calc(100vh - 260px);
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
 }
 .table-wrap table.list {
   min-width: 640px; /* wider than 360px phone so .table-wrap scrolls sideways */
+}
+/* Keep wide payment lists inside the card; scroll the wrap, not the page. */
+.payments-table-card {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.payments-table-card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
+.payments-empty {
+  max-width: 100%;
 }
 /* Cost & margin purchases: keep money columns readable on narrow viewports. */
 .table-wrap.cost-margin-purchases {

@@ -28,6 +28,7 @@ import {
   voidSupplierPayment,
   type PayablesActor,
 } from "@/lib/services/supplier-payments";
+import { PAYABLES_2307_OFF_MESSAGE } from "@/lib/payables/issue2307";
 import { apAgingSummary } from "@/lib/payables/views";
 import { addDays } from "@/lib/format";
 import { freshYear, makeSupplier, makeUser, tag } from "./fixtures";
@@ -332,9 +333,70 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
     expect(wh.status).toBe("TO_ISSUE");
     expect(money(wh.amount)).toBe("1000.00");
 
-    await markSupplier2307Issued(wh.id, { issuedAt: new Date(Date.UTC(year, 2, 20)), notes: null }, admin, []);
+    const prev2307 = process.env.PAYABLES_2307_ENABLED;
+    process.env.PAYABLES_2307_ENABLED = "true";
+    try {
+      await markSupplier2307Issued(wh.id, { issuedAt: new Date(Date.UTC(year, 2, 20)), notes: null }, admin, []);
+    } finally {
+      if (prev2307 === undefined) delete process.env.PAYABLES_2307_ENABLED;
+      else process.env.PAYABLES_2307_ENABLED = prev2307;
+    }
     expect((await db.supplierWithholding2307.findUniqueOrThrow({ where: { id: wh.id } })).status).toBe("ISSUED");
     await expect(voidSupplierPayment(pay.id, "too late", admin)).rejects.toThrow(/issued 2307/i);
+  });
+
+  it("PAYABLES_2307_ENABLED=off rejects mark-issued and writes nothing; on succeeds", async () => {
+    const year = await freshYear();
+    const { supplier, bill } = await openBill(year, "50000.00");
+    const pay = await recordSupplierPayment(
+      {
+        supplierId: supplier.id,
+        date: new Date(Date.UTC(year, 2, 10)),
+        method: "BANK_TRANSFER",
+        reference: "EWT-GATE",
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "49500.00",
+        notes: null,
+        allocations: [
+          {
+            supplierBillId: bill.id,
+            cashApplied: "49500.00",
+            withholdingApplied: "500.00",
+            withholdingRate: "0.0100",
+            atcCode: "WC010",
+          },
+        ],
+      },
+      admin,
+    );
+    const wh = await db.supplierWithholding2307.findFirstOrThrow({ where: { supplierPaymentId: pay.id } });
+    expect(wh.status).toBe("TO_ISSUE");
+
+    const prev2307 = process.env.PAYABLES_2307_ENABLED;
+    process.env.PAYABLES_2307_ENABLED = "false";
+    try {
+      await expect(
+        markSupplier2307Issued(wh.id, { issuedAt: new Date(Date.UTC(year, 2, 20)), notes: null }, admin, []),
+      ).rejects.toThrow(PAYABLES_2307_OFF_MESSAGE);
+      const afterOff = await db.supplierWithholding2307.findUniqueOrThrow({ where: { id: wh.id } });
+      expect(afterOff.status).toBe("TO_ISSUE");
+      expect(afterOff.issuedAt).toBeNull();
+    } finally {
+      if (prev2307 === undefined) delete process.env.PAYABLES_2307_ENABLED;
+      else process.env.PAYABLES_2307_ENABLED = prev2307;
+    }
+
+    process.env.PAYABLES_2307_ENABLED = "true";
+    try {
+      await markSupplier2307Issued(wh.id, { issuedAt: new Date(Date.UTC(year, 2, 21)), notes: "issued" }, admin, []);
+      const afterOn = await db.supplierWithholding2307.findUniqueOrThrow({ where: { id: wh.id } });
+      expect(afterOn.status).toBe("ISSUED");
+      expect(afterOn.issuedAt).not.toBeNull();
+    } finally {
+      if (prev2307 === undefined) delete process.env.PAYABLES_2307_ENABLED;
+      else process.env.PAYABLES_2307_ENABLED = prev2307;
+    }
   });
 
   it("void recomputes bill status, writes audit + DocumentVoid, and never reuses the number", async () => {

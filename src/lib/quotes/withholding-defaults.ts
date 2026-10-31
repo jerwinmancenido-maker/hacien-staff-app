@@ -11,7 +11,7 @@
 // summary of those line rates — not a second rate source.
 
 import type { ItemKind, WithholdingLineKind, WithholdingSnapshot } from "./calc";
-import { BUSINESS_IS_VAT_REGISTERED } from "../tax/constants";
+import { BUSINESS_IS_VAT_REGISTERED } from "../tax/constants.ts";
 
 /** Staff-facing strings (no extra customer-facing tax copy). */
 export const MISSING_WITHHOLDING_TYPE_WARNING = "Set this customer's withholding type";
