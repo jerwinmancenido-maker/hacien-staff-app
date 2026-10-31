@@ -122,14 +122,14 @@ export default async function PayablesHomePage({
             <p className="faint">No open payables yet.</p>
             <p className="faint small">Record a supplier bill on a purchase order, then come back to pay it.</p>
             {canManage && (
-              <p style={{ marginTop: 12 }}>
+              <div className="empty-actions">
                 <Link className="btn btn-secondary" href="/purchase-orders">
                   Go to supplier POs
-                </Link>{" "}
+                </Link>
                 <Link className="btn" href="/payables/payments/new">
                   Record payment
                 </Link>
-              </p>
+              </div>
             )}
           </div>
         ) : (

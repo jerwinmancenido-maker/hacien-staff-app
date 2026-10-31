@@ -37,6 +37,10 @@ export type ItemsTableRow = {
   unit: string;
   unitPrice: string;
   total: string;
+  withholdingRate?: string | null;
+  withholdingAtc?: string | null;
+  withholdingOverride?: boolean;
+  overrideNote?: string | null;
   supplierName?: string | null;
   supplierUnitCost?: string;
   supplierTotal?: string;
@@ -72,6 +76,13 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
                   {i.description}
                 </div>
                 <div className="small muted">{i.kind === "SERVICES" ? "Services" : "Goods"}</div>
+                {i.overrideNote ? <div className="small muted">{i.overrideNote}</div> : null}
+                {(i.withholdingRate != null || i.withholdingAtc) && (
+                  <div className="small faint">
+                    WH {i.withholdingRate != null ? `${(Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "")}%` : "—"}
+                    {i.withholdingAtc ? ` · ${i.withholdingAtc}` : ""}
+                  </div>
+                )}
               </td>
               <td className="num">{qtyText(i.qty)}</td>
               <td>{i.unit}</td>
@@ -114,7 +125,10 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
     <div className="totals-box" aria-label="Totals">
       <Row label="Contract price" value={formatPeso(totals.contractPrice)} strong />
       {totals.withholding.length === 0 ? (
-        <Row label="Less withholding" value={formatPeso(0)} />
+        <Row
+          label="Less withholding"
+          value={Number(totals.withholdingTotal) ? `−${formatPeso(totals.withholdingTotal)}` : formatPeso(0)}
+        />
       ) : (
         <>
           <div className="totals-row">

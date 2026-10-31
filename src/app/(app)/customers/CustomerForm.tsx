@@ -12,19 +12,14 @@ import {
 } from "@/lib/withholding/display";
 import type { FormState } from "@/lib/validation/forms";
 
-export type RateOption = { code: string; label: string; active: boolean };
-
 export function CustomerForm({
   customer,
   terms,
-  rates,
   action,
   canEdit,
 }: {
   customer: Customer | null;
   terms: string[];
-  /** Settings → Withholding rates for the "Default withholding" checkboxes. */
-  rates: RateOption[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
 }) {
@@ -35,10 +30,6 @@ export function CustomerForm({
   const e = state.fieldErrors ?? {};
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
   const blocked = !name.trim() || !withholding;
-  const savedDefault = Array.isArray(customer?.defaultWithholding) ? (customer.defaultWithholding as string[]) : [];
-  // Uncontrolled: the form isn't reset after a server error, so ticks stay as the user left them.
-  const defaultCodes = savedDefault;
-  const rateOptions = rates.filter((r) => r.active || savedDefault.includes(r.code));
 
   return (
     <form onSubmit={onSubmit} noValidate id="customer-form">
@@ -72,26 +63,6 @@ export function CustomerForm({
               ))}
             </select>
           </Field>
-          <div className={`field full${e.defaultWithholding ? " has-error" : ""}`}>
-            <span className="label">Default withholding on new quotes</span>
-            <div className="check-row" role="group" aria-label="Default withholding on new quotes">
-              {rateOptions.length === 0 && <span className="small faint">No withholding rates in Settings yet.</span>}
-              {rateOptions.map((r) => (
-                <label key={r.code} className="check">
-                  <input type="checkbox" name="defaultWithholding" value={r.code} defaultChecked={defaultCodes.includes(r.code)} />
-                  {r.label}
-                  {!r.active && <span className="faint small"> (inactive)</span>}
-                </label>
-              ))}
-            </div>
-            {e.defaultWithholding ? (
-              <div className="error" role="alert">
-                {e.defaultWithholding}
-              </div>
-            ) : (
-              <div className="hint">Copied onto new quotes; staff can change it per quote. Leave all unticked for none.</div>
-            )}
-          </div>
           <Field label="Default terms" name="defaultTerms" error={e.defaultTerms}>
             <select id="defaultTerms" name="defaultTerms" defaultValue={v("defaultTerms")}>
               <option value="">None</option>

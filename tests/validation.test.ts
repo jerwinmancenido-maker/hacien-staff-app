@@ -5,6 +5,14 @@ import { CANT_DEACTIVATE_MAIN, deactivateContactError, makeMainError, makeMainPl
 import { auditDiff } from "@/lib/audit";
 import { isRateLimited, MAX_FAILED_LOGINS } from "@/lib/auth/rate-limit";
 import { formatDate, formatPeso, formatPesoLimit } from "@/lib/format";
+import { itemSchema } from "@/lib/validation/quotes";
+import {
+  WITHHOLDING_PERCENT_NON_NUMERIC_ERROR,
+  WITHHOLDING_PERCENT_RANGE_ERROR,
+  parseWithholdingPercentInput,
+} from "@/lib/quotes/withholding-percent";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const TERMS = ["COD", "Net 30"];
 const ROLES = ["Procurement", "Accounting"];
@@ -136,5 +144,59 @@ describe("formatting", () => {
   it("shows dates in Asia/Manila", () => {
     // 2026-10-30 20:00 UTC is already Oct 31 in Manila (UTC+8).
     expect(formatDate(new Date("2026-10-30T20:00:00Z"))).toBe("Oct 31, 2026");
+  });
+});
+
+describe("line withholding percent (0–15%)", () => {
+  const base = {
+    id: null,
+    description: "Line",
+    kind: "GOODS" as const,
+    qty: "1",
+    unit: "pc",
+    unitPrice: "100",
+    supplierUnitCost: "0",
+  };
+
+  it("accepts 0% and 15% on the free-text parser and as stored fractions", () => {
+    expect(parseWithholdingPercentInput("0")).toEqual({ ok: true, rate: "0.0000" });
+    expect(parseWithholdingPercentInput("15")).toEqual({ ok: true, rate: "0.1500" });
+    expect(itemSchema.safeParse({ ...base, withholdingRate: "0.0000" }).success).toBe(true);
+    expect(itemSchema.safeParse({ ...base, withholdingRate: "0.1500" }).success).toBe(true);
+  });
+
+  it("treats a cleared (empty) field as explicit 0% so the server can tell it from legacy NULL", () => {
+    expect(parseWithholdingPercentInput("")).toEqual({ ok: true, rate: "0.0000" });
+    expect(parseWithholdingPercentInput("   ")).toEqual({ ok: true, rate: "0.0000" });
+  });
+
+  it("rejects a negative percent with the plain range error", () => {
+    expect(parseWithholdingPercentInput("-1")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
+    const r = itemSchema.safeParse({ ...base, withholdingRate: "-0.0100" });
+    expect(r.success).toBe(false);
+    expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_RANGE_ERROR);
+  });
+
+  it("rejects above 15% with the plain range error", () => {
+    expect(parseWithholdingPercentInput("15.1")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
+    expect(parseWithholdingPercentInput("100")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_RANGE_ERROR });
+    const r = itemSchema.safeParse({ ...base, withholdingRate: "0.1501" });
+    expect(r.success).toBe(false);
+    expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_RANGE_ERROR);
+  });
+
+  it("rejects non-numeric input with a plain non-numeric error", () => {
+    expect(parseWithholdingPercentInput("abc")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_NON_NUMERIC_ERROR });
+    expect(parseWithholdingPercentInput("1%")).toEqual({ ok: false, message: WITHHOLDING_PERCENT_NON_NUMERIC_ERROR });
+    const r = itemSchema.safeParse({ ...base, withholdingRate: "nope" });
+    expect(r.success).toBe(false);
+    expect(r.success ? null : r.error.issues[0]?.message).toBe(WITHHOLDING_PERCENT_NON_NUMERIC_ERROR);
+  });
+
+  it("DocumentEditor disables submit when whPctErrors is non-empty", () => {
+    const src = readFileSync(resolve(__dirname, "../src/components/docs/DocumentEditor.tsx"), "utf8");
+    expect(src).toMatch(
+      /disabled=\{pending \|\| \(mode === "quote" && !h\.customerId\) \|\| Object\.keys\(whPctErrors\)\.length > 0\}/,
+    );
   });
 });

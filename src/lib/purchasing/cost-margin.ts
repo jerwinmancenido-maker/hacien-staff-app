@@ -2,8 +2,10 @@
 // Used by the Cost & margin tab — which PO cost basis to use, actual vs planned
 // margin, and the two plain-language warnings.
 //
-// Both Planned and Actual use the same basis: contract (before withholding) − cost.
-// Withholding is a tax credit, not a cost.
+// Planned (before withholding) = contract − planned supplier cost.
+// After customer withholding = (contract − stored withholdingTotal) − cost,
+// where withholdingTotal is the per-line sum saved on the SO (drafts only
+// recalculate; issued/void keep stored money).
 
 import { fromScaled, toScaled } from "../quotes/calc";
 
@@ -130,8 +132,12 @@ export type CostMarginSummary = {
   rows: CostMarginPoRow[];
   totalCost: string;
   contractPrice: string;
+  /** Stored SO withholding total (per-line sum when last saved as a draft). */
+  withholdingTotal: string;
   actual: { margin: string; marginPct: string };
   planned: { margin: string; marginPct: string };
+  /** Contract − withholding − cost (same per-line withholding sum as document totals). */
+  afterWithholding: { margin: string; marginPct: string; netReceived: string };
   warnings: CostMarginWarning[];
 };
 
@@ -139,6 +145,8 @@ export function buildCostMarginSummary(input: {
   contractPrice: string;
   /** Planned supplier cost from the SO / quote (before withholding). */
   plannedCost: string;
+  /** Stored withholding total from the SO (per-line sum; never silently recomputed here). */
+  withholdingTotal?: string;
   pos: readonly CostMarginPoInput[];
   /** SO lines still short of PO coverage (ordered < SO qty). */
   uncoveredLineCount: number;
@@ -152,9 +160,16 @@ export function buildCostMarginSummary(input: {
     };
   });
   const totalCost = sumMoney(rows.map((r) => r.cost));
-  // Same basis for both: contract − cost (withholding is a tax credit, not a cost).
+  const withholdingTotal = input.withholdingTotal ?? "0.00";
+  const netReceived = fromScaled(toScaled(input.contractPrice, CENTS) - toScaled(withholdingTotal, CENTS), CENTS);
+  // Before withholding: contract − cost.
   const actual = actualMargin(input.contractPrice, totalCost);
   const planned = actualMargin(input.contractPrice, input.plannedCost);
+  // After customer withholding: net received − cost (same per-line WH sum).
+  const afterWithholding = {
+    ...actualMargin(netReceived, totalCost),
+    netReceived,
+  };
   const warnings: CostMarginWarning[] = [];
   if (input.uncoveredLineCount > 0) {
     warnings.push({
@@ -176,8 +191,10 @@ export function buildCostMarginSummary(input: {
     rows,
     totalCost,
     contractPrice: input.contractPrice,
+    withholdingTotal,
     actual,
     planned,
+    afterWithholding,
     warnings,
   };
 }

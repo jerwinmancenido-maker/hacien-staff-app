@@ -13,7 +13,8 @@ import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
-import { BellIcon, LogoutIcon, SearchIcon } from "@/components/Icons";
+import { BellIcon, LogoutIcon } from "@/components/Icons";
+import { TopbarSearch } from "@/components/TopbarSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -91,11 +92,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const topbarRight = (
     <>
-      <div className="topbar-search">
-        <SearchIcon size={14} />
-        <input type="text" placeholder="Search quotes, SOs, customers…" aria-label="Quick search" readOnly />
-        <span className="kbd-shortcut">⌘K</span>
-      </div>
+      <TopbarSearch />
       <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
         <BellIcon size={16} />
       </button>
