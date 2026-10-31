@@ -138,6 +138,7 @@ describe("buildCostMarginSummary", () => {
     expect(summary.warnings[0]!.hint).toMatch(/Create POs/i);
     expect(summary.warnings[1]!.title).toBe("Supplier billed more than the PO");
     expect(summary.warnings[1]!.hint).toMatch(/Match tab/i);
+    expect(summary.warnings[1]!.href).toBe("/purchase-orders/po1?tab=match");
     expect(summary.rows[0]!.billedOverPo).toBe(true);
     // A void PO would not appear in `pos` (caller filters status ≠ VOID).
     expect(summary.rows.every((r) => r.status !== "VOID")).toBe(true);

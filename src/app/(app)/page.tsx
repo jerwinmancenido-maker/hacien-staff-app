@@ -31,7 +31,7 @@ export default async function HomePage() {
       <PageHeader
         greeting={`${greeting(manilaHour())}, ${first} 👋`}
         title="Home"
-        subtitle={`Today is ${formatDate(new Date())}. Deals, cash gap and overdue bills will show here once quotes and sales orders are built.`}
+        subtitle={`Today is ${formatDate(new Date())}.`}
       />
       <div className="stat-grid">
         <Link href="/customers" className="card stat">
@@ -75,10 +75,6 @@ export default async function HomePage() {
           <div className="value">{contacts}</div>
           <div className="foot">Across customers and suppliers</div>
         </div>
-      </div>
-      <div className="card">
-        <h2>Coming next</h2>
-        <div className="muted">More staff tools are on the way. Books (when enabled) is a read-only export of existing records.</div>
       </div>
     </>
   );

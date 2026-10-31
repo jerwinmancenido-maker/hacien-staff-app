@@ -6,7 +6,7 @@ import { listBillings, BILLING_STATUSES, BILLING_STATUS_LABELS } from "@/lib/bil
 import type { BillingStatus } from "@prisma/client";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
@@ -57,33 +57,40 @@ export default async function BillingsListPage({
         </button>
       </form>
 
-      <div className="card">
-        <div className="table-wrap">
-          <table className="list" aria-label="Billings">
-            <thead>
-              <tr>
-                <th>Booklet no.</th>
-                <th>Internal</th>
-                <th>Customer</th>
-                <th>SO</th>
-                <th>Invoice date</th>
-                <th>Due</th>
-                <th className="num">Amount</th>
-                <th className="num">Balance</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            title="All clear here"
+            line="No billings yet. Bill a sales order to start."
+            action={
+              <Link className="btn btn-secondary" href="/sales-orders">
+                Open sales orders
+              </Link>
+            }
+          />
+        </div>
+      ) : (
+        <div className="card">
+          <div className="table-wrap">
+            <table className="list" aria-label="Billings">
+              <thead>
                 <tr>
-                  <td colSpan={9} className="faint">
-                    No billings yet.
-                  </td>
+                  <th>Booklet no.</th>
+                  <th>Internal</th>
+                  <th>Customer</th>
+                  <th>SO</th>
+                  <th>Invoice date</th>
+                  <th>Due</th>
+                  <th className="num">Amount</th>
+                  <th className="num">Balance</th>
+                  <th>Status</th>
                 </tr>
-              ) : (
-                rows.map((r) => (
-                  <tr key={r.id}>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="clickable row-has-link">
                     <td>
+                      <a href={`/billing/billings/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/billings/${r.id}`}>{r.invoiceNo}</Link>
                     </td>
                     <td className="faint">{r.number}</td>
@@ -101,12 +108,12 @@ export default async function BillingsListPage({
                       <BillingStatusChip status={r.status} /> <OverdueBadge label={r.overdue.label} />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
