@@ -31,6 +31,8 @@ export type PrintMetaRow = { label: string; value: string };
 
 export type PrintLineItem = {
   description: string;
+  /** Optional secondary line under the description (never cost/margin). */
+  detail?: string | null;
   qty: string;
   unit: string;
   unitPrice: string;
@@ -40,8 +42,10 @@ export type PrintLineItem = {
 export type PrintMoneyLine = { label: string; amount: string; emphasize?: boolean };
 
 export type PrintSignatory = {
-  role: "Prepared by" | "Approved by" | "Received by";
+  role: "Prepared by" | "Approved by" | "Received by" | "Conforme";
   name: string | null;
+  /** Job title / position from the user profile when set. */
+  position?: string | null;
 };
 
 /** Statement-style ledger line (SOA). */
@@ -74,6 +78,11 @@ export type ProfessionalPrintModel = {
   number: string;
   date: string;
   status: string;
+  /**
+   * When true, the printed document omits the internal status (WON / OPEN / …).
+   * Screen toolbars may still show it.
+   */
+  hideStatus?: boolean;
   watermark: "DRAFT" | "VOID" | null;
   company: PrintCompanyBlock;
   party: PrintPartyBlock;

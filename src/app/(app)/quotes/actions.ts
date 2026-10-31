@@ -10,6 +10,7 @@ import {
   createQuote,
   markQuoteLost,
   markQuoteSent,
+  refreshQuoteCompanyDetails,
   updateQuote,
   voidQuote,
   type EmailDraft,
@@ -59,6 +60,18 @@ export async function markQuoteLostAction(id: string): Promise<FormState> {
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Marked as lost." };
+  });
+}
+
+/** Draft quotes only — refresh letterhead from the latest company settings. */
+export async function refreshQuoteCompanyDetailsAction(id: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    await refreshQuoteCompanyDetails(id, user);
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath(`/print/quotes/${id}`);
+    return { ok: true, message: "Company details updated from settings." };
   });
 }
 

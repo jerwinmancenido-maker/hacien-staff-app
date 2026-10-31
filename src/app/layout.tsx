@@ -1,31 +1,20 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-ibm-plex-sans",
-  display: "swap",
-});
-
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-source-serif",
-  display: "swap",
-});
+/** Fonts: self-hosted Inter + Archivo Black in public/fonts (see globals.css @font-face). */
 
 export const metadata: Metadata = {
   title: "HACIEN Staff",
   description: "HACIEN staff app",
   robots: { index: false, follow: false },
+  icons: {
+    icon: [{ url: "/brand/favicon.ico" }, { url: "/brand/icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${ibmPlexSans.variable} ${sourceSerif.variable}`}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

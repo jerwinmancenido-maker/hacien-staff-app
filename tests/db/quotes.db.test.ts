@@ -23,6 +23,7 @@ import {
   convertQuoteToSalesOrder,
   createQuote,
   markQuoteSent,
+  refreshQuoteCompanyDetails,
   updateQuote,
   voidQuote,
   type DocActor,
@@ -30,6 +31,7 @@ import {
 import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
 import { listWithholdingRates, saveWithholdingRates, snapshotList } from "@/lib/services/withholding";
 import { getQuotePrint, getQuoteView, getSalesOrderPrint, getSalesOrderView, listQuotesView } from "@/lib/quotes/views";
+import { saveSettings } from "@/lib/settings";
 import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
 /** Keys that must never reach a user without "Can see costs". */
@@ -824,6 +826,41 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       await expect(db.documentSeries.deleteMany({})).rejects.toBeInstanceOf(HardDeleteError);
       await expect(db.documentVoid.deleteMany({})).rejects.toBeInstanceOf(HardDeleteError);
       expect(await db.quote.findUnique({ where: { id: q.id } })).toBeTruthy();
+    });
+
+    it("Use latest company details refreshes draft quotes and rejects sent ones", async () => {
+      const customer = await makeCustomer();
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const pinned = q.settingsVersionId;
+      const snap = await getSettingsSnapshot();
+      // Save a new company settings version so "latest" differs from the quote pin.
+      const saved = await saveSettings({
+        key: "company",
+        value: {
+          ...snap.settings.company,
+          tradeName: `Refresh Sample ${tag()}`,
+          email: "refresh-sample@example.com",
+        },
+        userId: costUser.id,
+        baseVersionId: snap.versionId,
+      });
+      expect(saved.ok && saved.changed).toBe(true);
+      if (!saved.ok || !saved.changed) return;
+
+      const refreshed = await refreshQuoteCompanyDetails(q.id, costUser);
+      expect(refreshed.settingsVersionId).toBe(saved.version.id);
+      expect(refreshed.settingsVersionId).not.toBe(pinned);
+      const audit = await db.auditLog.findFirst({
+        where: { entityType: "Quote", entityId: q.id, action: "update" },
+        orderBy: { at: "desc" },
+      });
+      expect(audit?.before).toMatchObject({ settingsVersionId: pinned });
+      expect(audit?.after).toMatchObject({ settingsVersionId: saved.version.id });
+
+      await markQuoteSent(q.id, costUser);
+      await expect(refreshQuoteCompanyDetails(q.id, costUser)).rejects.toBeInstanceOf(DocRuleError);
+      await expect(refreshQuoteCompanyDetails(q.id, costUser)).rejects.toThrow(/draft \(unsent\)/i);
+      expect((await db.quote.findUnique({ where: { id: q.id } }))?.settingsVersionId).toBe(saved.version.id);
     });
   });
 

@@ -364,7 +364,7 @@ describe("cost stripping of PO / RR payloads", () => {
 describe("PO print", () => {
   it("renders the A4 PO with NON-VAT, supplier block, deliver-to — no selling prices or margins", () => {
     const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: poPrintFixture() }));
-    for (const s of ["NON-VAT", "Purchase Order", "PO-2026-0001", "UNO Computer Supply", "TIN 000-333-444-000", "Delivery:", "₱400,000.00"]) {
+    for (const s of ["NON-VAT", "Purchase Order", "PO-2026-0001", "UNO Computer Supply", "TIN 000-333-444-000", "Deliver to", "₱400,000.00"]) {
       expect(html, s).toContain(s);
     }
     const lower = html.toLowerCase();
