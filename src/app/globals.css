@@ -3011,7 +3011,9 @@ button.contact-card-add {
   white-space: normal;
 }
 .tax-cal-table td.tax-cal-due > div:first-child {
-  white-space: nowrap;
+  /* YYYY-MM-DD stays one token; "date to confirm" may wrap so Status never covers it. */
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .tax-cal-table td.tax-cal-due .small,
 .tax-cal-table td.tax-cal-due .tax-cal-fileby {
@@ -3041,17 +3043,16 @@ button.contact-card-add {
 }
 .tax-cal-table td.tax-cal-status .chip,
 .tax-cal-table td.tax-cal-applies .chip {
-  white-space: normal;
-  max-width: 100%;
-  height: auto;
+  /* Keep chip labels on one line (e.g. Unverified: ask RDO). */
+  white-space: nowrap;
+  max-width: none;
+  height: 22px;
   min-height: 22px;
-  line-height: 1.25;
-  padding: 3px 5px;
+  line-height: 22px;
+  padding: 0 6px;
   font-size: 10px;
-  flex-shrink: 1;
+  flex-shrink: 0;
   box-sizing: border-box;
-  overflow-wrap: normal;
-  word-break: normal;
 }
 .tax-cal-table th:nth-child(7),
 .tax-cal-table td.tax-cal-worksheet {
@@ -3223,18 +3224,25 @@ button.contact-card-add {
   table.list.tax-cal-table td {
     padding: 8px 6px;
   }
+  /* Real gap between Period and Due (Q3 2027 must not run into the date). */
+  table.list.tax-cal-table td.tax-cal-period {
+    padding-right: 12px;
+  }
+  table.list.tax-cal-table td.tax-cal-due {
+    padding-left: 12px;
+  }
   /* Percentages sum to 100% of the card content box (~660px at 1024). */
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 12%;
+    width: 11%;
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 18%;
+    width: 16%;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
-    width: 9%;
+    width: 11%;
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
@@ -3242,26 +3250,25 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
-    width: 11%;
+    width: 10%;
   }
   .tax-cal-table th:nth-child(6),
   .tax-cal-table td.tax-cal-applies {
-    width: 19%;
+    width: 22%; /* room for nowrap "Unverified: ask RDO" */
   }
   .tax-cal-table th:nth-child(8),
   .tax-cal-table td.tax-cal-done {
-    width: 18%;
+    width: 16%;
   }
   .tax-cal-table td.tax-cal-status .chip,
   .tax-cal-table td.tax-cal-applies .chip {
-    padding: 3px 5px;
+    padding: 0 5px;
     font-size: 10px;
-    /* Allow long chips to wrap inside the cell — never ellipsis, never widen the table. */
-    white-space: normal;
-    height: auto;
+    white-space: nowrap;
+    height: 22px;
     min-height: 22px;
-    line-height: 1.25;
-    max-width: 100%;
+    line-height: 22px;
+    max-width: none;
     box-sizing: border-box;
   }
   .tax-cal-done .btn {
@@ -3285,47 +3292,54 @@ button.contact-card-add {
   table.list.tax-cal-table td {
     padding: 8px 8px;
   }
+  /* Real gap between Worksheet and Done (Open worksheet must not touch Mark as done). */
+  table.list.tax-cal-table td.tax-cal-worksheet {
+    padding-right: 14px;
+  }
+  table.list.tax-cal-table td.tax-cal-done {
+    padding-left: 14px;
+  }
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 96px; /* room for "Books of accounts" to wrap at spaces */
+    width: 90px; /* room for "Books of accounts" to wrap at spaces */
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 220px;
+    width: 188px;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
-    width: 72px;
+    width: 70px;
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
-    width: 110px;
+    width: 108px;
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
-    width: 80px;
+    width: 76px;
   }
   .tax-cal-table th:nth-child(6),
   .tax-cal-table td.tax-cal-applies {
-    width: 118px;
+    width: 148px; /* nowrap "Unverified: ask RDO" */
   }
   .tax-cal-table th:nth-child(7),
   .tax-cal-table td.tax-cal-worksheet {
-    width: 96px;
+    width: 108px;
   }
   .tax-cal-table th:nth-child(8),
   .tax-cal-table td.tax-cal-done {
-    width: 112px;
+    width: 120px;
   }
   .tax-cal-table td.tax-cal-status .chip,
   .tax-cal-table td.tax-cal-applies .chip {
-    padding: 3px 5px;
+    padding: 0 6px;
     font-size: 10px;
-    white-space: normal;
-    height: auto;
+    white-space: nowrap;
+    height: 22px;
     min-height: 22px;
-    line-height: 1.25;
-    max-width: 100%;
+    line-height: 22px;
+    max-width: none;
     box-sizing: border-box;
   }
   .tax-cal-table td.tax-cal-worksheet a {
