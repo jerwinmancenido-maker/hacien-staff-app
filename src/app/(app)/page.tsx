@@ -25,7 +25,7 @@ export default async function HomePage() {
   return (
     <>
       <PageHeader
-        greeting={`${greeting(manilaHour())}, ${first}`}
+        greeting={`${greeting(manilaHour())}, ${first} 👋`}
         title="Home"
         subtitle={`Today is ${formatDate(new Date())}.`}
       />

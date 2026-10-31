@@ -163,6 +163,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             ? "Try another name or TIN, or clear the filter."
             : "No customers yet. Add your first customer."
         }
+        emptyAction={
+          !filtered && can(user, "edit_data") ? (
+            <Link className="btn btn-secondary" href="/customers/new">
+              New customer
+            </Link>
+          ) : undefined
+        }
         sortColumns={[
           { key: "name", label: "Name" },
           { key: "tin", label: "TIN" },

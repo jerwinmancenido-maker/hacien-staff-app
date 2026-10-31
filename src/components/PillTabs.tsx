@@ -8,7 +8,11 @@ export type PillTabItem = {
   key: string;
   label: ReactNode;
   count?: number;
+  /** Colored status dot (legacy). Prefer `chip` for plain word badges. */
   dot?: "red" | "amber" | "green";
+  /** Plain word chip, e.g. "1 warning". */
+  chip?: string;
+  chipTone?: "red" | "amber" | "green";
   href?: string;
   disabled?: boolean;
 };
@@ -95,6 +99,9 @@ export function PillTabs({
               <span className="pill-tab-label">{tab.label}</span>
               {tab.count !== undefined && (
                 <span className={`pill-tab-count${isActive ? " active" : ""}`}>{tab.count}</span>
+              )}
+              {tab.chip && (
+                <span className={`pill-tab-chip${tab.chipTone ? ` chip-${tab.chipTone}` : ""}`}>{tab.chip}</span>
               )}
               {tab.dot && <span className={`pill-tab-dot dot-${tab.dot}`} aria-hidden />}
             </>

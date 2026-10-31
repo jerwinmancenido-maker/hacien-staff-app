@@ -122,6 +122,8 @@ export type CostMarginWarning = {
   code: "LINES_WITHOUT_PO" | "BILLED_OVER_PO";
   title: string;
   hint: string;
+  /** Direct link (e.g. PO Match tab) when the warning points at a specific record. */
+  href?: string;
 };
 
 export type CostMarginSummary = {
@@ -161,11 +163,13 @@ export function buildCostMarginSummary(input: {
       hint: "One or more sales-order lines still need a supplier PO for their full quantity. Open Create POs to cover them.",
     });
   }
-  if (rows.some((r) => r.billedOverPo)) {
+  const overPo = rows.find((r) => r.billedOverPo);
+  if (overPo) {
     warnings.push({
       code: "BILLED_OVER_PO",
       title: "Supplier billed more than the PO",
       hint: "At least one supplier bill total is higher than its purchase-order total. Check the PO’s Match tab before paying the difference.",
+      href: `/purchase-orders/${overPo.id}?tab=match`,
     });
   }
   return {

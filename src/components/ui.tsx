@@ -19,7 +19,15 @@ export function Avatar({ name, small, dark }: { name: string; small?: boolean; d
   );
 }
 
-export function EmptyState({ title = "All clear here", line }: { title?: string; line: string }) {
+export function EmptyState({
+  title = "All clear here",
+  line,
+  action,
+}: {
+  title?: string;
+  line: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty">
       <div className="icon">
@@ -27,6 +35,7 @@ export function EmptyState({ title = "All clear here", line }: { title?: string;
       </div>
       <div className="title">{title}</div>
       <div className="line">{line}</div>
+      {action && <div className="empty-action">{action}</div>}
     </div>
   );
 }

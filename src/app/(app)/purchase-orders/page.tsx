@@ -75,7 +75,15 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           {filtered ? (
             <EmptyState title="No matches" line="Try another number or supplier, or clear the filter." />
           ) : (
-            <EmptyState title="All clear here" line="No supplier POs yet. Open a sales order and choose Create POs." />
+            <EmptyState
+              title="All clear here"
+              line="No supplier POs yet. Open a sales order and choose Create POs."
+              action={
+                <Link className="btn btn-secondary" href="/sales-orders">
+                  Open sales orders
+                </Link>
+              }
+            />
           )}
         </div>
       ) : (
