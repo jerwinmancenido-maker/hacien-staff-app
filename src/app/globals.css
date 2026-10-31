@@ -5618,11 +5618,6 @@ button.contact-card-add {
   stroke: var(--blue);
   fill: none;
 }
-/* Dashed last segment into the in-progress month (not a crash). */
-.home-sales-line-partial {
-  stroke-dasharray: 5 4;
-  stroke-linecap: round;
-}
 .home-sales-dot {
   fill: #fff;
   stroke: var(--blue);
@@ -5640,12 +5635,6 @@ button.contact-card-add {
   fill: var(--blue);
   stroke: #fff;
   stroke-width: 2;
-}
-/* Hollow current-month point: white fill, blue ring (brand only). */
-.home-sales-current-dot-partial {
-  fill: #fff;
-  stroke: var(--blue);
-  stroke-width: 2.5;
 }
 .home-sales-tip {
   position: absolute;

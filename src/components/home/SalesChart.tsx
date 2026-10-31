@@ -31,15 +31,9 @@ function buildSmoothPath(points: { x: number; y: number }[]): string {
   return d;
 }
 
-/** Smooth path for a single segment between two points (matches {@link buildSmoothPath}). */
-function buildSmoothSegment(p0: { x: number; y: number }, p1: { x: number; y: number }): string {
-  const mx = (p0.x + p1.x) / 2;
-  return `M${p0.x},${p0.y} C${mx},${p0.y} ${mx},${p1.y} ${p1.x},${p1.y}`;
-}
-
 /**
  * Plain SVG line + soft blue area chart for Home Sales.
- * Current (partial) month: hollow dot, dashed last segment, “so far” label.
+ * Current month: filled dot, dashed vertical, dark tip with amount.
  * Empty: flat baseline, no ₱ axis.
  */
 export function SalesChart({
@@ -103,19 +97,13 @@ export function SalesChart({
     });
   }, [months, n, padL, padT, innerW, innerH, slot, empty, safeMax, emptyLineY]);
 
-  const current = points.find((p) => p.month.isCurrent || p.month.isPartial) ?? points[points.length - 1] ?? null;
-  const currentIsPartial = Boolean(current?.month.isPartial ?? current?.month.isCurrent);
-  const solidPoints =
-    !empty && currentIsPartial && points.length >= 2 ? points.slice(0, -1) : points;
-  const solidPath = buildSmoothPath(solidPoints.map((p) => ({ x: p.x, y: p.y })));
-  const dashedPath =
-    !empty && currentIsPartial && points.length >= 2
-      ? buildSmoothSegment(points[points.length - 2]!, points[points.length - 1]!)
-      : "";
+  const linePath = buildSmoothPath(points.map((p) => ({ x: p.x, y: p.y })));
   const areaPath =
     points.length > 0
-      ? `${buildSmoothPath(points.map((p) => ({ x: p.x, y: p.y })))} L${points[points.length - 1]!.x},${padT + innerH} L${points[0]!.x},${padT + innerH} Z`
+      ? `${linePath} L${points[points.length - 1]!.x},${padT + innerH} L${points[0]!.x},${padT + innerH} Z`
       : "";
+
+  const current = points.find((p) => p.month.isCurrent) ?? points[points.length - 1] ?? null;
 
   // Deduplicate while keeping top→bottom order for the left axis.
   const axisLabels = showAxis
@@ -172,26 +160,18 @@ export function SalesChart({
             )}
 
           {!empty && areaPath ? <path d={areaPath} fill={`url(#${gradId})`} /> : null}
-          {solidPath ? (
+          {linePath ? (
             <path
-              d={solidPath}
+              d={linePath}
               fill="none"
               className="home-sales-line"
-              strokeWidth={2.5 / scale}
-            />
-          ) : null}
-          {dashedPath ? (
-            <path
-              d={dashedPath}
-              fill="none"
-              className="home-sales-line home-sales-line-partial"
               strokeWidth={2.5 / scale}
             />
           ) : null}
 
           {!empty
             ? points.map((p) =>
-                p.month.isCurrent || p.month.isPartial ? null : (
+                p.month.isCurrent ? null : (
                   <circle
                     key={p.month.key}
                     cx={p.x}
@@ -212,23 +192,8 @@ export function SalesChart({
                 y2={padT + innerH}
                 className="home-sales-current-guide"
               />
-              <circle
-                cx={current.x}
-                cy={current.y}
-                r={7 / scale}
-                className="home-sales-current-halo"
-              />
-              <circle
-                cx={current.x}
-                cy={current.y}
-                r={4.5 / scale}
-                className={
-                  currentIsPartial
-                    ? "home-sales-current-dot home-sales-current-dot-partial"
-                    : "home-sales-current-dot"
-                }
-                data-partial={currentIsPartial ? "1" : undefined}
-              />
+              <circle cx={current.x} cy={current.y} r={7 / scale} className="home-sales-current-halo" />
+              <circle cx={current.x} cy={current.y} r={4.5 / scale} className="home-sales-current-dot" />
             </>
           ) : null}
         </svg>
@@ -237,7 +202,6 @@ export function SalesChart({
           <div id={tipId} className="home-sales-tip" role="status">
             <span>
               {current.month.shortLabel} {current.month.key.slice(0, 4)}
-              {currentIsPartial ? " · so far" : ""}
             </span>
             <b className="num">{formatPesoWhole(current.month.amount)}</b>
           </div>
@@ -246,7 +210,7 @@ export function SalesChart({
 
       <div className="home-sales-ml" aria-hidden="true">
         {months.map((m) => (
-          <span key={m.key} className={m.isCurrent || m.isPartial ? "on" : undefined}>
+          <span key={m.key} className={m.isCurrent ? "on" : undefined}>
             {m.shortLabel}
           </span>
         ))}
