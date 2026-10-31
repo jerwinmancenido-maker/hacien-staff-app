@@ -70,13 +70,11 @@ export type QuoteEditorProps = {
 
 type TabId = "items" | "terms" | "notes" | "signoff";
 
-let seq = 0;
-const newKey = () => `n${++seq}`;
-
-function blankItem(customerType: string | null | undefined): EditorItem {
+/** Stable across SSR/client — never use a module counter (hydration mismatch). */
+function blankItem(customerType: string | null | undefined, key: string): EditorItem {
   const wh = lineWithholdingSnapshot(customerType, "GOODS");
   return {
-    key: newKey(),
+    key,
     id: null,
     description: "",
     kind: "GOODS",
@@ -184,6 +182,9 @@ export function QuoteEditor({
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
+  // Client-only line keys for rows added after mount (initial keys are SSR-stable).
+  const lineKeySeq = useRef(0);
+  const allocLineKey = () => `n${++lineKeySeq.current}`;
 
   const [h, setH] = useState(() => ({
     ...initial,
@@ -195,14 +196,14 @@ export function QuoteEditor({
 
   const [items, setItems] = useState<EditorItem[]>(() =>
     initial.items.length
-      ? initial.items.map((i) => ({
+      ? initial.items.map((i, idx) => ({
           ...i,
-          key: newKey(),
+          key: i.id ?? `init-${idx}`,
           withholdingRate: i.withholdingRate,
           withholdingAtc: i.withholdingAtc ?? null,
           withholdingOverride: i.withholdingOverride ?? false,
         }))
-      : [blankItem(customerList.find((c) => c.id === initial.customerId)?.withholdingType)],
+      : [blankItem(customerList.find((c) => c.id === initial.customerId)?.withholdingType, "init-0")],
   );
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
@@ -515,7 +516,11 @@ export function QuoteEditor({
                   >
                     {REAPPLY_WITHHOLDING_LABEL}
                   </button>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(customer?.withholdingType)])}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setItems((xs) => [...xs, blankItem(customer?.withholdingType, allocLineKey())])}
+                  >
                     Add line
                   </button>
                 </div>

@@ -2821,8 +2821,9 @@ pre.json {
     max-width: none;
   }
   .edit-table.items-edit .col-kind {
-    width: 84px;
-    min-width: 84px;
+    /* Native select must paint "Services" / "Goods" in full (+ dropdown chrome). */
+    width: 100px;
+    min-width: 100px;
   }
   .edit-table.items-edit .col-qty {
     /* Integer-width field that fits 4 digits (e.g. 9999). */
@@ -2839,8 +2840,9 @@ pre.json {
     min-width: 88px;
   }
   .edit-table.items-edit .col-money {
-    width: 76px;
-    min-width: 76px;
+    /* Trim a little so Kind can show "Services" in full. */
+    width: 72px;
+    min-width: 72px;
   }
   .edit-table.items-edit .col-wh {
     width: 64px;
