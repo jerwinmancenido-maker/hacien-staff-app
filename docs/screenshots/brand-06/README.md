@@ -16,3 +16,12 @@ Before/after screenshots of the staff app after applying brand kit v1.1 (Ink `#0
 | Billing | `…/billing-*.png` |
 | Tax calendar | `…/tax-calendar-*.png` |
 | Settings | `…/settings-*.png` |
+
+## After merging PR 20 (Home dashboard)
+
+Merge of `origin/main` @ `f38e9dad` into `brand-06-hacien-restyle`. Home uses brand-06 tokens; sidebar Non-VAT meter drops `.00` on whole-peso limits.
+
+| Screen | Files |
+|---|---|
+| Home (post-merge) | `home-after-pr20-merge-1280.png`, `home-after-pr20-merge-360.png` |
+| Sidebar Non-VAT meter | `sidebar-nonvat-meter-1280.png`, `sidebar-nonvat-meter-360.png` |
