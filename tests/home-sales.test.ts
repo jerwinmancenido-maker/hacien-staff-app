@@ -6,7 +6,9 @@ import {
   formatSalesAxisPeso,
   isSalesEmpty,
   lastNMonthKeys,
+  manilaDayOfMonth,
   manilaMonthKey,
+  mtdVsSameDaysChip,
   niceSalesMax,
   owedOverdueChip,
   SALES_AXIS_EMPTY_MAX,
@@ -16,6 +18,7 @@ import {
   salesMonthLabel,
   salesMonthsRangeLabel,
   salesVsLastMonthCaption,
+  sameDaysEndYmd,
   shiftMonthKey,
   topSalesCustomers,
 } from "@/lib/home/sales";
@@ -130,6 +133,67 @@ describe("home sales change vs last month (Up/Down/Same chip)", () => {
     expect(sections).toMatch(/home-chip-down/);
     expect(css).toMatch(/\.home-chip-up/);
     expect(css).toMatch(/\.home-chip-down/);
+  });
+});
+
+describe("home MTD vs same days of last month (fixed clock)", () => {
+  // 2026-11-15 04:00 UTC = Nov 15 12:00 PHT — mid-month fixed clock.
+  const midMonth = new Date("2026-11-15T04:00:00.000Z");
+  // 2026-10-31 16:00 UTC = Nov 1 00:00 PHT — day 1 of the month.
+  const dayOne = new Date("2026-10-31T16:00:00.000Z");
+
+  it("hides the chip entirely when both MTD and same-days prior are ₱0 (never Down 100%)", () => {
+    expect(mtdVsSameDaysChip(0, 0, "2026-10", 15)).toBeNull();
+    expect(mtdVsSameDaysChip("0.00", "0.00", "2026-10", 15)).toBeNull();
+    expect(mtdVsSameDaysChip(0, 0, "2026-10", 1)).toBeNull();
+  });
+
+  it("shows Up N% with vs ₱X by prior day when MTD is higher", () => {
+    const chip = mtdVsSameDaysChip(200_000, 100_000, "2026-10", manilaDayOfMonth(midMonth));
+    expect(chip).not.toBeNull();
+    expect(chip!.change).toEqual({ label: "Up 100%", tone: "up" });
+    expect(chip!.vsCaption).toBe("vs ₱100,000 by Oct 15");
+  });
+
+  it("shows Down N% with vs ₱X by prior day when MTD is lower", () => {
+    const chip = mtdVsSameDaysChip(50_000, 100_000, "2026-10", manilaDayOfMonth(midMonth));
+    expect(chip).not.toBeNull();
+    expect(chip!.change).toEqual({ label: "Down 50%", tone: "down" });
+    expect(chip!.vsCaption).toBe("vs ₱100,000 by Oct 15");
+  });
+
+  it("on day 1 of the month compares against the 1st of last month only", () => {
+    expect(manilaDayOfMonth(dayOne)).toBe(1);
+    expect(manilaMonthKey(dayOne)).toBe("2026-11");
+    expect(sameDaysEndYmd("2026-10", 1)).toBe("2026-10-01");
+    const chip = mtdVsSameDaysChip(0, 0, "2026-10", manilaDayOfMonth(dayOne));
+    expect(chip).toBeNull();
+    const withPrior = mtdVsSameDaysChip(10_000, 0, "2026-10", 1);
+    expect(withPrior).not.toBeNull();
+    expect(withPrior!.vsCaption).toBe("vs ₱0 by Oct 1");
+    expect(withPrior!.change.tone).toBe("none"); // prior 0 → no % chip
+  });
+});
+
+describe("home sales chart partial current month", () => {
+  it("marks the current-month point as partial (hollow + dashed + so far)", () => {
+    const salesTs = readFileSync(path.join(process.cwd(), "src/lib/home/sales.ts"), "utf8");
+    expect(salesTs).toMatch(/isPartial:\s*boolean/);
+
+    const dataSrc = readFileSync(path.join(process.cwd(), "src/lib/home/sales-data.ts"), "utf8");
+    expect(dataSrc).toMatch(/isPartial:\s*isCurrent/);
+
+    const chartSrc = readFileSync(path.join(process.cwd(), "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/data-partial=\{currentIsPartial \? "1"/);
+    expect(chartSrc).toMatch(/home-sales-current-dot-partial/);
+    expect(chartSrc).toMatch(/home-sales-line-partial/);
+    expect(chartSrc).toMatch(/so far/);
+    expect(chartSrc).toMatch(/buildSmoothSegment/);
+
+    const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+    expect(css).toMatch(/\.home-sales-line-partial\s*\{[^}]*stroke-dasharray/s);
+    expect(css).toMatch(/\.home-sales-current-dot-partial\s*\{[^}]*fill:\s*#fff/s);
+    expect(css).toMatch(/\.home-sales-current-dot-partial\s*\{[^}]*stroke:\s*var\(--blue\)/s);
   });
 });
 

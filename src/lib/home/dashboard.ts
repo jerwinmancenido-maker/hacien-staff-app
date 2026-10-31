@@ -51,11 +51,13 @@ import {
 } from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
+  manilaDayOfMonth,
   manilaMonthKey,
+  mtdVsSameDaysChip,
   owedOverdueChip,
   salesMonthLabel,
   salesMonthsRangeLabel,
-  salesVsLastMonthCaption,
+  sameDaysEndYmd,
   shiftMonthKey,
   type HomeSales,
 } from "./sales";
@@ -132,6 +134,7 @@ export type HomeKpis = {
     label: string;
     amount: string;
     change: HomeKpiChange;
+    /** Empty when both MTD and same-days prior are ₱0 (no chip). */
     vsCaption: string;
     href: string;
   };
@@ -147,7 +150,10 @@ export type HomeKpis = {
     /** e.g. "Collected (Oct)". */
     label: string;
     amount: string;
+    /** Legacy muted line when there is no MTD chip (e.g. both ₱0). */
     caption: string;
+    change: HomeKpiChange;
+    vsCaption: string;
     href: string;
   };
   billedThisYear: {
@@ -289,18 +295,25 @@ function buildKpis(opts: {
   overdueCount: number;
   openCount: number;
   collected: string;
+  collectedPriorSameDays: string;
   nonVat: HomeNonVat;
   now: Date;
 }): HomeKpis {
-  const { sales, owedAmount, overdueCount, openCount, collected, nonVat, now } = opts;
+  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, nonVat, now } =
+    opts;
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
   const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
+  const day = sales.mtdDay;
+  const billedChip = sales.mtdChip;
+  const collectedChip = mtdVsSameDaysChip(collected, collectedPriorSameDays, lastKey, day);
   const collectedCaption =
-    !Number.isFinite(collectedNum) || collectedNum <= 0
-      ? "No payments yet"
-      : `Posted collections in ${mon}`;
+    collectedChip != null
+      ? ""
+      : !Number.isFinite(collectedNum) || collectedNum <= 0
+        ? "No payments yet"
+        : `Posted collections in ${mon}`;
 
   const billingCount = openCount;
   const billingCountLabel =
@@ -310,8 +323,8 @@ function buildKpis(opts: {
     billedThisMonth: {
       label: `Billed (${mon})`,
       amount: sales.thisMonth,
-      change: sales.change,
-      vsCaption: salesVsLastMonthCaption(sales.lastMonth, lastKey),
+      change: billedChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: billedChip?.vsCaption ?? "",
       href: sales.href,
     },
     owedByCustomers: {
@@ -326,6 +339,8 @@ function buildKpis(opts: {
       label: `Collected (${mon})`,
       amount: collected,
       caption: collectedCaption,
+      change: collectedChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: collectedChip?.vsCaption ?? "",
       href: collectedThisMonthHref(now),
     },
     billedThisYear: {
@@ -442,6 +457,7 @@ export async function loadHomeDashboard(
             overdueCount: 0,
             openCount: 0,
             collected: "0.00",
+            collectedPriorSameDays: "0.00",
             nonVat,
             now,
           })
@@ -459,6 +475,9 @@ export async function loadHomeDashboard(
   }
 
   const period = currentMonthPeriod(now);
+  const lastMonthKey = shiftMonthKey(manilaMonthKey(now), -1);
+  const priorSameDaysTo = sameDaysEndYmd(lastMonthKey, manilaDayOfMonth(now));
+  const priorSameDaysFrom = `${lastMonthKey}-01`;
 
   const [
     quotesNeedsApproval,
@@ -469,6 +488,7 @@ export async function loadHomeDashboard(
     customersNoWh,
     ar,
     collected,
+    collectedPriorSameDays,
     nonVatSnap,
     sales,
     recent,
@@ -483,6 +503,11 @@ export async function loadHomeDashboard(
     listCustomers({ withholding: "NONE" }),
     arAgingSummary(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumCollectionsReceived({
+      status: "POSTED",
+      fromYmd: priorSameDaysFrom,
+      toYmd: priorSameDaysTo,
+    }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
     // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
@@ -564,6 +589,7 @@ export async function loadHomeDashboard(
           overdueCount: ar.overdueCount,
           openCount: ar.openCount,
           collected,
+          collectedPriorSameDays,
           nonVat,
           now,
         })
