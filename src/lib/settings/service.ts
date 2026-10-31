@@ -79,12 +79,12 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
           ...DEFAULT_SETTINGS.taxCalendar.obligations,
           ...((v.data as Partial<Settings>).taxCalendar?.obligations ?? {}),
         };
-        // Migrate on read: drop stale 2551q.dueDay (old catalog used day-of-month 15).
-        if (obligations["2551q"]) {
+        // Migrate on read: drop only the old catalog default 2551q.dueDay (15).
+        // Any other dueDay (and dueMonth) is a real Settings override — keep it.
+        if (obligations["2551q"]?.dueDay === 15) {
           obligations["2551q"] = {
             ...obligations["2551q"],
             dueDay: null,
-            dueMonth: null,
           };
         }
         return {

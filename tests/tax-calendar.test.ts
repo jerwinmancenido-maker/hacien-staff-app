@@ -315,6 +315,19 @@ describe("rule 2: income tax method 8% vs Graduated form sets", () => {
     expect(q1?.dueYmd).toBe("2027-04-26");
   });
 
+  it("sanitizeTaxCalendarSettings keeps a non-null 2551q dueMonth", () => {
+    const settings = defaultTaxCalendarSettings();
+    settings.obligations["2551q"] = { enabled: true, dueDay: 15, dueMonth: 4 };
+    const sanitized = sanitizeTaxCalendarSettings(settings);
+    expect(sanitized.obligations["2551q"].dueDay).toBeNull();
+    expect(sanitized.obligations["2551q"].dueMonth).toBe(4);
+
+    settings.obligations["2551q"] = { enabled: true, dueDay: 20, dueMonth: 6 };
+    const keepCustom = sanitizeTaxCalendarSettings(settings);
+    expect(keepCustom.obligations["2551q"].dueDay).toBe(20);
+    expect(keepCustom.obligations["2551q"].dueMonth).toBe(6);
+  });
+
   it("8% with showNotApplicable shows 2551Q as N/A (never overdue, no mark done path)", () => {
     const rows = buildTaxCalendarRows(
       buildOpts({
