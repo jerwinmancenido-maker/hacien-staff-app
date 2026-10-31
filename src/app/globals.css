@@ -2710,7 +2710,9 @@ button.contact-card-add {
   width: 8.5in;
 }
 .pp-page {
-  /* HACIEN brand kit print: ink + greys; Pixel Blue only as title marker. */
+  /* HACIEN brand kit print: ink + greys; Pixel Blue only as title marker.
+     On-screen preview = full A4/Letter sheet, centered, equal side padding
+     matching @page margins. Print overrides at end of this section win. */
   --pp-ink: var(--ink, #0a0a0a);
   --pp-accent: var(--blue, #2563eb);
   --pp-rule: #e5e5e5;
@@ -2723,7 +2725,8 @@ button.contact-card-add {
   min-height: 297mm;
   margin: 0 auto;
   background: var(--white, #fff);
-  padding: 12mm 11mm;
+  padding: 18mm;
+  box-sizing: border-box;
   box-shadow: var(--shadow-frame);
   font-size: 9.5pt;
   line-height: 1.4;
@@ -2737,7 +2740,8 @@ button.contact-card-add {
 .print-shell-letter .pp-page {
   width: 8.5in;
   min-height: 11in;
-  padding: 0.45in 0.5in;
+  padding: 0.7in;
+  box-sizing: border-box;
 }
 .pp-watermark {
   position: absolute;
@@ -3109,6 +3113,39 @@ button.contact-card-add {
   align-self: center;
   min-width: 4.5em;
 }
+
+/*
+ * MUST come after .pp-page { width:210mm; padding:18mm } above.
+ * An earlier @media print block cannot win the cascade; without this trailing
+ * override, print keeps a full-sheet width + padding inside @page's 18mm
+ * margins, Chrome scales the box down, and one side looks emptier than the other.
+ */
+@media print {
+  .print-shell,
+  .print-shell-a4,
+  .print-shell-letter {
+    width: auto !important;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    min-height: 0;
+  }
+  .pp-page,
+  .print-shell-letter .pp-page,
+  .pp-page.pp-paper-a4,
+  .pp-page.pp-paper-letter {
+    width: 100% !important;
+    max-width: none;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: 0 !important;
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+}
+
 .print-preview-card {
   border: 1px solid var(--border, #e5e5e0);
   border-radius: 8px;

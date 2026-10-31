@@ -299,6 +299,35 @@ function chromePdf(htmlPath, pdfPath, title) {
 }
 
 async function pdfToPngs(pdfPath, baseName) {
+  // Prefer pdftoppm so PNGs match real print-to-PDF layout (equal side margins).
+  const ppm = spawnSync("which", ["pdftoppm"], { encoding: "utf8" });
+  if (ppm.status === 0) {
+    const prefix = path.join(tmpDir, `ppm-${baseName}`);
+    const r = spawnSync("pdftoppm", ["-png", "-r", "150", pdfPath, prefix], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`pdftoppm failed for ${baseName}: ${r.stderr}`);
+    const pages = [];
+    for (let i = 1; ; i++) {
+      const src = `${prefix}-${i}.png`;
+      if (!existsSync(src)) break;
+      pages.push(src);
+    }
+    if (pages.length === 0) throw new Error(`pdftoppm produced no pages for ${baseName}`);
+    const paths = [];
+    if (pages.length === 1) {
+      const out = path.join(outDir, `${baseName}.png`);
+      copyFileSync(pages[0], out);
+      paths.push(out);
+    } else {
+      pages.forEach((src, idx) => {
+        const out = path.join(outDir, `${baseName}-p${idx + 1}.png`);
+        copyFileSync(src, out);
+        paths.push(out);
+      });
+      copyFileSync(pages[0], path.join(outDir, `${baseName}.png`));
+    }
+    return paths;
+  }
+
   const data = new Uint8Array(readFileSync(pdfPath));
   const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
   const paths = [];
@@ -328,20 +357,25 @@ for (const d of docs) {
   console.log("OK", d.file, pngs.map((p) => path.basename(p)).join(", "));
 }
 
-writeFileSync(path.join(outDir, "README.md"), `# Print-pro-05 artifacts
+writeFileSync(
+  path.join(outDir, "README.md"),
+  `# Print-pro-05 artifacts
 
-Fake sample data only (TESDA / Sample Bank / TIN 000-000-000-00000). Chrome headless \`--no-pdf-header-footer\` A4 PDFs rendered to PNG.
+Fake sample data only (TESDA / Sample Bank / TIN 000-000-000-00000).
+Chrome headless \`--print-to-pdf --no-pdf-header-footer\` (real print layout), then \`pdftoppm\` → PNG.
 
 | Artifact | Notes |
 |---|---|
-| quote-3-lines | Quotation, 3 lines |
-| quote-25-lines | Quotation, 25 lines (multi-page) |
+| quote-3-lines / quote-3-lines-after | Quotation, 3 lines (after = latest layout) |
+| quote-3-lines-before | Earlier uneven-margin reference |
+| quote-25-lines (+ p1/p2) | Quotation, 25 lines |
 | sales-order | SO-2026-0002 |
 | billing-statement | Billing statement (BIR wording unchanged) |
 | quote-withholding | Est. WHT lines |
-| letterhead-clearspace | Brand kit logo-full.svg at 45 mm with 2.2 mm clear space annotation |
+| letterhead-clearspace | Brand kit logo-full.svg at 45 mm with clear-space annotation |
 
-Brand kit: \`public/brand/logo-full.svg\` (v1.1). No browser date/URL chrome.
-`);
+Equal ~18mm left/right \`@page\` margins; content fills the printable width.
+`,
+);
 
 console.log(JSON.stringify(written, null, 2));
