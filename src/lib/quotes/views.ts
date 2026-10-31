@@ -30,6 +30,9 @@ type ItemRow = {
   total: Dec;
   supplierTotal: Dec;
   margin: Dec;
+  withholdingRate?: Dec | null;
+  withholdingAtc?: string | null;
+  withholdingOverride?: boolean;
 };
 
 export type ItemView = {
@@ -40,6 +43,10 @@ export type ItemView = {
   unit: string;
   unitPrice: string;
   total: string;
+  /** Snapshotted withholding on the line (staff views / editor). */
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+  withholdingOverride: boolean;
   // Cost users only:
   supplierId?: string | null;
   supplierName?: string | null;
@@ -68,6 +75,9 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     unit: i.unit,
     unitPrice: money(i.unitPrice),
     total: money(i.total),
+    withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+    withholdingAtc: i.withholdingAtc ?? null,
+    withholdingOverride: i.withholdingOverride ?? false,
   };
   if (!withCosts) return base;
   return {
@@ -119,7 +129,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: itemsInclude,
-      customer: { select: { id: true, name: true, address: true, tin: true, active: true } },
+      customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
       salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
@@ -195,7 +205,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: itemsInclude,
-      customer: { select: { id: true, name: true, address: true, tin: true, active: true } },
+      customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true } },
       createdBy: { select: { name: true } },
@@ -344,13 +354,26 @@ export type EditableItem = {
   qty: string;
   unit: string;
   unitPrice: string;
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+  withholdingOverride: boolean;
   supplierId?: string | null;
   supplierUnitCost?: string;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
   return items.map((i) => {
-    const base = { id: i.id, description: i.description, kind: i.kind, qty: i.qty, unit: i.unit, unitPrice: i.unitPrice };
+    const base = {
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: i.qty,
+      unit: i.unit,
+      unitPrice: i.unitPrice,
+      withholdingRate: i.withholdingRate,
+      withholdingAtc: i.withholdingAtc,
+      withholdingOverride: i.withholdingOverride,
+    };
     return withCosts ? { ...base, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "0.00" } : base;
   });
 }

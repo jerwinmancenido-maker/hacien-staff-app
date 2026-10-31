@@ -6,10 +6,25 @@
 //
 // Cost fields (supplier, supplier unit cost, margins) only exist when the
 // server says the user can see costs; otherwise they're never rendered or sent.
+//
+// Line withholding defaults come from the customer's withholding type + kind.
+// Staff can override a line (flag + note); "Re-apply customer's withholding"
+// resets every line from the customer's current type.
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { docTotals, lineAmounts, ratePctLabel, toScaled, type ItemKind, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import {
+  documentWithholdingFromCustomer,
+  lineDiffersFromUsual,
+  lineWithholdingSnapshot,
+  MISSING_WITHHOLDING_TYPE_WARNING,
+  needsWithholdingTypeWarning,
+  OVERRIDE_NOTE,
+  REAPPLY_WITHHOLDING_LABEL,
+  allowGovVatOption,
+  WITHHOLDING_DEFAULT_CODES,
+} from "@/lib/quotes/withholding-defaults";
 import { formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
@@ -19,7 +34,7 @@ export type EditorCustomer = {
   name: string;
   address: string | null;
   defaultTerms: string | null;
-  defaultWithholding: string[];
+  withholdingType: string;
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 
@@ -33,6 +48,9 @@ export type EditorItem = {
   unitPrice: string;
   supplierId: string | null;
   supplierUnitCost: string;
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+  withholdingOverride: boolean;
 };
 
 export type EditorInitial = {
@@ -65,7 +83,24 @@ type Props = {
 
 let seq = 0;
 const newKey = () => `n${++seq}`;
-const blankItem = (): EditorItem => ({ key: newKey(), id: null, description: "", kind: "GOODS", qty: "1", unit: "pc", unitPrice: "", supplierId: null, supplierUnitCost: "" });
+
+function blankItem(customerType: string | null | undefined): EditorItem {
+  const wh = lineWithholdingSnapshot(customerType, "GOODS");
+  return {
+    key: newKey(),
+    id: null,
+    description: "",
+    kind: "GOODS",
+    qty: "1",
+    unit: "pc",
+    unitPrice: "",
+    supplierId: null,
+    supplierUnitCost: "",
+    withholdingRate: wh.withholdingRate,
+    withholdingAtc: wh.withholdingAtc,
+    withholdingOverride: false,
+  };
+}
 
 function safeLine(i: EditorItem) {
   try {
@@ -75,15 +110,33 @@ function safeLine(i: EditorItem) {
   }
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers, rates, suppliers, termsOptions, action, cancelHref }: Props) {
+function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
+  if (allowGovVatOption()) return rates;
+  return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
+}
+
+export function DocumentEditor({ mode, isNew, initial, customers, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const withCosts = suppliers !== null;
-  const [h, setH] = useState(() => ({ ...initial }));
-  const [items, setItems] = useState<EditorItem[]>(() => (initial.items.length ? initial.items.map((i) => ({ ...i, key: newKey() })) : [blankItem()]));
+  const rates = visibleRates(allRates);
+  const [h, setH] = useState(() => ({ ...initial, withholdingCodes: initial.withholdingCodes.filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption()) }));
+  const [items, setItems] = useState<EditorItem[]>(() =>
+    initial.items.length
+      ? initial.items.map((i) => ({
+          ...i,
+          key: newKey(),
+          withholdingRate: i.withholdingRate ?? "0.0000",
+          withholdingAtc: i.withholdingAtc ?? null,
+          withholdingOverride: i.withholdingOverride ?? false,
+        }))
+      : [blankItem(customers.find((c) => c.id === initial.customerId)?.withholdingType)],
+  );
+  const [reapplyWithholding, setReapplyWithholding] = useState(false);
   const e = state.fieldErrors ?? {};
   const customer = customers.find((c) => c.id === h.customerId);
   const contacts = customer?.contacts ?? [];
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
+  const typeWarning = customer ? needsWithholdingTypeWarning(customer.withholdingType) : false;
 
   const selectedRates = rates.filter((r) => h.withholdingCodes.includes(r.code));
   const t = docTotals(
@@ -101,16 +154,49 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
       return next;
     });
 
+  function applyCustomerDefaults(type: string | null | undefined, nextItems: EditorItem[], headerPatch: Partial<typeof h> = {}) {
+    const kinds = nextItems.map((i) => i.kind);
+    const doc = documentWithholdingFromCustomer(type, kinds, { includeGovVat: false, businessIsVatRegistered: allowGovVatOption() });
+    setH((v) => ({ ...v, ...headerPatch, withholdingCodes: doc.map((w) => w.code) }));
+    setItems(
+      nextItems.map((i) => {
+        const wh = lineWithholdingSnapshot(type, i.kind);
+        return { ...i, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
+      }),
+    );
+    setReapplyWithholding(true);
+  }
+
   function pickCustomer(id: string) {
     const c = customers.find((x) => x.id === id);
-    setH((v) => ({
-      ...v,
+    // Refresh line + document defaults from the withholding type (not defaultWithholding).
+    applyCustomerDefaults(c?.withholdingType, items, {
       customerId: id,
       contactId: c?.contacts.find((k) => k.isMain)?.id ?? "",
-      terms: c?.defaultTerms ?? v.terms,
-      // A new quote copies the customer's default withholding; staff can change it below.
-      withholdingCodes: c ? c.defaultWithholding.filter((code) => rates.some((r) => r.code === code)) : [],
-    }));
+      terms: c?.defaultTerms ?? h.terms,
+    });
+  }
+
+  function changeKind(key: string, kind: ItemKind) {
+    setItems((xs) =>
+      xs.map((x) => {
+        if (x.key !== key) return x;
+        if (x.withholdingOverride) return { ...x, kind };
+        const wh = lineWithholdingSnapshot(customer?.withholdingType, kind);
+        return { ...x, kind, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
+      }),
+    );
+  }
+
+  function changeLineWithholding(key: string, patch: { withholdingRate?: string; withholdingAtc?: string | null }) {
+    setItems((xs) =>
+      xs.map((x) => {
+        if (x.key !== key) return x;
+        const next = { ...x, ...patch };
+        const differs = lineDiffersFromUsual(customer?.withholdingType, next.kind, { rate: next.withholdingRate, atc: next.withholdingAtc });
+        return { ...next, withholdingOverride: differs };
+      }),
+    );
   }
 
   const payload =
@@ -123,6 +209,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
           terms: h.terms,
           notes: h.notes,
           withholdingCodes: h.withholdingCodes,
+          reapplyWithholding: reapplyWithholding || undefined,
           items: items.map(itemPayload),
         }
       : {
@@ -132,11 +219,22 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
           deliveryAddress: h.deliveryAddress,
           terms: h.terms,
           notes: h.notes,
+          reapplyWithholding: reapplyWithholding || undefined,
           items: items.map(itemPayload),
         };
 
   function itemPayload(i: EditorItem) {
-    const base = { id: i.id, description: i.description, kind: i.kind, qty: i.qty, unit: i.unit, unitPrice: i.unitPrice };
+    const base = {
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: i.qty,
+      unit: i.unit,
+      unitPrice: i.unitPrice,
+      withholdingRate: i.withholdingRate,
+      withholdingAtc: i.withholdingAtc,
+      withholdingOverride: i.withholdingOverride,
+    };
     return withCosts ? { ...base, supplierId: i.supplierId, supplierUnitCost: i.supplierUnitCost || "0" } : base;
   }
 
@@ -148,6 +246,12 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+
+      {typeWarning && (
+        <div className="alert warn" role="alert">
+          {MISSING_WITHHOLDING_TYPE_WARNING}
         </div>
       )}
 
@@ -244,18 +348,20 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
                     <input
                       type="checkbox"
                       checked={h.withholdingCodes.includes(r.code)}
-                      onChange={(ev) =>
-                        setH({ ...h, withholdingCodes: ev.target.checked ? [...h.withholdingCodes, r.code] : h.withholdingCodes.filter((c) => c !== r.code) })
-                      }
+                      onChange={(ev) => {
+                        setReapplyWithholding(false);
+                        setH({ ...h, withholdingCodes: ev.target.checked ? [...h.withholdingCodes, r.code] : h.withholdingCodes.filter((c) => c !== r.code) });
+                      }}
                     />
                     {r.label}
+                    {r.atcCode ? ` · ${r.atcCode}` : ""}
                   </label>
                 ))}
               </div>
               {e.withholdingCodes || e.withholding ? (
                 <div className="error">{e.withholdingCodes ?? e.withholding}</div>
               ) : (
-                <div className="hint">Copied from the customer; change it for this quote if needed.</div>
+                <div className="hint">Defaults from the customer&apos;s withholding type; change for this quote if needed.</div>
               )}
             </div>
           )}
@@ -269,8 +375,16 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
       <div className="card">
         <div className="card-head">
           <h2>Items</h2>
-          <div className="right">
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem()])}>
+          <div className="right" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={!customer}
+              onClick={() => applyCustomerDefaults(customer?.withholdingType, items)}
+            >
+              {REAPPLY_WITHHOLDING_LABEL}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(customer?.withholdingType)])}>
               Add line
             </button>
           </div>
@@ -297,19 +411,24 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
                 <th className="num">HACIEN price</th>
                 <th className="num">Total</th>
                 {withCosts && <th className="num">Margin</th>}
+                <th className="num">WH %</th>
+                <th>ATC</th>
                 <th aria-label="Line actions" />
               </tr>
             </thead>
             <tbody>
               {items.map((i, idx) => {
                 const a = safeLine(i);
+                const pct = (Number(i.withholdingRate || "0") * 100).toFixed(2).replace(/\.?0+$/, "");
+                const showOverride = i.withholdingOverride || lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
                 return (
                   <tr key={i.key}>
                     <td>
                       <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
+                      {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                     </td>
                     <td>
-                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => setItem(i.key, { kind: ev.target.value as ItemKind })}>
+                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
                         <option value="GOODS">Goods</option>
                         <option value="SERVICES">Services</option>
                       </select>
@@ -349,6 +468,27 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates, supplie
                     </td>
                     <td className="num strong">{formatPeso(a.total)}</td>
                     {withCosts && <td className={`num${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>}
+                    <td className="num">
+                      <input
+                        aria-label={`Line ${idx + 1} withholding percent`}
+                        inputMode="decimal"
+                        className="w-num-s"
+                        value={pct}
+                        onChange={(ev) => {
+                          const n = Number(ev.target.value);
+                          const rate = Number.isFinite(n) ? (n / 100).toFixed(4) : "0.0000";
+                          changeLineWithholding(i.key, { withholdingRate: rate });
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label={`Line ${idx + 1} ATC`}
+                        className="w-unit"
+                        value={i.withholdingAtc ?? ""}
+                        onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                      />
+                    </td>
                     <td className="line-actions">
                       <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} up`} disabled={idx === 0} onClick={() => move(idx, -1)}>
                         ↑

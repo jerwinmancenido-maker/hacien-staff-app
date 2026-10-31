@@ -11,6 +11,7 @@ import { Activity } from "@/components/Activity";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
+import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { SalesOrderActions } from "@/components/docs/QuoteActions";
 import { PoStatusChip, ProgressChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
@@ -152,7 +153,13 @@ export default async function SalesOrderPage({
           </div>
           <div className="card">
             <h2>Items</h2>
-            <ItemsTable items={so.items} showCosts={so.canSeeCosts} />
+            <ItemsTable
+              items={so.items.map((i) => ({
+                ...i,
+                overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
+              }))}
+              showCosts={so.canSeeCosts}
+            />
             <div className="totals-wrap">
               <TotalsBox totals={so.totals} showCosts={so.canSeeCosts} />
             </div>

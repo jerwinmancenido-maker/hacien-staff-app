@@ -206,7 +206,13 @@ async function main(db: ReturnType<typeof connect>) {
 
   // Withholding rates normally come from the migration; add any that are missing.
   for (const [i, r] of WITHHOLDING_RATES.entries()) {
-    if (await db.withholdingRate.findUnique({ where: { code: r.code } })) continue;
+    const existing = await db.withholdingRate.findUnique({ where: { code: r.code } });
+    if (existing) {
+      if (!existing.atcCode && "atcCode" in r && r.atcCode) {
+        await db.withholdingRate.update({ where: { code: r.code }, data: { atcCode: r.atcCode } });
+      }
+      continue;
+    }
     await db.withholdingRate.create({ data: { ...r, note: "verify with BIR", sortOrder: i + 1 } });
   }
 
@@ -251,10 +257,11 @@ async function main(db: ReturnType<typeof connect>) {
 }
 
 const WITHHOLDING_RATES = [
-  { code: "GOODS_1", label: "Goods 1%", lineKind: "GOODS", rate: "0.0100" },
-  { code: "SERVICES_2", label: "Services 2%", lineKind: "SERVICES", rate: "0.0200" },
-  { code: "GOV_PT_3", label: "Government percentage tax 3%", lineKind: "GOV_PT", rate: "0.0300" },
-  { code: "GOV_VAT_5", label: "Government VAT 5%", lineKind: "GOV_VAT", rate: "0.0500" },
+  // ATC labels: see src/lib/quotes/withholding-defaults.ts (ATC_LABELS). Gov codes UNVERIFIED.
+  { code: "GOODS_1", label: "Goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI158" },
+  { code: "SERVICES_2", label: "Services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI160" },
+  { code: "GOV_PT_3", label: "Government percentage tax 3%", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WG010" },
+  { code: "GOV_VAT_5", label: "Government VAT 5%", lineKind: "GOV_VAT", rate: "0.0500", atcCode: "WV050" },
 ] as const;
 
 type SeedLine = { description: string; kind: "GOODS" | "SERVICES"; qty: string; unit: string; supplier: string | null; supplierUnitCost: string; unitPrice: string };

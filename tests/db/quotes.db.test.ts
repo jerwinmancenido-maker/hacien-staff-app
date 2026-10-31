@@ -127,36 +127,163 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("withholding", () => {
-    it("copies the customer default and computes totals from it", async () => {
-      const customer = await makeCustomer(["GOODS_1", "GOV_PT_3"]);
+    it("defaults from customer type + line kinds and snapshots rate/ATC on each line", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const supplier = await makeSupplier();
       const q = await createQuote(quoteInput(customer.id, (await freshYear()), {}, supplier.id), costUser);
-      expect(snapshotList(q.withholding).map((w) => [w.code, w.rate])).toEqual([
-        ["GOODS_1", "0.0100"],
-        ["GOV_PT_3", "0.0300"],
+      expect(snapshotList(q.withholding).map((w) => [w.code, w.rate, w.atcCode])).toEqual([
+        ["GOODS_1", "0.0100", "WI158"],
+        ["SERVICES_2", "0.0200", "WI160"],
       ]);
-      // Goods 520,000 + services 20,000 = 540,000. 1% of goods 5,200 + 3% of total 16,200.
+      // Goods 520,000 + services 20,000 = 540,000. 1% of goods 5,200 + 2% of services 400.
       expect(q.contractPrice.toFixed(2)).toBe("540000.00");
-      expect(q.withholdingTotal.toFixed(2)).toBe("21400.00");
-      expect(q.netReceived.toFixed(2)).toBe("518600.00");
+      expect(q.withholdingTotal.toFixed(2)).toBe("5600.00");
+      expect(q.netReceived.toFixed(2)).toBe("534400.00");
       expect(q.supplierCost.toFixed(2)).toBe("455000.00");
-      expect(q.netMargin.toFixed(2)).toBe("63600.00");
-      expect(q.netMarginPct.toFixed(2)).toBe("11.78");
-      expect(q.items.find((i) => i.kind === "GOODS")?.supplierTotal.toFixed(2)).toBe("450000.00");
+      const goods = q.items.find((i) => i.kind === "GOODS")!;
+      const services = q.items.find((i) => i.kind === "SERVICES")!;
+      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0100");
+      expect(goods.withholdingAtc).toBe("WI158");
+      expect(goods.withholdingOverride).toBe(false);
+      expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0200");
+      expect(services.withholdingAtc).toBe("WI160");
+      expect(goods.supplierTotal.toFixed(2)).toBe("450000.00");
     });
 
-    it("saves a per-quote override", async () => {
-      const customer = await makeCustomer(["GOODS_1"]);
+    it("Government customer gets existing gov PT rate (not customer.defaultWithholding)", async () => {
+      const customer = await makeCustomer(["GOODS_1"], "GOVERNMENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(snapshotList(q.withholding).map((w) => w.code)).toEqual(["GOV_PT_3"]);
+      // 3% of 540,000
+      expect(q.withholdingTotal.toFixed(2)).toBe("16200.00");
+      for (const i of q.items) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
+        expect(i.withholdingAtc).toBe("WG010");
+      }
+    });
+
+    it("saves a per-quote document override and per-line override flag", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const created = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: ["SERVICES_2"] }), costUser);
       expect(snapshotList(created.withholding).map((w) => w.code)).toEqual(["SERVICES_2"]);
-      const input = quoteInput(customer.id, 2026, { withholdingCodes: ["GOODS_1", "SERVICES_2"] });
+      const input = quoteInput(customer.id, 2026, {
+        withholdingCodes: ["GOODS_1", "SERVICES_2"],
+        items: [
+          {
+            id: null,
+            description: "Laptop i5",
+            kind: "GOODS",
+            qty: "10",
+            unit: "pc",
+            supplierId: null,
+            supplierUnitCost: "0",
+            unitPrice: "52000",
+            withholdingRate: "0.0150",
+            withholdingAtc: "WI158",
+            withholdingOverride: true,
+          },
+          {
+            id: null,
+            description: "Installation",
+            kind: "SERVICES",
+            qty: "1",
+            unit: "lot",
+            supplierId: null,
+            supplierUnitCost: "0",
+            unitPrice: "20000",
+            withholdingRate: "0.0200",
+            withholdingAtc: "WI160",
+            withholdingOverride: false,
+          },
+        ],
+      });
       const updated = await updateQuote(created.id, { ...input, date: created.date }, costUser);
       expect(snapshotList(updated.withholding).map((w) => w.code)).toEqual(["GOODS_1", "SERVICES_2"]);
-      // 1% of 520,000 + 2% of 20,000
+      // Document math still uses document snapshot rates (1% + 2%), not the line override percent.
       expect(updated.withholdingTotal.toFixed(2)).toBe("5600.00");
+      const goods = updated.items.find((i) => i.kind === "GOODS")!;
+      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0150");
+      expect(goods.withholdingOverride).toBe(true);
     });
 
-    it("a Settings change doesn't alter an existing quote", async () => {
+    it("a later customer type change does not alter existing lines, prints or EWT document snapshot", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const beforeLines = q.items.map((i) => ({
+        id: i.id,
+        rate: Number(i.withholdingRate).toFixed(4),
+        atc: i.withholdingAtc,
+      }));
+      const beforeDoc = snapshotList(q.withholding);
+
+      await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "GOVERNMENT" } });
+
+      const view = await getQuoteView(q.id, costUser);
+      expect(view?.withholding).toEqual(beforeDoc);
+      expect(view?.totals.withholdingTotal).toBe(Number(q.withholdingTotal).toFixed(2));
+      expect(
+        view?.items.map((i) => ({ id: i.id, rate: i.withholdingRate, atc: i.withholdingAtc })),
+      ).toEqual(beforeLines.map((l) => ({ id: l.id, rate: l.rate, atc: l.atc })));
+
+      const print = await getQuotePrint(q.id);
+      expect(print?.contractPrice).toBe("540000.00");
+      // Print still has no withholding breakdown keys.
+      expect(JSON.stringify(print)).not.toMatch(/withholdingTotal|WI158|WG010/);
+
+      // Editing without re-apply keeps snapshotted line + document values.
+      const input = quoteInput(customer.id, 2026, {
+        withholdingCodes: beforeDoc.map((w) => w.code),
+        items: q.items
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+            withholdingRate: Number(i.withholdingRate).toFixed(4),
+            withholdingAtc: i.withholdingAtc,
+            withholdingOverride: i.withholdingOverride,
+          })),
+      });
+      const edited = await updateQuote(q.id, { ...input, date: q.date }, costUser);
+      expect(snapshotList(edited.withholding)).toEqual(beforeDoc);
+      expect(edited.withholdingTotal.toFixed(2)).toBe(Number(q.withholdingTotal).toFixed(2));
+    });
+
+    it("Re-apply customer's withholding refreshes lines from the current type", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "GOVERNMENT" } });
+      const input = quoteInput(customer.id, 2026, {
+        reapplyWithholding: true,
+        items: q.items
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+          })),
+      });
+      const reapplied = await updateQuote(q.id, { ...input, date: q.date }, costUser);
+      expect(snapshotList(reapplied.withholding).map((w) => w.code)).toEqual(["GOV_PT_3"]);
+      expect(reapplied.withholdingTotal.toFixed(2)).toBe("16200.00");
+      for (const i of reapplied.items.filter((x) => !x.removedAt)) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
+        expect(i.withholdingAtc).toBe("WG010");
+        expect(i.withholdingOverride).toBe(false);
+      }
+    });
+
+    it("a Settings rate change doesn't alter an existing quote's snapshotted document rates", async () => {
       const code = `T_${tag().toUpperCase()}`;
       const rowsNow = async () =>
         (await listWithholdingRates()).map((r) => ({
@@ -174,10 +301,10 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
         const res = await saveWithholdingRates(rows, costUser.id, versionId);
         expect(res.ok).toBe(true);
       };
-      await save([...(await rowsNow()), { code, label: "Test goods 1%", lineKind: "GOODS", atcCode: "", ratePct: "1", active: true, note: "verify with BIR" }]);
+      await save([...(await rowsNow()), { code, label: "Test goods 1%", lineKind: "GOODS", atcCode: "WI158", ratePct: "1", active: true, note: "verify with BIR" }]);
 
-      const customer = await makeCustomer([code]);
-      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const customer = await makeCustomer([], "NONE");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: [code] }), costUser);
       expect(q.withholdingTotal.toFixed(2)).toBe("5200.00");
 
       await save((await rowsNow()).map((r) => (r.code === code ? { ...r, ratePct: "5" } : r)));
@@ -186,7 +313,6 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const view = await getQuoteView(q.id, costUser);
       expect(view?.withholding.map((w) => w.rate)).toEqual(["0.0100"]);
       expect(view?.totals.withholdingTotal).toBe("5200.00");
-      // Editing the quote keeps the snapshotted rate for codes it already had.
       const input = quoteInput(customer.id, 2026, { withholdingCodes: [code] });
       const edited = await updateQuote(q.id, { ...input, date: q.date }, costUser);
       expect(edited.withholdingTotal.toFixed(2)).toBe("5200.00");
@@ -198,9 +324,9 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
   // -------------------------------------------------------------------------
   describe("cost hiding", () => {
     it("quote and SO payloads for a non-cost user contain no cost or margin fields", async () => {
-      const customer = await makeCustomer(["GOODS_1"]);
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const supplier = await makeSupplier();
-      const q = await createQuote(quoteInput(customer.id, (await freshYear()), {}, supplier.id), costUser);
+      const q = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: ["GOODS_1"] }, supplier.id), costUser);
       const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
 
       for (const user of [staff, viewer]) {
@@ -258,8 +384,8 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("convert and void", () => {
-    it("convert creates the SO with copied items and marks the quote Won", async () => {
-      const customer = await makeCustomer(["GOODS_1"]);
+    it("convert creates the SO with copied items, line rates/ATCs and marks the quote Won", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       await markQuoteSent(q.id, costUser);
       const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "2026-118", deliveryAddress: null }, staff);
@@ -270,6 +396,23 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(order.withholding).toEqual(q.withholding);
       expect(order.settingsVersionId).toBe(q.settingsVersionId);
       expect(order.deliveryAddress).toBe("Test address");
+      const qLines = [...q.items].sort((a, b) => a.sortOrder - b.sortOrder);
+      const soLines = [...order.items].sort((a, b) => a.sortOrder - b.sortOrder);
+      expect(
+        soLines.map((i) => ({
+          kind: i.kind,
+          rate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+          atc: i.withholdingAtc,
+          override: i.withholdingOverride,
+        })),
+      ).toEqual(
+        qLines.map((i) => ({
+          kind: i.kind,
+          rate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+          atc: i.withholdingAtc,
+          override: i.withholdingOverride,
+        })),
+      );
       expect((await db.quote.findUnique({ where: { id: q.id } }))?.status).toBe("WON");
       await expect(convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser)).rejects.toBeInstanceOf(DocRuleError);
     });
@@ -344,9 +487,9 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     });
 
     it("print data has no costs, margins or withholding", async () => {
-      const customer = await makeCustomer(["GOODS_1", "GOV_PT_3"]);
+      const customer = await makeCustomer([], "GOVERNMENT");
       const supplier = await makeSupplier();
-      const q = await createQuote(quoteInput(customer.id, (await freshYear()), {}, supplier.id), costUser);
+      const q = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: ["GOODS_1", "GOV_PT_3"] }, supplier.id), costUser);
       const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-9", deliveryAddress: null }, costUser);
       for (const doc of [await getQuotePrint(q.id), await getSalesOrderPrint(order.id)]) {
         const keys = keysDeep(doc);

@@ -8,6 +8,7 @@ import { assertCan, canSeeCosts } from "../permissions";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { docTotals } from "../quotes/calc";
 import { itemData, planItems } from "../quotes/items";
+import { allowGovVatOption, documentWithholdingFromCustomer, WITHHOLDING_DEFAULT_CODES } from "../quotes/withholding-defaults";
 import type { SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { snapshotList } from "./withholding";
@@ -57,9 +58,32 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           throw new DocRuleError("Pick an active contact of this customer.", "contactId");
         }
       }
-      const withholding = snapshotList(before.withholding);
-      const stored = before.items.map((i) => ({ id: i.id, kind: i.kind, supplierId: i.supplierId, supplierUnitCost: money(i.supplierUnitCost) }));
-      const { items, removedIds } = planItems(stored, input.items, withCosts);
+      const existingWithholding = snapshotList(before.withholding);
+      const customer = await tx.customer.findUniqueOrThrow({ where: { id: before.customerId } });
+      const withholding =
+        input.reapplyWithholding === true
+          ? documentWithholdingFromCustomer(
+              customer.withholdingType,
+              input.items.map((i) => i.kind),
+              {
+                includeGovVat: existingWithholding.some((w) => w.code === WITHHOLDING_DEFAULT_CODES.GOV_VAT_5),
+                businessIsVatRegistered: allowGovVatOption(),
+              },
+            )
+          : existingWithholding.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption());
+      const stored = before.items.map((i) => ({
+        id: i.id,
+        kind: i.kind,
+        supplierId: i.supplierId,
+        supplierUnitCost: money(i.supplierUnitCost),
+        withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+        withholdingOverride: i.withholdingOverride,
+      }));
+      const { items, removedIds } = planItems(stored, input.items, withCosts, {
+        customerWithholdingType: customer.withholdingType,
+        reapplyWithholding: input.reapplyWithholding === true,
+      });
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });
       }
@@ -77,6 +101,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           deliveryAddress: input.deliveryAddress,
           terms: input.terms,
           notes: input.notes,
+          withholding: withholding as unknown as Prisma.InputJsonValue,
           contractPrice: t.contractPrice,
           withholdingTotal: t.withholdingTotal,
           netReceived: t.netReceived,

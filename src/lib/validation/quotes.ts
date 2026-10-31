@@ -51,6 +51,15 @@ export const itemSchema = z.object({
   supplierId: optionalId,
   supplierUnitCost: amount("Supplier unit cost").optional().default("0"),
   unitPrice: amount("Unit price"),
+  /** Snapshotted withholding fraction ("0.0100"); omitted → server defaults from customer type. */
+  withholdingRate: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d+)?$/, "Withholding rate: enter a decimal fraction.")
+    .optional(),
+  withholdingAtc: z.string().trim().max(20).nullable().optional(),
+  /** Explicit staff override vs the customer's usual default for this kind. */
+  withholdingOverride: z.boolean().optional(),
 });
 export type ItemInput = z.infer<typeof itemSchema>;
 
@@ -70,8 +79,13 @@ export const quoteInputSchema = z
       .pipe(dateOnly("Valid until").optional()),
     terms: optionalText(100),
     notes: optionalText(5000),
-    /** Withholding rate codes. Omitted → copy the customer's default. */
+    /**
+     * Withholding rate codes for the document snapshot. Omitted → derive from
+     * the customer's withholding type + line kinds (not Customer.defaultWithholding).
+     */
     withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).optional(),
+    /** When true, every line is re-snapshotted from the customer's current type. */
+    reapplyWithholding: z.boolean().optional(),
     items,
   })
   .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
@@ -93,6 +107,8 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   contactId: optionalId,
   terms: optionalText(100),
   notes: optionalText(5000),
+  /** When true, every line is re-snapshotted from the customer's current type. */
+  reapplyWithholding: z.boolean().optional(),
   items,
 });
 export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;

@@ -12,9 +12,14 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { docTotals, type WithholdingSnapshot } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
+import {
+  allowGovVatOption,
+  documentWithholdingFromCustomer,
+  WITHHOLDING_DEFAULT_CODES,
+} from "../quotes/withholding-defaults";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
-import { buildWithholdingSnapshot, codeList, listWithholdingRates, snapshotList } from "./withholding";
+import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -88,6 +93,26 @@ export async function checkSuppliers(items: readonly Pick<ItemInput, "supplierId
 // Create / edit
 // ---------------------------------------------------------------------------
 
+function resolveQuoteWithholding(
+  customerType: string,
+  itemKinds: readonly ItemInput["kind"][],
+  codes: readonly string[] | undefined,
+  rates: Awaited<ReturnType<typeof listWithholdingRates>>,
+  existing: readonly WithholdingSnapshot[] = [],
+): WithholdingSnapshot[] {
+  // Hide Gov VAT when the business is non-VAT (existing setting).
+  const filteredCodes = (codes ?? []).filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption());
+  if (codes === undefined) {
+    return documentWithholdingFromCustomer(customerType, itemKinds, {
+      includeGovVat: false,
+      businessIsVatRegistered: allowGovVatOption(),
+    });
+  }
+  const snap = buildWithholdingSnapshot(filteredCodes, rates, existing);
+  // Drop GOV_VAT from an existing snapshot when the business is non-VAT.
+  return allowGovVatOption() ? snap : snap.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
+}
+
 export async function createQuote(input: QuoteInput, actor: DocActor): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   const withCosts = canSeeCosts(actor);
@@ -96,12 +121,17 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   if (withCosts) await checkSuppliers(input.items);
 
   const rates = await listWithholdingRates();
-  // The quote copies the customer's default unless staff picked rates on the form.
-  const withholding =
-    input.withholdingCodes === undefined
-      ? buildWithholdingSnapshot(codeList(customer.defaultWithholding), rates, [], { skipUnknown: true })
-      : buildWithholdingSnapshot(input.withholdingCodes, rates);
-  const { items } = planItems([], input.items, withCosts);
+  // Defaults come from the customer's withholding type + line kinds — not defaultWithholding.
+  const withholding = resolveQuoteWithholding(
+    customer.withholdingType,
+    input.items.map((i) => i.kind),
+    input.withholdingCodes,
+    rates,
+  );
+  const { items } = planItems([], input.items, withCosts, {
+    customerWithholdingType: customer.withholdingType,
+    reapplyWithholding: input.reapplyWithholding === true,
+  });
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
@@ -139,7 +169,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   const withCosts = canSeeCosts(actor);
   const current = await db.quote.findUnique({ where: { id } });
   if (!current) throw new DocRuleError("Quote not found.");
-  await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
+  const customer = await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
   const rates = await listWithholdingRates();
 
@@ -151,11 +181,28 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       }
       const existingWithholding = snapshotList(before.withholding);
       const withholding =
-        input.withholdingCodes === undefined
-          ? existingWithholding
-          : buildWithholdingSnapshot(input.withholdingCodes, rates, existingWithholding);
-      const stored = before.items.map((i) => ({ id: i.id, kind: i.kind, supplierId: i.supplierId, supplierUnitCost: money(i.supplierUnitCost) }));
-      const { items, removedIds } = planItems(stored, input.items, withCosts);
+        input.reapplyWithholding === true
+          ? documentWithholdingFromCustomer(
+              customer.withholdingType,
+              input.items.map((i) => i.kind),
+              { includeGovVat: existingWithholding.some((w) => w.code === WITHHOLDING_DEFAULT_CODES.GOV_VAT_5), businessIsVatRegistered: allowGovVatOption() },
+            )
+          : input.withholdingCodes === undefined
+            ? existingWithholding.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption())
+            : resolveQuoteWithholding(customer.withholdingType, input.items.map((i) => i.kind), input.withholdingCodes, rates, existingWithholding);
+      const stored = before.items.map((i) => ({
+        id: i.id,
+        kind: i.kind,
+        supplierId: i.supplierId,
+        supplierUnitCost: money(i.supplierUnitCost),
+        withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+        withholdingOverride: i.withholdingOverride,
+      }));
+      const { items, removedIds } = planItems(stored, input.items, withCosts, {
+        customerWithholdingType: customer.withholdingType,
+        reapplyWithholding: input.reapplyWithholding === true,
+      });
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -309,6 +356,10 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
                 total: i.total,
                 supplierTotal: i.supplierTotal,
                 margin: i.margin,
+                // Copy line rates and ATCs exactly — never re-derive from the customer.
+                withholdingRate: i.withholdingRate,
+                withholdingAtc: i.withholdingAtc,
+                withholdingOverride: i.withholdingOverride,
               })),
           },
         },

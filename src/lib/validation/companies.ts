@@ -45,15 +45,16 @@ function termsField(allowedTerms: readonly string[]) {
 }
 
 /**
- * `allowedWithholdingCodes`: rate codes from Settings → Withholding the customer
- * may default to (omit to skip the check, e.g. in tests).
+ * `allowedWithholdingCodes`: legacy rate codes on Customer.defaultWithholding
+ * (kept for back-compat; new quotes derive from withholdingType). Omit to skip
+ * the check, e.g. in tests.
  */
 export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
   return z.object({
     name: z.string().trim().min(1, "Name is required.").max(191),
     tin: tinField,
     withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
-    // Default withholding rates copied onto new quotes (may be empty).
+    // Legacy key kept in the column / SettingsVersion — UI no longer edits it.
     defaultWithholding: z
       .array(z.string().trim().min(1).max(32))
       .max(20)

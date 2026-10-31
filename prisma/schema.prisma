@@ -162,8 +162,10 @@ model Customer {
   // Copied into a default BILLING Address by migration 20261030120000. Use Address.
   address            String?         @db.Text
   withholdingType    WithholdingType
-  // Default withholding for new quotes: a JSON array of WithholdingRate codes
-  // (e.g. ["GOODS_1","GOV_PT_3"]). Null or [] means none.
+  // DEPRECATED for new quotes: previously a JSON array of WithholdingRate codes
+  // (e.g. ["GOODS_1","GOV_PT_3"]) copied onto new quotes. New quotes derive
+  // withholding from withholdingType + line kind (see withholding-defaults.ts).
+  // Key kept in the column / SettingsVersion history — no destructive migration.
   defaultWithholding Json?
   defaultTerms       String?         @db.VarChar(100)
   notes              String?         @db.Text
@@ -532,6 +534,12 @@ model QuoteItem {
   supplierTotal    Decimal   @default(0) @db.Decimal(15, 2)
   // total − supplierTotal
   margin           Decimal   @default(0) @db.Decimal(15, 2)
+  // Snapshotted at line creation from the customer's withholding type + kind.
+  // Later customer-type edits never change these; staff must re-apply.
+  withholdingRate     Decimal? @db.Decimal(5, 4)
+  withholdingAtc      String?  @db.VarChar(20)
+  // Explicit staff override vs the customer's usual default for this kind.
+  withholdingOverride Boolean  @default(false)
   removedAt        DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -602,6 +610,10 @@ model SalesOrderItem {
   total            Decimal    @db.Decimal(15, 2)
   supplierTotal    Decimal    @default(0) @db.Decimal(15, 2)
   margin           Decimal    @default(0) @db.Decimal(15, 2)
+  // Copied exactly from the quote line on convert; never re-derived from the customer.
+  withholdingRate     Decimal? @db.Decimal(5, 4)
+  withholdingAtc      String?  @db.VarChar(20)
+  withholdingOverride Boolean  @default(false)
   removedAt        DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
