@@ -4249,9 +4249,9 @@ button.contact-card-add {
 .home-sales-svg {
   display: block;
   width: 100%;
-  height: auto;
   max-width: 100%;
-  /* Cap tall empty area above bars on wide Home layouts (~160–200px). */
+  /* Full row width at a capped height (~160–200px); viewBox width tracks aspect. */
+  height: 180px;
   max-height: 180px;
 }
 .home-sales-grid {
@@ -4261,10 +4261,16 @@ button.contact-card-add {
 }
 .home-sales-axis,
 .home-sales-xlabel,
-.home-sales-xyear {
+.home-sales-xyear,
+.home-sales-bar-amount {
   fill: var(--text-2);
   font-family: inherit;
   /* Font size set in viewBox units from JS so on-screen size stays ~12px. */
+}
+.home-sales-bar-amount {
+  fill: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .home-sales-bar {
   fill: #111;
@@ -4380,7 +4386,9 @@ button.contact-card-add {
   }
   /* Keep natural aspect at phone widths (don't force the desktop height cap). */
   .home-sales-svg {
+    height: auto;
     max-height: none;
+    aspect-ratio: 2.25 / 1;
   }
 }
 

@@ -85,7 +85,7 @@ export function salesChangeVsLastMonth(
   return { label: "Same", tone: "flat" };
 }
 
-/** Axis tick labels like ₱500K / ₱1.0M (compact, always with ₱). */
+/** Axis / bar short labels like ₱500K / ₱1.0M / ₱274K (compact, always with ₱). */
 export function formatSalesAxisPeso(amount: number): string {
   const n = Math.abs(Number(amount));
   if (!Number.isFinite(n) || n <= 0) return "₱0";
@@ -96,27 +96,40 @@ export function formatSalesAxisPeso(amount: number): string {
   if (n >= 1_000 && n < 1_000_000 && Number.isInteger(n / 1_000)) {
     return `₱${n / 1_000}K`;
   }
+  // Near-thousand amounts (e.g. 274_400) → round to whole ₱K for bar labels.
+  if (n >= 1_000 && n < 1_000_000) {
+    const k = Math.round(n / 1_000);
+    if (k >= 1000) return `₱${(k / 1000).toFixed(1)}M`;
+    return `₱${k}K`;
+  }
   return formatCompactPesoLimit(n);
 }
 
-/** Nice axis tick values at ~½ and ~full of the chart max (at least one tick). */
-export function salesAxisTicks(maxAmount: number): number[] {
-  const max = Math.max(0, Number(maxAmount) || 0);
-  if (max <= 0) return [0];
-  const nice = niceCeil(max);
-  if (nice <= 0) return [0];
-  const mid = nice / 2;
-  if (mid > 0 && mid < nice) return [mid, nice];
-  return [nice];
-}
+/** Default Y max when every month is 0 / empty (keeps 2 clean gridlines, no NaN). */
+export const SALES_AXIS_EMPTY_MAX = 1_000;
 
-function niceCeil(n: number): number {
-  if (n <= 0) return 0;
+/**
+ * Clean round ceiling just above `maxAmount` for the Sales chart Y scale.
+ * e.g. 274_000 → 300_000. Zero / non-finite → {@link SALES_AXIS_EMPTY_MAX}.
+ */
+export function niceSalesMax(maxAmount: number): number {
+  const n = Number(maxAmount);
+  if (!Number.isFinite(n) || n <= 0) return SALES_AXIS_EMPTY_MAX;
   const exp = Math.floor(Math.log10(n));
   const base = 10 ** exp;
   const frac = n / base;
-  const niceFrac = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
-  return niceFrac * base;
+  // Steps dense enough that 274K → 300K (not 500K).
+  const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const niceFrac = steps.find((s) => s >= frac - 1e-12) ?? 10;
+  const nice = niceFrac * base;
+  return Number.isFinite(nice) && nice > 0 ? nice : SALES_AXIS_EMPTY_MAX;
+}
+
+/** Two Y gridlines: middle and top (= nice max). */
+export function salesAxisTicks(maxAmount: number): number[] {
+  const nice = niceSalesMax(maxAmount);
+  const mid = nice / 2;
+  return mid > 0 && mid < nice ? [mid, nice] : [nice];
 }
 
 export type SalesCustomerTotal = {

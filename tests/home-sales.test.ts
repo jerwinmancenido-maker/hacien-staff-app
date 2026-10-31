@@ -7,6 +7,8 @@ import {
   isSalesEmpty,
   lastNMonthKeys,
   manilaMonthKey,
+  niceSalesMax,
+  SALES_AXIS_EMPTY_MAX,
   salesAxisTicks,
   salesChangeVsLastMonth,
   salesMonthLabel,
@@ -76,15 +78,43 @@ describe("home sales change vs last month", () => {
   });
 });
 
-describe("home sales axis + empty", () => {
-  it("formats grey axis labels like ₱500K / ₱1.0M", () => {
-    expect(formatSalesAxisPeso(500_000)).toBe("₱500K");
-    expect(formatSalesAxisPeso(1_000_000)).toBe("₱1.0M");
+describe("home sales nice Y max", () => {
+  it("rounds just above the highest month to a clean value (274K → 300K)", () => {
+    expect(niceSalesMax(274_000)).toBe(300_000);
+    expect(niceSalesMax(274_000.5)).toBe(300_000);
+    expect(niceSalesMax(300_000)).toBe(300_000);
   });
 
-  it("picks nice ticks from the max month", () => {
-    expect(salesAxisTicks(0)).toEqual([0]);
-    expect(salesAxisTicks(800_000)).toEqual([500_000, 1_000_000]);
+  it("handles zero / empty / non-finite with a sensible default (no NaN)", () => {
+    expect(niceSalesMax(0)).toBe(SALES_AXIS_EMPTY_MAX);
+    expect(niceSalesMax(-10)).toBe(SALES_AXIS_EMPTY_MAX);
+    expect(niceSalesMax(Number.NaN)).toBe(SALES_AXIS_EMPTY_MAX);
+    expect(niceSalesMax(Number.POSITIVE_INFINITY)).toBe(SALES_AXIS_EMPTY_MAX);
+    expect(Number.isFinite(niceSalesMax(0))).toBe(true);
+  });
+
+  it("handles very small and very large values", () => {
+    expect(niceSalesMax(1)).toBe(1);
+    expect(niceSalesMax(50)).toBe(50);
+    expect(niceSalesMax(51)).toBe(60);
+    expect(niceSalesMax(999)).toBe(1_000);
+    expect(niceSalesMax(1_200_000)).toBe(1_200_000);
+    expect(niceSalesMax(1_250_000)).toBe(1_500_000);
+    expect(niceSalesMax(9_900_000_000)).toBe(10_000_000_000);
+  });
+
+  it("builds two gridlines (middle + top) from the nice max", () => {
+    expect(salesAxisTicks(274_000)).toEqual([150_000, 300_000]);
+    expect(salesAxisTicks(0)).toEqual([SALES_AXIS_EMPTY_MAX / 2, SALES_AXIS_EMPTY_MAX]);
+    expect(salesAxisTicks(800_000)).toEqual([400_000, 800_000]);
+  });
+});
+
+describe("home sales axis + empty", () => {
+  it("formats grey axis labels like ₱500K / ₱1.0M / ₱274K", () => {
+    expect(formatSalesAxisPeso(500_000)).toBe("₱500K");
+    expect(formatSalesAxisPeso(1_000_000)).toBe("₱1.0M");
+    expect(formatSalesAxisPeso(274_000)).toBe("₱274K");
   });
 
   it("treats all-zero months as empty", () => {
