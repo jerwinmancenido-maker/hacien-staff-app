@@ -11,6 +11,7 @@ import { bookletGrid } from "./booklet";
 import { billingToday, daysPastDue, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance } from "../services/collections";
+import { getNonVatMeter } from "../services/non-vat";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
@@ -565,25 +566,16 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
   };
 }
 
-/** Gross billings in the tax year (nice-to-have meter). */
+/** Gross billings YTD for the tax year (same source as the sidebar non-VAT meter). */
 export async function taxYearBillingMeter() {
   const snap = await getSettingsSnapshot();
-  const year = snap.settings.taxYear.year;
-  const from = new Date(Date.UTC(year, 0, 1));
-  const to = new Date(Date.UTC(year, 11, 31));
-  const agg = await db.billing.aggregate({
-    where: { status: { not: "VOID" }, invoiceDate: { gte: from, lte: to } },
-    _sum: { amount: true },
-  });
-  const gross = money(agg._sum.amount ?? 0);
-  const limit = snap.settings.taxYear.nonVatLimit;
-  const pct = limit === 0 ? 0 : (Number(gross) / limit) * 100;
+  const meter = await getNonVatMeter(snap.settings.taxYear);
   return {
-    year,
-    gross,
-    limit: limit.toFixed(2),
-    pct,
-    warnFirstPct: snap.settings.taxYear.warnFirstPct,
-    warnSecondPct: snap.settings.taxYear.warnSecondPct,
+    year: meter.year,
+    gross: fromScaled(toScaled(meter.used, 2), 2),
+    limit: fromScaled(toScaled(meter.limit, 2), 2),
+    pct: meter.pct,
+    warnFirstPct: meter.warnFirstPct,
+    warnSecondPct: meter.warnSecondPct,
   };
 }
