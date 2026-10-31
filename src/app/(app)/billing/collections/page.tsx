@@ -5,7 +5,7 @@ import { formatDate, formatPeso } from "@/lib/format";
 import { listCollections } from "@/lib/billing/views";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionStatusChip, MethodLabel } from "@/components/billing/BillingParts";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import type { CollectionStatus } from "@prisma/client";
 
@@ -43,33 +43,46 @@ export default async function CollectionsListPage({ searchParams }: { searchPara
           Filter
         </button>
       </form>
-      <div className="card">
-        <div className="table-wrap">
-          <table className="list" aria-label="Collections">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Method</th>
-                <th>Receipt</th>
-                <th className="num">Received</th>
-                <th className="num">Applied</th>
-                <th className="num">Credit</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="faint">
-                    No collections yet.
-                  </td>
-                </tr>
+      {rows.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            title="All clear here"
+            line="No collections yet. Record a collection when a customer pays."
+            action={
+              canManage ? (
+                <Link className="btn btn-secondary" href="/billing/collections/new">
+                  Record collection
+                </Link>
               ) : (
-                rows.map((r) => (
-                  <tr key={r.id}>
+                <Link className="btn btn-secondary" href="/billing/billings">
+                  Open billings
+                </Link>
+              )
+            }
+          />
+        </div>
+      ) : (
+        <div className="card">
+          <div className="table-wrap">
+            <table className="list" aria-label="Collections">
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>Date</th>
+                  <th>Customer</th>
+                  <th>Method</th>
+                  <th>Receipt</th>
+                  <th className="num">Received</th>
+                  <th className="num">Applied</th>
+                  <th className="num">Credit</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="clickable row-has-link">
                     <td>
+                      <a href={`/billing/collections/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/collections/${r.id}`}>{r.number}</Link>
                     </td>
                     <td>{day(r.date)}</td>
@@ -87,12 +100,12 @@ export default async function CollectionsListPage({ searchParams }: { searchPara
                       <CollectionStatusChip status={r.status} />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

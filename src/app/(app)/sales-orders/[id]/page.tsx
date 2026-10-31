@@ -102,8 +102,9 @@ export default async function SalesOrderPage({
             {
               key: "cost-margin",
               label: "Cost & margin",
-              count: costMargin?.rows.length,
-              dot: costWarnings ? "amber" : undefined,
+              count: costWarnings ? undefined : costMargin?.rows.length,
+              chip: costWarnings ? `${costWarnings} warning${costWarnings === 1 ? "" : "s"}` : undefined,
+              chipTone: costWarnings ? "amber" : undefined,
               href: `${base}?tab=cost-margin`,
             },
           ]}
@@ -174,7 +175,7 @@ export default async function SalesOrderPage({
                 </div>
               </div>
               {billings.length === 0 ? (
-                <p className="faint">No billings yet. Booklet invoices are recorded here (not generated).</p>
+                <p className="faint">No billings yet. Write the booklet invoice number you issued.</p>
               ) : (
                 <div className="table-wrap">
                   <table className="list" aria-label="Billings on this SO">

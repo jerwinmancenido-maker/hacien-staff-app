@@ -4,7 +4,12 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Customer } from "@prisma/client";
 import { Field } from "@/components/Field";
-import { WITHHOLDING_LABELS, WITHHOLDING_TYPES } from "@/lib/validation/companies";
+import {
+  WITHHOLDING_TYPE_FIELD_LABEL,
+  WITHHOLDING_TYPE_FORM_LABELS,
+  WITHHOLDING_TYPE_FORM_ORDER,
+  withholdingTypeFieldHint,
+} from "@/lib/withholding/display";
 import type { FormState } from "@/lib/validation/forms";
 
 export function CustomerForm({
@@ -41,12 +46,19 @@ export function CustomerForm({
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-000 · branch code optional">
             <input id="tin" name="tin" type="text" defaultValue={v("tin")} inputMode="numeric" placeholder="000-000-000-000" />
           </Field>
-          <Field label="Withholding type" name="withholdingType" required error={e.withholdingType}>
+          <Field
+            label={WITHHOLDING_TYPE_FIELD_LABEL}
+            name="withholdingType"
+            required
+            error={e.withholdingType}
+            hint={withholdingTypeFieldHint(withholding) ?? undefined}
+            full
+          >
             <select id="withholdingType" name="withholdingType" value={withholding} onChange={(ev) => setWithholding(ev.target.value)}>
               <option value="">Pick one…</option>
-              {WITHHOLDING_TYPES.map((t) => (
+              {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
                 <option key={t} value={t}>
-                  {WITHHOLDING_LABELS[t]}
+                  {WITHHOLDING_TYPE_FORM_LABELS[t]}
                 </option>
               ))}
             </select>

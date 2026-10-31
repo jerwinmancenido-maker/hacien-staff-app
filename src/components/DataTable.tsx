@@ -2,6 +2,7 @@
 
 // List table: whole row clickable (mouse or Enter), sticky header, sortable columns.
 // Cells are rendered on the server and passed in; sorting uses `sort` values.
+// Rows with href include a real <a> so open-in-new-tab / middle-click work.
 
 import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,8 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
   function open(row: Row, e: MouseEvent | KeyboardEvent) {
     if (!row.href) return;
     if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+    if ("button" in e && e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
     router.push(row.href);
   }
 
@@ -78,15 +81,16 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
           {sorted.map((row) => (
             <tr
               key={row.id}
-              className={`${row.href ? "clickable" : ""}${row.inactive ? " inactive" : ""}`}
+              className={`${row.href ? "clickable row-has-link" : ""}${row.inactive ? " inactive" : ""}`}
               tabIndex={row.href ? 0 : undefined}
               onClick={(e) => open(row, e)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") open(row, e);
               }}
             >
-              {columns.map((c) => (
+              {columns.map((c, i) => (
                 <td key={c.key} className={c.numeric ? "num" : undefined}>
+                  {i === 0 && row.href ? <a href={row.href} className="row-stretched-link" tabIndex={-1} aria-hidden /> : null}
                   {row.cells[c.key]}
                 </td>
               ))}

@@ -163,7 +163,7 @@ export function PrintCompanyForm({
               />
               Print &quot;This document is not valid for claim of input tax&quot; on billing and collection documents
             </label>
-            <div className="hint">UNVERIFIED BIR rule. Default ON. HACIEN is NON-VAT — no VAT lines are ever printed.</div>
+            <div className="hint">Check with your accountant. HACIEN is NON-VAT — no VAT lines are ever printed.</div>
           </div>
           <div className="field full">
             <label className="check" htmlFor="showReceivingReportCosts">
