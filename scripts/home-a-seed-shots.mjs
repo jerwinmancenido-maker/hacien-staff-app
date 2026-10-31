@@ -2,15 +2,18 @@
 /**
  * Throwaway fake billings for Home concept-A screenshots (local DB only).
  *
- *   node scripts/home-a-seed-shots.mjs fill
- *   node scripts/home-a-seed-shots.mjs empty
- *   node scripts/home-a-seed-shots.mjs restore
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs fill
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs empty
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs restore
  *
- * `empty` voids every non-VOID billing (reversible). Parking invoice dates alone
- * emptied the Sales chart / "Billed this month" but left AR open — Owed still
- * showed balances — so empty must remove billings from AR entirely.
+ * Requires ALLOW_SEED_SHOTS=1 and a local DATABASE_URL host (see
+ * scripts/lib/assert-local-db.mjs). `empty` voids every non-VOID billing
+ * (reversible) so Owed / overdue / chart all clear.
  */
+import { assertLocalSeedShotsOrExit } from "./lib/assert-local-db.mjs";
 import { PrismaClient } from "@prisma/client";
+
+assertLocalSeedShotsOrExit();
 
 const db = new PrismaClient();
 const TAG = "home-sales-07-shot";

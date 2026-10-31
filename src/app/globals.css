@@ -4471,7 +4471,7 @@ button.contact-card-add {
 .home-tax {
   display: flex;
   gap: 14px;
-  align-items: center;
+  align-items: flex-start; /* top-align like Recent activity; card still stretches */
   padding: 16px 18px;
   color: inherit;
   text-decoration: none;

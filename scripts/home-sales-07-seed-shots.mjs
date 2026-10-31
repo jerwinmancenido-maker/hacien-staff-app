@@ -5,10 +5,16 @@
  * Manila months, then optionally voids them for the empty-state shots.
  *
  * Usage:
- *   node scripts/home-sales-07-seed-shots.mjs fill
- *   node scripts/home-sales-07-seed-shots.mjs empty
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-sales-07-seed-shots.mjs fill
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-sales-07-seed-shots.mjs empty
+ *
+ * Requires ALLOW_SEED_SHOTS=1 and a local DATABASE_URL host (see
+ * scripts/lib/assert-local-db.mjs).
  */
+import { assertLocalSeedShotsOrExit } from "./lib/assert-local-db.mjs";
 import { PrismaClient } from "@prisma/client";
+
+assertLocalSeedShotsOrExit();
 
 const db = new PrismaClient();
 const TAG = "home-sales-07-shot";
