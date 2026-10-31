@@ -13,6 +13,7 @@ import {
   customerWithholdingChipLabel,
   customerWithholdingHint,
   defaultWithholdingFor,
+  lineWithholdingChipsFromPicks,
   lineWithholdingFromPicks,
   resolveCustomerSavedPick,
 } from "@/lib/quotes/withholding-defaults";
@@ -60,19 +61,30 @@ describe("manual withholding picks (build brief 10)", () => {
     }
   });
 
-  it("government goods 1% + 3% → goods 4%; services 2% + 3% → services 5%", () => {
+  it("government goods 1% + 3% → goods 4% money / chips WHT 1% WI640 + WHT 3% WB080", () => {
     const goodsPicks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
     expect(lineWithholdingFromPicks(goodsPicks, "GOODS").rate).toBe("0.0400");
+    expect(lineWithholdingFromPicks(goodsPicks, "GOODS").atc).toBeNull(); // never 4% WI640
     expect(lineWithholdingFromPicks(goodsPicks, "SERVICES").rate).toBe("0.0300");
-    expect(lineWithholdingFromPicks(goodsPicks, "GOODS").atc).toBe("WI640");
     expect(lineWithholdingFromPicks(goodsPicks, "SERVICES").atc).toBe("WB080");
+    expect(lineWithholdingChipsFromPicks(goodsPicks, "GOODS").map((c) => c.chipLabel)).toEqual([
+      "WHT 1% WI640",
+      "WHT 3% WB080",
+    ]);
+    expect(lineWithholdingChipsFromPicks(goodsPicks, "SERVICES").map((c) => c.chipLabel)).toEqual([
+      "WHT 3% WB080",
+    ]);
     // 520000 × 0.04 + 20000 × 0.03 = 20800 + 600
     expect(520000 * 0.04 + 20000 * 0.03).toBe(21400);
 
     const svcPicks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
     expect(lineWithholdingFromPicks(svcPicks, "SERVICES").rate).toBe("0.0500");
+    expect(lineWithholdingFromPicks(svcPicks, "SERVICES").atc).toBeNull();
     expect(lineWithholdingFromPicks(svcPicks, "GOODS").rate).toBe("0.0300");
-    expect(lineWithholdingFromPicks(svcPicks, "SERVICES").atc).toBe("WI157");
+    expect(lineWithholdingChipsFromPicks(svcPicks, "SERVICES").map((c) => c.chipLabel)).toEqual([
+      "WHT 2% WI157",
+      "WHT 3% WB080",
+    ]);
   });
 
   it("VAT withheld 5% is inactive by default", () => {

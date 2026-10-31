@@ -22,6 +22,7 @@ import {
 } from "@/lib/quotes/calc";
 import {
   lineDiffersFromUsualPicks,
+  lineWithholdingChipsFromPicks,
   lineWithholdingFromPicks,
   lineWithholdingSnapshotFromPicks,
   WITHHOLDING_NOT_SET_NOTICE,
@@ -658,11 +659,13 @@ export function QuoteEditor({
                   const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                   const showOverride =
                     i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
-                  const pickAtc = lineWithholdingFromPicks(linePicks, i.kind).atc;
-                  const displayAtc =
-                    i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
-                      ? i.withholdingAtc
-                      : pickAtc;
+                  const pickUsual = lineWithholdingFromPicks(linePicks, i.kind);
+                  const pickChips = lineWithholdingChipsFromPicks(linePicks, i.kind);
+                  // Stacked picks → one chip per code (never combined % beside one ATC).
+                  const usePickChips = !showOverride && pickChips.length > 0;
+                  const displayAtc = showOverride
+                    ? i.withholdingAtc
+                    : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const below = toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -684,29 +687,42 @@ export function QuoteEditor({
                               <option value="GOODS">Goods</option>
                               <option value="SERVICES">Services</option>
                             </select>
-                            <span className="quote-tg quote-tg-wh" title={displayAtc ?? undefined}>
-                              <span className="quote-tg-wh-label">{whLabel}</span>
-                              <input
-                                aria-label={`Line ${idx + 1} withholding percent`}
-                                inputMode="decimal"
-                                className="w-wh"
-                                value={pct}
-                                placeholder="—"
-                                onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
-                              />
-                              <span className="quote-wh-pct-suffix" aria-hidden>
-                                %
+                            {usePickChips ? (
+                              pickChips.map((chip) => (
+                                <span
+                                  key={`${i.key}-${chip.code}`}
+                                  className="quote-tg quote-tg-wh is-chip"
+                                  title={chip.atc ?? undefined}
+                                  aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
+                                >
+                                  {chip.chipLabel}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="quote-tg quote-tg-wh" title={displayAtc ?? undefined}>
+                                <span className="quote-tg-wh-label">{whLabel}</span>
+                                <input
+                                  aria-label={`Line ${idx + 1} withholding percent`}
+                                  inputMode="decimal"
+                                  className="w-wh"
+                                  value={pct}
+                                  placeholder="—"
+                                  onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
+                                />
+                                <span className="quote-wh-pct-suffix" aria-hidden>
+                                  %
+                                </span>
+                                {/* ATC only when not a stacked combined rate. */}
+                                <input
+                                  aria-label={`Line ${idx + 1} ATC`}
+                                  className="w-atc"
+                                  value={displayAtc ?? ""}
+                                  placeholder="ATC"
+                                  title={displayAtc ?? undefined}
+                                  onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                                />
                               </span>
-                              {/* ATC shows the code (WI640…) or blank — never the rate number. */}
-                              <input
-                                aria-label={`Line ${idx + 1} ATC`}
-                                className="w-atc"
-                                value={displayAtc ?? ""}
-                                placeholder="ATC"
-                                title={displayAtc ?? undefined}
-                                onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                              />
-                            </span>
+                            )}
                             {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                           </div>
                         </div>
@@ -794,11 +810,10 @@ export function QuoteEditor({
                   const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                   const showOverride =
                     i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
-                  const pickAtc = lineWithholdingFromPicks(linePicks, i.kind).atc;
-                  const displayAtc =
-                    i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
-                      ? i.withholdingAtc
-                      : pickAtc;
+                  const pickUsual = lineWithholdingFromPicks(linePicks, i.kind);
+                  const pickChips = lineWithholdingChipsFromPicks(linePicks, i.kind);
+                  const usePickChips = !showOverride && pickChips.length > 0;
+                  const displayAtc = showOverride ? i.withholdingAtc : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   return (
                     <article key={`m-${i.key}`} className="quote-line-card">
@@ -911,25 +926,40 @@ export function QuoteEditor({
                       </div>
                       <div className="quote-line-card-meta">
                         {withCosts ? <span>Margin {formatPeso(a.margin)}</span> : null}
-                        <span className="quote-line-card-wh">
-                          WH%{" "}
-                          <input
-                            aria-label={`Line ${idx + 1} withholding percent`}
-                            inputMode="decimal"
-                            className="w-wh"
-                            value={pct}
-                            placeholder="—"
-                            onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
-                          />
-                          <input
-                            aria-label={`Line ${idx + 1} ATC`}
-                            className="w-atc"
-                            value={displayAtc ?? ""}
-                            placeholder="ATC"
-                            title={displayAtc ?? undefined}
-                            onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                          />
-                        </span>
+                        {usePickChips ? (
+                          <span className="quote-line-card-wh-chips">
+                            {pickChips.map((chip) => (
+                              <span
+                                key={`m-${i.key}-${chip.code}`}
+                                className="quote-tg quote-tg-wh is-chip"
+                                title={chip.atc ?? undefined}
+                                aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
+                              >
+                                {chip.chipLabel}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="quote-line-card-wh">
+                            WH%{" "}
+                            <input
+                              aria-label={`Line ${idx + 1} withholding percent`}
+                              inputMode="decimal"
+                              className="w-wh"
+                              value={pct}
+                              placeholder="—"
+                              onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
+                            />
+                            <input
+                              aria-label={`Line ${idx + 1} ATC`}
+                              className="w-atc"
+                              value={displayAtc ?? ""}
+                              placeholder="ATC"
+                              title={displayAtc ?? undefined}
+                              onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                            />
+                          </span>
+                        )}
                         {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                       </div>
                     </article>

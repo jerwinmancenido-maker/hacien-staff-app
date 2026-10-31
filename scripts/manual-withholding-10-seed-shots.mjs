@@ -14,7 +14,7 @@ if (!gate.ok) {
 }
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Prisma } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const db = new PrismaClient();
 
@@ -55,8 +55,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Point draft at the government customer and copy the pick (does not rewrite money —
-  // staff must re-apply / save in UI for line rates; screenshots show the pick UI).
+  // Point draft at the government customer and copy the pick. Also snap line rates so
+  // chips render: goods = stacked 4% with null ATC (never "4% WI640"); services = 3% WB080.
   draft = await db.quote.update({
     where: { id: draft.id },
     data: {
@@ -67,7 +67,20 @@ async function main() {
       subject: "Supply of laptops, printers and setup for the ICT office",
       buyerPoNo: "RFQ-2026-118",
     },
+    include: { items: { where: { removedAt: null } } },
   });
+  for (const item of draft.items) {
+    const isGoods = item.kind === "GOODS";
+    await db.quoteItem.update({
+      where: { id: item.id },
+      data: {
+        withholdingRate: isGoods ? "0.0400" : "0.0300",
+        // Stacked goods: null ATC (chips show WI640 + WB080 separately). Services: WB080 only.
+        withholdingAtc: isGoods ? null : "WB080",
+        withholdingOverride: false,
+      },
+    });
+  }
 
   // A second customer with pick still null → "not set" notice on a fresh quote path.
   const notSet =
@@ -77,7 +90,8 @@ async function main() {
   if (notSet) {
     await db.customer.update({
       where: { id: notSet.id },
-      data: { defaultWithholding: null },
+      // Prisma JSON columns need DbNull for a real SQL NULL (not JSON null).
+      data: { defaultWithholding: Prisma.DbNull },
     });
   }
 

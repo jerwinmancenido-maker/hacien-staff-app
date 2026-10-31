@@ -11,6 +11,7 @@ import {
   defaultWithholdingFor,
   isWithholdingNone,
   isWithholdingNotSet,
+  lineWithholdingChipsFromPicks,
   lineWithholdingFromPicks,
   needsWithholdingTypeWarning,
 } from "@/lib/quotes/withholding-defaults";
@@ -45,13 +46,14 @@ describe("defaultWithholdingFor (deprecated — type never chooses rates)", () =
 });
 
 describe("lineWithholdingFromPicks", () => {
-  it("government goods 1% + percentage tax 3% → goods 4%, services 3%", () => {
+  it("government goods 1% + percentage tax 3% → goods 4% with no ATC (never 4% WI640)", () => {
     const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
-    expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
+    expect(lineWithholdingFromPicks(picks, "GOODS")).toEqual({
       rate: "0.0400",
-      atc: "WI640",
+      atc: null,
       code: null,
       label: null,
+      lineKind: null,
     });
     expect(lineWithholdingFromPicks(picks, "SERVICES")).toEqual({
       rate: "0.0300",
@@ -62,13 +64,14 @@ describe("lineWithholdingFromPicks", () => {
     });
   });
 
-  it("government services 2% + percentage tax 3% → services 5%, goods 3%", () => {
+  it("government services 2% + percentage tax 3% → services 5% with no ATC", () => {
     const picks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
-    expect(lineWithholdingFromPicks(picks, "SERVICES")).toMatchObject({
+    expect(lineWithholdingFromPicks(picks, "SERVICES")).toEqual({
       rate: "0.0500",
-      atc: "WI157",
+      atc: null,
       code: null,
       label: null,
+      lineKind: null,
     });
     expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
       rate: "0.0300",
@@ -79,6 +82,35 @@ describe("lineWithholdingFromPicks", () => {
 
   it("empty picks → zero", () => {
     expect(lineWithholdingFromPicks([], "GOODS")).toEqual(ZERO);
+  });
+});
+
+describe("lineWithholdingChipsFromPicks", () => {
+  it("stacked goods line → one chip per code; each % matches its own ATC (never 4% WI640)", () => {
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
+    const goods = lineWithholdingChipsFromPicks(picks, "GOODS");
+    expect(goods.map((c) => c.chipLabel)).toEqual(["WHT 1% WI640", "WHT 3% WB080"]);
+    for (const c of goods) {
+      const ownPct = (Number(c.rate) * 100).toFixed(2).replace(/\.?0+$/, "");
+      expect(c.chipLabel).toBe(`WHT ${ownPct}% ${c.atc}`);
+      expect(c.chipLabel).not.toMatch(/WHT 4%/);
+    }
+    // Combined money rate still 4%, but never paired with a single ATC.
+    const money = lineWithholdingFromPicks(picks, "GOODS");
+    expect(money.rate).toBe("0.0400");
+    expect(money.atc).toBeNull();
+
+    const services = lineWithholdingChipsFromPicks(picks, "SERVICES");
+    expect(services.map((c) => c.chipLabel)).toEqual(["WHT 3% WB080"]);
+  });
+
+  it("stacked services line → WHT 2% WI157 + WHT 3% WB080", () => {
+    const picks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
+    const chips = lineWithholdingChipsFromPicks(picks, "SERVICES");
+    expect(chips.map((c) => ({ code: c.code, chipLabel: c.chipLabel, rate: c.rate }))).toEqual([
+      { code: "GOV_SERVICES_2", chipLabel: "WHT 2% WI157", rate: "0.0200" },
+      { code: "GOV_PT_3", chipLabel: "WHT 3% WB080", rate: "0.0300" },
+    ]);
   });
 });
 
@@ -105,6 +137,11 @@ describe("Pass 3 Settings catalog", () => {
       expect(r.code).not.toMatch(/^LINE_/);
     }
     expect(WITHHOLDING_DEFAULT_CATALOG.filter((r) => r.active).map((r) => r.code)).not.toContain("GOV_VAT_5");
+    // WG010 is a legacy WB080 alias only — must never return to the Settings picker.
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.code)).not.toContain("WG010");
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.atcCode)).not.toContain("WG010");
+    // WV050 is 12% non-resident VAT — not a Settings catalog / 5% VAT row.
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.atcCode)).not.toContain("WV050");
   });
 });
 

@@ -250,9 +250,10 @@ function rateAppliesToKind(lineKind: WithholdingLineKind, kind: ItemKind): boole
 }
 
 /**
- * Sum of picked rates that apply to this item kind.
+ * Sum of picked rates that apply to this item kind (money math).
  * Single applicable rate → keep its ATC/code/label.
- * Several → combined rate; ATC from the single line-kind-specific rate when present.
+ * Several → combined rate with ATC/code/label null — never pair a stacked %
+ * with one ATC (UI uses lineWithholdingChipsFromPicks instead).
  */
 export function lineWithholdingFromPicks(
   picks: readonly WithholdingSnapshot[],
@@ -276,19 +277,43 @@ export function lineWithholdingFromPicks(
     };
   }
 
-  // Combined picks: keep ATC from the single line-kind-specific rate when present.
-  const kindSpecific = applicable.filter((p) => p.lineKind === kind);
-  if (kindSpecific.length === 1) {
+  // Stacked picks: combined rate for money only — no single ATC.
+  return { rate, atc: null, code: null, label: null, lineKind: null };
+}
+
+export type LineWithholdingChip = {
+  rate: string;
+  atc: string | null;
+  code: string;
+  label: string;
+  lineKind: WithholdingLineKind;
+  /** Staff chip text, e.g. "WHT 1% WI640" — each chip's % matches its own code. */
+  chipLabel: string;
+};
+
+/**
+ * One display chip per applied pick for this item kind.
+ * Never emits a combined % next to a single ATC.
+ */
+export function lineWithholdingChipsFromPicks(
+  picks: readonly WithholdingSnapshot[],
+  kind: ItemKind,
+): LineWithholdingChip[] {
+  const applicable = picks.filter((p) => rateAppliesToKind(p.lineKind, kind));
+  return applicable.map((p) => {
+    const rate = Number(p.rate).toFixed(4);
+    const pct = (Number(rate) * 100).toFixed(2).replace(/\.?0+$/, "");
+    const atc = p.atcCode && String(p.atcCode).trim() !== "" ? String(p.atcCode).trim() : null;
+    const chipLabel = atc ? `WHT ${pct}% ${atc}` : `WHT ${pct}%`;
     return {
       rate,
-      atc: kindSpecific[0]!.atcCode,
-      code: null,
-      label: null,
-      lineKind: null,
+      atc,
+      code: p.code,
+      label: p.label,
+      lineKind: p.lineKind,
+      chipLabel,
     };
-  }
-
-  return { rate, atc: null, code: null, label: null, lineKind: null };
+  });
 }
 
 /** Snapshot fields to persist on a new / re-applied line from the pick list. */

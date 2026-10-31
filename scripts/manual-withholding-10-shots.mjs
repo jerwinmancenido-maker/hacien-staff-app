@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Manual withholding (brief 10) screenshots: quote editor, customer page,
- * add-customer drawer, print preview — each at 1280 and 360 (print 1280 only).
- * Full-page shots. Reports height and scrollWidth (360 must equal 360).
+ * add-customer drawer, print preview — each at 1280 and 360/390.
+ * Line chips at 1280 + 390 (goods: WHT 1% WI640 + WHT 3% WB080; services: WHT 3% WB080).
+ * Print preview also at 390 — scrollWidth must be ≤ 390 (no h-scroll).
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -261,6 +262,23 @@ async function main() {
     await cdp.send("Page.navigate", { url: `${BASE}${editorPath}` });
     await waitFor(cdp, `!!document.querySelector('.quote-editor')`);
     await sleep(500);
+    // Re-apply so stacked lines get null ATC and chips render (never "4% WI640").
+    await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const btn = [...document.querySelectorAll('button')].find((el) => /Re-apply customer's withholding/i.test(el.textContent || ''));
+        if (!btn) return false;
+        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+        const onClick = propsKey ? btn[propsKey]?.onClick : null;
+        if (typeof onClick === 'function') {
+          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+        } else {
+          btn.click();
+        }
+        return true;
+      })()`,
+      returnByValue: true,
+    });
+    await sleep(400);
     // Scroll internal panel into view briefly then full-page shot
     await cdp.send("Runtime.evaluate", {
       expression: `document.querySelector('.wh-internal-panel, .wh-pick, [class*=\"wh-\"]')?.scrollIntoView({block:'center'})`,
@@ -411,11 +429,66 @@ async function main() {
     }
   }
 
+  // Dedicated chip shots at 1280 + 390 (goods stacked chips + services WB080 chip).
+  for (const width of [1280, 390]) {
+    await setViewport(cdp, width, width === 390 ? 1400 : 900);
+    await cdp.send("Page.navigate", { url: `${BASE}${editorPath}` });
+    await waitFor(cdp, `!!document.querySelector('.quote-editor')`);
+    await sleep(500);
+    await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const btn = [...document.querySelectorAll('button')].find((el) => /Re-apply customer's withholding/i.test(el.textContent || ''));
+        if (!btn) return false;
+        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+        const onClick = propsKey ? btn[propsKey]?.onClick : null;
+        if (typeof onClick === 'function') {
+          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+        } else {
+          btn.click();
+        }
+        return true;
+      })()`,
+      returnByValue: true,
+    });
+    await sleep(400);
+    const chipCheck = await cdp.send("Runtime.evaluate", {
+      returnByValue: true,
+      expression: `(() => {
+        const chips = [...document.querySelectorAll('.quote-tg-wh.is-chip')].map((el) => (el.textContent || '').trim());
+        const labels = [...document.querySelectorAll('[aria-label*="WHT"]')].map((el) => el.getAttribute('aria-label') || '');
+        return {
+          chips,
+          labels,
+          hasCombined4Wi640: chips.some((t) => /WHT\\s*4%\\s*WI640/i.test(t)) || labels.some((t) => /WHT\\s*4%\\s*WI640/i.test(t)),
+          hasGoods1: chips.includes('WHT 1% WI640'),
+          hasGoods3: chips.includes('WHT 3% WB080'),
+          hasServicesOnly3: chips.filter((t) => t === 'WHT 3% WB080').length >= 1,
+        };
+      })()`,
+    });
+    console.log("chipCheck", width, JSON.stringify(chipCheck.result?.value));
+    await cdp.send("Runtime.evaluate", {
+      expression: `document.querySelector('.quote-ln-tags, .quote-line-card-wh-chips, .quote-items-desktop, .quote-items-mobile')?.scrollIntoView({block:'center'})`,
+    });
+    await sleep(200);
+    const cm = await fullPageShot(cdp, `quote-line-chips-${width}.png`);
+    if (chipCheck.result?.value?.hasCombined4Wi640) {
+      throw new Error(`Combined 4% WI640 chip found at ${width} — stacked lines must show one chip per ATC`);
+    }
+    report.push({
+      name: `quote-line-chips-${width}.png`,
+      width,
+      height: cm.scrollHeight,
+      scrollWidth: cm.scrollWidth,
+      chipCheck: chipCheck.result?.value,
+    });
+  }
+
   // Print preview: Subtotal + Total only — no withholding / WHT / ATC
   if (quoteId && quoteId !== "new") {
     await setViewport(cdp, 1280, 1600);
     await cdp.send("Page.navigate", { url: `${BASE}/print/quotes/${quoteId}` });
-    await waitFor(cdp, `!!document.querySelector('.pp-doc, .print-doc, article')`);
+    await waitFor(cdp, `!!document.querySelector('.pp-doc, .print-doc, article, .pp-page')`);
     await sleep(500);
     const printCheck = await cdp.send("Runtime.evaluate", {
       returnByValue: true,
@@ -440,6 +513,40 @@ async function main() {
       height: pm.scrollHeight,
       scrollWidth: pm.scrollWidth,
       printCheck: printCheck.result?.value,
+    });
+
+    // Phone print preview at 390 — must have no horizontal scroll (was ~794 from 210mm).
+    await setViewport(cdp, 390, 844);
+    await cdp.send("Page.navigate", { url: `${BASE}/print/quotes/${quoteId}` });
+    await waitFor(cdp, `!!document.querySelector('.pp-doc, .print-doc, article, .pp-page')`);
+    await sleep(600);
+    const phoneMeasure = await cdp.send("Runtime.evaluate", {
+      returnByValue: true,
+      expression: `(() => {
+        const de = document.documentElement;
+        const page = document.querySelector('.pp-page');
+        return {
+          scrollWidth: Math.max(de.scrollWidth || 0, document.body?.scrollWidth || 0),
+          clientWidth: de.clientWidth,
+          pageWidth: page ? Math.ceil(page.getBoundingClientRect().width) : 0,
+        };
+      })()`,
+    });
+    const pm390 = phoneMeasure.result?.value;
+    console.log("print390Measure", JSON.stringify(pm390));
+    if (!pm390 || pm390.scrollWidth > 390) {
+      throw new Error(`Print preview h-scroll at 390: scrollWidth=${pm390?.scrollWidth} (must be ≤ 390)`);
+    }
+    const pmPhone = await fullPageShot(cdp, "quote-print-preview-390.png");
+    if (pmPhone.scrollWidth > 390) {
+      throw new Error(`Print preview full-page h-scroll at 390: scrollWidth=${pmPhone.scrollWidth}`);
+    }
+    report.push({
+      name: "quote-print-preview-390.png",
+      width: 390,
+      height: pmPhone.scrollHeight,
+      scrollWidth: pmPhone.scrollWidth,
+      print390Measure: pm390,
     });
   }
 

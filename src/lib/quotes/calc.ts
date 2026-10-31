@@ -139,17 +139,12 @@ function resolveAmounts(line: LineForDocTotals): LineAmounts & { kind: ItemKind 
 /** Group key for the read-only document withholding summary. */
 function groupKey(rate: string, atc: string | null, kind: ItemKind): string {
   // Whole-total ATCs share one bucket across goods/services (same rate on every line).
-  // Legacy WG010 / WV050 kept so older snapshots still group correctly.
-  if (
-    atc === "WB080" ||
-    atc === "WG010" ||
-    atc === "WV010/WV020" ||
-    atc === "WV050" ||
-    atc === "WV010" ||
-    atc === "WV020"
-  ) {
+  // WG010 = legacy alias for WB080 (read-only; must never return to the Settings picker).
+  // WV050 is 12% VAT on non-residents — not in the 5% VAT group; group alone if seen.
+  if (atc === "WB080" || atc === "WG010" || atc === "WV010/WV020" || atc === "WV010" || atc === "WV020") {
     return `${rate}|${atc}`;
   }
+  if (atc === "WV050") return `${rate}|${atc}`;
   return `${rate}|${atc ?? ""}|${kind}`;
 }
 
@@ -159,18 +154,23 @@ function summaryCode(rate: string, atc: string | null, kind: ItemKind): string {
   if (kind === "SERVICES" && r === "0.0200" && atc === "WI157") return "GOV_SERVICES_2";
   if (kind === "GOODS" && r === "0.0100" && atc === "WI158") return "GOODS_1";
   if (kind === "SERVICES" && r === "0.0200" && atc === "WI160") return "SERVICES_2";
+  // WG010 = legacy read-only alias → WB080 / GOV_PT_3. Never offer WG010 in Settings.
   if (r === "0.0300" && (atc === "WB080" || atc === "WG010")) return "GOV_PT_3";
-  if (r === "0.0500" && (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020")) return "GOV_VAT_5";
+  // 5% VAT withheld — WV010/WV020 only. WV050 is 12% non-resident VAT (not this rate).
+  if (r === "0.0500" && (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020")) return "GOV_VAT_5";
   const atcPart = atc ? `_${atc.replace(/\//g, "_")}` : "";
   return `LINE_${kind}_${r.replace(".", "")}${atcPart}`;
 }
 
 function summaryLabel(rate: string, atc: string | null, kind: ItemKind): string {
   const pct = ratePctLabel(rate);
+  // WG010 legacy → show as WB080. Must never return WG010 to the Settings picker.
   if (atc === "WB080" || atc === "WG010") return `Government percentage tax ${pct} (WB080)`;
-  if (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020") {
+  if (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020") {
     return `VAT withheld ${pct} (WV010/WV020)`;
   }
+  // WV050 is 12% VAT on non-residents — do not relabel as 5% WV010/WV020.
+  if (atc === "WV050") return `VAT (non-resident) ${pct} (WV050)`;
   if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI640") return "Government goods 1% (WI640)";
   if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI157") return "Government services 2% (WI157)";
   if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Private top agent goods 1% (WI158)";
@@ -183,7 +183,8 @@ function summaryLineKind(rate: string, atc: string | null, kind: ItemKind): With
   if (atc === "WB080" || atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WB080" || atc === "WG010" || atc == null))) {
     return "GOV_PT";
   }
-  if (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020" || Number(rate).toFixed(4) === "0.0500") {
+  // WV050 is not the 5% VAT group — still whole-total when present on a legacy line.
+  if (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020" || atc === "WV050" || Number(rate).toFixed(4) === "0.0500") {
     return "GOV_VAT";
   }
   void kind;
