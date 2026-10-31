@@ -143,7 +143,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       }
     });
 
-    it("customer saved Government goods 1% + GOV_PT 3% → goods 4%, services 3%; mixed quote WH = 21400", async () => {
+    it("customer saved Government goods 1% + GOV_PT 3% → goods 4% (null ATC), services 3%; mixed quote WH = 21400", async () => {
       const customer = await makeCustomer(["GOV_GOODS_1", "GOV_PT_3"], "GOVERNMENT");
       const supplier = await makeSupplier();
       const q = await createQuote(quoteInput(customer.id, (await freshYear()), {}, supplier.id), costUser);
@@ -152,7 +152,8 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const services = q.items.find((i) => i.kind === "SERVICES")!;
       expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0400");
       expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0300");
-      expect(goods.withholdingAtc).toBe("WI640");
+      // Stacked goods: money is 4% with no single ATC (never persist "4% WI640").
+      expect(goods.withholdingAtc).toBeNull();
       expect(services.withholdingAtc).toBe("WB080");
       // 520000×0.04 + 20000×0.03 = 20800 + 600
       expect(q.withholdingTotal.toFixed(2)).toBe("21400.00");
@@ -160,14 +161,16 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(Array.isArray(q.withholdingPick) ? q.withholdingPick : null).toEqual(["GOV_GOODS_1", "GOV_PT_3"]);
     });
 
-    it("customer saved Government services 2% + GOV_PT 3% → services 5%", async () => {
+    it("customer saved Government services 2% + GOV_PT 3% → services 5% (null ATC)", async () => {
       const customer = await makeCustomer(["GOV_SERVICES_2", "GOV_PT_3"], "GOVERNMENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       const services = q.items.find((i) => i.kind === "SERVICES")!;
       const goods = q.items.find((i) => i.kind === "GOODS")!;
       expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0500");
       expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0300");
-      expect(services.withholdingAtc).toBe("WI157");
+      // Stacked services: money is 5% with no single ATC (never persist "5% WI157").
+      expect(services.withholdingAtc).toBeNull();
+      expect(goods.withholdingAtc).toBe("WB080");
       // 520000×0.03 + 20000×0.05 = 15600 + 1000
       expect(q.withholdingTotal.toFixed(2)).toBe("16600.00");
     });
