@@ -11,11 +11,17 @@ import type { CollectionStatus } from "@prisma/client";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
-export default async function CollectionsListPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function CollectionsListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; q?: string; from?: string; to?: string }>;
+}) {
   const user = await requirePagePermission("view");
   const sp = await searchParams;
   const status = (sp.status === "POSTED" || sp.status === "VOID" ? sp.status : "ALL") as CollectionStatus | "ALL";
-  const rows = await listCollections({ status, q: sp.q });
+  const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
+  const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
+  const rows = await listCollections({ status, q: sp.q, fromYmd, toYmd });
   const canManage = can(user, "manage_billing");
 
   return (
@@ -39,6 +45,8 @@ export default async function CollectionsListPage({ searchParams }: { searchPara
           <option value="POSTED">Posted</option>
           <option value="VOID">Void</option>
         </select>
+        <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From collection date" />
+        <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To collection date" />
         <button className="btn btn-secondary" type="submit">
           Filter
         </button>

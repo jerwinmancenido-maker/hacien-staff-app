@@ -10,6 +10,8 @@ import { db } from "../db";
 import { canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
+import { addDays, manilaToday } from "../format";
+import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
@@ -158,19 +160,46 @@ export type QuoteView = NonNullable<Awaited<ReturnType<typeof getQuoteView>>>;
 
 export const QUOTE_STATUSES: QuoteStatus[] = ["DRAFT", "SENT", "WON", "LOST", "VOID"];
 
-export async function listQuotesView(filter: { q?: string; status?: QuoteStatus }, viewer: PermissionUser) {
+export type QuoteListFilter = {
+  q?: string;
+  status?: QuoteStatus;
+  /** Draft quotes that need approval under their settings version. */
+  needsApproval?: boolean;
+  /** Sent quotes whose quote date is on or before Manila today − N days. */
+  noReplyAfterDays?: number;
+  /** Optional clock for no-reply cutoff (tests). */
+  now?: Date;
+};
+
+export async function listQuotesView(filter: QuoteListFilter, viewer: PermissionUser) {
   const withCosts = canSeeCosts(viewer);
   const q = filter.q?.trim();
+  const needsApproval = filter.needsApproval === true;
+  const noReplyAfterDays =
+    typeof filter.noReplyAfterDays === "number" && filter.noReplyAfterDays > 0 ? filter.noReplyAfterDays : undefined;
+
+  let status = filter.status;
+  if (needsApproval) status = "DRAFT";
+  if (noReplyAfterDays) status = "SENT";
+
+  const where: Prisma.QuoteWhereInput = {
+    ...(status ? { status } : {}),
+    ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+  };
+
+  if (noReplyAfterDays) {
+    const cutoff = addDays(manilaToday(filter.now), -noReplyAfterDays);
+    where.date = { lte: cutoff };
+  }
+
   const rows = await db.quote.findMany({
-    where: {
-      ...(filter.status ? { status: filter.status } : {}),
-      ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
-    },
+    where,
     include: { customer: { select: { name: true } } },
     orderBy: [{ date: "desc" }, { number: "desc" }],
     take: 500,
   });
-  return rows.map((r) => {
+
+  let mapped = rows.map((r) => {
     const row = {
       id: r.id,
       number: r.number,
@@ -180,9 +209,32 @@ export async function listQuotesView(filter: { q?: string; status?: QuoteStatus 
       status: r.status,
       date: ymd(r.date)!,
       validUntil: ymd(r.validUntil)!,
+      settingsVersionId: r.settingsVersionId,
+      netMarginPctStored: money(r.netMarginPct),
     };
     return withCosts ? { ...row, netMarginPct: money(r.netMarginPct) } : row;
-  }) as ({ id: string; number: string; revision: number; customerName: string; contractPrice: string; status: QuoteStatus; date: string; validUntil: string; netMarginPct?: string })[];
+  });
+
+  if (needsApproval) {
+    const kept: typeof mapped = [];
+    for (const r of mapped) {
+      const approval = await approvalFor(r.settingsVersionId, r.contractPrice, r.netMarginPctStored, withCosts);
+      if (approval.needed) kept.push(r);
+    }
+    mapped = kept;
+  }
+
+  return mapped.map(({ settingsVersionId: _s, netMarginPctStored: _n, ...rest }) => rest) as ({
+    id: string;
+    number: string;
+    revision: number;
+    customerName: string;
+    contractPrice: string;
+    status: QuoteStatus;
+    date: string;
+    validUntil: string;
+    netMarginPct?: string;
+  })[];
 }
 
 // ---------------------------------------------------------------------------
@@ -232,27 +284,75 @@ export type SalesOrderView = NonNullable<Awaited<ReturnType<typeof getSalesOrder
 
 export const SALES_ORDER_STATUSES: SalesOrderStatus[] = ["OPEN", "VOID"];
 
-export async function listSalesOrdersView(filter: { q?: string; status?: SalesOrderStatus }) {
+export type SalesOrderListFilter = {
+  q?: string;
+  status?: SalesOrderStatus;
+  /** Open SOs with at least one line still short of supplier PO coverage. */
+  needsPo?: boolean;
+};
+
+export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const q = filter.q?.trim();
+  const needsPo = filter.needsPo === true;
+  const status = needsPo ? "OPEN" : filter.status;
+  const where: Prisma.SalesOrderWhereInput = {
+    ...(status ? { status } : {}),
+    ...(q ? { OR: [{ number: { contains: q } }, { buyerPoNo: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+  };
+
+  if (!needsPo) {
+    const rows = await db.salesOrder.findMany({
+      where,
+      include: { customer: { select: { name: true } } },
+      orderBy: [{ date: "desc" }, { number: "desc" }],
+      take: 500,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      customerName: r.customer.name,
+      buyerPoNo: r.buyerPoNo,
+      contractPrice: money(r.contractPrice),
+      status: r.status,
+      date: ymd(r.date)!,
+    }));
+  }
+
   const rows = await db.salesOrder.findMany({
-    where: {
-      ...(filter.status ? { status: filter.status } : {}),
-      ...(q ? { OR: [{ number: { contains: q } }, { buyerPoNo: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+    where,
+    include: {
+      customer: { select: { name: true } },
+      items: {
+        where: { removedAt: null },
+        select: {
+          qty: true,
+          purchaseOrderItems: {
+            where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+            select: { qty: true },
+          },
+        },
+      },
     },
-    include: { customer: { select: { name: true } } },
     orderBy: [{ date: "desc" }, { number: "desc" }],
     take: 500,
   });
-  // No cost columns on this list, so nothing to omit.
-  return rows.map((r) => ({
-    id: r.id,
-    number: r.number,
-    customerName: r.customer.name,
-    buyerPoNo: r.buyerPoNo,
-    contractPrice: money(r.contractPrice),
-    status: r.status,
-    date: ymd(r.date)!,
-  }));
+
+  return rows
+    .filter((r) =>
+      r.items.some((item) => {
+        const ordered = sumMoney(item.purchaseOrderItems.map((x) => money(x.qty)));
+        return lineNeedsMorePo(money(item.qty), ordered);
+      }),
+    )
+    .map((r) => ({
+      id: r.id,
+      number: r.number,
+      customerName: r.customer.name,
+      buyerPoNo: r.buyerPoNo,
+      contractPrice: money(r.contractPrice),
+      status: r.status,
+      date: ymd(r.date)!,
+    }));
 }
 
 // ---------------------------------------------------------------------------

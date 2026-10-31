@@ -3400,3 +3400,145 @@ button.contact-card-add {
     max-width: 100%;
   }
 }
+
+/* ---------- Home dashboard ---------- */
+
+.home-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-dashboard > .card {
+  margin-top: 0;
+}
+.home-getting-started-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.home-action-list,
+.home-money-list,
+.home-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-action-row,
+.home-money-row,
+.home-activity-row,
+.home-tax-link,
+.home-nonvat-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 10px;
+  margin: 0 -10px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.home-action-row:hover,
+.home-money-row:hover,
+.home-activity-row:hover,
+.home-tax-link:hover,
+.home-nonvat-link:hover {
+  background: #f7f7f5;
+}
+.home-action-list li + li .home-action-row,
+.home-money-list li + li .home-money-row,
+.home-activity-list li + li .home-activity-row {
+  border-top: 1px solid #f3f3f0;
+  border-radius: 0;
+}
+.home-action-label,
+.home-money-label,
+.home-activity-summary {
+  font-size: 14px;
+}
+.home-action-count {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+.home-money-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.home-money-overdue {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-tax-main {
+  min-width: 0;
+}
+.home-tax-due {
+  text-align: right;
+}
+.home-tax-due .label {
+  color: var(--text-2);
+  font-size: 11px;
+}
+.home-tax-overdue {
+  margin-top: 10px;
+}
+.home-tax-overdue a {
+  color: var(--red);
+  font-weight: 600;
+  text-decoration: none;
+}
+.home-tax-overdue a:hover {
+  text-decoration: underline;
+}
+.home-nonvat-link {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.home-nonvat-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-nonvat-pct {
+  margin-left: auto;
+  font-weight: 600;
+}
+.home-nonvat-warn {
+  color: var(--red);
+  font-weight: 600;
+}
+.home-activity-row {
+  align-items: flex-start;
+}
+.home-activity-when {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .home-action-row,
+  .home-money-row,
+  .home-activity-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .home-money-amounts,
+  .home-tax-due {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .home-nonvat-pct {
+    margin-left: 0;
+  }
+}

@@ -8,7 +8,7 @@ import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
 import { SO_STATUS_LABELS, SoStatusChip } from "@/components/docs/DocParts";
 
-type Search = { q?: string; status?: string };
+type Search = { q?: string; status?: string; needsPo?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -20,9 +20,10 @@ function href(s: Search, patch: Partial<Search>) {
 export default async function SalesOrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requirePagePermission("view");
   const s = await searchParams;
+  const needsPo = s.needsPo === "1";
   const status = SALES_ORDER_STATUSES.includes(s.status as SalesOrderStatus) ? (s.status as SalesOrderStatus) : undefined;
-  const orders = await listSalesOrdersView({ q: s.q, status });
-  const filtered = !!(s.q || status);
+  const orders = await listSalesOrdersView({ q: s.q, status, needsPo: needsPo || undefined });
+  const filtered = !!(s.q || status || needsPo);
 
   return (
     <>
@@ -36,14 +37,24 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           <input id="q" name="q" defaultValue={s.q} placeholder="Search SO no., buyer PO or customer" />
           {status && <input type="hidden" name="status" value={status} />}
         </form>
-        <Link className={`filter-chip${!status ? " active" : ""}`} href={href(s, { status: undefined })}>
+        <Link
+          className={`filter-chip${!status && !needsPo ? " active" : ""}`}
+          href={href(s, { status: undefined, needsPo: undefined })}
+        >
           All
         </Link>
         {SALES_ORDER_STATUSES.map((t) => (
-          <Link key={t} className={`filter-chip${status === t ? " active" : ""}`} href={href(s, { status: t })}>
+          <Link
+            key={t}
+            className={`filter-chip${status === t && !needsPo ? " active" : ""}`}
+            href={href(s, { status: t, needsPo: undefined })}
+          >
             {SO_STATUS_LABELS[t]}
           </Link>
         ))}
+        <Link className={`filter-chip${needsPo ? " active" : ""}`} href={href(s, { status: undefined, needsPo: "1" })}>
+          Needs supplier PO
+        </Link>
       </div>
       {orders.length === 0 ? (
         <div className="card">

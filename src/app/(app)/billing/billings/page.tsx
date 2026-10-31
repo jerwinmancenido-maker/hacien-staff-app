@@ -14,7 +14,7 @@ const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 export default async function BillingsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; customerId?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; customerId?: string; from?: string; to?: string }>;
 }) {
   const user = await requirePagePermission("view");
   const sp = await searchParams;
@@ -23,7 +23,9 @@ export default async function BillingsListPage({
     statusRaw === "ALL" || statusRaw === "OVERDUE" || (BILLING_STATUSES as string[]).includes(statusRaw)
       ? (statusRaw as BillingStatus | "ALL" | "OVERDUE")
       : "ALL";
-  const rows = await listBillings({ status, q: sp.q, customerId: sp.customerId });
+  const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
+  const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
+  const rows = await listBillings({ status, q: sp.q, customerId: sp.customerId, fromYmd, toYmd });
   const canManage = can(user, "manage_billing");
 
   return (
@@ -52,6 +54,9 @@ export default async function BillingsListPage({
             </option>
           ))}
         </select>
+        <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From invoice date" />
+        <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To invoice date" />
+        {sp.customerId ? <input type="hidden" name="customerId" value={sp.customerId} /> : null}
         <button className="btn btn-secondary" type="submit">
           Filter
         </button>

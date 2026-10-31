@@ -45,6 +45,9 @@ export async function listBillings(filters: {
   salesOrderId?: string;
   status?: BillingStatus | "ALL" | "OVERDUE";
   q?: string;
+  /** Inclusive Manila YYYY-MM-DD bounds on invoiceDate (DATE column). */
+  fromYmd?: string;
+  toYmd?: string;
 } = {}) {
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
@@ -52,12 +55,21 @@ export async function listBillings(filters: {
   const where: {
     customerId?: string;
     salesOrderId?: string;
-    status?: BillingStatus;
+    status?: BillingStatus | { not: "VOID" };
+    invoiceDate?: { gte?: Date; lte?: Date };
     OR?: ({ number: { contains: string } } | { customer: { name: { contains: string } } } | { invoiceNo: number })[];
   } = {};
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.salesOrderId) where.salesOrderId = filters.salesOrderId;
   if (filters.status && filters.status !== "ALL" && filters.status !== "OVERDUE") where.status = filters.status;
+  if (filters.fromYmd || filters.toYmd) {
+    where.invoiceDate = {
+      ...(filters.fromYmd ? { gte: new Date(`${filters.fromYmd}T00:00:00.000Z`) } : {}),
+      ...(filters.toYmd ? { lte: new Date(`${filters.toYmd}T00:00:00.000Z`) } : {}),
+    };
+    // Month / range views skip voids so totals match "billed this month".
+    if (!filters.status || filters.status === "ALL") where.status = { not: "VOID" };
+  }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     const asNo = Number(q);
@@ -165,14 +177,30 @@ export async function getBillingView(id: string) {
   };
 }
 
-export async function listCollections(filters: { customerId?: string; status?: CollectionStatus | "ALL"; q?: string } = {}) {
+export async function listCollections(
+  filters: {
+    customerId?: string;
+    status?: CollectionStatus | "ALL";
+    q?: string;
+    /** Inclusive Manila YYYY-MM-DD bounds on collection date (DATE column). */
+    fromYmd?: string;
+    toYmd?: string;
+  } = {},
+) {
   const where: {
     customerId?: string;
     status?: CollectionStatus;
+    date?: { gte?: Date; lte?: Date };
     OR?: ({ number: { contains: string } } | { receiptNo: { contains: string } } | { customer: { name: { contains: string } } } | { reference: { contains: string } })[];
   } = {};
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  if (filters.fromYmd || filters.toYmd) {
+    where.date = {
+      ...(filters.fromYmd ? { gte: new Date(`${filters.fromYmd}T00:00:00.000Z`) } : {}),
+      ...(filters.toYmd ? { lte: new Date(`${filters.toYmd}T00:00:00.000Z`) } : {}),
+    };
+  }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     where.OR = [{ number: { contains: q } }, { receiptNo: { contains: q } }, { customer: { name: { contains: q } } }, { reference: { contains: q } }];
