@@ -135,10 +135,6 @@ export type LineWithholdingDefault = {
 
 const ZERO: LineWithholdingDefault = { rate: "0.0000", atc: null, code: null, label: null, lineKind: null };
 
-function rowToDefault(row: DefaultRow): LineWithholdingDefault {
-  return { rate: row.rate, atc: row.atcCode, code: row.code, label: row.label, lineKind: row.lineKind };
-}
-
 export function isKnownWithholdingType(type: string | null | undefined): type is KnownWithholdingType {
   return type === "GOVERNMENT" || type === "TOP_WITHHOLDING_AGENT" || type === "NONE";
 }
@@ -147,7 +143,8 @@ export function isKnownWithholdingType(type: string | null | undefined): type is
  * @deprecated Type no longer drives rates. Kept so old call sites compile during
  * the cutover; always returns false.
  */
-export function needsWithholdingTypeWarning(_type: string | null | undefined): boolean {
+export function needsWithholdingTypeWarning(type: string | null | undefined): boolean {
+  void type;
   return false;
 }
 
@@ -230,17 +227,21 @@ export function lineWithholdingSnapshotFromPicks(
  * Kept so a unit test can prove no code path auto-picks from type.
  */
 export function defaultWithholdingFor(
-  _customerType: string | null | undefined,
-  _lineKind: DefaultWithholdingLineKind,
+  customerType: string | null | undefined,
+  lineKind: DefaultWithholdingLineKind,
 ): LineWithholdingDefault {
+  void customerType;
+  void lineKind;
   return ZERO;
 }
 
 /** @deprecated Prefer lineWithholdingFromPicks — type never chooses a rate. */
 export function defaultForItemKind(
-  _customerType: string | null | undefined,
-  _kind: ItemKind,
+  customerType: string | null | undefined,
+  kind: ItemKind,
 ): LineWithholdingDefault {
+  void customerType;
+  void kind;
   return ZERO;
 }
 
@@ -253,10 +254,13 @@ export function allowGovVatOption(businessIsVatRegistered: boolean = BUSINESS_IS
  * @deprecated Prefer buildWithholdingSnapshot(codes, rates). Type never chooses rates.
  */
 export function documentWithholdingFromCustomer(
-  _customerType: string | null | undefined,
-  _itemKinds: readonly ItemKind[],
-  _opts: { includeGovVat?: boolean; businessIsVatRegistered?: boolean } = {},
+  customerType: string | null | undefined,
+  itemKinds: readonly ItemKind[],
+  opts: { includeGovVat?: boolean; businessIsVatRegistered?: boolean } = {},
 ): WithholdingSnapshot[] {
+  void customerType;
+  void itemKinds;
+  void opts;
   return [];
 }
 
@@ -281,18 +285,21 @@ export function lineDiffersFromUsualPicks(
  * (customer type never chooses a rate).
  */
 export function lineDiffersFromUsual(
-  _customerType: string | null | undefined,
+  customerType: string | null | undefined,
   kind: ItemKind,
   stored: { rate: string | null | undefined; atc: string | null | undefined },
 ): boolean {
+  void customerType;
   return lineDiffersFromUsualPicks([], kind, stored);
 }
 
 /** @deprecated Prefer lineWithholdingSnapshotFromPicks. */
 export function lineWithholdingSnapshot(
-  _customerType: string | null | undefined,
-  _kind: ItemKind,
+  customerType: string | null | undefined,
+  kind: ItemKind,
 ): { withholdingRate: string; withholdingAtc: string | null; withholdingOverride: boolean } {
+  void customerType;
+  void kind;
   return { withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: false };
 }
 

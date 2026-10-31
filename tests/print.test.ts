@@ -27,12 +27,17 @@ describe("print document", () => {
     }
   });
 
-  it("may show estimated withholding on withholding-customer quotes only", () => {
+  it("never prints withholding on customer quotes (internal estimate only)", () => {
     const plain = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() })).toLowerCase();
-    expect(plain).not.toContain("withholding tax (est.)");
     const wht = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: withholdingQuotePrintFixture() })).toLowerCase();
-    expect(wht).toContain("withholding tax (est.)");
-    expect(wht).toContain("net amount due");
+    for (const html of [plain, wht]) {
+      expect(html).not.toContain("withholding tax (est.)");
+      expect(html).not.toContain("net amount due");
+      expect(html).not.toContain("wht");
+      expect(html).not.toContain("atc");
+      expect(html).toContain("subtotal");
+      expect(html).toContain("total");
+    }
   });
 
   it("generates the QR locally for the terms URL", async () => {

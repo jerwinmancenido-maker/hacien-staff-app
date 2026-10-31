@@ -2,7 +2,7 @@
 // draft. Every function checks permissions itself (server-side), runs in one
 // transaction with its audit row, and never deletes anything.
 
-import type { Prisma, Quote, QuoteItem } from "@prisma/client";
+import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
@@ -148,7 +148,13 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
     // Always apply the pick on create so blank lines get the customer's rates.
     reapplyWithholding: input.reapplyWithholding === true || input.items.every((i) => i.withholdingRate === undefined),
   });
-  const withholding = withholdingFromItems(items, pickSnapshots);
+  // Picks drive breakdown unless any line is an explicit staff override.
+  const hasLineOverride = items.some((i) => i.withholdingOverride);
+  const usePicks = pickSnapshots.length > 0 && !hasLineOverride;
+  const withholding = usePicks
+    ? withholdingFromItems(items, pickSnapshots)
+    : withholdingFromItems(items);
+  const moneyTotals = usePicks ? totalsData(items, pickSnapshots) : totalsData(items);
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
@@ -172,7 +178,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
-          ...totalsData(items, pickSnapshots),
+          ...moneyTotals,
           createdById: actor.id,
           updatedById: actor.id,
           items: { create: items.map(itemData) },
@@ -190,7 +196,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   const withCosts = canSeeCosts(actor);
   const current = await db.quote.findUnique({ where: { id } });
   if (!current) throw new DocRuleError("Quote not found.");
-  const customer = await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
+  await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
 
   return withTxRetry(() =>
@@ -219,10 +225,12 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
       if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
-      // When picks drive the math, breakdown = one row per pick (whole-total as own line)
-      // and withholdingTotal = sum of parts. Otherwise keep legacy line-derived summary.
-      const withholding = pickSnapshots.length ? withholdingFromItems(items, pickSnapshots) : preserved.withholding;
-      const moneyTotals = pickSnapshots.length ? totalsData(items, pickSnapshots) : preserved.totals;
+      // Picks drive the internal breakdown (whole-total rates as own lines) unless any
+      // line is an explicit staff override — then line rates own the money math.
+      const hasLineOverride = items.some((i) => i.withholdingOverride);
+      const usePicks = pickSnapshots.length > 0 && !hasLineOverride;
+      const withholding = usePicks ? withholdingFromItems(items, pickSnapshots) : preserved.withholding;
+      const moneyTotals = usePicks ? totalsData(items, pickSnapshots) : preserved.totals;
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
