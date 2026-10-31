@@ -20,7 +20,7 @@ import { TaxCalendarForm } from "@/app/(app)/settings/TaxCalendarForm";
 import { SettingsForm } from "@/app/(app)/settings/SettingsForm";
 import type { FormState } from "@/lib/validation/forms";
 
-const noopAction = async (_s: FormState, _f: FormData): Promise<FormState> => ({ ok: true });
+const noopAction = async (): Promise<FormState> => ({ ok: true });
 
 describe("obligationUsesDueMonth", () => {
   it("is true only for annual_1701 (1701 / 1701A)", () => {

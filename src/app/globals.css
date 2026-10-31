@@ -1192,6 +1192,8 @@ tr.inactive .cell-primary .sub {
   min-width: 40px;
 }
 .tax-cal-show-text {
+  /* Column header already says Show; keep text for stacked phone rows only. */
+  display: none;
   font-size: 13px;
 }
 .tax-cal-settings-day input,
@@ -2616,7 +2618,6 @@ pre.json {
     max-width: none;
   }
   .tax-cal-show-text {
-    /* Visible label on phone stacked rows */
     display: inline;
   }
   .settings-form-actions {

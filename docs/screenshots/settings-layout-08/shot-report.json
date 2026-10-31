@@ -1,0 +1,134 @@
+[
+  {
+    "name": "users-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "users-360.png",
+    "width": 360,
+    "height": 1439,
+    "scrollWidth": 360
+  },
+  {
+    "name": "approval-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "approval-360.png",
+    "width": 360,
+    "height": 900,
+    "scrollWidth": 360
+  },
+  {
+    "name": "numbering-1280.png",
+    "width": 1280,
+    "height": 2166,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "numbering-360.png",
+    "width": 360,
+    "height": 2882,
+    "scrollWidth": 360
+  },
+  {
+    "name": "tax-1280.png",
+    "width": 1280,
+    "height": 1171,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "tax-360.png",
+    "width": 360,
+    "height": 1565,
+    "scrollWidth": 360
+  },
+  {
+    "name": "tax-calendar-1280.png",
+    "width": 1280,
+    "height": 1451,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "tax-calendar-360.png",
+    "width": 360,
+    "height": 2931,
+    "scrollWidth": 360
+  },
+  {
+    "name": "withholding-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "withholding-360.png",
+    "width": 360,
+    "height": 900,
+    "scrollWidth": 360
+  },
+  {
+    "name": "billing-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "billing-360.png",
+    "width": 360,
+    "height": 1040,
+    "scrollWidth": 360
+  },
+  {
+    "name": "features-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "features-360.png",
+    "width": 360,
+    "height": 900,
+    "scrollWidth": 360
+  },
+  {
+    "name": "print-1280.png",
+    "width": 1280,
+    "height": 2565,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "print-360.png",
+    "width": 360,
+    "height": 3151,
+    "scrollWidth": 360
+  },
+  {
+    "name": "lists-1280.png",
+    "width": 1280,
+    "height": 1117,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "lists-360.png",
+    "width": 360,
+    "height": 1165,
+    "scrollWidth": 360
+  },
+  {
+    "name": "changelog-1280.png",
+    "width": 1280,
+    "height": 900,
+    "scrollWidth": 1280
+  },
+  {
+    "name": "changelog-360.png",
+    "width": 360,
+    "height": 900,
+    "scrollWidth": 360
+  }
+]

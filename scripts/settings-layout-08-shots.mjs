@@ -118,63 +118,75 @@ async function login(cdp) {
   await waitFor(cdp, `!location.pathname.includes('/login')`);
 }
 
+async function pageMetrics(cdp) {
+  const r = await cdp.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      const de = document.documentElement;
+      const body = document.body;
+      const height = Math.max(
+        de.scrollHeight || 0, body?.scrollHeight || 0,
+        de.offsetHeight || 0, body?.offsetHeight || 0,
+        de.clientHeight || 0
+      );
+      const scrollWidth = Math.max(de.scrollWidth || 0, body?.scrollWidth || 0);
+      return {
+        height,
+        scrollWidth,
+        clientWidth: de.clientWidth,
+        path: location.pathname + location.search,
+        hasLogin: location.pathname.includes('/login') && !!document.querySelector('input[name=email][type=email], form input[name=email]'),
+        onLoginPath: location.pathname.includes('/login'),
+        hasSettings: !!document.querySelector('.settings-page'),
+      };
+    })()`,
+  });
+  return r.result.value;
+}
+
 async function captureTab(cdp, tab, width) {
+  // Always start from a known viewport width so layout matches the shot.
+  await setViewport(cdp, width, 900);
   const url = `${BASE}/settings?tab=${tab}`;
   await cdp.send("Page.navigate", { url });
   await waitFor(cdp, `document.readyState === 'complete'`);
+  await sleep(300);
+
+  let meta = await pageMetrics(cdp);
+  if (meta.onLoginPath) {
+    await login(cdp);
+    await setViewport(cdp, width, 900);
+    await cdp.send("Page.navigate", { url });
+    await waitFor(cdp, `document.readyState === 'complete'`);
+    await sleep(300);
+    meta = await pageMetrics(cdp);
+  }
+
   await waitFor(
     cdp,
-    `!!document.querySelector('.settings-page, .pill-tabs-wrap') && !document.querySelector('input[name=email]')`,
+    `!!document.querySelector('.settings-page') && !location.pathname.includes('/login')`,
   );
-  await sleep(400);
+  await sleep(350);
+  await cdp.send("Runtime.evaluate", { expression: `window.scrollTo(0, 0)` });
 
-  // Measure real page height + scrollWidth, then resize viewport to full page height.
-  const metrics = await cdp.send("Runtime.evaluate", {
-    returnByValue: true,
-    expression: `(() => {
-      const de = document.documentElement;
-      const body = document.body;
-      const height = Math.max(
-        de.scrollHeight, body.scrollHeight,
-        de.offsetHeight, body.offsetHeight,
-        de.clientHeight
-      );
-      const scrollWidth = Math.max(de.scrollWidth, body.scrollWidth);
-      return { height, scrollWidth, clientWidth: de.clientWidth };
-    })()`,
-  });
-  const { height, scrollWidth, clientWidth } = metrics.result.value;
-  const pageH = Math.max(height, 600);
+  meta = await pageMetrics(cdp);
+  let pageH = Math.max(meta.height, 600);
   await setViewport(cdp, width, pageH);
   await sleep(200);
-
-  // Re-measure after viewport change (layout may reflow).
-  const metrics2 = await cdp.send("Runtime.evaluate", {
-    returnByValue: true,
-    expression: `(() => {
-      const de = document.documentElement;
-      const body = document.body;
-      const height = Math.max(
-        de.scrollHeight, body.scrollHeight,
-        de.offsetHeight, body.offsetHeight,
-        de.clientHeight
-      );
-      const scrollWidth = Math.max(de.scrollWidth, body.scrollWidth);
-      return { height, scrollWidth, clientWidth: de.clientWidth };
-    })()`,
-  });
-  const h2 = Math.max(metrics2.result.value.height, pageH);
-  const sw2 = metrics2.result.value.scrollWidth;
-  if (h2 !== pageH) {
-    await setViewport(cdp, width, h2);
+  meta = await pageMetrics(cdp);
+  pageH = Math.max(meta.height, pageH);
+  if (pageH !== meta.height) {
+    await setViewport(cdp, width, pageH);
     await sleep(150);
+    meta = await pageMetrics(cdp);
+    pageH = Math.max(meta.height, pageH);
   }
 
   const name = `${tab}-${width}.png`;
   const { data } = await cdp.send("Page.captureScreenshot", {
     format: "png",
     fromSurface: true,
-    captureBeyondViewport: false,
+    captureBeyondViewport: true,
   });
   const buf = Buffer.from(data, "base64");
   fs.writeFileSync(path.join(OUT, name), buf);
@@ -183,15 +195,13 @@ async function captureTab(cdp, tab, width) {
     JSON.stringify({
       file: name,
       width,
-      height: h2,
-      scrollWidth: sw2,
-      clientWidth: metrics2.result.value.clientWidth ?? clientWidth,
-      firstPassHeight: height,
-      firstPassScrollWidth: scrollWidth,
+      height: pageH,
+      scrollWidth: meta.scrollWidth,
+      clientWidth: meta.clientWidth,
       bytes: buf.length,
     }),
   );
-  return { name, width, height: h2, scrollWidth: sw2 };
+  return { name, width, height: pageH, scrollWidth: meta.scrollWidth };
 }
 
 async function main() {
