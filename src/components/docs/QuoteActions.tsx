@@ -27,6 +27,8 @@ type Props = {
     void: (id: string, reason: string) => Promise<FormState>;
     convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }) => Promise<FormState>;
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
+    /** Draft/unsent only — refresh letterhead from current settings. */
+    refreshCompanyDetails?: (id: string) => Promise<FormState>;
   };
 };
 
@@ -34,19 +36,30 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
   const [dialog, setDialog] = useState<"void" | "convert" | "lost" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [okMessage, setOkMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = (fn: () => Promise<FormState & { draft?: EmailDraftView }>) =>
     startTransition(async () => {
       const res = await fn();
       setMessage(res.ok ? null : (res.message ?? "Something went wrong."));
+      setOkMessage(res.ok ? (res.message ?? null) : null);
       if (res.draft) setDraft(res.draft);
     });
 
   const editable = status === "DRAFT" || status === "SENT";
+  /** Sent / WON / LOST / VOID keep a frozen company snapshot. */
+  const canRefreshCompany = canEdit && status === "DRAFT" && !!actions.refreshCompanyDetails;
   const items: MenuItem[] = [];
   if (canEdit && editable) items.push({ key: "edit", label: "Edit", href: `/quotes/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/quotes/${id}`, newTab: true });
+  if (canRefreshCompany) {
+    items.push({
+      key: "refresh-company",
+      label: "Use latest company details",
+      onSelect: () => run(() => actions.refreshCompanyDetails!(id)),
+    });
+  }
   if (canEdit && status !== "VOID") items.push({ key: "email", label: "Email", onSelect: () => run(() => actions.email(id)) });
   if (canEdit && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
@@ -78,6 +91,11 @@ export function QuoteActions({ id, number, status, canEdit, openSalesOrderId, cu
       {message && (
         <span role="alert" className="small" style={{ color: "var(--red)" }}>
           {message}
+        </span>
+      )}
+      {okMessage && (
+        <span role="status" className="small muted">
+          {okMessage}
         </span>
       )}
       <ActionsMenu items={items} />

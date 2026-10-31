@@ -5,13 +5,16 @@ import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { money, ymd } from "@/lib/documents/common";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
-import { customerBlockAddress } from "@/lib/services/addresses";
+import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/addresses";
 import { formatAddress } from "@/lib/addresses/format";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
+import { ratePctLabel, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
+import { printablePersonName } from "./signatory";
 
 function assertCosts(viewer: PermissionUser) {
   if (!canSeeCosts(viewer)) throw new ForbiddenError();
@@ -25,8 +28,43 @@ import {
   watermarkForStatus,
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
-import { EWT_2307_NOTE, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
-import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine } from "./types";
+import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
+import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
+
+/** Split a stored description into title + optional detail line (first newline). */
+function splitDescription(raw: string): { description: string; detail: string | null } {
+  const parts = raw.split(/\n/);
+  const description = (parts[0] ?? "").trim() || raw;
+  const detail = parts.slice(1).join("\n").trim() || null;
+  return { description, detail };
+}
+
+function customerSignatories(preparedName: string | null): PrintSignatory[] {
+  return [
+    { role: "Prepared by", name: printablePersonName(preparedName), position: null },
+    { role: "Conforme", name: null },
+  ];
+}
+
+/** Totals for customer quotes/SOs: Subtotal, Total, optional est. WHT + net. */
+export function customerMoneyTotals(opts: {
+  contractPrice: string;
+  withholdingTotal: string;
+  netReceived: string;
+  withholding: WithholdingSnapshot[];
+}): PrintMoneyLine[] {
+  const total = opts.contractPrice;
+  const lines: PrintMoneyLine[] = [
+    { label: "Subtotal", amount: total },
+    { label: "Total", amount: total, emphasize: true },
+  ];
+  if (Number(opts.withholdingTotal) > 0) {
+    const pct = opts.withholding.map((w) => ratePctLabel(w.rate)).join(" + ");
+    lines.push({ label: `Less: withholding tax (est.) ${pct}`, amount: opts.withholdingTotal });
+    lines.push({ label: "Net amount due", amount: opts.netReceived, emphasize: true });
+  }
+  return lines;
+}
 
 const day = (ymdStr: string | null | undefined) =>
   ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—";
@@ -70,7 +108,9 @@ async function withQr<T extends ProfessionalPrintModel>(doc: T): Promise<T> {
   return { ...doc, qrSvg: await qrSvg() };
 }
 
-const itemRow = (i: { description: string; qty: string; unit: string; unitPrice: string; amount: string }): PrintLineItem => i;
+const itemRow = (
+  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string },
+): PrintLineItem => i;
 
 /**
  * Subtotal + optional mid-lines + Total.
@@ -101,51 +141,59 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   if (!q) return null;
   const letter = await letterhead(q.settingsVersionId);
   const total = money(q.contractPrice);
+  const withholding = snapshotList(q.withholding);
+  const prepared = printablePersonName(q.createdBy.name);
   const footer = baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
+  const billingAddress = await customerBlockAddress(q.customer);
+  const deliveryAddress = await suggestedDeliveryAddress(q.customer);
   const doc: ProfessionalPrintModel = {
     kind: "quote",
-    title: "Quotation",
+    title: "QUOTATION",
     number: q.number,
     date: day(ymd(q.date)),
     status: q.status,
+    hideStatus: HIDE_STATUS_ON_PRINT.has("quote"),
     watermark: watermarkForStatus(q.status),
     company: letter.company,
     party: {
       label: "Customer",
       name: q.customer.name,
       tin: q.customer.tin,
-      billingAddress: await customerBlockAddress(q.customer),
-      deliveryAddress: null,
+      billingAddress,
+      deliveryAddress,
       contactPerson: q.contact?.name ?? null,
       phone: q.contact?.phone ?? null,
       email: q.contact?.email ?? null,
     },
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
-      ...(q.terms ? [{ label: "Terms", value: q.terms }] : []),
+      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ],
-    items: q.items.map((i) =>
-      itemRow({
-        description: i.description,
+    items: q.items.map((i) => {
+      const { description, detail } = splitDescription(i.description);
+      return itemRow({
+        description,
+        detail,
         qty: money(i.qty),
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
-      }),
-    ),
+      });
+    }),
     unitPriceLabel: "Unit price",
-    totals: [{ label: "Subtotal", amount: total }, { label: "Total", amount: total, emphasize: true }],
+    totals: customerMoneyTotals({
+      contractPrice: total,
+      withholdingTotal: money(q.withholdingTotal),
+      netReceived: money(q.netReceived),
+      withholding,
+    }),
     totalInWords: amountInWords(total),
     terms: q.terms || letter.print.quoteTerms || null,
     validity: day(ymd(q.validUntil)),
     notes: q.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
-    signatories: [
-      { role: "Prepared by", name: q.createdBy.name },
-      { role: "Approved by", name: null },
-      { role: "Received by", name: null },
-    ],
+    signatories: customerSignatories(q.createdBy.name),
     ...footer,
     thankYou: true,
   };
@@ -166,19 +214,22 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   if (!so) return null;
   const letter = await letterhead(so.settingsVersionId);
   const total = money(so.contractPrice);
+  const withholding = snapshotList(so.withholding);
+  const prepared = printablePersonName(so.createdBy.name);
   const footer = baseFooter("sales_order", letter, { thankYou: true, includePayment: true, qr: true });
   const meta = [
-    ...(so.buyerPoNo ? [{ label: "Customer PO no.", value: so.buyerPoNo }] : []),
+    ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
+    ...(so.buyerPoNo ? [{ label: "Customer PO/ref", value: so.buyerPoNo }] : []),
     ...(so.buyerPoDate ? [{ label: "Customer PO date", value: day(ymd(so.buyerPoDate)) }] : []),
     ...(so.quote ? [{ label: "Quote no.", value: so.quote.number }] : []),
-    ...(so.terms ? [{ label: "Terms", value: so.terms }] : []),
   ];
   const doc: ProfessionalPrintModel = {
     kind: "sales_order",
-    title: "Sales Order",
+    title: "SALES ORDER",
     number: so.number,
     date: day(ymd(so.date)),
     status: so.status,
+    hideStatus: HIDE_STATUS_ON_PRINT.has("sales_order"),
     watermark: watermarkForStatus(so.status),
     company: letter.company,
     party: {
@@ -192,26 +243,29 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       email: so.contact?.email ?? null,
     },
     meta,
-    items: so.items.map((i) =>
-      itemRow({
-        description: i.description,
+    items: so.items.map((i) => {
+      const { description, detail } = splitDescription(i.description);
+      return itemRow({
+        description,
+        detail,
         qty: money(i.qty),
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
-      }),
-    ),
-    totals: [{ label: "Subtotal", amount: total }, { label: "Total", amount: total, emphasize: true }],
+      });
+    }),
+    totals: customerMoneyTotals({
+      contractPrice: total,
+      withholdingTotal: money(so.withholdingTotal),
+      netReceived: money(so.netReceived),
+      withholding,
+    }),
     totalInWords: amountInWords(total),
     terms: so.terms,
     notes: so.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
-    signatories: [
-      { role: "Prepared by", name: so.createdBy.name },
-      { role: "Approved by", name: null },
-      { role: "Received by", name: null },
-    ],
+    signatories: customerSignatories(so.createdBy.name),
     ...footer,
     thankYou: true,
   };
@@ -241,21 +295,25 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   ];
   if (Number(wh) > 0) totals.push({ label: "Less: EWT (expected)", amount: wh });
   totals.push({ label: "Total / Net expected", amount: net, emphasize: true });
+  const prepared = printablePersonName(b.createdBy.name);
   const footer = baseFooter("billing", letter, { thankYou: true, includePayment: true });
+  const billingAddress = await customerBlockAddress(b.customer);
+  const deliveryAddress = await suggestedDeliveryAddress(b.customer);
   const doc: ProfessionalPrintModel = {
     kind: "billing",
-    title: "Billing Statement",
+    title: "BILLING STATEMENT",
     number: b.number,
     date: day(ymd(b.invoiceDate)),
     status: b.status,
+    hideStatus: HIDE_STATUS_ON_PRINT.has("billing"),
     watermark: watermarkForStatus(b.status),
     company: letter.company,
     party: {
       label: "Customer",
       name: b.customer.name,
       tin: b.customer.tin,
-      billingAddress: await customerBlockAddress(b.customer),
-      deliveryAddress: null,
+      billingAddress,
+      deliveryAddress,
       contactPerson: null,
       phone: null,
       email: null,
@@ -264,7 +322,8 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       { label: "Booklet invoice no.", value: String(b.invoiceNo) },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
-      ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO no.", value: b.salesOrder.buyerPoNo }] : []),
+      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
+      ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
       ...(b.salesOrder.terms ? [{ label: "Terms", value: b.salesOrder.terms }] : []),
     ],
     items: [
@@ -280,11 +339,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     totalInWords: amountInWords(amount),
     terms: b.salesOrder.terms,
     notes: b.notes,
-    signatories: [
-      { role: "Prepared by", name: b.createdBy.name },
-      { role: "Approved by", name: null },
-      { role: "Received by", name: null },
-    ],
+    signatories: customerSignatories(b.createdBy.name),
     ...footer,
     thankYou: true,
   };

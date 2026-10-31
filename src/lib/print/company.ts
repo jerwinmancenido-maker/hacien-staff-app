@@ -23,6 +23,9 @@ export function missingCompanyWarning(company: CompanySettings): string | null {
   return `Add your ${missing.join(" and ")} so they print on documents.`;
 }
 
+/** Default letterhead mark from the HACIEN brand kit. Settings upload overrides. */
+export const BRAND_LETTERHEAD_LOGO = "/brand/logo-full.svg";
+
 export function printCompanyBlock(company: CompanySettings): PrintCompanyBlock {
   return {
     registeredName: company.name,
@@ -32,7 +35,8 @@ export function printCompanyBlock(company: CompanySettings): PrintCompanyBlock {
     phone: company.phone?.trim() || "",
     email: company.email?.trim() || "",
     website: company.website?.trim() || "",
-    logoUrl: company.logoStorageKey?.trim() ? "/files/company-logo" : null,
+    // Settings logo wins; otherwise the brand kit full logo.
+    logoUrl: company.logoStorageKey?.trim() ? "/files/company-logo" : BRAND_LETTERHEAD_LOGO,
   };
 }
 

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const result = await getBillingPrintModel(id);
-  return { title: result ? `${result.doc.number} ${result.doc.party.name}` : "Print billing" };
+  return { title: result ? result.doc.number : "Print billing" };
 }
 
 export default async function PrintBillingPage({ params }: { params: Promise<{ id: string }> }) {

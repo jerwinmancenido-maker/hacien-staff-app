@@ -11,7 +11,14 @@ import { Activity } from "@/components/Activity";
 import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
-import { convertQuoteAction, emailDraftAction, markQuoteLostAction, markQuoteSentAction, voidQuoteAction } from "../actions";
+import {
+  convertQuoteAction,
+  emailDraftAction,
+  markQuoteLostAction,
+  markQuoteSentAction,
+  refreshQuoteCompanyDetailsAction,
+  voidQuoteAction,
+} from "../actions";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
@@ -62,6 +69,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               void: voidQuoteAction,
               convert: convertQuoteAction,
               email: emailDraftAction,
+              refreshCompanyDetails: refreshQuoteCompanyDetailsAction,
             }}
           />
         }
