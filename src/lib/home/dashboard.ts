@@ -82,6 +82,11 @@ export type HomeTaxDeadline = {
   dueLabel: string;
   /** e.g. "Due Mon, Nov 16, 2026 · in 16 days" */
   dueDetail: string;
+  /**
+   * Phone one-line strip, e.g. "NOV 16 · 1701Q due in 16 days".
+   * Built from the real badge / form / days — never hard-coded.
+   */
+  stripLabel: string;
   dueYmd: string | null;
   /** Uppercase month abbr for the date badge (NOV). */
   badgeMonth: string | null;
@@ -225,6 +230,28 @@ function buildTaxDetail(dueYmd: string | null, now: Date): string {
   }
   if (days === 0) return `Due ${when} · today`;
   return `Due ${when} · in ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/** Compact phone tax strip: "NOV 16 · 1701Q due in 16 days". */
+export function buildTaxStripLabel(opts: {
+  form: string;
+  badgeMonth: string | null;
+  badgeDay: string | null;
+  dueYmd: string | null;
+  now?: Date;
+}): string {
+  const now = opts.now ?? new Date();
+  const datePart =
+    opts.badgeMonth && opts.badgeDay ? `${opts.badgeMonth} ${opts.badgeDay}` : "Tax";
+  const form = opts.form?.trim() || "Tax calendar";
+  if (!opts.dueYmd) return `${datePart} · ${form}`;
+  const days = daysUntilYmd(opts.dueYmd, now);
+  if (days < 0) {
+    const n = Math.abs(days);
+    return `${datePart} · ${form} ${n} ${n === 1 ? "day" : "days"} overdue`;
+  }
+  if (days === 0) return `${datePart} · ${form} due today`;
+  return `${datePart} · ${form} due in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function monthShortLabel(now: Date): string {
@@ -390,7 +417,8 @@ export async function loadHomeDashboard(
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
-    listRecentHomeActivity(5, { withCosts }),
+    // Desktop shows 3; phone CSS hides the 3rd (shows 2).
+    listRecentHomeActivity(3, { withCosts }),
   ]);
 
   // Same list as /receiving (Awaiting delivery).
@@ -482,11 +510,19 @@ export async function loadHomeDashboard(
     if (next || overdueUnfiled > 0) {
       const dueYmd = next?.dueYmd ?? null;
       const badge = taxBadge(dueYmd);
+      const form = next?.form ?? "Tax calendar";
       tax = {
-        form: next?.form ?? "Tax calendar",
+        form,
         description: next?.description ?? "Open the tax calendar",
         dueLabel: dueYmd ? formatDate(new Date(`${dueYmd}T00:00:00.000Z`)) : "No upcoming date",
         dueDetail: buildTaxDetail(dueYmd, now),
+        stripLabel: buildTaxStripLabel({
+          form,
+          badgeMonth: badge.badgeMonth,
+          badgeDay: badge.badgeDay,
+          dueYmd,
+          now,
+        }),
         dueYmd,
         badgeMonth: badge.badgeMonth,
         badgeDay: badge.badgeDay,

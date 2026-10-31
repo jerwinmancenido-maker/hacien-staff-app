@@ -58,6 +58,7 @@ export default async function HomePage() {
   return (
     <>
       <PageHeader
+        className="home-page-header"
         greeting={`${greeting(manilaHour())}, ${first} · ${homeDateLabel()}`}
         title="Home"
         actions={actions}

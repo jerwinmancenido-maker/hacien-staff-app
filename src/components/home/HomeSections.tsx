@@ -1,4 +1,5 @@
 // Presentational Home sections (server components) — concept A card layout.
+// Phone-only compaction is CSS under max-width: 640px; desktop markup stays.
 
 import Link from "next/link";
 import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
@@ -77,7 +78,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisMonth.amount)}</div>
         <div className="home-ks">
           <ChangeChip change={kpis.billedThisMonth.change} />
-          <span>{kpis.billedThisMonth.vsCaption}</span>
+          {/* Phone hides the vs-caption; chip stays. */}
+          <span className="home-ks-vs home-desktop-only">{kpis.billedThisMonth.vsCaption}</span>
         </div>
       </div>
 
@@ -91,7 +93,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           {kpis.owedByCustomers.overdueChip ? (
             <span className="home-chip home-chip-overdue">{kpis.owedByCustomers.overdueChip.label}</span>
           ) : null}
-          <span>{kpis.owedByCustomers.billingCountLabel}</span>
+          <span className="home-desktop-only">{kpis.owedByCustomers.billingCountLabel}</span>
         </div>
       </div>
 
@@ -111,11 +113,12 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisYear.amount)}</div>
         <div className="home-ks home-ks-bar">
-          <span className="home-mini-bar" aria-hidden>
+          {/* Phone hides the Non-VAT mini bar (sidebar meter has it). */}
+          <span className="home-mini-bar home-desktop-only" aria-hidden>
             <i style={{ width: `${Math.min(100, Math.max(0, kpis.billedThisYear.barPct))}%` }} />
           </span>
           <b className="num">{kpis.billedThisYear.pctLabel}</b>
-          <span>{kpis.billedThisYear.limitLabel}</span>
+          <span className="home-desktop-only">{kpis.billedThisYear.limitLabel}</span>
         </div>
       </div>
     </div>
@@ -213,21 +216,31 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
 export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]> }) {
   return (
     <Link className="card home-tax" href={tax.href}>
-      {tax.badgeMonth && tax.badgeDay ? (
-        <div className="home-db" aria-hidden>
-          <div>{tax.badgeMonth}</div>
-          <b>{tax.badgeDay}</b>
-        </div>
-      ) : null}
-      <div className="home-tax-body">
-        <div className="home-tax-kicker muted">Next tax deadline</div>
-        <div className="home-tax-form">{tax.form}</div>
-        <div className="muted small home-tax-due">{tax.dueDetail}</div>
-        {tax.overdueUnfiledCount > 0 ? (
-          <div className="home-tax-overdue small">
-            {tax.overdueUnfiledCount} overdue {tax.overdueUnfiledCount === 1 ? "item" : "items"} not marked filed
+      {/* Desktop / tablet full card */}
+      <div className="home-tax-full home-desktop-only">
+        {tax.badgeMonth && tax.badgeDay ? (
+          <div className="home-db" aria-hidden>
+            <div>{tax.badgeMonth}</div>
+            <b>{tax.badgeDay}</b>
           </div>
         ) : null}
+        <div className="home-tax-body">
+          <div className="home-tax-kicker muted">Next tax deadline</div>
+          <div className="home-tax-form">{tax.form}</div>
+          <div className="muted small home-tax-due">{tax.dueDetail}</div>
+          {tax.overdueUnfiledCount > 0 ? (
+            <div className="home-tax-overdue small">
+              {tax.overdueUnfiledCount} overdue {tax.overdueUnfiledCount === 1 ? "item" : "items"} not marked filed
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {/* Phone one-line strip — computed stripLabel, never hard-coded. */}
+      <div className="home-tax-strip home-phone-only">
+        <span className="home-tax-strip-text">{tax.stripLabel}</span>
+        <span className="home-tax-strip-arrow" aria-hidden>
+          →
+        </span>
       </div>
     </Link>
   );
@@ -266,7 +279,7 @@ export function HomeRecentActivity({
         </Link>
       </div>
       <div className="home-ra">
-        {rows.map((r) => {
+        {rows.map((r, i) => {
           const inner = (
             <>
               <span className="home-ri">{activityIcon(r.entityType)}</span>
@@ -279,12 +292,14 @@ export function HomeRecentActivity({
               </div>
             </>
           );
+          // Phone CSS hides .home-ra-row-extra (3rd+); desktop shows 3.
+          const extra = i >= 2 ? " home-ra-row-extra" : "";
           return r.href ? (
-            <Link key={r.id} className="home-ra-row" href={r.href}>
+            <Link key={r.id} className={`home-ra-row${extra}`} href={r.href}>
               {inner}
             </Link>
           ) : (
-            <div key={r.id} className="home-ra-row">
+            <div key={r.id} className={`home-ra-row${extra}`}>
               {inner}
             </div>
           );

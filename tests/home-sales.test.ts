@@ -261,11 +261,37 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*14px/s);
     expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*114px/s);
     expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toMatch(/\.home-tax\s*\{[^}]*min-height:\s*72px/s);
+    expect(css).toMatch(/\.home-tax-full\s*\{[^}]*min-height:\s*72px/s);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
     expect(chartSrc).toMatch(/const VB_H = 114/);
     const hrefs = readFileSync(path.join(root, "src/lib/home/hrefs.ts"), "utf8");
     expect(hrefs).not.toMatch(/billedThisMonthHref/);
+  });
+
+  it("compacts Home on phone only (desktop markup/CSS base unchanged)", () => {
+    // Phone-only hiding hooks in markup
+    expect(sections).toMatch(/home-desktop-only/);
+    expect(sections).toMatch(/home-phone-only/);
+    expect(sections).toMatch(/home-ks-vs/);
+    expect(sections).toMatch(/home-tax-strip/);
+    expect(sections).toMatch(/home-ra-row-extra/);
+    expect(sections).toMatch(/stripLabel/);
+    // Recent: fetch 3 (desktop); phone CSS hides 3rd
+    expect(dash).toMatch(/listRecentHomeActivity\(3/);
+    // Phone media block: smaller cards (pad 10–12), 18px KPI, 13px titles, 40px taps, no Y-axis, 2 activity rows
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s*\{[^}]*padding:\s*10px\s+12px\s+0/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s+h3\s*\{[^}]*font-size:\s*13px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kv\s*\{[^}]*font-size:\s*18px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-svg\s*\{[^}]*height:\s*110px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-yl\s*\{[^}]*display:\s*none/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-na-row\s*\{[^}]*min-height:\s*40px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-tax-strip[\s\S]*min-height:\s*48px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*border-radius:\s*10px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*box-shadow:\s*0\s+1px\s+1px/s);
+    expect(page).toMatch(/home-page-header/);
   });
 
   it("prevents sideways overflow on narrow Home (min-width 0 + truncate)", () => {

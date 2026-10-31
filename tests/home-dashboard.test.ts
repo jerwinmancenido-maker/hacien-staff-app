@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { currentMonthPeriod } from "@/lib/books/period";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { activitySummary, documentHref, formatHomeActivityWhen } from "@/lib/home/activity";
-import { homeMonthBounds, homeOwedSplit, homeSumAmounts, homeTodayPlusDaysYmd } from "@/lib/home/dashboard";
+import {
+  buildTaxStripLabel,
+  homeMonthBounds,
+  homeOwedSplit,
+  homeSumAmounts,
+  homeTodayPlusDaysYmd,
+} from "@/lib/home/dashboard";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
 import {
@@ -199,6 +205,31 @@ describe("home activity helpers", () => {
     const nextDay = new Date("2026-11-01T02:00:00.000Z"); // Nov 1 PHT
     expect(formatHomeActivityWhen(at, sameDay)).toBe("5:49 PM");
     expect(formatHomeActivityWhen(at, nextDay)).toBe("Oct 31, 5:49 PM");
+  });
+});
+
+describe("home tax phone strip label", () => {
+  it("builds NOV 16 · 1701Q due in N days from computed fields (not hard-coded)", () => {
+    // Manila "today" 2026-10-31 → due 2026-11-16 is 16 days out.
+    const now = new Date("2026-10-31T04:00:00.000Z");
+    expect(
+      buildTaxStripLabel({
+        form: "1701Q",
+        badgeMonth: "NOV",
+        badgeDay: "16",
+        dueYmd: "2026-11-16",
+        now,
+      }),
+    ).toBe("NOV 16 · 1701Q due in 16 days");
+    expect(
+      buildTaxStripLabel({
+        form: "1701Q",
+        badgeMonth: "NOV",
+        badgeDay: "16",
+        dueYmd: "2026-10-31",
+        now,
+      }),
+    ).toBe("NOV 16 · 1701Q due today");
   });
 });
 
