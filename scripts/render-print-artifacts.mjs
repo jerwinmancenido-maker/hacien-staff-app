@@ -26,7 +26,10 @@ const css = readFileSync(path.join(root, "src/app/globals.css"), "utf8").replace
 );
 const logoSrc = pathToFileURL(path.join(root, "public/brand/logo-full.svg")).href;
 
-function shellHtml(inner, title) {
+function shellHtml(inner, title, paper = "a4") {
+  const shell = paper === "letter" ? "print-shell-letter" : "print-shell-a4";
+  const pageSize =
+    paper === "letter" ? "@page { size: letter; margin: 0.7in; }" : "@page { size: A4; margin: 18mm; }";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,6 +37,7 @@ function shellHtml(inner, title) {
 <title>${title}</title>
 <style>
 ${css}
+${pageSize}
 body { margin: 0; background: #fff; font-family: var(--font); }
 .print-shell { padding: 0; background: #fff; min-height: 0; }
 .pp-page { box-shadow: none; margin: 0; }
@@ -41,7 +45,7 @@ body { margin: 0; background: #fff; font-family: var(--font); }
 </style>
 </head>
 <body>
-<div class="print-shell print-shell-a4">${inner}</div>
+<div class="print-shell ${shell}">${inner}</div>
 </body>
 </html>`;
 }
@@ -82,12 +86,13 @@ function itemsTable(rows) {
   return `<table class="pp-items"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function docArticle({ kind, title, number, date, metaRows, rows, totals, words, notes, tax }) {
+function docArticle({ kind, title, number, date, metaRows, rows, totals, words, notes, tax, paper = "a4" }) {
   const meta = metaRows.map((m) => `<tr><th>${m[0]}</th><td>${m[1]}</td></tr>`).join("");
   const tot = totals
     .map((t) => `<tr class="${t[2] ? "pp-total-emph" : ""}"><th>${t[0]}</th><td class="num">${peso(t[1])}</td></tr>`)
     .join("");
-  return `<article class="pp-page pp-paper-a4" aria-label="${title} ${number}" data-print-kind="${kind}">
+  const paperClass = paper === "letter" ? "pp-paper-letter" : "pp-paper-a4";
+  return `<article class="pp-page ${paperClass}" aria-label="${title} ${number}" data-print-kind="${kind}">
   <header class="pp-head">${letterhead()}
     <div class="pp-title-block"><h1><span class="pp-title-pixel" aria-hidden="true"></span>${title}</h1>
       <table class="pp-meta"><tbody>
@@ -246,6 +251,29 @@ const docs = [
     }),
   },
   {
+    file: "quote-3-lines-letter",
+    title: "QT-2026-LTR1",
+    paper: "letter",
+    html: docArticle({
+      kind: "quote",
+      title: "QUOTATION",
+      number: "QT-2026-LTR1",
+      date: "Oct 30, 2026",
+      paper: "letter",
+      metaRows: [
+        ["Valid until", "Nov 30, 2026"],
+        ["Prepared by", "Jerwin"],
+      ],
+      rows: threeLines,
+      totals: [
+        ["Subtotal", 531500],
+        ["Total", 531500, true],
+      ],
+      words: "Five hundred thirty-one thousand five hundred pesos only",
+      tax: ["This is a quotation, not an invoice."],
+    }),
+  },
+  {
     file: "letterhead-clearspace",
     title: "letterhead-clearspace",
     html: `<article class="pp-page pp-paper-a4" aria-label="Letterhead clear space" data-print-kind="quote">
@@ -349,7 +377,7 @@ const written = [];
 for (const d of docs) {
   const htmlPath = path.join(tmpDir, `${d.file}.html`);
   const pdfPath = path.join(tmpDir, `${d.file}.pdf`);
-  writeFileSync(htmlPath, shellHtml(d.html, d.title));
+  writeFileSync(htmlPath, shellHtml(d.html, d.title, d.paper ?? "a4"));
   chromePdf(htmlPath, pdfPath, d.title);
   copyFileSync(pdfPath, path.join(outDir, `${d.file}.pdf`));
   const pngs = await pdfToPngs(pdfPath, d.file);
