@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import {
   ATC_LABELS,
+  WITHHOLDING_DEFAULT_CATALOG,
   WITHHOLDING_DEFAULT_ROWS,
   WITHHOLDING_HINT_NONE,
   WITHHOLDING_HINT_NOT_SET,
@@ -44,20 +45,35 @@ describe("defaultWithholdingFor (deprecated — type never chooses rates)", () =
 });
 
 describe("lineWithholdingFromPicks", () => {
-  it("Goods 1% + GOV_PT 3% → goods 4%, services 3%", () => {
-    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
+  it("government goods 1% + percentage tax 3% → goods 4%, services 3%", () => {
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
     expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
       rate: "0.0400",
-      atc: "WI158", // kind-specific ATC kept when combining with whole-total
+      atc: "WI640",
       code: null,
       label: null,
     });
     expect(lineWithholdingFromPicks(picks, "SERVICES")).toEqual({
       rate: "0.0300",
-      atc: "WG010",
+      atc: "WB080",
       code: "GOV_PT_3",
       label: WITHHOLDING_DEFAULT_ROWS.GOV_PT_3.label,
       lineKind: "GOV_PT",
+    });
+  });
+
+  it("government services 2% + percentage tax 3% → services 5%, goods 3%", () => {
+    const picks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
+    expect(lineWithholdingFromPicks(picks, "SERVICES")).toMatchObject({
+      rate: "0.0500",
+      atc: "WI157",
+      code: null,
+      label: null,
+    });
+    expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
+      rate: "0.0300",
+      atc: "WB080",
+      code: "GOV_PT_3",
     });
   });
 
@@ -66,13 +82,41 @@ describe("lineWithholdingFromPicks", () => {
   });
 });
 
+describe("Pass 3 Settings catalog", () => {
+  it("lists six rates in order; VAT inactive by default; no Goods 4% / code to confirm", () => {
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.code)).toEqual([
+      "GOV_GOODS_1",
+      "GOV_SERVICES_2",
+      "GOV_PT_3",
+      "GOODS_1",
+      "SERVICES_2",
+      "GOV_VAT_5",
+    ]);
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_GOODS_1.label).toBe("Government goods 1% (WI640)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_2.label).toBe("Government services 2% (WI157)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_PT_3.label).toBe("Government percentage tax 3% (WB080)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOODS_1.label).toBe("Private top agent goods 1% (WI158)");
+    expect(WITHHOLDING_DEFAULT_ROWS.SERVICES_2.label).toBe("Private top agent services 2% (WI160)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.label).toBe("VAT withheld 5% (WV010/WV020)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.active).toBe(false);
+    for (const r of WITHHOLDING_DEFAULT_CATALOG) {
+      expect(r.label).not.toMatch(/code to confirm/i);
+      expect(r.label).not.toBe("Goods 4%");
+      expect(r.code).not.toMatch(/^LINE_/);
+    }
+    expect(WITHHOLDING_DEFAULT_CATALOG.filter((r) => r.active).map((r) => r.code)).not.toContain("GOV_VAT_5");
+  });
+});
+
 describe("customerWithholdingHint", () => {
   it("not set / none / picked labels", () => {
     expect(customerWithholdingHint(null)).toBe(WITHHOLDING_HINT_NOT_SET);
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
-    expect(customerWithholdingHint([snap("GOODS_1")])).toBe("Withholding: Goods 1% (WI158)");
-    expect(customerWithholdingHint([snap("GOODS_1"), snap("GOV_PT_3")])).toBe(
-      "Withholding: Goods 1% (WI158) + Government 3% (code to confirm)",
+    expect(customerWithholdingHint([snap("GOODS_1")])).toBe(
+      "Withholding: Private top agent goods 1% (WI158)",
+    );
+    expect(customerWithholdingHint([snap("GOV_GOODS_1"), snap("GOV_PT_3")])).toBe(
+      "Withholding: Government goods 1% (WI640) + Government percentage tax 3% (WB080)",
     );
   });
 });
@@ -92,12 +136,15 @@ describe("isWithholdingNotSet / isWithholdingNone", () => {
 });
 
 describe("ATC_LABELS config map", () => {
-  it("keeps TWA and gov labels in one map; gov marked UNVERIFIED + code to confirm", () => {
+  it("Confirmed ATC codes from 2307; no code-to-confirm wording", () => {
+    expect(ATC_LABELS.WI640).toContain("government goods");
+    expect(ATC_LABELS.WI157).toContain("government services");
+    expect(ATC_LABELS.WB080).toContain("percentage tax");
     expect(ATC_LABELS.WI158).toContain("goods");
     expect(ATC_LABELS.WI160).toContain("services");
-    expect(ATC_LABELS.WG010).toMatch(/UNVERIFIED/);
-    expect(ATC_LABELS.WG010).toMatch(/code to confirm/);
-    expect(ATC_LABELS.WV050).toMatch(/UNVERIFIED/);
-    expect(ATC_LABELS.WV050).toMatch(/code to confirm/);
+    expect(ATC_LABELS["WV010/WV020"]).toContain("VAT");
+    for (const v of Object.values(ATC_LABELS)) {
+      expect(v).not.toMatch(/code to confirm/i);
+    }
   });
 });

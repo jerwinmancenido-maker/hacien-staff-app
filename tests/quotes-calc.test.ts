@@ -75,7 +75,7 @@ describe("document totals (per-line rates)", () => {
     // 100.50 × 1% = 1.005 → 1.01; 100.50 × 3% = 3.015 → 3.02
     const t = docTotals([
       { kind: "GOODS", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0100", withholdingAtc: "WI158" },
-      { kind: "SERVICES", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WG010" },
+      { kind: "SERVICES", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WB080" },
     ]);
     expect(t.withholding.map((w) => w.amount)).toEqual(["1.01", "3.02"]);
     expect(t.withholdingTotal).toBe("4.03");
@@ -178,17 +178,17 @@ describe("planItems re-apply respects overrides", () => {
         withholdingPicks: [
           {
             code: "GOV_PT_3",
-            label: "Government percentage tax 3% (code to confirm)",
+            label: "Government percentage tax 3% (WB080)",
             lineKind: "GOV_PT",
             rate: "0.0300",
-            atcCode: "WG010",
+            atcCode: "WB080",
           },
         ],
         reapplyWithholding: true,
       },
     );
     expect(items[0]).toMatchObject({ withholdingRate: "0.0150", withholdingAtc: "WI158", withholdingOverride: true });
-    expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WG010", withholdingOverride: false });
+    expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WB080", withholdingOverride: false });
   });
 });
 

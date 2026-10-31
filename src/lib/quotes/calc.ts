@@ -138,37 +138,55 @@ function resolveAmounts(line: LineForDocTotals): LineAmounts & { kind: ItemKind 
 
 /** Group key for the read-only document withholding summary. */
 function groupKey(rate: string, atc: string | null, kind: ItemKind): string {
-  // Government ATC shares one bucket across goods/services (same rate on every line).
-  if (atc === "WG010" || atc === "WV050") return `${rate}|${atc}`;
+  // Whole-total ATCs share one bucket across goods/services (same rate on every line).
+  // Legacy WG010 / WV050 kept so older snapshots still group correctly.
+  if (
+    atc === "WB080" ||
+    atc === "WG010" ||
+    atc === "WV010/WV020" ||
+    atc === "WV050" ||
+    atc === "WV010" ||
+    atc === "WV020"
+  ) {
+    return `${rate}|${atc}`;
+  }
   return `${rate}|${atc ?? ""}|${kind}`;
 }
 
 function summaryCode(rate: string, atc: string | null, kind: ItemKind): string {
   const r = Number(rate).toFixed(4);
+  if (kind === "GOODS" && r === "0.0100" && atc === "WI640") return "GOV_GOODS_1";
+  if (kind === "SERVICES" && r === "0.0200" && atc === "WI157") return "GOV_SERVICES_2";
   if (kind === "GOODS" && r === "0.0100" && atc === "WI158") return "GOODS_1";
   if (kind === "SERVICES" && r === "0.0200" && atc === "WI160") return "SERVICES_2";
-  if (r === "0.0300" && atc === "WG010") return "GOV_PT_3";
-  if (r === "0.0500" && atc === "WV050") return "GOV_VAT_5";
-  const atcPart = atc ? `_${atc}` : "";
+  if (r === "0.0300" && (atc === "WB080" || atc === "WG010")) return "GOV_PT_3";
+  if (r === "0.0500" && (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020")) return "GOV_VAT_5";
+  const atcPart = atc ? `_${atc.replace(/\//g, "_")}` : "";
   return `LINE_${kind}_${r.replace(".", "")}${atcPart}`;
 }
 
 function summaryLabel(rate: string, atc: string | null, kind: ItemKind): string {
   const pct = ratePctLabel(rate);
-  if (atc === "WG010" || atc === "WV050") {
-    return kind === "SERVICES" || kind === "GOODS"
-      ? `Government ${pct} (code to confirm)`
-      : `Government ${pct} (code to confirm)`;
+  if (atc === "WB080" || atc === "WG010") return `Government percentage tax ${pct} (WB080)`;
+  if (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020") {
+    return `VAT withheld ${pct} (WV010/WV020)`;
   }
-  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Goods 1%";
-  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI160") return "Services 2%";
-  const atcBit = atc ? ` · ${atc}` : "";
+  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI640") return "Government goods 1% (WI640)";
+  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI157") return "Government services 2% (WI157)";
+  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Private top agent goods 1% (WI158)";
+  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI160") return "Private top agent services 2% (WI160)";
+  const atcBit = atc ? ` (${atc})` : "";
   return `${kind === "GOODS" ? "Goods" : "Services"} ${pct}${atcBit}`;
 }
 
 function summaryLineKind(rate: string, atc: string | null, kind: ItemKind): WithholdingLineKind {
-  if (atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WG010" || atc == null))) return "GOV_PT";
-  if (atc === "WV050" || Number(rate).toFixed(4) === "0.0500") return "GOV_VAT";
+  if (atc === "WB080" || atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WB080" || atc === "WG010" || atc == null))) {
+    return "GOV_PT";
+  }
+  if (atc === "WV010/WV020" || atc === "WV050" || atc === "WV010" || atc === "WV020" || Number(rate).toFixed(4) === "0.0500") {
+    return "GOV_VAT";
+  }
+  void kind;
   return kind;
 }
 
@@ -202,7 +220,7 @@ function baseForPick(lineKind: WithholdingLineKind, bases: { contract: bigint; g
 
 /**
  * Internal breakdown from the quote-level pick list.
- * Each pick is its own line (whole-total rates such as WG010 / GOV_PT stay separate).
+ * Each pick is its own line (whole-total rates such as WB080 / GOV_PT stay separate).
  * Total withholding MUST equal the sum of these parts (half-up per part).
  */
 export function withholdingBreakdownFromPicks(

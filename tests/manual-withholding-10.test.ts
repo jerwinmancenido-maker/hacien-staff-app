@@ -38,7 +38,7 @@ const mixedLines = [
     supplierTotal: "0.00",
     margin: "7495.00",
     withholdingRate: "0.0300",
-    withholdingAtc: "WG010",
+    withholdingAtc: "WB080",
   },
 ];
 
@@ -48,27 +48,37 @@ describe("manual withholding picks (build brief 10)", () => {
       contractPrice: "540000.00",
       withholdingTotal: "21400.00",
       netReceived: "518600.00",
-      withholding: [snap("GOODS_1"), snap("GOV_PT_3")],
+      withholding: [snap("GOV_GOODS_1"), snap("GOV_PT_3")],
     });
     expect(lines).toEqual([
       { label: "Subtotal", amount: "540000.00" },
       { label: "Total", amount: "540000.00", emphasize: true },
     ]);
     const blob = JSON.stringify(lines).toLowerCase();
-    for (const banned of ["withholding", "wht", "atc", "less", "net amount", "%", "wi158", "wg010"]) {
+    for (const banned of ["withholding", "wht", "atc", "less", "net amount", "%", "wi640", "wb080"]) {
       expect(blob, banned).not.toContain(banned);
     }
   });
 
-  it("combined rate hand math: goods 1%+3%, services 3%", () => {
-    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
-    expect(lineWithholdingFromPicks(picks, "GOODS").rate).toBe("0.0400");
-    expect(lineWithholdingFromPicks(picks, "SERVICES").rate).toBe("0.0300");
-    // Combined goods keeps the goods-specific ATC (not the rate number).
-    expect(lineWithholdingFromPicks(picks, "GOODS").atc).toBe("WI158");
-    expect(lineWithholdingFromPicks(picks, "SERVICES").atc).toBe("WG010");
+  it("government goods 1% + 3% → goods 4%; services 2% + 3% → services 5%", () => {
+    const goodsPicks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
+    expect(lineWithholdingFromPicks(goodsPicks, "GOODS").rate).toBe("0.0400");
+    expect(lineWithholdingFromPicks(goodsPicks, "SERVICES").rate).toBe("0.0300");
+    expect(lineWithholdingFromPicks(goodsPicks, "GOODS").atc).toBe("WI640");
+    expect(lineWithholdingFromPicks(goodsPicks, "SERVICES").atc).toBe("WB080");
     // 520000 × 0.04 + 20000 × 0.03 = 20800 + 600
     expect(520000 * 0.04 + 20000 * 0.03).toBe(21400);
+
+    const svcPicks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
+    expect(lineWithholdingFromPicks(svcPicks, "SERVICES").rate).toBe("0.0500");
+    expect(lineWithholdingFromPicks(svcPicks, "GOODS").rate).toBe("0.0300");
+    expect(lineWithholdingFromPicks(svcPicks, "SERVICES").atc).toBe("WI157");
+  });
+
+  it("VAT withheld 5% is inactive by default", () => {
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.active).toBe(false);
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.label).toBe("VAT withheld 5% (WV010/WV020)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.atcCode).toBe("WV010/WV020");
   });
 
   it("defaultWithholdingFor never returns a non-zero rate", () => {
@@ -80,9 +90,9 @@ describe("manual withholding picks (build brief 10)", () => {
   });
 
   it("(a) mixed goods+services: whole-total rate is its own line; sum of parts === total", () => {
-    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
     const parts = withholdingBreakdownFromPicks(mixedLines, picks);
-    expect(parts.map((p) => p.code)).toEqual(["GOODS_1", "GOV_PT_3"]);
+    expect(parts.map((p) => p.code)).toEqual(["GOV_GOODS_1", "GOV_PT_3"]);
     expect(parts[0]!.lineKind).toBe("GOODS");
     expect(parts[1]!.lineKind).toBe("GOV_PT"); // whole-total — own line
     // Goods 1% of 12505 = 125.05; Gov 3% of 20000 = 600.00
@@ -98,7 +108,7 @@ describe("manual withholding picks (build brief 10)", () => {
   });
 
   it("(b) customer header chip and quote hint show the same saved pick; never 'No withholding' while WH applies", () => {
-    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
     const header = customerWithholdingChipLabel(picks);
     const hint = customerWithholdingHint(picks);
     // Same saved pick content (hint adds the "Withholding: " prefix).
@@ -113,16 +123,16 @@ describe("manual withholding picks (build brief 10)", () => {
   });
 
   it("quote hint follows the quote pick, not the customer's saved pick", () => {
-    // Customer still has Goods 1% + Gov 3% saved; quote pick was cleared → not set.
-    const customerSaved = [snap("GOODS_1"), snap("GOV_PT_3")];
-    expect(customerWithholdingHint(customerSaved)).toContain("Goods 1%");
+    // Customer still has Gov goods 1% + Gov 3% saved; quote pick was cleared → not set.
+    const customerSaved = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
+    expect(customerWithholdingHint(customerSaved)).toContain("Government goods 1%");
     const quotePickCleared: WithholdingSnapshot[] | null = null;
     expect(customerWithholdingHint(quotePickCleared)).toBe(WITHHOLDING_HINT_NOT_SET);
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
   });
 
   it("internal margin ignores WH; cash after WH = contract − WH (seed 535k / 450k / 21,250)", () => {
-    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
     const lines = [
       {
         kind: "GOODS" as const,
@@ -130,7 +140,7 @@ describe("manual withholding picks (build brief 10)", () => {
         supplierTotal: "450000.00",
         margin: "70000.00",
         withholdingRate: "0.0400",
-        withholdingAtc: "WI158",
+        withholdingAtc: "WI640",
       },
       {
         kind: "SERVICES" as const,
@@ -138,7 +148,7 @@ describe("manual withholding picks (build brief 10)", () => {
         supplierTotal: "0.00",
         margin: "15000.00",
         withholdingRate: "0.0300",
-        withholdingAtc: "WG010",
+        withholdingAtc: "WB080",
       },
     ];
     const t = docTotals(lines, picks);
@@ -155,9 +165,9 @@ describe("manual withholding picks (build brief 10)", () => {
   });
 
   it("customer type No saves explicit none []", () => {
-    expect(resolveCustomerSavedPick("NONE", ["GOODS_1", "GOV_PT_3"])).toEqual([]);
+    expect(resolveCustomerSavedPick("NONE", ["GOV_GOODS_1", "GOV_PT_3"])).toEqual([]);
     expect(resolveCustomerSavedPick("NONE", null)).toEqual([]);
-    expect(resolveCustomerSavedPick("GOVERNMENT", ["GOODS_1"])).toEqual(["GOODS_1"]);
+    expect(resolveCustomerSavedPick("GOVERNMENT", ["GOV_GOODS_1"])).toEqual(["GOV_GOODS_1"]);
     expect(resolveCustomerSavedPick("GOVERNMENT", null)).toBeNull();
     expect(resolveCustomerSavedPick("TOP_WITHHOLDING_AGENT", [])).toEqual([]);
   });

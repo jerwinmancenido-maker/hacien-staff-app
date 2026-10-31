@@ -143,8 +143,8 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       }
     });
 
-    it("customer saved Goods 1% + GOV_PT 3% → goods 4%, services 3%; mixed quote WH = 21400", async () => {
-      const customer = await makeCustomer(["GOODS_1", "GOV_PT_3"], "GOVERNMENT");
+    it("customer saved Government goods 1% + GOV_PT 3% → goods 4%, services 3%; mixed quote WH = 21400", async () => {
+      const customer = await makeCustomer(["GOV_GOODS_1", "GOV_PT_3"], "GOVERNMENT");
       const supplier = await makeSupplier();
       const q = await createQuote(quoteInput(customer.id, (await freshYear()), {}, supplier.id), costUser);
       expect(q.contractPrice.toFixed(2)).toBe("540000.00");
@@ -152,10 +152,32 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const services = q.items.find((i) => i.kind === "SERVICES")!;
       expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0400");
       expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0300");
+      expect(goods.withholdingAtc).toBe("WI640");
+      expect(services.withholdingAtc).toBe("WB080");
       // 520000×0.04 + 20000×0.03 = 20800 + 600
       expect(q.withholdingTotal.toFixed(2)).toBe("21400.00");
       expect(q.netReceived.toFixed(2)).toBe("518600.00");
-      expect(Array.isArray(q.withholdingPick) ? q.withholdingPick : null).toEqual(["GOODS_1", "GOV_PT_3"]);
+      expect(Array.isArray(q.withholdingPick) ? q.withholdingPick : null).toEqual(["GOV_GOODS_1", "GOV_PT_3"]);
+    });
+
+    it("customer saved Government services 2% + GOV_PT 3% → services 5%", async () => {
+      const customer = await makeCustomer(["GOV_SERVICES_2", "GOV_PT_3"], "GOVERNMENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const services = q.items.find((i) => i.kind === "SERVICES")!;
+      const goods = q.items.find((i) => i.kind === "GOODS")!;
+      expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0500");
+      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0300");
+      expect(services.withholdingAtc).toBe("WI157");
+      // 520000×0.03 + 20000×0.05 = 15600 + 1000
+      expect(q.withholdingTotal.toFixed(2)).toBe("16600.00");
+    });
+
+    it("VAT withheld 5% is inactive by default in Settings catalog", async () => {
+      const vat = await db.withholdingRate.findUnique({ where: { code: "GOV_VAT_5" } });
+      expect(vat).not.toBeNull();
+      expect(vat!.active).toBe(false);
+      expect(vat!.label).toBe("VAT withheld 5% (WV010/WV020)");
+      expect(vat!.atcCode).toBe("WV010/WV020");
     });
 
     it("changing pick on one quote does not change customer saved pick or other quotes", async () => {
@@ -302,7 +324,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(Number(goodsAfter.withholdingRate).toFixed(4)).toBe("0.0150");
       expect(goodsAfter.withholdingOverride).toBe(true);
       expect(Number(servicesAfter.withholdingRate).toFixed(4)).toBe("0.0300");
-      expect(servicesAfter.withholdingAtc).toBe("WG010");
+      expect(servicesAfter.withholdingAtc).toBe("WB080");
       // 520000×1.5% + 20000×3% = 7800 + 600
       expect(reapplied.withholdingTotal.toFixed(2)).toBe("8400.00");
     });
@@ -329,7 +351,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const print = await getQuotePrint(q.id);
       expect(print?.contractPrice).toBe("540000.00");
       // Print still has no withholding breakdown keys.
-      expect(JSON.stringify(print)).not.toMatch(/withholdingTotal|WI158|WG010/);
+      expect(JSON.stringify(print)).not.toMatch(/withholdingTotal|WI158|WB080/);
 
       // Editing without re-apply keeps snapshotted line + document values.
       const input = quoteInput(customer.id, 2026, {
@@ -381,7 +403,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(reapplied.withholdingTotal.toFixed(2)).toBe("16200.00");
       for (const i of reapplied.items.filter((x) => !x.removedAt)) {
         expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
-        expect(i.withholdingAtc).toBe("WG010");
+        expect(i.withholdingAtc).toBe("WB080");
         expect(i.withholdingOverride).toBe(false);
       }
     });

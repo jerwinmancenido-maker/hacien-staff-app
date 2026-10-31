@@ -33,8 +33,6 @@ import {
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
   allowGovVatOption,
-  GOV_ATC_CODE_TO_CONFIRM,
-  isUnverifiedGovAtc,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
@@ -493,7 +491,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                   {computedDocRates.map((r) => (
                     <span key={r.code} className="chip">
                       {r.label}
-                      {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                      {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
                     </span>
                   ))}
                 </div>
@@ -509,7 +507,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                   computedDocRates.map((r) => (
                     <span key={r.code} className="chip">
                       {r.label}
-                      {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                      {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
                     </span>
                   ))
                 )}
@@ -576,7 +574,6 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                 const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                 const showOverride =
                   i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
-                const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
                 return (
                   <tr key={i.key}>
                     <td>
@@ -660,19 +657,13 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         }}
                       />
                       {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
-                      {govAtc ? (
-                        <div className="small muted" title={i.withholdingAtc ?? undefined}>
-                          {GOV_ATC_CODE_TO_CONFIRM}
-                        </div>
-                      ) : (
-                        <input
-                          aria-label={`Line ${idx + 1} ATC`}
-                          className="w-atc"
-                          value={i.withholdingAtc ?? ""}
-                          placeholder="ATC"
-                          onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                        />
-                      )}
+                      <input
+                        aria-label={`Line ${idx + 1} ATC`}
+                        className="w-atc"
+                        value={i.withholdingAtc ?? ""}
+                        placeholder="ATC"
+                        onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                      />
                     </td>
                     <td className="line-actions">
                       <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} up`} disabled={idx === 0} onClick={() => move(idx, -1)}>

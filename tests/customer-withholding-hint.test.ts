@@ -24,9 +24,11 @@ describe("customerWithholdingHint (pick-based re-export)", () => {
     expect(customerWithholdingHint(null)).toBe(WITHHOLDING_HINT_NOT_SET);
     expect(customerWithholdingHint(undefined)).toBe(WITHHOLDING_HINT_NOT_SET);
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
-    expect(customerWithholdingHint([snap("GOODS_1")])).toBe("Withholding: Goods 1% (WI158)");
-    expect(customerWithholdingHint([snap("GOODS_1"), snap("GOV_PT_3")])).toBe(
-      "Withholding: Goods 1% (WI158) + Government 3% (code to confirm)",
+    expect(customerWithholdingHint([snap("GOODS_1")])).toBe(
+      "Withholding: Private top agent goods 1% (WI158)",
+    );
+    expect(customerWithholdingHint([snap("GOV_GOODS_1"), snap("GOV_PT_3")])).toBe(
+      "Withholding: Government goods 1% (WI640) + Government percentage tax 3% (WB080)",
     );
   });
 });
@@ -36,8 +38,8 @@ describe("customerWithholdingChipLabel", () => {
     expect(customerWithholdingChipLabel(null)).toBe("Withholding: not set");
     expect(customerWithholdingChipLabel([])).toBe("Withholding: none");
     const label = customerWithholdingChipLabel([snap("GOODS_1"), snap("SERVICES_2")]);
-    expect(label).toContain("Goods 1%");
-    expect(label).toContain("Services 2%");
+    expect(label).toContain("Private top agent goods 1%");
+    expect(label).toContain("Private top agent services 2%");
     expect(label).not.toMatch(/No withholding/i);
   });
 });

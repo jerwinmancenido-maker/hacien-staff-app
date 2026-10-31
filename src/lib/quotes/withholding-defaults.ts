@@ -3,7 +3,7 @@
 // Customer.defaultWithholding (JSON):
 //   null  = not set
 //   []    = explicit none
-//   ["GOODS_1","GOV_PT_3",…] = picked rate codes from Settings → Withholding
+//   ["GOV_GOODS_1","GOV_PT_3",…] = picked rate codes from Settings → Withholding
 //
 // New quotes copy the customer's pick. Staff can change the quote-level pick and
 // per-line overrides. Changing a customer's saved pick never rewrites existing
@@ -11,12 +11,16 @@
 //
 // Rates apply by each rate's "Applies to" (lineKind):
 //   GOODS → goods lines, SERVICES → services lines, GOV_PT / GOV_VAT → whole total
-//   (every line). Combined picks sum onto the line rate (e.g. Goods 1% + Gov 3%
-//   → goods lines at 4%, services lines at 3%).
+//   (every line). Combined picks sum onto the line rate (e.g. Gov goods 1% + Gov
+//   percentage tax 3% → goods lines at 4%).
 //
 // Document totals = sum of per-line (line total × line rate), rounded per line
 // (src/lib/quotes/calc.ts). Customer type (GOVERNMENT / TWA / NONE) is a label
 // only — it never chooses a rate.
+//
+// ATC codes below are Confirmed from BIR Form 2307 Appendix ATC list
+// (https://bangsamoro.gov.ph/wp-content/uploads/2024/12/Appendix-26-BIR-Form-2307.pdf).
+// Rate percentages remain Unverified until an accountant confirms.
 
 import type { ItemKind, WithholdingLineKind, WithholdingSnapshot } from "./calc";
 import { BUSINESS_IS_VAT_REGISTERED } from "../tax/constants.ts";
@@ -71,33 +75,39 @@ export function resolveCustomerSavedPick(
 export const MISSING_WITHHOLDING_TYPE_WARNING = WITHHOLDING_NOT_SET_NOTICE;
 
 /**
- * ATC labels in ONE config map.
- *
- * Government ATC codes below are UNVERIFIED — an accountant must review them
- * against the latest BIR withholding tables before production use.
+ * ATC labels (Confirmed codes from BIR 2307 ATC appendix).
+ * Rate % values are Unverified until accountant review.
  */
 export const ATC_LABELS = {
-  WI158: "EWT — goods (TWA) 1%",
-  WI160: "EWT — services (TWA) 2%",
-  // UNVERIFIED — confirm with accountant / BIR before relying on these codes:
-  WG010: "Government percentage tax 3% (UNVERIFIED — code to confirm)",
-  WV050: "Government VAT withholding 5% (UNVERIFIED — code to confirm)",
+  WI640: "EWT — government goods 1%",
+  WI157: "EWT — government services 2%",
+  WB080: "Government percentage tax 3%",
+  WI158: "EWT — private top agent goods 1%",
+  WI160: "EWT — private top agent services 2%",
+  "WV010/WV020": "VAT withheld 5%",
 } as const;
 
-/** Government ATCs stay UNVERIFIED; UI may hide the code and show this instead. */
-export const GOV_ATC_CODE_TO_CONFIRM = "code to confirm";
+/**
+ * @deprecated Pass 3: ATC codes are Confirmed from the 2307 list — never hide them.
+ * Kept empty so old call sites compile; never show this to staff.
+ */
+export const GOV_ATC_CODE_TO_CONFIRM = "";
 
+/** @deprecated Always false — Confirmed ATC codes are shown as-is. */
 export function isUnverifiedGovAtc(atc: string | null | undefined): boolean {
-  return atc === "WG010" || atc === "WV050";
+  void atc;
+  return false;
 }
 
 export type AtcCode = keyof typeof ATC_LABELS;
 
-/** Stable rate codes already used in Settings → Withholding / seeds. */
+/** Stable Settings → Withholding codes (Pass 3 catalog). */
 export const WITHHOLDING_DEFAULT_CODES = {
+  GOV_GOODS_1: "GOV_GOODS_1",
+  GOV_SERVICES_2: "GOV_SERVICES_2",
+  GOV_PT_3: "GOV_PT_3",
   GOODS_1: "GOODS_1",
   SERVICES_2: "SERVICES_2",
-  GOV_PT_3: "GOV_PT_3",
   GOV_VAT_5: "GOV_VAT_5",
 } as const;
 
@@ -107,39 +117,81 @@ type DefaultRow = {
   lineKind: WithholdingLineKind;
   rate: string;
   atcCode: AtcCode;
+  /** When false, Settings seeds the row inactive (staff may turn on later). */
+  active: boolean;
+  sortOrder: number;
 };
 
-/** Existing rate values (do not change). ATC codes come from ATC_LABELS. */
+/**
+ * Default Settings → Withholding catalog (exact Pass 3 order).
+ * Labels include the Confirmed ATC in parentheses. Rate % Unverified.
+ */
 export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_CODES, DefaultRow> = {
-  GOODS_1: {
-    code: WITHHOLDING_DEFAULT_CODES.GOODS_1,
-    label: "Goods 1%",
+  GOV_GOODS_1: {
+    code: WITHHOLDING_DEFAULT_CODES.GOV_GOODS_1,
+    label: "Government goods 1% (WI640)",
     lineKind: "GOODS",
     rate: "0.0100",
-    atcCode: "WI158",
+    atcCode: "WI640",
+    active: true,
+    sortOrder: 1,
   },
-  SERVICES_2: {
-    code: WITHHOLDING_DEFAULT_CODES.SERVICES_2,
-    label: "Services 2%",
+  GOV_SERVICES_2: {
+    code: WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_2,
+    label: "Government services 2% (WI157)",
     lineKind: "SERVICES",
     rate: "0.0200",
-    atcCode: "WI160",
+    atcCode: "WI157",
+    active: true,
+    sortOrder: 2,
   },
   GOV_PT_3: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_PT_3,
-    label: "Government 3% (code to confirm)",
+    label: "Government percentage tax 3% (WB080)",
     lineKind: "GOV_PT",
     rate: "0.0300",
-    atcCode: "WG010",
+    atcCode: "WB080",
+    active: true,
+    sortOrder: 3,
+  },
+  GOODS_1: {
+    code: WITHHOLDING_DEFAULT_CODES.GOODS_1,
+    label: "Private top agent goods 1% (WI158)",
+    lineKind: "GOODS",
+    rate: "0.0100",
+    atcCode: "WI158",
+    active: true,
+    sortOrder: 4,
+  },
+  SERVICES_2: {
+    code: WITHHOLDING_DEFAULT_CODES.SERVICES_2,
+    label: "Private top agent services 2% (WI160)",
+    lineKind: "SERVICES",
+    rate: "0.0200",
+    atcCode: "WI160",
+    active: true,
+    sortOrder: 5,
   },
   GOV_VAT_5: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_VAT_5,
-    label: "Government VAT 5% (code to confirm)",
+    label: "VAT withheld 5% (WV010/WV020)",
     lineKind: "GOV_VAT",
     rate: "0.0500",
-    atcCode: "WV050",
+    atcCode: "WV010/WV020",
+    active: false,
+    sortOrder: 6,
   },
 };
+
+/** Ordered list for seed / migration (sortOrder ascending). */
+export const WITHHOLDING_DEFAULT_CATALOG: readonly DefaultRow[] = [
+  WITHHOLDING_DEFAULT_ROWS.GOV_GOODS_1,
+  WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_2,
+  WITHHOLDING_DEFAULT_ROWS.GOV_PT_3,
+  WITHHOLDING_DEFAULT_ROWS.GOODS_1,
+  WITHHOLDING_DEFAULT_ROWS.SERVICES_2,
+  WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5,
+];
 
 /** Customer type remains a label only (does not choose rates). */
 export const KNOWN_WITHHOLDING_TYPES = ["GOVERNMENT", "TOP_WITHHOLDING_AGENT", "NONE"] as const;
@@ -172,33 +224,27 @@ export function needsWithholdingTypeWarning(type: string | null | undefined): bo
   return false;
 }
 
-/** True when the customer's / quote's pick is still unset (null). */
-export function isWithholdingNotSet(pick: string[] | null | undefined): boolean {
+/** True when the pick is still null (staff has not chosen rates or none). */
+export function isWithholdingNotSet(pick: readonly string[] | null | undefined): boolean {
   return pick == null;
 }
 
 /** True when staff explicitly chose none ([]). */
-export function isWithholdingNone(pick: string[] | null | undefined): boolean {
+export function isWithholdingNone(pick: readonly string[] | null | undefined): boolean {
   return Array.isArray(pick) && pick.length === 0;
 }
 
-/** True when at least one rate code is picked. */
-export function hasWithholdingPicks(pick: string[] | null | undefined): boolean {
-  return Array.isArray(pick) && pick.length > 0;
-}
-
 /** Parse Customer.defaultWithholding / Quote.withholdingPick JSON → null | string[]. */
-export function parseWithholdingPick(value: unknown): string[] | null {
-  if (value == null) return null;
-  if (!Array.isArray(value)) return null;
-  const codes = value.filter((v): v is string => typeof v === "string" && v.trim() !== "");
-  return [...new Set(codes)];
+export function parseWithholdingPick(raw: unknown): string[] | null {
+  if (raw == null) return null;
+  if (!Array.isArray(raw)) return null;
+  const codes = raw.filter((v): v is string => typeof v === "string" && v.trim() !== "");
+  return codes;
 }
 
-/** Whether a rate's Applies-to covers this item kind. */
-export function rateAppliesToKind(lineKind: WithholdingLineKind, itemKind: ItemKind): boolean {
-  if (lineKind === "GOODS") return itemKind === "GOODS";
-  if (lineKind === "SERVICES") return itemKind === "SERVICES";
+function rateAppliesToKind(lineKind: WithholdingLineKind, kind: ItemKind): boolean {
+  if (lineKind === "GOODS") return kind === "GOODS";
+  if (lineKind === "SERVICES") return kind === "SERVICES";
   // GOV_PT / GOV_VAT apply to the whole total → every line.
   return true;
 }
@@ -206,7 +252,7 @@ export function rateAppliesToKind(lineKind: WithholdingLineKind, itemKind: ItemK
 /**
  * Sum of picked rates that apply to this item kind.
  * Single applicable rate → keep its ATC/code/label.
- * Several → combined rate; ATC/code/label null (chips show the pick list instead).
+ * Several → combined rate; ATC from the single line-kind-specific rate when present.
  */
 export function lineWithholdingFromPicks(
   picks: readonly WithholdingSnapshot[],
@@ -230,8 +276,7 @@ export function lineWithholdingFromPicks(
     };
   }
 
-  // Combined picks: keep ATC from the single line-kind-specific rate when present
-  // (e.g. Goods 1% + Gov 3% → goods line shows WI158). Otherwise blank.
+  // Combined picks: keep ATC from the single line-kind-specific rate when present.
   const kindSpecific = applicable.filter((p) => p.lineKind === kind);
   if (kindSpecific.length === 1) {
     return {
@@ -321,7 +366,7 @@ export function lineDiffersFromUsualPicks(
 }
 
 /**
- * @deprecated Prefer lineDiffersFromUsualPicks. Type-based usual is always zero
+ * @deprecated Prefer lineDiffersFromUsualPicks.
  * (customer type never chooses a rate).
  */
 export function lineDiffersFromUsual(
@@ -343,13 +388,9 @@ export function lineWithholdingSnapshot(
   return { withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: false };
 }
 
-/** Format one rate for staff hints / chips (ATC once; gov uses "code to confirm"). */
+/** Format one rate for staff hints / chips (ATC once; labels already include it). */
 export function formatWithholdingPickPart(p: WithholdingSnapshot): string {
-  if (p.atcCode && isUnverifiedGovAtc(p.atcCode)) {
-    // Labels already include "(code to confirm)" for seeded gov rows — don't double it.
-    if (/\(code to confirm\)/i.test(p.label)) return p.label;
-    return `${p.label} (${GOV_ATC_CODE_TO_CONFIRM})`;
-  }
+  if (p.atcCode && p.label.includes(p.atcCode)) return p.label;
   if (p.atcCode) return `${p.label} (${p.atcCode})`;
   return p.label;
 }
@@ -376,4 +417,4 @@ export const WITHHOLDING_PICK_FIELD_LABEL = "Withholding";
 
 /** Hint under the multi-select on the customer form. */
 export const WITHHOLDING_PICK_FIELD_HINT =
-  "Tick the rates this agency withholds. You can combine rates (for example Goods 1% + Gov. percentage tax 3%).";
+  "Tick the rates this agency withholds. You can combine rates (for example Government goods 1% + Government percentage tax 3%).";

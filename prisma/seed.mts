@@ -84,7 +84,8 @@ const CUSTOMERS: {
       { kind: "DELIVERY", label: "Training center", street: "Sample Training Center, 45 Sample Rd.", barangay: "Bagumbayan", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1110" },
     ],
     withholdingType: "GOVERNMENT",
-    defaultWithholding: ["GOODS_1", "GOV_PT_3"],
+    // Government goods 1% + Government percentage tax 3% → goods lines at 4%.
+    defaultWithholding: ["GOV_GOODS_1", "GOV_PT_3"],
     defaultTerms: "Net 30",
     contacts: [
       { name: "Ana Cruz", role: "Procurement", email: "ana.cruz@example.com", phone: "0917 000 0001", isMain: true },
@@ -221,19 +222,38 @@ async function main(db: ReturnType<typeof connect>) {
     created.push(u.email);
   }
 
-  // Withholding rates normally come from the migration; add any that are missing.
-  // Seed may refresh labels/ATC on known codes. Never invent a "Goods 4%" rate —
-  // staff combine Goods 1% + Government 3%. Deactivate any leftover LINE_* rows.
-  for (const [i, r] of WITHHOLDING_RATES.entries()) {
+  // Withholding rates normally come from the migration; upsert Pass 3 catalog.
+  // Never invent a "Goods 4%" rate — staff combine goods 1% + percentage tax 3%.
+  // Deactivate any leftover LINE_* / Goods 4% rows. Does not rewrite saved picks.
+  for (const r of WITHHOLDING_RATES) {
     const existing = await db.withholdingRate.findUnique({ where: { code: r.code } });
     if (existing) {
-      const patch: { atcCode?: string; label?: string } = {};
-      if (!existing.atcCode && "atcCode" in r && r.atcCode) patch.atcCode = r.atcCode;
-      if (existing.label !== r.label) patch.label = r.label;
-      if (Object.keys(patch).length) await db.withholdingRate.update({ where: { code: r.code }, data: patch });
+      await db.withholdingRate.update({
+        where: { code: r.code },
+        data: {
+          label: r.label,
+          lineKind: r.lineKind,
+          atcCode: r.atcCode,
+          rate: r.rate,
+          active: r.active,
+          sortOrder: r.sortOrder,
+          note: "verify with BIR",
+        },
+      });
       continue;
     }
-    await db.withholdingRate.create({ data: { ...r, note: "verify with BIR", sortOrder: i + 1 } });
+    await db.withholdingRate.create({
+      data: {
+        code: r.code,
+        label: r.label,
+        lineKind: r.lineKind,
+        atcCode: r.atcCode,
+        rate: r.rate,
+        active: r.active,
+        note: "verify with BIR",
+        sortOrder: r.sortOrder,
+      },
+    });
   }
   await db.withholdingRate.updateMany({
     where: { OR: [{ code: { startsWith: "LINE_" } }, { label: "Goods 4%" }] },
@@ -280,13 +300,16 @@ async function main(db: ReturnType<typeof connect>) {
   }
 }
 
-const WITHHOLDING_RATES = [
-  // ATC labels: see src/lib/quotes/withholding-defaults.ts (ATC_LABELS). Gov codes UNVERIFIED.
-  { code: "GOODS_1", label: "Goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI158" },
-  { code: "SERVICES_2", label: "Services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI160" },
-  { code: "GOV_PT_3", label: "Government 3% (code to confirm)", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WG010" },
-  { code: "GOV_VAT_5", label: "Government VAT 5%", lineKind: "GOV_VAT", rate: "0.0500", atcCode: "WV050" },
-] as const;
+/** Pass 3 Settings → Withholding catalog (labels + ATCs Confirmed; rates Unverified). */
+const WITHHOLDING_RATES = Object.values(WITHHOLDING_DEFAULT_ROWS).map((r) => ({
+  code: r.code,
+  label: r.label,
+  lineKind: r.lineKind,
+  rate: r.rate,
+  atcCode: r.atcCode,
+  active: r.active,
+  sortOrder: r.sortOrder,
+}));
 
 type SeedLine = { description: string; kind: "GOODS" | "SERVICES"; qty: string; unit: string; supplier: string | null; supplierUnitCost: string; unitPrice: string };
 

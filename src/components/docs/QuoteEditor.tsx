@@ -35,8 +35,6 @@ import {
   REAPPLY_WITHHOLDING_LABEL,
   WITHHOLDING_PICK_CHANGE_LABEL,
   allowGovVatOption,
-  GOV_ATC_CODE_TO_CONFIRM,
-  isUnverifiedGovAtc,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
@@ -665,7 +663,6 @@ export function QuoteEditor({
                     i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
                       ? i.withholdingAtc
                       : pickAtc;
-                  const govAtc = isUnverifiedGovAtc(displayAtc);
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const below = toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -687,10 +684,7 @@ export function QuoteEditor({
                               <option value="GOODS">Goods</option>
                               <option value="SERVICES">Services</option>
                             </select>
-                            <span
-                              className="quote-tg quote-tg-wh"
-                              title={govAtc ? `${GOV_ATC_CODE_TO_CONFIRM}${displayAtc ? ` (${displayAtc})` : ""}` : displayAtc ?? undefined}
-                            >
+                            <span className="quote-tg quote-tg-wh" title={displayAtc ?? undefined}>
                               <span className="quote-tg-wh-label">{whLabel}</span>
                               <input
                                 aria-label={`Line ${idx + 1} withholding percent`}
@@ -703,13 +697,13 @@ export function QuoteEditor({
                               <span className="quote-wh-pct-suffix" aria-hidden>
                                 %
                               </span>
-                              {/* ATC shows the code (WI158…) or blank — never the rate number. Unverified gov codes stay blank. */}
+                              {/* ATC shows the code (WI640…) or blank — never the rate number. */}
                               <input
                                 aria-label={`Line ${idx + 1} ATC`}
                                 className="w-atc"
-                                value={govAtc ? "" : (displayAtc ?? "")}
-                                placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
-                                title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : displayAtc ?? undefined}
+                                value={displayAtc ?? ""}
+                                placeholder="ATC"
+                                title={displayAtc ?? undefined}
                                 onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                               />
                             </span>
@@ -805,7 +799,6 @@ export function QuoteEditor({
                     i.withholdingOverride || (i.withholdingAtc != null && String(i.withholdingAtc).trim() !== "")
                       ? i.withholdingAtc
                       : pickAtc;
-                  const govAtc = isUnverifiedGovAtc(displayAtc);
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   return (
                     <article key={`m-${i.key}`} className="quote-line-card">
@@ -931,9 +924,9 @@ export function QuoteEditor({
                           <input
                             aria-label={`Line ${idx + 1} ATC`}
                             className="w-atc"
-                            value={govAtc ? "" : (displayAtc ?? "")}
-                            placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
-                            title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : displayAtc ?? undefined}
+                            value={displayAtc ?? ""}
+                            placeholder="ATC"
+                            title={displayAtc ?? undefined}
                             onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                           />
                         </span>
@@ -1050,7 +1043,7 @@ export function QuoteEditor({
                     computedDocRates.map((r) => (
                       <span key={r.code} className="chip">
                         {r.label}
-                        {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                        {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
                       </span>
                     ))
                   )}

@@ -7,8 +7,6 @@
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import {
-  GOV_ATC_CODE_TO_CONFIRM,
-  isUnverifiedGovAtc,
   WITHHOLDING_PICK_FIELD_HINT,
   WITHHOLDING_PICK_FIELD_LABEL,
   WITHHOLDING_PICK_NONE_LABEL,
@@ -77,14 +75,8 @@ export function WithholdingPickField({
           <span className="small faint">No active rates in Settings → Withholding.</span>
         ) : (
           rates.map((r) => {
-            // Don't double "(code to confirm)" when the seeded label already has it.
-            const labelHasConfirm = /\(code to confirm\)/i.test(r.label);
-            const atc =
-              r.atcCode && !isUnverifiedGovAtc(r.atcCode)
-                ? r.atcCode
-                : r.atcCode && !labelHasConfirm
-                  ? GOV_ATC_CODE_TO_CONFIRM
-                  : null;
+            // Labels already include the ATC — don't double it.
+            const atc = r.atcCode && !r.label.includes(r.atcCode) ? r.atcCode : null;
             return (
               <label key={r.code} className="wh-pick-row">
                 <input

@@ -33,8 +33,8 @@ const beforeWithWh = {
   netMargin: "97.00",
   netMarginPct: "97.00",
   withholding: [
-    { code: "GOV_PT_3", label: "Gov PT", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WG010" },
-    { code: "GOV_VAT_5", label: "Gov VAT", lineKind: "GOV_VAT", rate: "0.0500", atcCode: "WV050" },
+    { code: "GOV_PT_3", label: "Gov PT", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WB080" },
+    { code: "GOV_VAT_5", label: "VAT withheld 5%", lineKind: "GOV_VAT", rate: "0.0500", atcCode: "WV010/WV020" },
   ],
 };
 
@@ -42,7 +42,7 @@ describe("rateFromDocWithholding", () => {
   it("prefers GOV_PT over GOV_VAT when both are in the document JSON", () => {
     expect(rateFromDocWithholding(beforeWithWh.withholding, "GOODS")).toEqual({
       withholdingRate: "0.0300",
-      withholdingAtc: "WG010",
+      withholdingAtc: "WB080",
     });
   });
 });

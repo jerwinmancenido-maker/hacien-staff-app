@@ -35,8 +35,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Saved pick: Goods 1% + Gov PT 3% (combined rates for the gap demo).
-  const pick = ["GOODS_1", "GOV_PT_3"];
+  // Saved pick: Government goods 1% + Government percentage tax 3% (goods → 4%).
+  const pick = ["GOV_GOODS_1", "GOV_PT_3"];
   customer = await db.customer.update({
     where: { id: customer.id },
     data: {
