@@ -15,14 +15,20 @@ const taken = new Set<number>();
 /** A year (and the year after it) with no number series yet, so its counters start at 0001. */
 export async function freshYear(): Promise<number> {
   // Shared hacien_test exhausted 2200–9199; keep years ≤9998 for MySQL DATE / JS Date.
-  for (;;) {
-    const y = 9200 + Math.floor(Math.random() * 798); // 9200–9997 so y+1 ≤9998
-    if (taken.has(y) || taken.has(y + 1)) continue;
-    const used = await db.documentSeries.count({ where: { year: { in: [y, y + 1] } } });
-    if (used) continue;
-    taken.add(y).add(y + 1);
-    return y;
+  // Local `taken` only avoids same-process races before DocumentSeries rows exist; if it
+  // fills up across a long worker, clear it and trust the DB again.
+  for (let round = 0; round < 3; round++) {
+    for (let attempt = 0; attempt < 1500; attempt++) {
+      const y = 9200 + Math.floor(Math.random() * 798); // 9200–9997 so y+1 ≤9998
+      if (taken.has(y) || taken.has(y + 1)) continue;
+      const used = await db.documentSeries.count({ where: { year: { in: [y, y + 1] } } });
+      if (used) continue;
+      taken.add(y).add(y + 1);
+      return y;
+    }
+    taken.clear();
   }
+  throw new Error("freshYear: no free year pair in 9200–9997");
 }
 
 export async function makeUser(kind: "costs" | "staff" | "viewer"): Promise<DocActor> {
