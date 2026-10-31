@@ -27,9 +27,13 @@ function loggedOut(url: string) {
 
 describe("proxy public-asset allowlist (security)", () => {
   it("lists only exact icon/favicon/manifest names and brand/_next prefixes (no extension wildcard)", () => {
-    // /icon and /apple-icon only — app/icon.png and app/apple-icon.png are file
-    // conventions served at those bare paths; there is no public/*.png for them.
-    expect(PUBLIC_ASSET_EXACT).toEqual(["/favicon.ico", "/icon", "/apple-icon", "/site.webmanifest"]);
+    // Next 16 file conventions: ○ /icon.png and ○ /apple-icon.png (not bare /icon).
+    expect(PUBLIC_ASSET_EXACT).toEqual([
+      "/favicon.ico",
+      "/icon.png",
+      "/apple-icon.png",
+      "/site.webmanifest",
+    ]);
     expect(PUBLIC_ASSET_PREFIXES).toEqual(["/_next/static", "/_next/image", "/brand/"]);
     const matcherLine = Array.isArray(config.matcher) ? config.matcher[0] : config.matcher;
     expect(matcherLine).toBe(PROXY_MATCHER);
@@ -37,12 +41,12 @@ describe("proxy public-asset allowlist (security)", () => {
     expect(matcherLine).not.toMatch(/svg\|png\|jpg/);
     expect(matcherLine).toContain("brand/");
     expect(matcherLine).toContain("favicon\\.ico$");
-    expect(matcherLine).toContain("icon$");
-    expect(matcherLine).toContain("apple-icon$");
+    expect(matcherLine).toContain("icon\\.png$");
+    expect(matcherLine).toContain("apple-icon\\.png$");
     expect(matcherLine).toContain("site\\.webmanifest$");
-    // No unanchored (?:/|$) — trailing segments must stay gated.
-    expect(matcherLine).not.toMatch(/favicon\\.ico\(\?:/);
-    expect(matcherLine).not.toMatch(/site\\.webmanifest\(\?:/);
+    // Bare /icon and /apple-icon are not allowlisted.
+    expect(matcherLine).not.toMatch(/(?<![\w.-])icon\$/);
+    expect(matcherLine).not.toMatch(/apple-icon\$/);
   });
 
   it("matcher and isPublicAssetPath agree: session check skipped only for allowlisted assets", () => {
@@ -51,8 +55,8 @@ describe("proxy public-asset allowlist (security)", () => {
       "/brand/logo-wordmark.svg",
       "/brand/icon-32.png",
       "/favicon.ico",
-      "/icon",
-      "/apple-icon",
+      "/icon.png",
+      "/apple-icon.png",
       "/site.webmanifest",
       "/_next/static/chunks/app.js",
       "/_next/image",
@@ -72,8 +76,8 @@ describe("proxy public-asset allowlist (security)", () => {
       "/login.png",
       "/evil.ico",
       "/site.webmanifest.bak",
-      "/icon.png",
-      "/apple-icon.png",
+      "/icon",
+      "/apple-icon",
       "/brand",
       "/customers",
       "/",
@@ -85,8 +89,25 @@ describe("proxy public-asset allowlist (security)", () => {
     }
   });
 
-  it("logged out: trailing segments under favicon/icon/manifest stay gated", () => {
-    for (const path of ["/favicon.ico/anything", "/icon/x", "/site.webmanifest/x", "/apple-icon/180"]) {
+  it("logged out: /icon.png, /apple-icon.png, /favicon.ico and /site.webmanifest are open (200, not 307)", () => {
+    for (const path of ["/icon.png", "/apple-icon.png", "/favicon.ico", "/site.webmanifest"]) {
+      expect(shouldCheckSession(path), path).toBe(false);
+      expect(matcherHits(path), `matcher should skip ${path}`).toBe(false);
+      const res = proxy(loggedOut(`http://localhost${path}`));
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("location"), path).toBeNull();
+    }
+  });
+
+  it("logged out: trailing segments under favicon/icon.png/apple-icon.png/manifest stay gated", () => {
+    for (const path of [
+      "/favicon.ico/anything",
+      "/favicon.ico/x",
+      "/icon.png/x",
+      "/apple-icon.png/x",
+      "/site.webmanifest/x",
+      "/icon/x",
+    ]) {
       expect(isPublicAssetPath(path), path).toBe(false);
       expect(shouldCheckSession(path), path).toBe(true);
       expect(matcherHits(path), `matcher should hit ${path}`).toBe(true);
@@ -111,8 +132,8 @@ describe("proxy public-asset allowlist (security)", () => {
       "/brand/logo-full.svg",
       "/brand/logo-wordmark.svg",
       "/favicon.ico",
-      "/icon",
-      "/apple-icon",
+      "/icon.png",
+      "/apple-icon.png",
       "/site.webmanifest",
     ]) {
       expect(shouldCheckSession(path)).toBe(false);

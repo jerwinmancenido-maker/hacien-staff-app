@@ -9,14 +9,15 @@ const PUBLIC = ["/login", "/forgot-password", "/reset-password"];
  * Exact public asset paths that skip the session gate (favicon, app icons, PWA
  * manifest). Prefixes are listed separately — never a generic file-extension rule.
  *
- * Kept `/icon` and `/apple-icon` (not `*.png`): `src/app/icon.png` and
- * `src/app/apple-icon.png` are App Router metadata file conventions, which Next
- * serves at those bare paths. There is no `public/icon.png` / `public/apple-icon.png`.
+ * `/icon.png` and `/apple-icon.png` are the App Router metadata file-convention
+ * routes produced by `src/app/icon.png` and `src/app/apple-icon.png` (see
+ * `next build` route list: `○ /icon.png`, `○ /apple-icon.png`). `/favicon.ico`
+ * and `/site.webmanifest` come from `public/`.
  */
 export const PUBLIC_ASSET_EXACT = [
   "/favicon.ico",
-  "/icon",
-  "/apple-icon",
+  "/icon.png",
+  "/apple-icon.png",
   "/site.webmanifest",
 ] as const;
 
@@ -25,10 +26,10 @@ export const PUBLIC_ASSET_PREFIXES = ["/_next/static", "/_next/image", "/brand/"
 
 /**
  * Final middleware matcher (must be a static string for Next to parse at build time).
- * Exact names are `$`-anchored so /favicon.ico/anything, /icon/x, etc. still hit the proxy.
+ * Exact names are `$`-anchored so /icon.png/x, /favicon.ico/anything, etc. still hit the proxy.
  */
 export const PROXY_MATCHER =
-  "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon$|apple-icon$|site\\.webmanifest$).*)";
+  "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon\\.png$|apple-icon\\.png$|site\\.webmanifest$).*)";
 
 /** True when the path is a no-auth static asset (matcher + proxy share this list). */
 export function isPublicAssetPath(pathname: string): boolean {
@@ -69,6 +70,6 @@ export function proxy(req: NextRequest) {
 export const config = {
   // Static string required by Next — keep identical to PROXY_MATCHER (tested).
   matcher: [
-    "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon$|apple-icon$|site\\.webmanifest$).*)",
+    "/((?!_next/static|_next/image|brand/|favicon\\.ico$|icon\\.png$|apple-icon\\.png$|site\\.webmanifest$).*)",
   ],
 };
