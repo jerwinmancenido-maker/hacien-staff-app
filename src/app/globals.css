@@ -3011,9 +3011,10 @@ button.contact-card-add {
   white-space: normal;
 }
 .tax-cal-table td.tax-cal-due > div:first-child {
-  /* YYYY-MM-DD stays one token; "date to confirm" may wrap so Status never covers it. */
-  white-space: normal;
-  overflow-wrap: break-word;
+  /* Main due line: nowrap like .tax-cal-fileby-date so ISO YYYY-MM-DD never splits. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .tax-cal-table td.tax-cal-due .small,
 .tax-cal-table td.tax-cal-due .tax-cal-fileby {
@@ -3238,7 +3239,7 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 16%;
+    width: 14%;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
@@ -3246,7 +3247,7 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
-    width: 14%;
+    width: 16%; /* room for nowrap ISO / "date to confirm" */
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
@@ -3305,7 +3306,7 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 188px;
+    width: 178px;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
@@ -3313,7 +3314,7 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
-    width: 108px;
+    width: 118px; /* nowrap ISO / "date to confirm" */
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
