@@ -436,17 +436,17 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
             <thead>
               <tr>
                 <th>Description</th>
-                <th>Kind</th>
-                <th className="num">Qty</th>
-                <th>Unit</th>
-                {withCosts && <th>Supplier</th>}
-                {withCosts && <th className="num">Supplier unit</th>}
-                {withCosts && <th className="num">Supplier total</th>}
-                <th className="num">HACIEN price</th>
-                <th className="num">Total</th>
-                {withCosts && <th className="num">Margin</th>}
+                <th className="col-kind">Kind</th>
+                <th className="num col-qty">Qty</th>
+                <th className="col-unit">Unit</th>
+                {withCosts && <th className="col-supplier">Supplier</th>}
+                {withCosts && <th className="num col-money">Unit cost</th>}
+                {withCosts && <th className="num col-money">Supplier total</th>}
+                <th className="num col-money">Price</th>
+                <th className="num col-money">Total</th>
+                {withCosts && <th className="num col-money">Margin</th>}
                 <th className="num col-wh">WH% / ATC</th>
-                <th aria-label="Line actions" />
+                <th className="col-actions" aria-label="Line actions" />
               </tr>
             </thead>
             <tbody>
@@ -466,20 +466,20 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                       <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
                       {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                     </td>
-                    <td>
+                    <td className="col-kind">
                       <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
                         <option value="GOODS">Goods</option>
                         <option value="SERVICES">Services</option>
                       </select>
                     </td>
-                    <td className="num">
+                    <td className="num col-qty">
                       <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                     </td>
-                    <td>
+                    <td className="col-unit">
                       <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
                     </td>
                     {withCosts && (
-                      <td>
+                      <td className="col-supplier">
                         <select aria-label={`Line ${idx + 1} supplier`} value={i.supplierId ?? ""} onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}>
                           <option value="">—</option>
                           {suppliers!.map((s) => (
@@ -491,7 +491,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                       </td>
                     )}
                     {withCosts && (
-                      <td className="num">
+                      <td className="num col-money">
                         <input
                           aria-label={`Line ${idx + 1} supplier unit cost`}
                           inputMode="decimal"
@@ -501,12 +501,14 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                         />
                       </td>
                     )}
-                    {withCosts && <td className="num muted">{formatPeso(a.supplierTotal)}</td>}
-                    <td className="num">
+                    {withCosts && <td className="num muted col-money">{formatPeso(a.supplierTotal)}</td>}
+                    <td className="num col-money">
                       <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
                     </td>
-                    <td className="num strong">{formatPeso(a.total)}</td>
-                    {withCosts && <td className={`num${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>}
+                    <td className="num strong col-money">{formatPeso(a.total)}</td>
+                    {withCosts && (
+                      <td className={`num col-money${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>
+                    )}
                     <td className="num col-wh">
                       <input
                         aria-label={`Line ${idx + 1} withholding percent`}
