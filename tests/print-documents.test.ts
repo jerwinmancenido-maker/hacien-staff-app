@@ -5,11 +5,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
+import { PrintShell } from "@/components/docs/PrintShell";
 import {
   FORBIDDEN_VAT_PHRASES,
   INPUT_TAX_DISCLAIMER,
   NON_VAT_LABEL,
   NOT_OFFICIAL_INVOICE,
+  QUOTATION_NOT_INVOICE,
   STATEMENT_NOT_OFFICIAL,
   taxFooterLines,
 } from "@/lib/print/tax-wording";
@@ -26,6 +28,7 @@ import {
   supplierPaymentPrintFixture,
   supplierStatementFixture,
   voidQuoteFixture,
+  withholdingQuotePrintFixture,
 } from "./fixtures/print-doc";
 
 function html(doc: Parameters<typeof ProfessionalPrintDocument>[0]["doc"]) {
@@ -116,7 +119,8 @@ describe("professional print documents", () => {
       INPUT_TAX_DISCLAIMER,
     ]);
     expect(taxFooterLines("billing", { showInputTaxDisclaimer: false })).toEqual([NOT_OFFICIAL_INVOICE]);
-    expect(taxFooterLines("quote")).toEqual([]);
+    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(taxFooterLines("sales_order")).toEqual([QUOTATION_NOT_INVOICE]);
     expect(taxFooterLines("collection", { showInputTaxDisclaimer: true })).toEqual([
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
@@ -137,5 +141,83 @@ describe("professional print documents", () => {
 
   it("includes EWT/2307 note on supplier payment voucher fixture", () => {
     expect(html(supplierPaymentPrintFixture())).toContain("BIR Form 2307");
+  });
+
+  it("hides internal status on printed quote, SO and billing (screen-only row)", () => {
+    for (const fixture of [quotePrintFixture, salesOrderPrintFixture, billingPrintFixture]) {
+      const markup = html(fixture());
+      expect(markup).toContain('class="pp-status-row no-print"');
+      expect(markup).toContain(`>${fixture().status}<`);
+    }
+    // Supplier PO still prints status.
+    const po = html(poPrintFixture());
+    expect(po).toContain('class="pp-status-row"');
+    expect(po).not.toContain("pp-status-row no-print");
+  });
+
+  it("shows company email in the letterhead whenever it is set", () => {
+    const withEmail = html(quotePrintFixture());
+    expect(withEmail).toContain("billing@example.com");
+    const noEmail = html({
+      ...quotePrintFixture(),
+      company: { ...quotePrintFixture().company, email: "" },
+    });
+    expect(noEmail).not.toContain("billing@example.com");
+    expect(noEmail).toContain("+63 2 8123 4567");
+  });
+
+  it("uses brand kit logo-full.svg by default and allows a settings logo override", () => {
+    const brand = html({ ...quotePrintFixture(), company: { ...quotePrintFixture().company, logoUrl: null } });
+    expect(brand).toContain('src="/brand/logo-full.svg"');
+    expect(brand).toContain('class="pp-title-pixel"');
+    const custom = html({
+      ...quotePrintFixture(),
+      company: { ...quotePrintFixture().company, logoUrl: "/files/company-logo" },
+    });
+    expect(custom).toContain('src="/files/company-logo"');
+    expect(custom).not.toContain("/brand/logo-full.svg");
+  });
+
+  it("shows Bill to / Deliver to boxes with Attn on customer docs", () => {
+    const markup = html(quotePrintFixture());
+    expect(markup).toContain("Bill to");
+    expect(markup).toContain("Deliver to");
+    expect(markup).toContain("Attn:");
+    expect(markup).toContain("Ana Cruz");
+  });
+
+  it("shows Valid until on quotes and est. WHT lines when the customer withholds", () => {
+    expect(html(quotePrintFixture())).toContain("Valid until");
+    const wht = html(withholdingQuotePrintFixture());
+    expect(wht).toContain("Less: withholding tax (est.)");
+    expect(wht).toContain("Net amount due");
+  });
+
+  it("never prints QA admin on signature lines", () => {
+    const markup = html({
+      ...quotePrintFixture(),
+      signatories: [
+        { role: "Prepared by", name: "QA admin", position: null },
+        { role: "Conforme", name: null },
+      ],
+    });
+    expect(markup.toLowerCase()).not.toContain("qa admin");
+  });
+});
+
+describe("print shell screen-only chrome", () => {
+  it("marks Back / Print buttons and missing-field warnings as no-print", () => {
+    const markup = renderToStaticMarkup(
+      createElement(PrintShell, {
+        backHref: "/quotes/1",
+        doc: quotePrintFixture(),
+        missing: ["TIN", "address"],
+        canManageSettings: true,
+      }),
+    );
+    expect(markup).toContain("no-print");
+    expect(markup).toContain("Print / Save PDF");
+    expect(markup).toContain("Back");
+    expect(markup).toMatch(/alert warn[^>]*no-print|no-print[^>]*alert warn/);
   });
 });

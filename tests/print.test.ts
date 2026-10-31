@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { qrSvg, TERMS_URL } from "@/lib/print/qr";
 import { NON_VAT_LABEL } from "@/lib/print/tax-wording";
-import { quotePrintFixture } from "./fixtures/print-doc";
+import { quotePrintFixture, withholdingQuotePrintFixture } from "./fixtures/print-doc";
 
 describe("print document", () => {
   it("renders NON-VAT, the QR code, the footer and the contract price", async () => {
@@ -17,14 +17,22 @@ describe("print document", () => {
     expect(html).toContain("<svg");
     expect(html).toContain("QT-2026-0001");
     expect(html).toContain("₱520,000.00");
-    expect(html).toContain("Terms and conditions:");
+    expect(html).toContain("Terms:");
   });
 
   it("has no costs, margins, or supplier info on customer quote", async () => {
     const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() })).toLowerCase();
-    for (const word of ["supplier", "margin", "unit cost", "withholding", "net received"]) {
+    for (const word of ["supplier", "margin", "unit cost", "net received"]) {
       expect(html, word).not.toContain(word);
     }
+  });
+
+  it("may show estimated withholding on withholding-customer quotes only", () => {
+    const plain = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() })).toLowerCase();
+    expect(plain).not.toContain("withholding tax (est.)");
+    const wht = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: withholdingQuotePrintFixture() })).toLowerCase();
+    expect(wht).toContain("withholding tax (est.)");
+    expect(wht).toContain("net amount due");
   });
 
   it("generates the QR locally for the terms URL", async () => {

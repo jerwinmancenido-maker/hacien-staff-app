@@ -1,5 +1,5 @@
 import type { ProfessionalPrintModel } from "@/lib/print/types";
-import { INPUT_TAX_DISCLAIMER, NOT_OFFICIAL_INVOICE, STATEMENT_NOT_OFFICIAL } from "@/lib/print/tax-wording";
+import { INPUT_TAX_DISCLAIMER, NOT_OFFICIAL_INVOICE, QUOTATION_NOT_INVOICE, STATEMENT_NOT_OFFICIAL } from "@/lib/print/tax-wording";
 
 const company = {
   registeredName: "HACIEN Sample Trading Co.",
@@ -9,7 +9,7 @@ const company = {
   phone: "+63 2 8123 4567",
   email: "billing@example.com",
   website: "https://example.com",
-  logoUrl: null as string | null,
+  logoUrl: "/brand/logo-full.svg" as string | null,
 };
 
 const customerParty = {
@@ -70,38 +70,71 @@ function base(partial: Partial<ProfessionalPrintModel> & Pick<ProfessionalPrintM
 export const quotePrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "quote",
-    title: "Quotation",
+    title: "QUOTATION",
     number: "QT-2026-0001",
     status: "SENT",
+    hideStatus: true,
     thankYou: true,
+    meta: [
+      { label: "Valid until", value: "Nov 30, 2026" },
+      { label: "Prepared by", value: "Jerwin" },
+    ],
+    validity: "Nov 30, 2026",
+    taxLines: [QUOTATION_NOT_INVOICE],
     paymentInstructions: [
       { kind: "bank", label: "Sample Bank", accountName: "HACIEN Sample", accountLast4: "1234", accountPrinted: "****1234" },
     ],
     signatories: [
-      { role: "Prepared by", name: "Jerwin" },
-      { role: "Approved by", name: null },
-      { role: "Received by", name: null },
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Conforme", name: null },
+    ],
+  });
+
+/** Quote for a customer that withholds — shows est. WHT lines. */
+export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
+  base({
+    ...quotePrintFixture(),
+    number: "QT-2026-WHT1",
+    totals: [
+      { label: "Subtotal", amount: "520000.00" },
+      { label: "Total", amount: "520000.00", emphasize: true },
+      { label: "Less: withholding tax (est.) 1% + 3%", amount: "20800.00" },
+      { label: "Net amount due", amount: "499200.00", emphasize: true },
     ],
   });
 
 export const salesOrderPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "sales_order",
-    title: "Sales Order",
+    title: "SALES ORDER",
     number: "SO-2026-0001",
+    hideStatus: true,
     thankYou: true,
-    meta: [{ label: "Customer PO no.", value: "PO-CUST-99" }],
+    taxLines: [QUOTATION_NOT_INVOICE],
+    meta: [
+      { label: "Prepared by", value: "Jerwin" },
+      { label: "Customer PO/ref", value: "PO-CUST-99" },
+    ],
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Conforme", name: null },
+    ],
   });
 
 export const billingPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "billing",
-    title: "Billing Statement",
+    title: "BILLING STATEMENT",
     number: "BL-2026-0001",
+    hideStatus: true,
     thankYou: true,
     taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
     paymentInstructions: [
       { kind: "ewallet", label: "GCash", accountName: "HACIEN", accountLast4: "5678", accountPrinted: "****5678" },
+    ],
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Conforme", name: null },
     ],
   });
 
@@ -250,3 +283,26 @@ export const draftPoFixture = (): ProfessionalPrintModel => ({
   status: "DRAFT",
   watermark: "DRAFT",
 });
+
+/** Long quote (25 lines) for pagination fixtures / screenshots. */
+export const longQuotePrintFixture = (): ProfessionalPrintModel => {
+  const q = quotePrintFixture();
+  const many = Array.from({ length: 25 }, (_, i) => ({
+    description: `Sample line item ${i + 1}`,
+    detail: i % 5 === 0 ? "Optional detail line" : null,
+    qty: "1.00",
+    unit: "pc",
+    unitPrice: "1000.00",
+    amount: "1000.00",
+  }));
+  return {
+    ...q,
+    number: "QT-2026-0025",
+    items: many,
+    totals: [
+      { label: "Subtotal", amount: "25000.00" },
+      { label: "Total", amount: "25000.00", emphasize: true },
+    ],
+    totalInWords: "Twenty-five thousand pesos only",
+  };
+};
