@@ -5077,13 +5077,18 @@ button.contact-card-add {
   .home-ct h3 {
     font-size: 13px;
   }
+  /* Sales billed + Needs action: same 12px pad as KPI cards. */
+  .home-sales > .home-ct,
+  .home-na-card > .home-ct {
+    padding: 12px 12px 0;
+  }
 
   /* Chart ~120px, no Y-axis, every-other month, trim chrome. */
   .home-sales-sub {
     display: none; /* range still in desktop; phone saves a line */
   }
   .home-sales-chart {
-    margin: 4px 0 0;
+    margin: 0; /* no empty band above/below the plot */
   }
   .home-sales-yl {
     display: none !important;
@@ -5094,7 +5099,7 @@ button.contact-card-add {
     padding-right: 12px;
   }
   .home-sales-chw {
-    padding-top: 2px;
+    padding-top: 0;
   }
   .home-sales-svg {
     height: 110px;
@@ -5102,8 +5107,8 @@ button.contact-card-add {
   }
   .home-sales-ml {
     font-size: 10px;
-    padding-top: 2px;
-    padding-bottom: 8px;
+    padding-top: 0;
+    padding-bottom: 12px; /* card bottom matches KPI 12px */
   }
   .home-sales-ml span {
     width: 20px;
@@ -5117,15 +5122,21 @@ button.contact-card-add {
     max-width: 42%;
   }
   .home-sales-empty {
-    padding: 0 12px 10px;
+    padding: 0 12px 12px;
   }
 
-  /* Needs action: compact 40px rows, no empty card floor. */
+  /* Needs action: 12px pad like KPI; compact 40px rows. */
   .home-na {
-    padding: 0 8px 0;
+    padding: 0 12px 12px;
   }
   .home-na-empty {
-    padding: 6px 12px 10px;
+    padding: 6px 12px 12px;
+  }
+  .home-ks-phone-limit {
+    display: block !important; /* override flex from .home-phone-only */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .home-na-row {
     min-height: 40px;

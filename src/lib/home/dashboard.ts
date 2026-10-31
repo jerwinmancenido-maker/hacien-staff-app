@@ -38,6 +38,7 @@ import {
   taxCalendarHref,
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
+import { formatCompactPesoLimit } from "./nonVatCopy";
 import { loadHomeSales } from "./sales-data";
 import {
   manilaMonthKey,
@@ -146,6 +147,8 @@ export type HomeKpis = {
     barPct: number;
     pctLabel: string;
     limitLabel: string;
+    /** Phone sub-line: "46.8% of ₱3M limit" from live pct + Non-VAT limit. */
+    phoneLimitLabel: string;
     href: string;
   };
 };
@@ -232,6 +235,14 @@ function buildTaxDetail(dueYmd: string | null, now: Date): string {
   return `Due ${when} · in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
+/**
+ * Phone Billed-year KPI sub-line from live Non-VAT meter values.
+ * e.g. pctLabel "46.8%" + limit 3_000_000 → "46.8% of ₱3M limit".
+ */
+export function billedYearPhoneLimitLabel(pctLabel: string, limit: number): string {
+  return `${pctLabel} of ${formatCompactPesoLimit(limit)} limit`;
+}
+
 /** Compact phone tax strip: "NOV 16 · 1701Q due in 16 days". */
 export function buildTaxStripLabel(opts: {
   form: string;
@@ -310,6 +321,7 @@ function buildKpis(opts: {
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,
       limitLabel: `of Non-VAT ${formatCompactLimit(nonVat.limit)}`,
+      phoneLimitLabel: billedYearPhoneLimitLabel(nonVat.pctLabel, nonVat.limit),
       href: nonVat.href,
     },
   };

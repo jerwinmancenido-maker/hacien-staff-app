@@ -117,8 +117,10 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <span className="home-mini-bar home-desktop-only" aria-hidden>
             <i style={{ width: `${Math.min(100, Math.max(0, kpis.billedThisYear.barPct))}%` }} />
           </span>
-          <b className="num">{kpis.billedThisYear.pctLabel}</b>
+          <b className="num home-desktop-only">{kpis.billedThisYear.pctLabel}</b>
           <span className="home-desktop-only">{kpis.billedThisYear.limitLabel}</span>
+          {/* Phone: "46.8% of ₱3M limit" from live pct + Non-VAT limit. */}
+          <span className="num home-phone-only home-ks-phone-limit">{kpis.billedThisYear.phoneLimitLabel}</span>
         </div>
       </div>
     </div>

@@ -282,6 +282,15 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s*\{[^}]*padding:\s*10px\s+12px\s+0/s);
+    // Sales billed + Needs action match KPI 12px padding; chart has no empty band
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-sales\s*>\s*\.home-ct[\s\S]*padding:\s*12px\s+12px\s+0/s,
+    );
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-na-card\s*>\s*\.home-ct[\s\S]*padding:\s*12px\s+12px\s+0/s,
+    );
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-na\s*\{[^}]*padding:\s*0\s+12px\s+12px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-chart\s*\{[^}]*margin:\s*0/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s+h3\s*\{[^}]*font-size:\s*13px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kv\s*\{[^}]*font-size:\s*18px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-svg\s*\{[^}]*height:\s*110px/s);
@@ -291,6 +300,7 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-tax-strip[\s\S]*min-height:\s*48px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*border-radius:\s*10px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*box-shadow:\s*0\s+1px\s+1px/s);
+    expect(sections).toMatch(/phoneLimitLabel/);
     expect(page).toMatch(/home-page-header/);
   });
 
