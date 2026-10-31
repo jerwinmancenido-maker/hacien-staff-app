@@ -56,6 +56,14 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
+      taxCalendar: {
+        ...DEFAULT_SETTINGS.taxCalendar,
+        ...(v.data as Partial<Settings>).taxCalendar,
+        obligations: {
+          ...DEFAULT_SETTINGS.taxCalendar.obligations,
+          ...((v.data as Partial<Settings>).taxCalendar?.obligations ?? {}),
+        },
+      },
       print: {
         ...DEFAULT_SETTINGS.print,
         ...(v.data as Partial<Settings>).print,

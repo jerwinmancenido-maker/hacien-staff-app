@@ -1,6 +1,8 @@
 import type { Settings } from "./schema";
 
 // Seed defaults only. The app always reads settings from the database.
+// Tax calendar obligation defaults mirror src/lib/tax/calendar-obligations.ts
+// (kept inline so prisma/seed.mts can load this file without a deep .ts import chain).
 export const DEFAULT_SETTINGS: Settings = {
   approval: { marginBelowPct: 18, totalAbove: 500_000 },
   quotes: { defaultValidityDays: 30 },
@@ -34,6 +36,19 @@ export const DEFAULT_SETTINGS: Settings = {
   invoiceBooklet: { seriesFrom: 1, seriesTo: 500, label: "Booklet 1" },
   collections: { overdueGraceDays: 0 },
   features: { payablesEnabled: false, cashEnabled: false, booksEnabled: false },
+  taxCalendar: {
+    corUploadedAndChecked: false,
+    obligations: {
+      "1701q": { enabled: true, dueDay: 15, dueMonth: null },
+      "1701": { enabled: true, dueDay: 15, dueMonth: 4 },
+      "2551q": { enabled: true, dueDay: 15, dueMonth: null },
+      "2550q": { enabled: true, dueDay: 25, dueMonth: null },
+      "0619e": { enabled: false, dueDay: 10, dueMonth: null },
+      "1601eq": { enabled: false, dueDay: null, dueMonth: null },
+      books_accounts: { enabled: true, dueDay: null, dueMonth: null },
+      inventory_list: { enabled: true, dueDay: null, dueMonth: null },
+    },
+  },
   print: {
     paperSize: "A4",
     showInputTaxDisclaimer: true,

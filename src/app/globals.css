@@ -2939,3 +2939,464 @@ button.contact-card-add {
 .print-preview-card .pp-nonvat {
   margin: 4px 0;
 }
+
+/* ---------- Tax calendar (Part 7d) — phone cards / desktop table ---------- */
+/* sm breakpoint (~640px), matching Tailwind sm: */
+
+.tax-cal-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 6px; /* ~half of the earlier 12px flex gap */
+}
+/* Defeat global `.card + .card { margin-top: 14px }` which doubled the phone gap. */
+.tax-cal-mobile > .tax-cal-card + .tax-cal-card {
+  margin-top: 0;
+}
+.tax-cal-desktop {
+  display: block;
+  overflow-x: visible;
+  /* Slightly tighter card pad so fixed columns fit without horizontal scroll. */
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.tax-cal-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.tax-cal-table th,
+.tax-cal-table td {
+  height: auto;
+  /* Consistent cell padding (~Tailwind px-3). */
+  padding: 8px 12px;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-sizing: border-box;
+  /* Never truncate cell copy with ellipsis. */
+  text-overflow: clip;
+  overflow: visible;
+}
+.tax-cal-table th {
+  font-size: 10px;
+}
+/*
+ * Default desktop (≥1150): Worksheet column visible; width 100% of card.
+ * Percentages keep scrollWidth === clientWidth. ≥1280 retunes Description
+ * to ~220–260 by trimming Status/Applies/Worksheet (media query below).
+ */
+.tax-cal-table th:nth-child(1),
+.tax-cal-table td.tax-cal-form {
+  width: 10%;
+  /* Wrap multi-word names ("Books of accounts"); never split short codes (2551Q). */
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.tax-cal-table th:nth-child(2),
+.tax-cal-table td.tax-cal-desc {
+  width: 22%;
+}
+.tax-cal-table th:nth-child(3),
+.tax-cal-table td.tax-cal-period {
+  width: 8%;
+  white-space: nowrap;
+}
+.tax-cal-table th:nth-child(4),
+.tax-cal-table td.tax-cal-due {
+  width: 12%;
+  white-space: normal;
+  overflow: visible;
+}
+.tax-cal-table td.tax-cal-due > div:first-child {
+  /* Main due line: nowrap so ISO YYYY-MM-DD never splits mid-token. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.tax-cal-table td.tax-cal-due .small,
+.tax-cal-table td.tax-cal-due .tax-cal-fileby {
+  /* File-by hint wraps freely — never truncated / no line-clamp / no ellipsis. */
+  display: block;
+  overflow: visible;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+.tax-cal-table td.tax-cal-due .tax-cal-fileby-date {
+  /* Every ISO date stays one line; hint may still wrap around it. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.tax-cal-table th:nth-child(5),
+.tax-cal-table td.tax-cal-status {
+  width: 10%;
+  white-space: normal;
+  overflow: visible; /* never clip Status chip text (Marked done / Due in 7 days) */
+}
+.tax-cal-table th:nth-child(6),
+.tax-cal-table td.tax-cal-applies {
+  width: 15%;
+  white-space: nowrap;
+  overflow: visible;
+}
+.tax-cal-table td.tax-cal-status .chip {
+  /* Status may wrap at spaces so long labels stay fully visible. */
+  white-space: normal;
+  max-width: none;
+  height: auto;
+  min-height: 22px;
+  line-height: 1.25;
+  padding: 3px 6px;
+  font-size: 10px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.tax-cal-table td.tax-cal-applies .chip {
+  /* Applies stays one line (e.g. Unverified: ask RDO). */
+  white-space: nowrap;
+  max-width: none;
+  height: 22px;
+  min-height: 22px;
+  line-height: 22px;
+  padding: 0 6px;
+  font-size: 10px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.tax-cal-table th:nth-child(7),
+.tax-cal-table td.tax-cal-worksheet {
+  width: 12%;
+  white-space: nowrap;
+}
+.tax-cal-table th:nth-child(8),
+.tax-cal-table td.tax-cal-done {
+  width: 14%;
+}
+.tax-cal-desc {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+/* No ellipsis — description title wraps; notes wrap. */
+.tax-cal-desc > div:first-child {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.tax-cal-desc .small {
+  white-space: normal;
+}
+/* Inline worksheet under title — only shown when Worksheet column is hidden. */
+.tax-cal-desc-worksheet {
+  display: none;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.tax-cal-table td.tax-cal-worksheet a,
+.tax-cal-desc-worksheet a {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.tax-cal-done-date {
+  /* Keep YYYY-MM-DD whole; note text may wrap after the date. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.tax-cal-done .btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tax-cal-done .btn.btn-secondary {
+  /* Keep outline readable on muted rows (do not inherit faded text color). */
+  color: var(--text);
+  background: var(--card);
+  border-color: var(--border);
+}
+/* Open Mark-as-done form spans the full table width under the row (not the Done cell). */
+.tax-cal-done-form-row td {
+  padding: 4px 12px 14px;
+  vertical-align: top;
+  overflow: visible;
+}
+.tax-cal-mark-done-form {
+  width: 100%;
+  max-width: 520px;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form input[type="date"],
+.tax-cal-mark-done-form input[type="text"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form .faint.small {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
+}
+/* Mute copy, not the action control — secondary Done must stay readable. */
+.tax-cal-row-muted td:not(.tax-cal-done) {
+  color: var(--text-3);
+}
+.tax-cal-row-muted td:not(.tax-cal-done) b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.tax-cal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+}
+.tax-cal-card-muted .tax-cal-card-name,
+.tax-cal-card-muted .tax-cal-card-desc,
+.tax-cal-card-muted .tax-cal-card-period,
+.tax-cal-card-muted .tax-cal-card-due {
+  color: var(--text-3);
+}
+.tax-cal-card-muted .tax-cal-card-name b {
+  color: var(--text-2);
+}
+.tax-cal-card-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tax-cal-card-desc {
+  font-size: 14px;
+}
+.tax-cal-card-period {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.tax-cal-card-due {
+  font-variant-numeric: tabular-nums;
+}
+.tax-cal-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.tax-cal-card-worksheet {
+  font-size: 13px;
+}
+.tax-cal-card-action {
+  margin-top: 2px;
+}
+.tax-cal-card-action > .btn,
+.tax-cal-card-action form .btn {
+  width: 100%;
+  justify-content: center;
+}
+.tax-cal-card-action form > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tax-cal-card-action form > div .btn {
+  width: 100%;
+}
+
+@media (max-width: 639px) {
+  .tax-cal-mobile {
+    display: flex;
+  }
+  .tax-cal-desktop {
+    display: none;
+  }
+}
+
+/*
+ * Below ~1150: hide Worksheet column; show "Open worksheet" under the title.
+ * Remaining columns must fit at 1024 with NO horizontal scroll; Done fully visible.
+ */
+@media (min-width: 640px) and (max-width: 1149px) {
+  .tax-cal-desktop {
+    overflow-x: visible;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .tax-cal-table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .tax-cal-table th:nth-child(7),
+  .tax-cal-table td.tax-cal-worksheet {
+    display: none;
+  }
+  .tax-cal-desc-worksheet {
+    display: block;
+  }
+  /* Beat table.list td padding (0,1,2) so Form/Period nowrap text fits the %. */
+  table.list.tax-cal-table th,
+  table.list.tax-cal-table td {
+    padding: 8px 6px;
+  }
+  /* Real gap between Period and Due (Q3 2027 must not run into the date). */
+  table.list.tax-cal-table td.tax-cal-period {
+    padding-right: 12px;
+  }
+  table.list.tax-cal-table td.tax-cal-due {
+    padding-left: 12px;
+  }
+  /* Percentages sum to 100% of the card content box (~660px at 1024).
+   * Description ~20% so titles wrap to ≤3 lines at 768/1024; take from
+   * Form/Period/Due/Status/Applies/Done without splitting ISO dates,
+   * clipping chips, or introducing H-scroll. */
+  .tax-cal-table th:nth-child(1),
+  .tax-cal-table td.tax-cal-form {
+    width: 10%;
+  }
+  .tax-cal-table th:nth-child(2),
+  .tax-cal-table td.tax-cal-desc {
+    width: 20%;
+  }
+  .tax-cal-table th:nth-child(3),
+  .tax-cal-table td.tax-cal-period {
+    width: 9%;
+  }
+  .tax-cal-table th:nth-child(4),
+  .tax-cal-table td.tax-cal-due {
+    width: 16%; /* nowrap ISO / "date to confirm" */
+  }
+  .tax-cal-table th:nth-child(5),
+  .tax-cal-table td.tax-cal-status {
+    width: 12%; /* Due in 7 days / Marked done — wrap at spaces, never clip */
+  }
+  .tax-cal-table th:nth-child(6),
+  .tax-cal-table td.tax-cal-applies {
+    width: 18%; /* room for nowrap "Unverified: ask RDO" */
+  }
+  .tax-cal-table th:nth-child(8),
+  .tax-cal-table td.tax-cal-done {
+    width: 15%;
+  }
+  .tax-cal-table td.tax-cal-status .chip {
+    padding: 3px 5px;
+    font-size: 10px;
+    white-space: normal; /* wrap at spaces — never clip */
+    height: auto;
+    min-height: 22px;
+    line-height: 1.25;
+    max-width: none;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .tax-cal-table td.tax-cal-applies .chip {
+    padding: 0 5px;
+    font-size: 10px;
+    white-space: nowrap;
+    height: 22px;
+    min-height: 22px;
+    line-height: 22px;
+    max-width: none;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .tax-cal-done .btn {
+    padding: 0 5px;
+    font-size: 11px;
+    max-width: 100%;
+  }
+}
+
+/*
+ * ≥1280: Description ~220–260px by trimming Status / Applies / Worksheet.
+ * Absolute widths sum ≤ ~908 (content box at 1280 with sidebar) so the table
+ * does not expand past the card (scrollWidth === clientWidth).
+ */
+@media (min-width: 1280px) {
+  .tax-cal-desktop {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  table.list.tax-cal-table th,
+  table.list.tax-cal-table td {
+    padding: 8px 8px;
+  }
+  /* Real gap between Worksheet and Done (Open worksheet must not touch Mark as done). */
+  table.list.tax-cal-table td.tax-cal-worksheet {
+    padding-right: 14px;
+  }
+  table.list.tax-cal-table td.tax-cal-done {
+    padding-left: 14px;
+  }
+  .tax-cal-table th:nth-child(1),
+  .tax-cal-table td.tax-cal-form {
+    width: 90px; /* room for "Books of accounts" to wrap at spaces */
+  }
+  .tax-cal-table th:nth-child(2),
+  .tax-cal-table td.tax-cal-desc {
+    width: 168px;
+  }
+  .tax-cal-table th:nth-child(3),
+  .tax-cal-table td.tax-cal-period {
+    width: 70px;
+  }
+  .tax-cal-table th:nth-child(4),
+  .tax-cal-table td.tax-cal-due {
+    width: 118px; /* nowrap ISO / "date to confirm" */
+  }
+  .tax-cal-table th:nth-child(5),
+  .tax-cal-table td.tax-cal-status {
+    width: 88px; /* Due in 7 days / Marked done unclipped */
+  }
+  .tax-cal-table th:nth-child(6),
+  .tax-cal-table td.tax-cal-applies {
+    width: 146px; /* nowrap "Unverified: ask RDO" */
+  }
+  .tax-cal-table th:nth-child(7),
+  .tax-cal-table td.tax-cal-worksheet {
+    width: 108px;
+  }
+  .tax-cal-table th:nth-child(8),
+  .tax-cal-table td.tax-cal-done {
+    width: 120px;
+  }
+  .tax-cal-table td.tax-cal-status .chip {
+    padding: 3px 6px;
+    font-size: 10px;
+    white-space: normal;
+    height: auto;
+    min-height: 22px;
+    line-height: 1.25;
+    max-width: none;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .tax-cal-table td.tax-cal-applies .chip {
+    padding: 0 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    height: 22px;
+    min-height: 22px;
+    line-height: 22px;
+    max-width: none;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .tax-cal-table td.tax-cal-worksheet a {
+    font-size: 11px;
+  }
+  .tax-cal-done .btn {
+    padding: 0 6px;
+    font-size: 11px;
+    max-width: 100%;
+  }
+}

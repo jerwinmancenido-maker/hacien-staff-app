@@ -3,6 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { BOOKS_DISCLAIMER, REGISTER_CONFIGS, REGISTER_KEYS } from "@/lib/books/config";
 import { parseBooksPeriod } from "@/lib/books/period";
 import { TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { TAX_CALENDAR_PAGE } from "@/lib/tax/calendar-constants";
 import { formatDate } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
@@ -54,6 +55,12 @@ export default async function BooksHomePage({
               <b>{TAX_WORKSHEET_PAGES.home.title}</b>
             </Link>
             <div className="faint small">{TAX_WORKSHEET_PAGES.home.subtitle}</div>
+          </li>
+          <li style={{ marginBottom: 0 }}>
+            <Link href={TAX_CALENDAR_PAGE.href}>
+              <b>{TAX_CALENDAR_PAGE.title}</b>
+            </Link>
+            <div className="faint small">{TAX_CALENDAR_PAGE.subtitle}</div>
           </li>
         </ul>
       </div>

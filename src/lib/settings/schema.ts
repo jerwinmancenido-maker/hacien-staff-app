@@ -4,6 +4,24 @@ import { normalizeTin, TIN_FORMAT_MESSAGE } from "../validation/tin";
 // Shape of one full settings snapshot (stored as JSON in SettingsVersion.data).
 // Defaults live in ./defaults.ts and are only used to seed the first version.
 
+const optionalDay = z.preprocess((v) => {
+  if (v === null || v === undefined || v === "") return null;
+  return v;
+}, z.coerce.number().int().min(1).max(31).nullable());
+
+const optionalMonth = z.preprocess((v) => {
+  if (v === null || v === undefined || v === "") return null;
+  return v;
+}, z.coerce.number().int().min(1).max(12).nullable());
+
+const taxCalendarObligationSettings = z.object({
+  enabled: z.boolean(),
+  /** Day of month (1–31), or null when undated / last-day-of-month. */
+  dueDay: optionalDay,
+  /** Month (1–12) for annual / undated overrides; null = catalog default. */
+  dueMonth: optionalMonth,
+});
+
 const numberingFormat = z.object({
   prefix: z
     .string()
@@ -129,6 +147,21 @@ export const settingsSections = {
     cashEnabled: z.boolean(),
     booksEnabled: z.boolean(),
   }),
+  // Part 7d tax calendar (provisional). Owner-only via manage_settings.
+  taxCalendar: z.object({
+    /** When true, the provisional banner may be cleared. Default false. */
+    corUploadedAndChecked: z.boolean(),
+    obligations: z.object({
+      "1701q": taxCalendarObligationSettings,
+      "1701": taxCalendarObligationSettings,
+      "2551q": taxCalendarObligationSettings,
+      "2550q": taxCalendarObligationSettings,
+      "0619e": taxCalendarObligationSettings,
+      "1601eq": taxCalendarObligationSettings,
+      books_accounts: taxCalendarObligationSettings,
+      inventory_list: taxCalendarObligationSettings,
+    }),
+  }),
   // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
@@ -166,6 +199,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   invoiceBooklet: "invoice booklet",
   collections: "collections",
   features: "features",
+  taxCalendar: "tax calendar",
   print: "print & company details",
 };
 

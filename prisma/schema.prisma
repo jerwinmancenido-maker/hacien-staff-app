@@ -68,6 +68,8 @@ model User {
   expensesCreated              Expense[]                 @relation("ExpenseCreatedBy")
   cashTransfersCreated         CashTransfer[]            @relation("CashTransferCreatedBy")
   taxPaidQuartersUpdated       TaxPaidQuarter[]          @relation("TaxPaidQuarterUpdatedBy")
+  taxCalendarCompletions       TaxCalendarCompletion[]   @relation("TaxCalendarCompletionBy")
+  taxCalendarCompletionsUndone TaxCalendarCompletion[]   @relation("TaxCalendarCompletionUndoneBy")
 }
 
 model Session {
@@ -1292,4 +1294,38 @@ model TaxPaidQuarter {
 
   @@unique([year, quarter])
   @@index([year])
+}
+
+// ---------------------------------------------------------------------------
+// Tax calendar (Part 7d) — staff "Marked done" notes only. Never a filing.
+// Additive only. Provisional until COR is uploaded and checked in Settings.
+// ---------------------------------------------------------------------------
+
+/// Staff note that a calendar occurrence was handled (not a BIR filing).
+/// Soft-undone via undoneAt; active rows have undoneAt = null.
+model TaxCalendarCompletion {
+  id             String    @id @default(cuid())
+  /// Catalog key, e.g. "1701q", "0619e".
+  obligationKey  String    @db.VarChar(40)
+  /// Period key, e.g. "2026-Q3", "2026-05", "TY2025", "2026".
+  periodKey      String    @db.VarChar(32)
+  /// Stable `${obligationKey}|${periodKey}` for lookups.
+  occurrenceKey  String    @db.VarChar(80)
+  /// Legal due date when known (Manila DATE); null for undated items.
+  dueDate        DateTime? @db.Date
+  /// Date the staff marked it done (Manila DATE).
+  doneDate       DateTime  @db.Date
+  note           String?   @db.Text
+  createdById    String
+  createdBy      User      @relation("TaxCalendarCompletionBy", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  /// Soft undo — when set, the row no longer counts as marked done.
+  undoneAt       DateTime?
+  undoneById     String?
+  undoneBy       User?     @relation("TaxCalendarCompletionUndoneBy", fields: [undoneById], references: [id])
+
+  @@index([occurrenceKey, undoneAt])
+  @@index([obligationKey])
+  @@index([doneDate])
 }
