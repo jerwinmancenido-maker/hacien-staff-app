@@ -422,6 +422,7 @@ describe("home concept A layout wiring", () => {
     expect(can(user(["ADMIN"]), "view_audit")).toBe(true);
     expect(can(user(["APPROVER"]), "view_audit")).toBe(false);
     expect(can(user(["STAFF"]), "view_audit")).toBe(false);
+    expect(can(user(["VIEWER"]), "view_audit")).toBe(false);
     expect(dash).toMatch(/can\(user,\s*["']view_audit["']\)/);
     expect(auditLogHref()).toBe("/audit");
 
