@@ -9,11 +9,9 @@ import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/w
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
-import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
 import {
   BOOKS_OF_ACCOUNTS_TYPE_LABELS,
   INCOME_TAX_METHOD_LABELS,
-  TAX_CALENDAR_PROVISIONAL_BANNER,
 } from "@/lib/tax/calendar-constants";
 import { formatHolidayLines } from "@/lib/tax/holidays";
 import {
@@ -25,6 +23,7 @@ import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
+import { TaxCalendarForm } from "./TaxCalendarForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
@@ -75,7 +74,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         active={tab}
         tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
       />
-      <div style={{ maxWidth: tab === "withholding" ? 1100 : 880 }}>
+      <div className="settings-page">
         {tab === "users" && <UsersTab />}
 
         {tab === "approval" && (
@@ -159,8 +158,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   ],
                   hint:
                     y === s.taxYear.year
-                      ? "Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A."
-                      : "Saving another year’s method leaves other years untouched.",
+                      ? "On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly and annual is 1701 or 1701A."
+                      : "Saving one year leaves other years untouched.",
                   group: "Income tax method by year",
                 }),
               ),
@@ -174,7 +173,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   { value: "loose_leaf", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.loose_leaf },
                   { value: "computerized", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.computerized },
                 ],
-                hint: "Loose-leaf due Jan 15; computerized due Jan 30 — both rolled to the next working day when they fall on a weekend or holiday.",
+                hint: "Loose-leaf due Jan 15; computerized due Jan 30. Weekend or holiday dates roll to the next working day.",
               },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
               { name: "warnFirstPct", label: "First warning at", kind: "number", value: s.taxYear.warnFirstPct, suffix: "% of the limit" },
@@ -184,7 +183,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Holiday list (YYYY-MM-DD [regular|special] [name])",
                 kind: "lines",
                 value: formatHolidayLines(s.taxYear.holidays ?? []),
-                hint: "Editable. Seeded with 2026 only — add 2025 / 2027 (and later) yourself; the calendar warns when a year has no holidays. Due dates on a weekend or holiday move to the next working day (RMC 65-2016).",
+                hint: "One date per line. Add years as needed; the calendar warns when a year has none. Weekend or holiday due dates move to the next working day (RMC 65-2016).",
                 full: true,
               },
             ]}
@@ -193,61 +192,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {tab === "tax-calendar" && (
           <>
-            <p className="faint small" style={{ marginTop: 0 }}>
-              Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is
-              uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee.
+            <p className="faint small settings-tab-intro">
+              Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and
+              checked. This app never files or pays. Do not add the abolished 0605 fee.
             </p>
-            <SettingsForm
-              title="Tax calendar"
+            <TaxCalendarForm
               label={SETTINGS_LABELS.taxCalendar}
               versionId={snap.versionId}
               action={save("taxCalendar")}
-              showDocumentsOnlyFooter={false}
-              fields={[
-                {
-                  name: "corUploadedAndChecked",
-                  label: "COR uploaded and checked",
-                  kind: "checkbox" as const,
-                  value: s.taxCalendar.corUploadedAndChecked,
-                  hint: `When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`,
-                  group: "COR",
-                },
-                ...TAX_CALENDAR_OBLIGATIONS.flatMap((def) => {
-                  const o = s.taxCalendar.obligations[def.key];
-                  const group = `${def.form} — ${def.description}`;
-                  return [
-                    {
-                      name: `obligations.${def.key}.enabled`,
-                      label: `Show ${def.form} on the calendar`,
-                      kind: "checkbox" as const,
-                      value: o.enabled,
-                      hint: def.sourceNote,
-                      group,
-                    },
-                    {
-                      name: `obligations.${def.key}.dueDay`,
-                      label: "Due day of month",
-                      kind: "number" as const,
-                      value: o.dueDay ?? "",
-                      hint:
-                        def.schedule.kind === "undated_year_end"
-                          ? "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms."
-                          : def.schedule.kind === "quarterly_last_day_after"
-                            ? "Leave blank to use the last day of the month after the quarter."
-                            : "1–31. Used with the catalog month rule for this form.",
-                      group,
-                    },
-                    {
-                      name: `obligations.${def.key}.dueMonth`,
-                      label: "Due month (annual / year-end)",
-                      kind: "number" as const,
-                      value: o.dueMonth ?? "",
-                      hint: "1–12. Used for 1701 annual and year-end items; leave blank otherwise.",
-                      group,
-                    },
-                  ];
-                }),
-              ]}
+              corUploadedAndChecked={s.taxCalendar.corUploadedAndChecked}
+              obligations={s.taxCalendar.obligations}
             />
           </>
         )}
@@ -267,13 +221,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   label: "Series from",
                   kind: "number",
                   value: s.invoiceBooklet.seriesFrom,
-                  hint: "Pre-printed booklet start. The app only records these numbers.",
+                  hint: "Start of the pre-printed booklet. The app only records these numbers.",
                 },
                 { name: "seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.seriesTo },
                 { name: "label", label: "Label", kind: "text", value: s.invoiceBooklet.label ?? "", hint: "e.g. Booklet 1" },
               ]}
             />
-            <p className="faint small" style={{ margin: "8px 0 16px" }}>
+            <p className="faint small settings-tab-link">
               <Link href="/billing/booklet">Open booklet usage grid →</Link> Voided invoice numbers are never reused.
             </p>
             <SettingsForm
@@ -321,14 +275,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Enable Books (read-only registers / export)",
                 kind: "checkbox",
                 value: s.features.booksEnabled,
-                hint: "OFF by default. Ask your admin to turn this on. Draft BIR format — confirm with accountant/RDO.",
+                hint: "OFF by default. Draft BIR format — confirm with accountant/RDO.",
               },
               {
                 name: "payables2307Enabled",
                 label: "Enable Payables 2307 to issue (withholding agent)",
                 kind: "checkbox",
                 value: s.features.payables2307Enabled,
-                hint: "OFF by default. HACIEN is not a withholding agent until RDO confirms. Env override: PAYABLES_2307_ENABLED.",
+                hint: "OFF by default. HACIEN is not a withholding agent until RDO confirms.",
               },
             ]}
           />
@@ -405,7 +359,7 @@ async function UsersTab() {
   const users = await db.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
   if (!users.length) {
     return (
-      <div className="card">
+      <div className="card settings-section">
         <EmptyState line="No users yet." />
       </div>
     );
@@ -468,16 +422,16 @@ async function ChangeLog() {
   });
   if (!versions.length) {
     return (
-      <div className="card">
+      <div className="card settings-section">
         <EmptyState line="No settings changes yet." />
       </div>
     );
   }
 
   return (
-    <div className="card changelog-card">
+    <div className="card settings-section changelog-card">
       <div className="card-head">
-        <h2>Settings change log</h2>
+        <h2 className="settings-section-title">Settings change log</h2>
         <div className="right">
           <span className="faint small">{versions.length} versions recorded</span>
         </div>

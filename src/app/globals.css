@@ -1001,6 +1001,7 @@ tr.inactive .cell-primary .sub {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
+  align-items: start;
 }
 .form-grid .full {
   grid-column: 1 / -1;
@@ -1015,6 +1016,12 @@ tr.inactive .cell-primary .sub {
 .field .req {
   color: var(--red);
 }
+.field-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
 .input,
 .field input[type="text"],
 .field input[type="email"],
@@ -1023,7 +1030,7 @@ tr.inactive .cell-primary .sub {
 .field select,
 .field textarea {
   width: 100%;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1057,6 +1064,11 @@ tr.inactive .cell-primary .sub {
   color: var(--text-3);
   font-size: 12px;
   margin-top: 5px;
+  line-height: 1.35;
+}
+.field-check .check {
+  min-height: 40px;
+  align-items: center;
 }
 .check {
   display: inline-flex;
@@ -1065,8 +1077,9 @@ tr.inactive .cell-primary .sub {
   cursor: pointer;
 }
 .check input {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
   accent-color: var(--blue);
 }
 .form-actions {
@@ -1082,6 +1095,132 @@ tr.inactive .cell-primary .sub {
   color: var(--text-3);
   margin: 6px 0 0;
   grid-column: 1 / -1;
+}
+
+/* ---------- Settings page layout (Brief 08) ---------- */
+.settings-page {
+  max-width: 960px;
+  width: 100%;
+}
+.settings-tab-intro {
+  margin: 0 0 14px;
+  max-width: 64ch;
+}
+.settings-tab-link {
+  margin: 8px 0 16px;
+}
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.settings-section .card-head .settings-section-title {
+  margin: 0;
+}
+.settings-form-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 18px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.settings-form-footnote {
+  margin-right: auto;
+  max-width: 42ch;
+}
+.settings-cor-row {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-cor-row .check {
+  min-height: 40px;
+  font-weight: 500;
+}
+.tax-cal-settings-wrap {
+  width: 100%;
+  overflow-x: visible;
+}
+.tax-cal-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.tax-cal-settings-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--fill);
+  text-align: left;
+  padding: 10px 12px;
+}
+.tax-cal-settings-table td {
+  padding: 12px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.tax-cal-settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.tax-cal-settings-table th:nth-child(1),
+.tax-cal-settings-table td:nth-child(1) {
+  width: 38%;
+}
+.tax-cal-settings-table th:nth-child(2),
+.tax-cal-settings-table td:nth-child(2) {
+  width: 14%;
+}
+.tax-cal-settings-table th:nth-child(3),
+.tax-cal-settings-table td:nth-child(3),
+.tax-cal-settings-table th:nth-child(4),
+.tax-cal-settings-table td:nth-child(4) {
+  width: 24%;
+}
+.tax-cal-settings-form .strong {
+  display: block;
+  line-height: 1.35;
+}
+.tax-cal-show-toggle {
+  min-height: 40px;
+  min-width: 40px;
+}
+.tax-cal-show-text {
+  font-size: 13px;
+}
+.tax-cal-settings-day input,
+.tax-cal-settings-month input {
+  width: 100%;
+  max-width: 120px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.tax-cal-settings-day input:focus,
+.tax-cal-settings-month input:focus {
+  border-color: var(--blue);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.tax-cal-settings-day .hint,
+.tax-cal-settings-month .hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+.tax-cal-month-na {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
 }
 
 .alert {
@@ -1321,6 +1460,7 @@ pre.json {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
+  min-height: 40px;
   border-radius: 9px;
   border: none;
   background: transparent;
@@ -1329,6 +1469,7 @@ pre.json {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  flex: 0 0 auto;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   user-select: none;
 }
@@ -2399,12 +2540,87 @@ pre.json {
   .topbar-search input {
     font-size: 14px;
   }
-  /* Books / tax section tabs: keep one row, scroll instead of wrapping cramped */
+  /* Books / tax / settings tabs: keep one row, scroll instead of wrapping */
   .pill-tabs-wrap {
     margin-bottom: 10px;
   }
   .pill-tabs-track {
     gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .pill-tab {
+    min-height: 40px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .tax-cal-settings-wrap {
+    overflow-x: visible;
+  }
+  .tax-cal-settings-table,
+  .tax-cal-settings-table thead,
+  .tax-cal-settings-table tbody,
+  .tax-cal-settings-table tr,
+  .tax-cal-settings-table th,
+  .tax-cal-settings-table td {
+    display: block;
+    width: 100%;
+  }
+  .tax-cal-settings-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .tax-cal-settings-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tax-cal-settings-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .tax-cal-settings-table td {
+    padding: 0;
+    border-bottom: none;
+  }
+  .tax-cal-settings-form {
+    grid-column: 1 / -1;
+  }
+  .tax-cal-settings-show {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .tax-cal-settings-day {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .tax-cal-settings-month {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .tax-cal-settings-month:has(.tax-cal-month-na) {
+    display: none;
+  }
+  .tax-cal-settings-day input,
+  .tax-cal-settings-month input {
+    max-width: none;
+  }
+  .tax-cal-show-text {
+    /* Visible label on phone stacked rows */
+    display: inline;
+  }
+  .settings-form-actions {
+    position: static;
   }
   .content {
     padding: 16px;

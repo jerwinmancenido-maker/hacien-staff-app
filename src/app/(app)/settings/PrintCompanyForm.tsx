@@ -84,8 +84,8 @@ export function PrintCompanyForm({
   const val = (name: string, fallback: string) => state.values?.[name] ?? fallback;
 
   return (
-    <div className="card">
-      <h2>Print &amp; company details</h2>
+    <div className="card settings-section">
+      <h2 className="settings-section-title">Print &amp; company details</h2>
       <p className="muted small">
         These details appear on every printable document. Account numbers print as last 4 digits unless you turn on
         &quot;Print full account number&quot; for a receiving account.
@@ -315,11 +315,13 @@ export function PrintCompanyForm({
           </div>
         </div>
 
-        <div className="form-actions">
+        <div className="form-actions settings-form-actions">
+          <span className="small faint settings-form-footnote">
+            Changes apply to new documents; current letterhead also feeds PO/statement prints.
+          </span>
           <button className="btn" type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save changes"}
           </button>
-          <span className="small faint">Changes apply to new documents; current letterhead also feeds PO/statement prints.</span>
         </div>
       </form>
       <ConfirmDialog

@@ -45,8 +45,8 @@ export function WithholdingForm({
     ["code", "label", "lineKind", "atcCode", "ratePct", "note"].map((f) => e[`${i}.${f}`]).find(Boolean);
 
   return (
-    <div className="card">
-      <h2>Withholding rates</h2>
+    <div className="card settings-section">
+      <h2 className="settings-section-title">Withholding rates</h2>
       <div className="alert warn" role="note">
         <b>Rates must be verified with BIR / accountant.</b> These are examples only. Changes apply to new quotes; existing quotes keep the
         rates they were made with.
@@ -125,10 +125,8 @@ export function WithholdingForm({
             </tbody>
           </table>
         </div>
-        <div className="form-actions">
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
+        <div className="form-actions settings-form-actions">
+          <span className="small faint settings-form-footnote">Rates can&apos;t be deleted; untick Active to stop offering one.</span>
           <button
             type="button"
             className="btn btn-secondary"
@@ -136,7 +134,9 @@ export function WithholdingForm({
           >
             Add rate
           </button>
-          <span className="small faint">Rates can&apos;t be deleted; untick Active to stop offering one.</span>
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
         </div>
       </form>
       <ConfirmDialog

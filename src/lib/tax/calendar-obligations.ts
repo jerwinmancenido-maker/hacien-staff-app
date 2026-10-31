@@ -222,6 +222,27 @@ export function obligationByKey(key: TaxCalendarObligationKey): TaxCalendarOblig
   return def;
 }
 
+/** Due month is editable only for annual income-tax returns (1701 / 1701A). */
+export function obligationUsesDueMonth(def: TaxCalendarObligationDef): boolean {
+  return def.schedule.kind === "annual_1701";
+}
+
+/** Short due-day hint for Settings → Tax calendar (one line). */
+export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
+  switch (def.schedule.kind) {
+    case "undated_year_end":
+      return "Leave blank for date to confirm. Set day once RDO confirms.";
+    case "quarterly_last_day_after":
+      return "Leave blank to use the last day of the month after the quarter.";
+    case "days_after_quarter_end":
+      return `Leave blank to use ${def.schedule.daysAfter} days after quarter end.`;
+    case "books_of_accounts":
+      return "Leave blank; day follows books type (Jan 15 or Jan 30).";
+    default:
+      return "Day of the month (1–31).";
+  }
+}
+
 /** Human Applies? label from key (empty string for unverified — not shown on rows). */
 export function appliesLabel(key: TaxCalendarAppliesKey): string {
   return TAX_CALENDAR_APPLIES[key];
