@@ -1,6 +1,6 @@
-// Editable seed catalog for Part 7d tax calendar obligations.
-// Every entry is tagged UNVERIFIED with a source note. Defaults live here;
-// owner overrides (enabled / due day) live in Settings.taxCalendar.
+// Editable seed catalog for tax calendar obligations.
+// Visibility and due dates also depend on Settings → Tax year
+// (income tax method, holidays, books type) and non-VAT status.
 
 import {
   TAX_CALENDAR_2550Q_NOTE,
@@ -8,6 +8,7 @@ import {
   TAX_CALENDAR_APPLIES,
   TAX_CALENDAR_BOOKS_SOURCE_NOTE,
   TAX_CALENDAR_CONFIRMED_FROM_DOCS_NOTE,
+  TAX_CALENDAR_PLAIN_NAMES,
   TAX_CALENDAR_WITHHOLDING_SOURCE_NOTE,
   type TaxCalendarAppliesKey,
 } from "./calendar-constants";
@@ -15,6 +16,7 @@ import {
 export const TAX_CALENDAR_OBLIGATION_KEYS = [
   "1701q",
   "1701",
+  "1701a",
   "2551q",
   "2550q",
   "0619e",
@@ -31,26 +33,30 @@ export function isTaxCalendarObligationKey(k: string): k is TaxCalendarObligatio
 
 /**
  * How occurrences are generated. Due day (1–31) is overridable in settings
- * except where the catalog uses last-day-of-month or undated.
+ * except where the catalog uses last-day-of-month, days-after, or undated.
  */
 export type ObligationSchedule =
   | {
-      /** 1701Q under 8% option: Q1→May, Q2→Aug, Q3→Nov (no Q4 — annual 1701). */
+      /** 1701Q: Q1→May, Q2→Aug, Q3→Nov (no Q4 — annual return). */
       kind: "quarterly_1701q";
       dueDay: number;
     }
   | {
-      /** 1701 annual: Apr 15 of the year after the tax year. */
+      /** Annual income tax: Apr 15 of the year after the tax year. */
       kind: "annual_1701";
       dueMonth: number;
       dueDay: number;
     }
   | {
-      /** Quarterly forms that still appear (often Does not apply) — due day after quarter end month. */
+      /** Quarterly forms due on a fixed day N months after quarter end. */
       kind: "quarterly_after_end";
-      /** Months after quarter end when due (0 = end month of quarter). */
       monthsAfterQuarterEnd: number;
       dueDay: number;
+    }
+  | {
+      /** Quarterly forms due N calendar days after quarter end (e.g. 2551Q = 25). */
+      kind: "days_after_quarter_end";
+      daysAfter: number;
     }
   | {
       /** 0619-E: monthly on the Nth. */
@@ -63,39 +69,45 @@ export type ObligationSchedule =
       monthsAfterQuarterEnd: number;
     }
   | {
-      /** Year-end books / inventory — no date until owner confirms. */
+      /** Year-end inventory — no date until owner confirms. */
       kind: "undated_year_end";
+    }
+  | {
+      /** Books of accounts: Jan 15 loose-leaf / Jan 30 computerized. */
+      kind: "books_of_accounts";
+      looseLeafDay: number;
+      computerizedDay: number;
     };
 
 export type TaxCalendarObligationDef = {
   key: TaxCalendarObligationKey;
   /** Form code shown in the first column. */
   form: string;
-  /** Plain description. */
+  /** Plain name under the form code (or longer description when no plain name). */
   description: string;
   /** Default on/off. Withholding items start off (hidden). */
   defaultEnabled: boolean;
   applies: TaxCalendarAppliesKey;
   /** Extra note under Applies? (e.g. 2551Q / 2550Q). */
   appliesNote: string | null;
-  /** Source / UNVERIFIED note for accountant review. */
+  /** Source note for accountant review. */
   sourceNote: string;
   schedule: ObligationSchedule;
-  /** Link to matching 7c worksheet, when one exists. */
+  /** Link to matching worksheet, when one exists. */
   worksheetHref: string | null;
-  /** Grey out the row (Does not apply). */
+  /** Grey out / treat as does-not-apply when shown via the N/A toggle. */
   greyedOut: boolean;
 };
 
 /**
  * Seed obligations. Do NOT include 0605 (annual registration fee abolished).
- * All dates and applicability are UNVERIFIED pending COR / RDO.
+ * Method-specific visibility (8% vs Graduated, non-VAT) is applied in calendar-build.
  */
 export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
   {
     key: "1701q",
     form: "1701Q",
-    description: "Quarterly income tax return (8% option)",
+    description: TAX_CALENDAR_PLAIN_NAMES["1701Q"] ?? "Quarterly income tax",
     defaultEnabled: true,
     applies: "confirmed",
     appliesNote: null,
@@ -105,9 +117,9 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     greyedOut: false,
   },
   {
-    key: "1701",
-    form: "1701",
-    description: "Annual income tax return",
+    key: "1701a",
+    form: "1701A",
+    description: TAX_CALENDAR_PLAIN_NAMES["1701A"] ?? "Annual income tax",
     defaultEnabled: true,
     applies: "confirmed",
     appliesNote: null,
@@ -117,15 +129,28 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     greyedOut: false,
   },
   {
+    key: "1701",
+    form: "1701",
+    description: "Annual income tax",
+    defaultEnabled: true,
+    applies: "confirmed",
+    // Under Graduated, both 1701 and 1701A are options — do not invent other rules.
+    appliesNote: "Under Graduated: 1701 or 1701A (confirm which with your accountant)",
+    sourceNote: TAX_CALENDAR_CONFIRMED_FROM_DOCS_NOTE,
+    schedule: { kind: "annual_1701", dueMonth: 4, dueDay: 15 },
+    worksheetHref: null,
+    greyedOut: false,
+  },
+  {
     key: "2551q",
     form: "2551Q",
-    description: "Quarterly percentage tax",
+    description: TAX_CALENDAR_PLAIN_NAMES["2551Q"] ?? "Quarterly percentage tax (3%)",
     defaultEnabled: true,
     applies: "does_not_apply",
     appliesNote: TAX_CALENDAR_2551Q_NOTE,
-    sourceNote: `Does not apply under the 8% option — ${TAX_CALENDAR_2551Q_NOTE}. UNVERIFIED.`,
-    // UNVERIFIED placeholder due: 15th of month after quarter end (common pattern; confirm with RDO).
-    schedule: { kind: "quarterly_after_end", monthsAfterQuarterEnd: 1, dueDay: 15 },
+    sourceNote: TAX_CALENDAR_2551Q_NOTE,
+    // Graduated: 25 days after quarter end (rolled to next working day).
+    schedule: { kind: "days_after_quarter_end", daysAfter: 25 },
     worksheetHref: null,
     greyedOut: true,
   },
@@ -136,8 +161,7 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     defaultEnabled: true,
     applies: "does_not_apply",
     appliesNote: TAX_CALENDAR_2550Q_NOTE,
-    sourceNote: `Does not apply (non-VAT). ${TAX_CALENDAR_2550Q_NOTE} UNVERIFIED.`,
-    // UNVERIFIED placeholder due: 25th of month after quarter end (common VAT pattern; confirm with RDO).
+    sourceNote: TAX_CALENDAR_2550Q_NOTE,
     schedule: { kind: "quarterly_after_end", monthsAfterQuarterEnd: 1, dueDay: 25 },
     worksheetHref: null,
     greyedOut: true,
@@ -174,7 +198,7 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     applies: "unverified",
     appliesNote: null,
     sourceNote: TAX_CALENDAR_BOOKS_SOURCE_NOTE,
-    schedule: { kind: "undated_year_end" },
+    schedule: { kind: "books_of_accounts", looseLeafDay: 15, computerizedDay: 30 },
     worksheetHref: null,
     greyedOut: false,
   },
@@ -185,7 +209,7 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     defaultEnabled: true,
     applies: "unverified",
     appliesNote: null,
-    sourceNote: TAX_CALENDAR_BOOKS_SOURCE_NOTE,
+    sourceNote: "Date left blank until confirmed.",
     schedule: { kind: "undated_year_end" },
     worksheetHref: null,
     greyedOut: false,
@@ -198,7 +222,7 @@ export function obligationByKey(key: TaxCalendarObligationKey): TaxCalendarOblig
   return def;
 }
 
-/** Human Applies? label from key. */
+/** Human Applies? label from key (empty string for unverified — not shown on rows). */
 export function appliesLabel(key: TaxCalendarAppliesKey): string {
   return TAX_CALENDAR_APPLIES[key];
 }
@@ -230,6 +254,11 @@ export function defaultTaxCalendarSettings(): TaxCalendarSettingsShape {
         dueDay = def.schedule.dueDay;
         dueMonth = def.schedule.dueMonth;
         break;
+      case "days_after_quarter_end":
+        dueDay = null;
+        dueMonth = null;
+        break;
+      case "books_of_accounts":
       case "quarterly_last_day_after":
       case "undated_year_end":
         dueDay = null;

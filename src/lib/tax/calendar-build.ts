@@ -3,8 +3,11 @@
 import { csvCell } from "../books/csv";
 import {
   TAX_CALENDAR_APPLIES,
+  TAX_CALENDAR_SAWT_TASK,
   TAX_CALENDAR_STATUS,
   TAX_CALENDAR_UPCOMING_DAYS,
+  type BooksOfAccountsType,
+  type IncomeTaxMethod,
   type TaxCalendarAppliesKey,
   type TaxCalendarStatusKey,
 } from "./calendar-constants";
@@ -19,10 +22,18 @@ import {
 import {
   TAX_CALENDAR_OBLIGATIONS,
   defaultTaxCalendarSettings,
+  obligationByKey,
   type ObligationSettingsRow,
   type TaxCalendarObligationKey,
   type TaxCalendarSettingsShape,
 } from "./calendar-obligations";
+import {
+  holidaysNotSetLine,
+  yearsMissingHolidays,
+  ymdYearMissingHolidays,
+  type TaxHoliday,
+} from "./holidays";
+import { incomeTaxMethodForYear, isEightPercent, isGraduated } from "./income-tax-method";
 
 export type { ObligationSettingsRow, TaxCalendarSettingsShape };
 export { defaultTaxCalendarSettings };
@@ -42,6 +53,8 @@ export type TaxCalendarRow = {
   periodLabel: string;
   dueYmd: string | null;
   dueDisplay: string;
+  legalDueYmd: string;
+  rolled: boolean;
   fallsOnWeekend: boolean;
   fileByYmd: string | null;
   fileByHint: string | null;
@@ -59,6 +72,17 @@ export type TaxCalendarRow = {
   markedDone: boolean;
   doneDateYmd: string | null;
   doneNote: string | null;
+  /** Extra staff tasks (e.g. SAWT when 2307s exist). */
+  tasks: string[];
+  /** True when this row is N/A (hidden by default; never overdue; no Mark as done). */
+  notApplicable: boolean;
+  /** Tax year used for method resolution (filing year or TY). */
+  taxYearForMethod: number;
+  /**
+   * True when the due date's calendar year has no holiday list — weekend-only
+   * roll may leave the date early. Show as unconfirmed; do not invent holidays.
+   */
+  dueUnconfirmed: boolean;
 };
 
 export type BuildCalendarInput = {
@@ -69,11 +93,33 @@ export type BuildCalendarInput = {
   toYear?: number;
   now?: Date;
   /**
-   * `upcoming` = due within next 90 days (or overdue / undated year for current year),
-   * or marked done in that window.
-   * `all` = every generated occurrence for enabled (and always-shown greyed) obligations.
+   * `upcoming` = due today..today+90 only (overdue is a separate section).
+   * `overdue` = undone past-due applicable items.
+   * `all` = every generated occurrence for enabled obligations (respecting N/A toggle).
    */
-  view?: "upcoming" | "all";
+  view?: "upcoming" | "overdue" | "all";
+  /** Holiday list from Settings → Tax year. */
+  holidays?: readonly TaxHoliday[];
+  /** Active tax-year settings used to resolve 8% vs Graduated per year. */
+  incomeTax?: {
+    year: number;
+    incomeTaxMethod: IncomeTaxMethod;
+    incomeTaxMethodsByYear: Record<string, IncomeTaxMethod>;
+  };
+  /** HACIEN is non-VAT — hide 2550Q unless showNotApplicable. */
+  isNonVat?: boolean;
+  /** Books of accounts type; null → "date to confirm". */
+  booksType?: BooksOfAccountsType | null;
+  /**
+   * When false (default), hide does-not-apply rows.
+   * When true, show them — never Overdue, no Mark as done.
+   */
+  showNotApplicable?: boolean;
+  /**
+   * Period keys (`2026-Q3`) that have at least one customer 2307 logged.
+   * Adds the SAWT task on that quarter's 1701Q row.
+   */
+  quartersWith2307?: ReadonlySet<string> | readonly string[];
 };
 
 function worksheetLinkFor(
@@ -81,7 +127,6 @@ function worksheetLinkFor(
   occurrence: GeneratedOccurrence,
 ): string | null {
   if (!href) return null;
-  // 1701Q / quarterly worksheets take year+quarter.
   const qMatch = /^(\d{4})-Q([1-4])$/.exec(occurrence.periodKey);
   if (qMatch) return `${href}?year=${qMatch[1]}&quarter=${qMatch[2]}`;
   const yMatch = /^(\d{4})$/.exec(occurrence.periodKey);
@@ -96,17 +141,143 @@ function overrideFor(
   key: TaxCalendarObligationKey,
 ): OwnerDueOverrides {
   const row = settings.obligations[key];
+  const schedule = obligationByKey(key).schedule;
+  // Stale Settings may still carry 2551q.dueDay: 15 from the old catalog —
+  // days_after_quarter_end ignores dueDay (see generateOccurrences).
+  if (schedule.kind === "days_after_quarter_end") {
+    return { dueDay: null, dueMonth: null };
+  }
   return { dueDay: row?.dueDay ?? null, dueMonth: row?.dueMonth ?? null };
+}
+
+/** Years in the build window (plus one for spillover dues) with no holidays. */
+export function missingHolidayYearsForWindow(
+  holidays: readonly TaxHoliday[],
+  fromYear: number,
+  toYear: number,
+): number[] {
+  // Due dates can land in toYear+1 (e.g. Q4 → Jan); include that year too.
+  return yearsMissingHolidays(holidays, fromYear, toYear + 1);
+}
+
+/** Single notice line for missing holiday years, or null when none. */
+export function missingHolidaysLine(missingYears: readonly number[]): string | null {
+  return holidaysNotSetLine(missingYears);
+}
+
+/** @deprecated Prefer missingHolidaysLine — one combined notice, not per-year boxes. */
+export function missingHolidaysBanners(missingYears: readonly number[]): string[] {
+  const line = holidaysNotSetLine(missingYears);
+  return line ? [line] : [];
 }
 
 function isEnabled(settings: TaxCalendarSettingsShape, key: TaxCalendarObligationKey): boolean {
   return settings.obligations[key]?.enabled ?? false;
 }
 
+/** Tax year associated with an occurrence for method lookup. */
+export function taxYearForOccurrence(obligationKey: TaxCalendarObligationKey, periodKey: string): number {
+  const ty = /^TY(\d{4})$/.exec(periodKey);
+  if (ty) return Number(ty[1]);
+  const q = /^(\d{4})-Q[1-4]$/.exec(periodKey);
+  if (q) return Number(q[1]);
+  const y = /^(\d{4})$/.exec(periodKey);
+  if (y) return Number(y[1]);
+  const ym = /^(\d{4})-\d{2}$/.exec(periodKey);
+  if (ym) return Number(ym[1]);
+  return Number(periodKey.slice(0, 4)) || new Date().getUTCFullYear();
+}
+
+/**
+ * Resolve whether a catalog row applies for a given tax year / VAT status.
+ * Returns { include, notApplicable, applies }.
+ */
+function confirmedOrHidden(corUploadedAndChecked: boolean): TaxCalendarAppliesKey {
+  // Never show "Unverified: ask RDO" on rows — hide the Applies chip until COR is checked.
+  return corUploadedAndChecked ? "confirmed" : "unverified";
+}
+
+export function resolveApplicability(opts: {
+  key: TaxCalendarObligationKey;
+  catalogApplies: TaxCalendarAppliesKey;
+  method: IncomeTaxMethod;
+  isNonVat: boolean;
+  corUploadedAndChecked: boolean;
+}): { includeAlways: boolean; notApplicable: boolean; applies: TaxCalendarAppliesKey } {
+  const { key, catalogApplies, method, isNonVat, corUploadedAndChecked } = opts;
+
+  // 2550Q: non-VAT → does not apply (hidden by default).
+  if (key === "2550q") {
+    if (isNonVat) {
+      return { includeAlways: false, notApplicable: true, applies: "does_not_apply" };
+    }
+    return {
+      includeAlways: true,
+      notApplicable: false,
+      applies: confirmedOrHidden(corUploadedAndChecked),
+    };
+  }
+
+  // 2551Q: hide under 8% (N/A); show under Graduated.
+  if (key === "2551q") {
+    if (isEightPercent(method)) {
+      return { includeAlways: false, notApplicable: true, applies: "does_not_apply" };
+    }
+    return {
+      includeAlways: true,
+      notApplicable: false,
+      applies: confirmedOrHidden(corUploadedAndChecked),
+    };
+  }
+
+  // Annual return: 1701A under 8%; 1701 and 1701A under Graduated.
+  if (key === "1701a") {
+    return {
+      includeAlways: true,
+      notApplicable: false,
+      applies: confirmedOrHidden(corUploadedAndChecked),
+    };
+  }
+  if (key === "1701") {
+    if (isEightPercent(method)) {
+      // Under 8% the annual return is 1701A only — hide 1701.
+      return { includeAlways: false, notApplicable: true, applies: "does_not_apply" };
+    }
+    return {
+      includeAlways: true,
+      notApplicable: false,
+      applies: confirmedOrHidden(corUploadedAndChecked),
+    };
+  }
+
+  let applies: TaxCalendarAppliesKey = catalogApplies;
+  if (!corUploadedAndChecked && catalogApplies === "confirmed") {
+    applies = "unverified";
+  }
+
+  return {
+    includeAlways: catalogApplies !== "does_not_apply",
+    notApplicable: catalogApplies === "does_not_apply",
+    applies,
+  };
+}
+
+function sortRows(rows: TaxCalendarRow[]): TaxCalendarRow[] {
+  return rows.sort((a, b) => {
+    const statusRank = (s: TaxCalendarStatusKey): number =>
+      s === "overdue" ? 0 : s === "dueIn2" ? 1 : s === "dueIn7" ? 2 : s === "upcoming" ? 3 : 4;
+    const byStatus = statusRank(a.status) - statusRank(b.status);
+    if (byStatus !== 0) return byStatus;
+    if (a.dueYmd && b.dueYmd) {
+      if (a.dueYmd !== b.dueYmd) return a.dueYmd.localeCompare(b.dueYmd);
+    } else if (a.dueYmd && !b.dueYmd) return -1;
+    else if (!a.dueYmd && b.dueYmd) return 1;
+    return a.form.localeCompare(b.form) || a.periodLabel.localeCompare(b.periodLabel);
+  });
+}
+
 /**
  * Build sorted calendar rows for the UI / ICS / CSV.
- * Hidden (disabled) obligations are omitted — except we still omit them entirely
- * when disabled; greyed "does not apply" items stay visible when enabled (default on).
  */
 export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[] {
   const now = input.now ?? new Date();
@@ -117,36 +288,83 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
   const view = input.view ?? "upcoming";
   const horizonEnd = addDaysYmd(today, TAX_CALENDAR_UPCOMING_DAYS);
   const doneMap = new Map((input.completions ?? []).map((c) => [c.occurrenceKey, c]));
+  const holidays = input.holidays ?? [];
+  const isNonVat = input.isNonVat !== false; // HACIEN default: non-VAT
+  const showNa = input.showNotApplicable === true;
+  const booksType = input.booksType ?? null;
+  const quartersWith2307 = new Set(
+    input.quartersWith2307 instanceof Set
+      ? [...input.quartersWith2307]
+      : (input.quartersWith2307 ?? []),
+  );
+  const incomeTax = input.incomeTax ?? {
+    year: thisYear,
+    incomeTaxMethod: "EIGHT_PERCENT" as IncomeTaxMethod,
+    incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" as IncomeTaxMethod },
+  };
+  const missingHolidayYearSet = new Set(missingHolidayYearsForWindow(holidays, fromYear, toYear));
 
   const rows: TaxCalendarRow[] = [];
 
   for (const def of TAX_CALENDAR_OBLIGATIONS) {
     if (!isEnabled(input.settings, def.key)) continue;
-    const occurrences = generateOccurrences(def.key, fromYear, toYear, overrideFor(input.settings, def.key));
+
+    const occurrences = generateOccurrences(def.key, fromYear, toYear, {
+      override: overrideFor(input.settings, def.key),
+      holidays,
+      booksType,
+    });
+
     for (const occ of occurrences) {
+      const taxYear = taxYearForOccurrence(def.key, occ.periodKey);
+      const method = incomeTaxMethodForYear(incomeTax, taxYear);
+      const appl = resolveApplicability({
+        key: def.key,
+        catalogApplies: def.applies,
+        method,
+        isNonVat,
+        corUploadedAndChecked: input.settings.corUploadedAndChecked,
+      });
+
+      // Under Graduated, 2551Q applies — clear greyed/N/A catalog flags.
+      const notApplicable = appl.notApplicable;
+      if (notApplicable && !showNa) continue;
+      if (!appl.includeAlways && !notApplicable) continue;
+
+      const greyedOut = notApplicable;
+      const applies: TaxCalendarAppliesKey = appl.applies;
+
       const done = doneMap.get(occ.occurrenceKey);
       const markedDone = !!done;
-      const status = statusForDueDate(occ.dueYmd, today, markedDone);
+      // N/A rows are never Overdue.
+      let status = statusForDueDate(occ.dueYmd, today, markedDone);
+      if (notApplicable && status === "overdue") status = "upcoming";
 
       if (view === "upcoming") {
-        // Undated year-end: show the current Manila year only.
+        // Strict window: today through today+90 inclusive. No overdue here.
         if (!occ.dueYmd) {
           if (occ.periodKey !== String(thisYear) && !markedDone) continue;
-        } else if (!markedDone) {
-          // Include overdue + due within 90 days.
-          if (occ.dueYmd > horizonEnd) continue;
-          // Drop very old overdue (before fromYear window already limited); keep overdue in window.
-        } else {
-          // Marked done: keep if done date or due date falls in horizon / recent year.
+        } else if (markedDone) {
           const anchor = done?.doneDateYmd ?? occ.dueYmd;
-          if (anchor && (anchor < `${thisYear - 1}-01-01` || anchor > horizonEnd)) continue;
+          if (anchor < today || anchor > horizonEnd) continue;
+        } else {
+          if (occ.dueYmd < today || occ.dueYmd > horizonEnd) continue;
         }
+      } else if (view === "overdue") {
+        if (notApplicable) continue;
+        if (markedDone) continue;
+        if (!occ.dueYmd || occ.dueYmd >= today) continue;
       }
 
-      // Until COR is checked, never show the "Confirmed" Applies chip — reuse the
-      // existing "Unverified: ask RDO" label (seeds like 1701Q/1701 stay confirmed in catalog).
-      const applies: TaxCalendarAppliesKey =
-        !input.settings.corUploadedAndChecked && def.applies === "confirmed" ? "unverified" : def.applies;
+      const tasks: string[] = [];
+      if (def.key === "1701q" && quartersWith2307.has(occ.periodKey)) {
+        tasks.push(TAX_CALENDAR_SAWT_TASK);
+      }
+
+      const dueUnconfirmed =
+        !!occ.dueYmd &&
+        (ymdYearMissingHolidays(occ.dueYmd, missingHolidayYearSet) ||
+          ymdYearMissingHolidays(occ.legalDueYmd, missingHolidayYearSet));
 
       rows.push({
         obligationKey: def.key,
@@ -157,6 +375,8 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         periodLabel: occ.periodLabel,
         dueYmd: occ.dueYmd,
         dueDisplay: occ.dueDisplay,
+        legalDueYmd: occ.legalDueYmd,
+        rolled: occ.rolled,
         fallsOnWeekend: occ.fallsOnWeekend,
         fileByYmd: occ.fileByYmd,
         fileByHint: occ.fileByHint,
@@ -164,34 +384,43 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         statusLabel: TAX_CALENDAR_STATUS[status],
         applies,
         appliesLabel: TAX_CALENDAR_APPLIES[applies],
-        appliesNote: def.appliesNote,
+        appliesNote: notApplicable
+          ? def.appliesNote
+          : def.key === "1701" && isGraduated(method)
+            ? def.appliesNote
+            : def.key === "2551q" && isGraduated(method)
+              ? null
+              : def.appliesNote,
         sourceNote: def.sourceNote,
         worksheetHref: def.worksheetHref,
         worksheetLink: worksheetLinkFor(def.worksheetHref, occ),
-        greyedOut: def.greyedOut,
+        greyedOut: greyedOut || notApplicable,
         enabled: true,
         markedDone,
         doneDateYmd: done?.doneDateYmd ?? null,
         doneNote: done?.note ?? null,
+        tasks,
+        notApplicable,
+        taxYearForMethod: taxYear,
+        dueUnconfirmed,
       });
     }
   }
 
-  rows.sort((a, b) => {
-    // Overdue first (past-year undone items stay in "Next 90 days"), then nearer due, then open, then done.
-    const statusRank = (s: TaxCalendarStatusKey): number =>
-      s === "overdue" ? 0 : s === "dueIn2" ? 1 : s === "dueIn7" ? 2 : s === "upcoming" ? 3 : 4;
-    const byStatus = statusRank(a.status) - statusRank(b.status);
-    if (byStatus !== 0) return byStatus;
-    // Undated last within a status band; then by due date; then form.
-    if (a.dueYmd && b.dueYmd) {
-      if (a.dueYmd !== b.dueYmd) return a.dueYmd.localeCompare(b.dueYmd);
-    } else if (a.dueYmd && !b.dueYmd) return -1;
-    else if (!a.dueYmd && b.dueYmd) return 1;
-    return a.form.localeCompare(b.form) || a.periodLabel.localeCompare(b.periodLabel);
-  });
+  return sortRows(rows);
+}
 
-  return rows;
+/** Split helper for the calendar page: overdue section + next-90 section. */
+export function buildTaxCalendarSections(input: Omit<BuildCalendarInput, "view">): {
+  overdue: TaxCalendarRow[];
+  upcoming: TaxCalendarRow[];
+  all: TaxCalendarRow[];
+} {
+  return {
+    overdue: buildTaxCalendarRows({ ...input, view: "overdue" }),
+    upcoming: buildTaxCalendarRows({ ...input, view: "upcoming" }),
+    all: buildTaxCalendarRows({ ...input, view: "all" }),
+  };
 }
 
 /** CSV export for the calendar list (injection-safe via shared csvCell). */
@@ -205,6 +434,7 @@ export function taxCalendarToCsv(rows: readonly TaxCalendarRow[]): string {
     "Status",
     "Applies?",
     "Applies note",
+    "Tasks",
     "Worksheet",
   ];
   const lines = [header.map(csvCell).join(",")];
@@ -219,6 +449,7 @@ export function taxCalendarToCsv(rows: readonly TaxCalendarRow[]): string {
         r.statusLabel,
         r.appliesLabel,
         r.appliesNote ?? "",
+        r.tasks.join("; "),
         r.worksheetLink ?? "",
       ]
         .map(csvCell)
