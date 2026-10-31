@@ -23,6 +23,11 @@ type QuoteWithItems = Quote & { items: QuoteItem[] };
 
 export const EDITABLE_QUOTE_STATUSES = ["DRAFT", "SENT"] as const;
 
+/** Draft / unsent only — sent and later statuses keep a frozen company snapshot. */
+export function quoteCanRefreshCompanyDetails(status: Quote["status"]): boolean {
+  return status === "DRAFT";
+}
+
 export function quoteAudit(q: QuoteWithItems) {
   return {
     number: q.number,
@@ -33,6 +38,7 @@ export function quoteAudit(q: QuoteWithItems) {
     validUntil: ymd(q.validUntil),
     terms: q.terms,
     notes: q.notes,
+    settingsVersionId: q.settingsVersionId,
     withholding: withholdingCodes(snapshotList(q.withholding)),
     contractPrice: money(q.contractPrice),
     withholdingTotal: money(q.withholdingTotal),
@@ -222,6 +228,38 @@ export function markQuoteSent(id: string, actor: DocActor) {
 
 export function markQuoteLost(id: string, actor: DocActor) {
   return setStatus(id, actor, ["DRAFT", "SENT"], "LOST", "Only a draft or sent quote can be marked as lost.");
+}
+
+/**
+ * Point a draft quote at the latest SettingsVersion so its print letterhead
+ * picks up current company details. Sent / WON / LOST / VOID stay frozen.
+ */
+export async function refreshQuoteCompanyDetails(id: string, actor: DocActor): Promise<QuoteWithItems> {
+  assertCan(actor, "edit_data");
+  const snap = await getSettingsSnapshot();
+  return db.$transaction(async (tx) => {
+    const before = await lockQuote(tx, id);
+    if (!quoteCanRefreshCompanyDetails(before.status)) {
+      throw new DocRuleError("Only draft (unsent) quotes can refresh company details from settings.");
+    }
+    if (before.settingsVersionId === snap.versionId) {
+      return before;
+    }
+    const after = await tx.quote.update({
+      where: { id },
+      data: { settingsVersionId: snap.versionId, updatedById: actor.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { settingsVersionId: before.settingsVersionId },
+      after: { settingsVersionId: after.settingsVersionId },
+    });
+    return after;
+  });
 }
 
 export async function voidQuote(id: string, reason: string, actor: DocActor) {

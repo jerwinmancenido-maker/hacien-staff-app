@@ -1,36 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo_Black, IBM_Plex_Sans, Inter, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const archivoBlack = Archivo_Black({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-display",
-  display: "swap",
-});
-
-/** Print documents keep Source Serif + IBM Plex (letterhead / body). */
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-ibm-plex-sans",
-  display: "swap",
-});
-
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-source-serif",
-  display: "swap",
-});
+/** Fonts: self-hosted Inter + Archivo Black in public/fonts (see globals.css @font-face). */
 
 export const metadata: Metadata = {
   title: "HACIEN Staff",
@@ -53,10 +24,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${archivoBlack.variable} ${ibmPlexSans.variable} ${sourceSerif.variable}`}
-    >
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

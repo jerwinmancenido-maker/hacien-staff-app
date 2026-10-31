@@ -24,9 +24,10 @@ export function PrintShell({
           Back
         </Link>
         <span className="small muted">
-          Choose &quot;Save as PDF&quot; in the print dialog. Paper: {doc.paperSize}.
+          {doc.number} · {doc.status} · Choose &quot;Save as PDF&quot; in the print dialog. Paper: {doc.paperSize}. Turn off
+          browser headers and footers.
         </span>
-        <PrintButton missing={missing} />
+        <PrintButton missing={missing} documentTitle={doc.number} />
       </div>
       {warning && (
         <div className="alert warn print-toolbar-alert no-print" role="status">

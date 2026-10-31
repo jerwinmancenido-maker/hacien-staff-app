@@ -299,15 +299,16 @@ export function PrintCompanyForm({
 
         <div className="print-preview-card" style={{ marginTop: 16 }} aria-live="polite">
           <div className="pp-label">Live preview</div>
-          <div className="pp-company-name" style={{ fontSize: "1.1rem" }}>
-            {live.name || "—"}
+          <div className="pp-trade-name" style={{ fontSize: "1.15rem" }}>
+            {(live.tradeName ?? "").trim() || live.name || "—"}
           </div>
-          {live.tradeName ? <div className="pp-trade-name">{live.tradeName}</div> : null}
-          <div className="pp-nonvat">{NON_VAT_LABEL}</div>
-          <div>TIN {live.tin || "[not set]"}</div>
           <div className="pp-pre">{live.address || "[address not set]"}</div>
+          <div className="pp-tin-row">
+            <span>TIN {live.tin || "[not set]"}</span>
+            <span className="pp-nonvat">{NON_VAT_LABEL}</span>
+          </div>
           <div className="small muted" style={{ marginTop: 6 }}>
-            {[live.phone, live.email, live.website].filter(Boolean).join(" · ") || "No phone / email / website yet"}
+            {[live.email, live.phone].filter(Boolean).join(" · ") || "No email / phone yet"}
           </div>
           <div className="small muted" style={{ marginTop: 8 }}>
             Paper: {live.paperSize} · Input-tax note: {live.showInputTaxDisclaimer ? "ON" : "OFF"}
