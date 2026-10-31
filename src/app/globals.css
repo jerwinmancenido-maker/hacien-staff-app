@@ -4975,21 +4975,11 @@ button.contact-card-add {
 .quote-tabs::-webkit-scrollbar {
   display: none;
 }
-.quote-tabs-wrap::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 36px;
-  pointer-events: none;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), #fff 55%, #fff);
-  opacity: 0;
-  z-index: 2;
-}
 @media (max-width: 640px) {
-  .quote-tabs-wrap::after {
-    opacity: 1;
+  .quote-tabs {
+    padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 32px), transparent 100%);
   }
   .quote-tab {
     padding-left: 8px;
