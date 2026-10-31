@@ -4,7 +4,7 @@ import { contactSchema, customerSchema, missingBankDetails, supplierSchema } fro
 import { CANT_DEACTIVATE_MAIN, deactivateContactError, makeMainError, makeMainPlan, newContactIsMain } from "@/lib/contacts";
 import { auditDiff } from "@/lib/audit";
 import { isRateLimited, MAX_FAILED_LOGINS } from "@/lib/auth/rate-limit";
-import { formatDate, formatPeso } from "@/lib/format";
+import { formatDate, formatPeso, formatPesoLimit } from "@/lib/format";
 
 const TERMS = ["COD", "Net 30"];
 const ROLES = ["Procurement", "Accounting"];
@@ -124,6 +124,13 @@ describe("formatting", () => {
     expect(formatPeso(0)).toBe("₱0.00");
     expect(formatPeso(3000000)).toBe("₱3,000,000.00");
     expect(formatPeso(-50)).toBe("-₱50.00");
+  });
+
+  it("drops .00 on whole-peso limits", () => {
+    expect(formatPesoLimit(3_000_000)).toBe("₱3,000,000");
+    expect(formatPesoLimit(0)).toBe("₱0");
+    expect(formatPesoLimit(1234.56)).toBe("₱1,234.56");
+    expect(formatPesoLimit(-50)).toBe("-₱50");
   });
 
   it("shows dates in Asia/Manila", () => {
