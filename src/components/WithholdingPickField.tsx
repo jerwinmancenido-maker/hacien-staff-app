@@ -72,10 +72,12 @@ export function WithholdingPickField({
           <span className="small faint">No active rates in Settings → Withholding.</span>
         ) : (
           rates.map((r) => {
+            // Don't double "(code to confirm)" when the seeded label already has it.
+            const labelHasConfirm = /\(code to confirm\)/i.test(r.label);
             const atc =
               r.atcCode && !isUnverifiedGovAtc(r.atcCode)
                 ? r.atcCode
-                : r.atcCode
+                : r.atcCode && !labelHasConfirm
                   ? GOV_ATC_CODE_TO_CONFIRM
                   : null;
             return (

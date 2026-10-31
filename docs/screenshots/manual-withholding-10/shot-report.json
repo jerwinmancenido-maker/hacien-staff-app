@@ -1,0 +1,68 @@
+{
+  "host": "127.0.0.1",
+  "report": [
+    {
+      "name": "quote-editor-pick-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "quote-add-customer-pick-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "customer-overview-pick-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "customer-edit-pick-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "quote-editor-pick-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-add-customer-pick-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "customer-overview-pick-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "customer-edit-pick-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-print-no-withholding-1280.png",
+      "width": 1280,
+      "height": 1600,
+      "scrollWidth": 1280,
+      "printCheck": {
+        "hasWithholding": false,
+        "hasWht": false,
+        "hasAtc": false,
+        "hasNetDue": false,
+        "hasSubtotal": true,
+        "hasTotal": true,
+        "hasInternal": false
+      }
+    }
+  ]
+}
