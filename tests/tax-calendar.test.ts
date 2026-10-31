@@ -262,7 +262,41 @@ describe("calendar build views", () => {
     const q3 = rows.find((r) => r.occurrenceKey === "1701q|2026-Q3");
     expect(q3?.status).toBe("markedDone");
     expect(q3?.statusLabel).toBe("Marked done");
+    expect(q3?.markedDone).toBe(true);
     expect(q3?.doneNote).toBe("paid at bank");
+  });
+
+  it("status Marked done ↔ markedDone on every row (Undo must track the chip)", () => {
+    const settings = defaultTaxCalendarSettings();
+    const withDone = buildTaxCalendarRows({
+      settings,
+      view: "all",
+      now: new Date("2026-10-30T08:00:00.000Z"),
+      fromYear: 2025,
+      toYear: 2027,
+      completions: [
+        { occurrenceKey: "1701q|2026-Q3", doneDateYmd: "2026-10-01", note: "paid" },
+        { occurrenceKey: "books_accounts|2025", doneDateYmd: "2026-01-15", note: null },
+      ],
+    });
+    const without = buildTaxCalendarRows({
+      settings,
+      view: "all",
+      now: new Date("2026-10-30T08:00:00.000Z"),
+      fromYear: 2025,
+      toYear: 2027,
+    });
+    for (const r of [...withDone, ...without]) {
+      expect(r.markedDone).toBe(r.status === "markedDone");
+      if (r.markedDone) {
+        expect(r.statusLabel).toBe("Marked done");
+      } else {
+        expect(r.statusLabel).not.toBe("Marked done");
+      }
+    }
+    const q3 = withDone.find((r) => r.occurrenceKey === "1701q|2026-Q3");
+    expect(q3?.markedDone).toBe(true);
+    expect(q3?.statusLabel).toBe("Marked done");
   });
 
   it("upcoming keeps past overdue in window and sorts Overdue status first", () => {
