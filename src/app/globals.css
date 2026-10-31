@@ -2610,33 +2610,35 @@ pre.json {
   width: 5rem;
 }
 .edit-table.items-edit .col-qty {
-  min-width: 2.35rem;
-  width: 2.35rem;
+  min-width: 3.25rem;
+  width: 3.25rem;
 }
 .edit-table.items-edit .col-unit {
   min-width: 2.5rem;
   width: 2.5rem;
 }
 .edit-table.items-edit .col-supplier {
-  min-width: 4.15rem;
-  width: 4.15rem;
+  min-width: 5.5rem;
+  width: 5.5rem;
 }
 .edit-table.items-edit .col-actions,
 .edit-table.items-edit td.line-actions {
-  min-width: 1.5rem;
-  width: 1.5rem;
+  min-width: 4.25rem;
+  width: 4.25rem;
 }
 .edit-table.items-edit td.line-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0;
-  white-space: normal;
+  white-space: nowrap;
 }
 .edit-table.items-edit .col-wh {
-  width: 3.1rem;
-  min-width: 3.1rem;
-  white-space: normal;
+  width: 3.75rem;
+  min-width: 3.75rem;
+  white-space: nowrap;
 }
 .edit-table.items-edit .w-wh,
 .edit-table.items-edit .w-atc {
@@ -2667,6 +2669,9 @@ pre.json {
   box-sizing: border-box;
   font-size: 11px;
   padding: 4px 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .edit-table.items-edit .w-num {
   width: 100%;
@@ -2783,7 +2788,7 @@ pre.json {
   min-width: 4.15rem;
 }
 .edit-table.items-edit .col-qty {
-  min-width: 2.5rem;
+  min-width: 3.25rem;
 }
 .edit-table .error {
   color: var(--red);
@@ -2792,7 +2797,7 @@ pre.json {
   white-space: nowrap;
 }
 .edit-table.items-edit td.line-actions {
-  white-space: normal;
+  white-space: nowrap;
 }
 .line-actions .btn-link {
   text-decoration: none;
@@ -2820,29 +2825,31 @@ pre.json {
     min-width: 84px;
   }
   .edit-table.items-edit .col-qty {
-    width: 40px;
-    min-width: 40px;
+    /* Integer-width field that fits 4 digits (e.g. 9999). */
+    width: 52px;
+    min-width: 52px;
   }
   .edit-table.items-edit .col-unit {
     width: 40px;
     min-width: 40px;
   }
   .edit-table.items-edit .col-supplier {
-    width: 66px;
-    min-width: 66px;
+    /* Short supplier name; longer names ellipsis + title tooltip. */
+    width: 88px;
+    min-width: 88px;
   }
   .edit-table.items-edit .col-money {
-    width: 84px;
-    min-width: 84px;
+    width: 80px;
+    min-width: 80px;
   }
   .edit-table.items-edit .col-wh {
-    width: 50px;
-    min-width: 50px;
+    width: 56px;
+    min-width: 56px;
   }
   .edit-table.items-edit .col-actions,
   .edit-table.items-edit td.line-actions {
-    width: 24px;
-    min-width: 24px;
+    width: 68px;
+    min-width: 68px;
   }
 }
 .btn-link.danger {
@@ -2927,6 +2934,12 @@ pre.json {
 .print-toolbar-alert {
   width: 210mm;
   margin: 0 auto 12px;
+  box-sizing: border-box;
+}
+.print-toolbar-alert.tax-cal-notice {
+  /* Same grey box + black left bar as Settings / tax calendar notices. */
+  margin-left: auto;
+  margin-right: auto;
 }
 .print-missing {
   color: var(--red);
@@ -3385,9 +3398,12 @@ button.contact-card-add {
   gap: 20px;
   border-bottom: 0.5pt solid var(--pp-rule);
   padding-bottom: 10px;
+  min-width: 0;
 }
 .pp-letterhead {
-  max-width: 62%;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 11rem);
   font-size: 8.5pt;
   line-height: 1.35;
   color: var(--pp-label);
@@ -3456,7 +3472,9 @@ button.contact-card-add {
 }
 .pp-title-block {
   text-align: right;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
 }
 .pp-title-block h1 {
   margin: 0 0 8px;
@@ -3471,6 +3489,8 @@ button.contact-card-add {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 /* Pixel Blue square — the only blue on the page besides the logo. */
 .pp-title-pixel {
@@ -4928,18 +4948,38 @@ button.contact-card-add {
 .quote-fg > .field.full {
   grid-column: 1 / -1;
 }
+.quote-tabs-wrap {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
 .quote-tabs {
   display: flex;
   gap: 2px;
   align-items: center;
-  border-bottom: 1px solid var(--border);
   padding: 0 10px;
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 .quote-tabs::-webkit-scrollbar {
   display: none;
+}
+.quote-tabs-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, #fff);
+  opacity: 0;
+}
+@media (max-width: 640px) {
+  .quote-tabs-wrap::after {
+    opacity: 1;
+  }
 }
 .quote-tab {
   appearance: none;
@@ -5108,15 +5148,29 @@ button.contact-card-add {
   gap: 12px;
   overflow: auto;
   flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+}
+.quote-drawer-body .field {
+  min-width: 0;
+  width: 100%;
+}
+.quote-drawer-body .field input,
+.quote-drawer-body .field select,
+.quote-drawer-body .field textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .quote-drawer-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
-.quote-drawer-wh-hint {
-  font-weight: 600;
-  padding: 8px 0 2px;
+.quote-drawer-row > .field {
+  min-width: 0;
 }
 .quote-drawer-foot {
   display: flex;
@@ -5133,6 +5187,143 @@ button.contact-card-add {
 }
 .quote-drawer-foot .btn {
   min-height: 40px;
+}
+
+/* Quote items: auto-grow description + WH tip + mobile cards */
+.quote-editor .quote-desc {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  field-sizing: content;
+  min-height: 2.5em;
+}
+.quote-wh-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.quote-wh-tip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f1f2f4;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+.quote-items-mobile {
+  display: none;
+}
+.quote-line-card {
+  position: relative;
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quote-line-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 0;
+  z-index: 1;
+}
+.quote-line-card-desc {
+  padding-right: 72px;
+  min-width: 0;
+}
+.quote-line-card-desc .quote-desc {
+  width: 100%;
+}
+.quote-line-card-row3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  gap: 8px;
+}
+.quote-line-card-row2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.quote-line-card-price {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quote-line-card-price .field {
+  flex: 1;
+  min-width: 0;
+}
+.quote-line-card-total {
+  flex: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.quote-line-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.quote-line-card-wh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.quote-line-card-wh .w-wh {
+  width: 3.25rem;
+  max-width: 3.25rem;
+  text-align: right;
+  padding: 2px 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.quote-line-card-wh .w-atc {
+  width: 4.5rem;
+  max-width: 4.5rem;
+  padding: 2px 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.quote-line-card .field input,
+.quote-line-card .field select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+}
+
+@media (max-width: 639px) {
+  .quote-items-desktop {
+    display: none;
+  }
+  .quote-items-mobile {
+    display: block;
+  }
 }
 
 @media (max-width: 720px) {
@@ -5162,7 +5353,8 @@ button.contact-card-add {
     flex: 1;
     justify-content: center;
   }
+  /* Keep TIN/Type and Contact/Position as equal pairs inside the drawer. */
   .quote-drawer-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }

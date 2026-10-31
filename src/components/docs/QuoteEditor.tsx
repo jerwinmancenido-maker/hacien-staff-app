@@ -5,7 +5,7 @@
 // quote-trow, quote-int2, quote-tbox, quote-sticky-act, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
-import { useRef, useState, useTransition } from "react";
+import { useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import {
@@ -97,6 +97,41 @@ function safeLine(i: EditorItem) {
   } catch {
     return { total: "0.00", supplierTotal: "0.00", margin: "0.00" };
   }
+}
+
+/** Grow a description textarea to fit its content (no clipped 2nd line). */
+function growDesc(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "0px";
+  el.style.height = `${Math.max(el.scrollHeight, 36)}px`;
+}
+
+function DescTextarea({
+  label,
+  value,
+  onValue,
+}: {
+  label: string;
+  value: string;
+  onValue: (v: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    growDesc(ref.current);
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      aria-label={label}
+      className="quote-desc"
+      rows={1}
+      value={value}
+      onChange={(ev) => {
+        onValue(ev.target.value);
+        growDesc(ev.target);
+      }}
+    />
+  );
 }
 
 function customerTypeLabel(type: string): string {
@@ -254,6 +289,31 @@ export function QuoteEditor({
       contactId: ec.contacts.find((k) => k.isMain)?.id ?? "",
       terms: ec.defaultTerms ?? h.terms,
     });
+  }
+
+  function onWhPctChange(key: string, raw: string) {
+    setWhPctDrafts((prev) => ({ ...prev, [key]: raw }));
+    if (/^\d+\.$/.test(raw.trim())) {
+      setWhPctErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    const parsed = parseWithholdingPercentInput(raw);
+    if (!parsed.ok) {
+      setWhPctErrors((prev) => ({ ...prev, [key]: parsed.message }));
+      return;
+    }
+    setWhPctErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    changeLineWithholding(key, { withholdingRate: parsed.rate });
   }
 
   function changeKind(key: string, kind: ItemKind) {
@@ -421,23 +481,25 @@ export function QuoteEditor({
         </div>
 
         <div className="card">
-          <div className="quote-tabs" role="tablist" aria-label="Quote sections">
-            <button type="button" role="tab" aria-selected={tab === "items"} className={`quote-tab${tab === "items" ? " quote-tab-on" : ""}`} onClick={() => setTab("items")}>
-              Items
-              {items.length > 0 ? <span className="quote-tab-badge">{items.length}</span> : null}
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "terms"} className={`quote-tab${tab === "terms" ? " quote-tab-on" : ""}`} onClick={() => setTab("terms")}>
-              Terms &amp; conditions
-              {termsTabDot ? <span className="quote-tab-dot" aria-hidden /> : null}
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "notes"} className={`quote-tab${tab === "notes" ? " quote-tab-on" : ""}`} onClick={() => setTab("notes")}>
-              Notes
-              {notesCount > 0 ? <span className="quote-tab-badge">{notesCount}</span> : null}
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "signoff"} className={`quote-tab${tab === "signoff" ? " quote-tab-on" : ""}`} onClick={() => setTab("signoff")}>
-              Sign-off
-              <span className="quote-tab-dot" aria-hidden />
-            </button>
+          <div className="quote-tabs-wrap">
+            <div className="quote-tabs" role="tablist" aria-label="Quote sections">
+              <button type="button" role="tab" aria-selected={tab === "items"} className={`quote-tab${tab === "items" ? " quote-tab-on" : ""}`} onClick={() => setTab("items")}>
+                Items
+                {items.length > 0 ? <span className="quote-tab-badge">{items.length}</span> : null}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "terms"} className={`quote-tab${tab === "terms" ? " quote-tab-on" : ""}`} onClick={() => setTab("terms")}>
+                Terms &amp; conditions
+                {termsTabDot ? <span className="quote-tab-dot" aria-hidden /> : null}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "notes"} className={`quote-tab${tab === "notes" ? " quote-tab-on" : ""}`} onClick={() => setTab("notes")}>
+                Notes
+                {notesCount > 0 ? <span className="quote-tab-badge">{notesCount}</span> : null}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "signoff"} className={`quote-tab${tab === "signoff" ? " quote-tab-on" : ""}`} onClick={() => setTab("signoff")}>
+                Sign-off
+                <span className="quote-tab-dot" aria-hidden />
+              </button>
+            </div>
           </div>
 
           {tab === "items" && (
@@ -466,7 +528,7 @@ export function QuoteEditor({
                   })}
                 </div>
               )}
-              <div className="edit-table items-edit">
+              <div className="edit-table items-edit quote-items-desktop">
                 <table className="list">
                   <thead>
                     <tr>
@@ -496,10 +558,11 @@ export function QuoteEditor({
                         i.withholdingOverride ||
                         lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
                       const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
+                      const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                       return (
                         <tr key={i.key}>
                           <td>
-                            <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
+                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                             {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                           </td>
                           <td className="col-kind">
@@ -516,10 +579,15 @@ export function QuoteEditor({
                           </td>
                           {withCosts && (
                             <td className="col-supplier">
-                              <select aria-label={`Line ${idx + 1} supplier`} value={i.supplierId ?? ""} onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}>
+                              <select
+                                aria-label={`Line ${idx + 1} supplier`}
+                                title={supplierName || undefined}
+                                value={i.supplierId ?? ""}
+                                onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                              >
                                 <option value="">—</option>
                                 {suppliers!.map((s) => (
-                                  <option key={s.id} value={s.id}>
+                                  <option key={s.id} value={s.id} title={s.name}>
                                     {s.name}
                                   </option>
                                 ))}
@@ -544,52 +612,34 @@ export function QuoteEditor({
                           <td className="num strong col-money">{formatPeso(a.total)}</td>
                           {withCosts && <td className={`num col-money${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>}
                           <td className="num col-wh">
-                            <input
-                              aria-label={`Line ${idx + 1} withholding percent`}
-                              inputMode="decimal"
-                              className="w-wh"
-                              value={pct}
-                              placeholder="—"
-                              onChange={(ev) => {
-                                const raw = ev.target.value;
-                                setWhPctDrafts((prev) => ({ ...prev, [i.key]: raw }));
-                                if (/^\d+\.$/.test(raw.trim())) {
-                                  setWhPctErrors((prev) => {
-                                    if (!prev[i.key]) return prev;
-                                    const next = { ...prev };
-                                    delete next[i.key];
-                                    return next;
-                                  });
-                                  return;
-                                }
-                                const parsed = parseWithholdingPercentInput(raw);
-                                if (!parsed.ok) {
-                                  setWhPctErrors((prev) => ({ ...prev, [i.key]: parsed.message }));
-                                  return;
-                                }
-                                setWhPctErrors((prev) => {
-                                  if (!prev[i.key]) return prev;
-                                  const next = { ...prev };
-                                  delete next[i.key];
-                                  return next;
-                                });
-                                changeLineWithholding(i.key, { withholdingRate: parsed.rate });
-                              }}
-                            />
-                            {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
-                            {govAtc ? (
-                              <div className="small muted" title={i.withholdingAtc ?? undefined}>
-                                {GOV_ATC_CODE_TO_CONFIRM}
-                              </div>
-                            ) : (
+                            <div className="quote-wh-cell">
                               <input
-                                aria-label={`Line ${idx + 1} ATC`}
-                                className="w-atc"
-                                value={i.withholdingAtc ?? ""}
-                                placeholder="ATC"
-                                onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                                aria-label={`Line ${idx + 1} withholding percent`}
+                                inputMode="decimal"
+                                className="w-wh"
+                                value={pct}
+                                placeholder="—"
+                                onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
                               />
-                            )}
+                              {govAtc ? (
+                                <span
+                                  className="quote-wh-tip"
+                                  title={`${GOV_ATC_CODE_TO_CONFIRM}${i.withholdingAtc ? ` (${i.withholdingAtc})` : ""}`}
+                                  aria-label={GOV_ATC_CODE_TO_CONFIRM}
+                                >
+                                  ?
+                                </span>
+                              ) : (
+                                <input
+                                  aria-label={`Line ${idx + 1} ATC`}
+                                  className="w-atc"
+                                  value={i.withholdingAtc ?? ""}
+                                  placeholder="ATC"
+                                  onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                                />
+                              )}
+                            </div>
+                            {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           </td>
                           <td className="line-actions">
                             <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} up`} disabled={idx === 0} onClick={() => move(idx, -1)}>
@@ -613,6 +663,165 @@ export function QuoteEditor({
                     })}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="quote-items-mobile">
+                {items.map((i, idx) => {
+                  const a = safeLine(i);
+                  const pctFromRate =
+                    i.withholdingRate == null || i.withholdingRate === ""
+                      ? ""
+                      : (Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "");
+                  const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
+                  const showOverride =
+                    i.withholdingOverride ||
+                    lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
+                  const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
+                  const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
+                  return (
+                    <article key={`m-${i.key}`} className="quote-line-card">
+                      <div className="quote-line-card-actions line-actions">
+                        <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} up`} disabled={idx === 0} onClick={() => move(idx, -1)}>
+                          ↑
+                        </button>
+                        <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} down`} disabled={idx === items.length - 1} onClick={() => move(idx, 1)}>
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-link danger"
+                          aria-label={`Remove line ${idx + 1}`}
+                          disabled={items.length === 1}
+                          onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="quote-line-card-desc">
+                        <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
+                        {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                      </div>
+                      <div className="quote-line-card-row3">
+                        <div className="field">
+                          <label className="sr-only" htmlFor={`m-kind-${i.key}`}>
+                            Kind
+                          </label>
+                          <select id={`m-kind-${i.key}`} aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
+                            <option value="GOODS">Goods</option>
+                            <option value="SERVICES">Services</option>
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label className="sr-only" htmlFor={`m-qty-${i.key}`}>
+                            Qty
+                          </label>
+                          <input
+                            id={`m-qty-${i.key}`}
+                            aria-label={`Line ${idx + 1} qty`}
+                            inputMode="decimal"
+                            value={i.qty}
+                            onChange={(ev) => setItem(i.key, { qty: ev.target.value })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label className="sr-only" htmlFor={`m-unit-${i.key}`}>
+                            Unit
+                          </label>
+                          <input
+                            id={`m-unit-${i.key}`}
+                            aria-label={`Line ${idx + 1} unit`}
+                            value={i.unit}
+                            onChange={(ev) => setItem(i.key, { unit: ev.target.value })}
+                          />
+                        </div>
+                      </div>
+                      {withCosts && (
+                        <div className="quote-line-card-row2">
+                          <div className="field">
+                            <label className="sr-only" htmlFor={`m-sup-${i.key}`}>
+                              Supplier
+                            </label>
+                            <select
+                              id={`m-sup-${i.key}`}
+                              aria-label={`Line ${idx + 1} supplier`}
+                              title={supplierName || undefined}
+                              value={i.supplierId ?? ""}
+                              onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                            >
+                              <option value="">Supplier —</option>
+                              {suppliers!.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label className="sr-only" htmlFor={`m-cost-${i.key}`}>
+                              Unit cost
+                            </label>
+                            <input
+                              id={`m-cost-${i.key}`}
+                              aria-label={`Line ${idx + 1} supplier unit cost`}
+                              inputMode="decimal"
+                              value={i.supplierUnitCost}
+                              placeholder="Unit cost"
+                              onChange={(ev) => setItem(i.key, { supplierUnitCost: ev.target.value })}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <div className="quote-line-card-price">
+                        <div className="field">
+                          <label className="sr-only" htmlFor={`m-price-${i.key}`}>
+                            Price
+                          </label>
+                          <input
+                            id={`m-price-${i.key}`}
+                            aria-label={`Line ${idx + 1} HACIEN unit price`}
+                            inputMode="decimal"
+                            value={i.unitPrice}
+                            placeholder="Price"
+                            onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })}
+                          />
+                        </div>
+                        <div className="quote-line-card-total num strong">{formatPeso(a.total)}</div>
+                      </div>
+                      <div className="quote-line-card-meta">
+                        {withCosts ? <span>Margin {formatPeso(a.margin)}</span> : null}
+                        <span className="quote-line-card-wh">
+                          WH%{" "}
+                          <input
+                            aria-label={`Line ${idx + 1} withholding percent`}
+                            inputMode="decimal"
+                            className="w-wh"
+                            value={pct}
+                            placeholder="—"
+                            onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
+                          />
+                          {govAtc ? (
+                            <span
+                              className="quote-wh-tip"
+                              title={`${GOV_ATC_CODE_TO_CONFIRM}${i.withholdingAtc ? ` (${i.withholdingAtc})` : ""}`}
+                              aria-label={GOV_ATC_CODE_TO_CONFIRM}
+                            >
+                              ?
+                            </span>
+                          ) : (
+                            <input
+                              aria-label={`Line ${idx + 1} ATC`}
+                              className="w-atc"
+                              value={i.withholdingAtc ?? ""}
+                              placeholder="ATC"
+                              onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                            />
+                          )}
+                        </span>
+                        {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               <div className="quote-trow">
                 {withCosts && (

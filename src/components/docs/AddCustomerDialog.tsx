@@ -7,8 +7,13 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
-  withholdingTypeFieldHint,
 } from "@/lib/withholding/display";
+
+function typeHint(type: string): string {
+  if (type === "GOVERNMENT" || type === "TOP_WITHHOLDING_AGENT") return "Goods 1% (WI158) · Services 2% (WI160)";
+  if (type === "NONE") return "No withholding";
+  return "Used on every line for this customer. You can change it per line.";
+}
 import {
   createCustomerForQuoteAction,
   type CreatedQuoteCustomer,
@@ -105,6 +110,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
             <input
               ref={firstRef}
               id="acq-name"
+              type="text"
               value={v.name}
               onChange={(ev) => setV({ ...v, name: ev.target.value })}
               autoComplete="organization"
@@ -114,7 +120,14 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
           <div className="quote-drawer-row">
             <div className={`field${e.tin ? " has-error" : ""}`}>
               <label htmlFor="acq-tin">TIN</label>
-              <input id="acq-tin" value={v.tin} onChange={(ev) => setV({ ...v, tin: ev.target.value })} inputMode="numeric" placeholder="000-000-000-000" />
+              <input
+                id="acq-tin"
+                type="text"
+                value={v.tin}
+                onChange={(ev) => setV({ ...v, tin: ev.target.value })}
+                inputMode="numeric"
+                placeholder="000-000-000-000"
+              />
               {e.tin && <div className="error">{e.tin}</div>}
             </div>
             <div className={`field${e.withholdingType ? " has-error" : ""}`}>
@@ -129,6 +142,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
                   </option>
                 ))}
               </select>
+              <div className="hint">{typeHint(v.withholdingType)}</div>
               {e.withholdingType && <div className="error">{e.withholdingType}</div>}
             </div>
           </div>
@@ -136,33 +150,35 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
             <label htmlFor="acq-address">Address</label>
             <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} />
           </div>
-          <div className="field">
-            <span className="label">Withholding type</span>
-            <div className="quote-drawer-wh-hint">
-              {v.withholdingType === "GOVERNMENT"
-                ? "Goods 1% (WI158) · Services 2% (WI160)"
-                : v.withholdingType === "TOP_WITHHOLDING_AGENT"
-                  ? "Goods 1% (WI158) · Services 2% (WI160)"
-                  : v.withholdingType === "NONE"
-                    ? "No withholding"
-                    : "Used on every line for this customer. You can change it per line."}
-            </div>
-            <div className="hint">{withholdingTypeFieldHint(v.withholdingType) ?? "Used on every line for this customer. You can change it per line."}</div>
-          </div>
           <div className="quote-drawer-row">
             <div className={`field${e.contactName ? " has-error" : ""}`}>
               <label htmlFor="acq-contact">Contact person</label>
-              <input id="acq-contact" value={v.contactName} onChange={(ev) => setV({ ...v, contactName: ev.target.value })} />
+              <input
+                id="acq-contact"
+                type="text"
+                value={v.contactName}
+                onChange={(ev) => setV({ ...v, contactName: ev.target.value })}
+              />
               {e.contactName && <div className="error">{e.contactName}</div>}
             </div>
             <div className={`field${e.contactRole ? " has-error" : ""}`}>
               <label htmlFor="acq-role">Position</label>
-              <input id="acq-role" value={v.contactRole} onChange={(ev) => setV({ ...v, contactRole: ev.target.value })} />
+              <input
+                id="acq-role"
+                type="text"
+                value={v.contactRole}
+                onChange={(ev) => setV({ ...v, contactRole: ev.target.value })}
+              />
             </div>
           </div>
           <div className={`field${e.emailOrPhone ? " has-error" : ""}`}>
             <label htmlFor="acq-email">Email or phone</label>
-            <input id="acq-email" value={v.emailOrPhone} onChange={(ev) => setV({ ...v, emailOrPhone: ev.target.value })} />
+            <input
+              id="acq-email"
+              type="text"
+              value={v.emailOrPhone}
+              onChange={(ev) => setV({ ...v, emailOrPhone: ev.target.value })}
+            />
             {e.emailOrPhone && <div className="error">{e.emailOrPhone}</div>}
           </div>
           <div className="quote-drawer-foot">
