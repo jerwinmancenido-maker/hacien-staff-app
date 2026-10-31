@@ -8,18 +8,23 @@ import {
   lastNMonthKeys,
   manilaMonthKey,
   niceSalesMax,
+  owedOverdueChip,
   SALES_AXIS_EMPTY_MAX,
   salesAxisTicks,
   salesChartAxisTicks,
   salesChangeVsLastMonth,
   salesMonthLabel,
+  salesMonthsRangeLabel,
+  salesVsLastMonthCaption,
   shiftMonthKey,
   topSalesCustomers,
 } from "@/lib/home/sales";
-import { roleFlags, type PermissionUser } from "@/lib/permissions";
+import { canShowHomeActivity, filterHomeActivity, activityDetail } from "@/lib/home/activity";
+import { newBillingHref, newQuoteHref, auditLogHref } from "@/lib/home/hrefs";
+import { roleFlags, can, type PermissionUser } from "@/lib/permissions";
 
-function user(roles: ("ADMIN" | "APPROVER" | "STAFF" | "VIEWER")[]): PermissionUser {
-  return { ...roleFlags(roles), active: true, canSeeCosts: false };
+function user(roles: ("ADMIN" | "APPROVER" | "STAFF" | "VIEWER")[], costs = false): PermissionUser {
+  return { ...roleFlags(roles), active: true, canSeeCosts: costs };
 }
 
 describe("home sales visibility", () => {
@@ -28,6 +33,25 @@ describe("home sales visibility", () => {
     expect(canShowHomeSales(user(["APPROVER"]))).toBe(true);
     expect(canShowHomeSales(user(["STAFF"]))).toBe(false);
     expect(canShowHomeSales(user(["VIEWER"]))).toBe(false);
+  });
+});
+
+describe("home header button permissions", () => {
+  it("shows New quote with edit_data and New billing with manage_billing", () => {
+    expect(can(user(["ADMIN"]), "edit_data")).toBe(true);
+    expect(can(user(["STAFF"]), "edit_data")).toBe(true);
+    expect(can(user(["VIEWER"]), "edit_data")).toBe(false);
+    expect(can(user(["ADMIN"]), "manage_billing")).toBe(true);
+    expect(can(user(["STAFF"]), "manage_billing")).toBe(false);
+    expect(newQuoteHref()).toBe("/quotes/new");
+    expect(newBillingHref()).toBe("/billing/billings/new");
+    expect(auditLogHref()).toBe("/audit");
+
+    const page = readFileSync(path.join(process.cwd(), "src/app/(app)/page.tsx"), "utf8");
+    expect(page).toMatch(/newQuoteHref/);
+    expect(page).toMatch(/newBillingHref/);
+    expect(page).toMatch(/New quote/);
+    expect(page).toMatch(/New billing/);
   });
 });
 
@@ -55,9 +79,17 @@ describe("home sales month windows (Asia/Manila)", () => {
     });
     expect(salesMonthLabel("2026-02", "2026-01").showYear).toBe(false);
   });
+
+  it("builds a Nov 2025 – Oct 2026 range label", () => {
+    const months = lastNMonthKeys(new Date("2026-10-31T15:30:00.000Z"), 12).map((key) => ({
+      key,
+      shortLabel: salesMonthLabel(key, null).short,
+    }));
+    expect(salesMonthsRangeLabel(months)).toBe("Nov 2025 – Oct 2026");
+  });
 });
 
-describe("home sales change vs last month", () => {
+describe("home sales change vs last month (Up/Down/Same chip)", () => {
   it("returns an em dash when last month is 0 or data is missing", () => {
     expect(salesChangeVsLastMonth(100, 0)).toEqual({ label: "—", tone: "none" });
     expect(salesChangeVsLastMonth(0, 0)).toEqual({ label: "—", tone: "none" });
@@ -76,6 +108,36 @@ describe("home sales change vs last month", () => {
 
   it("says Same when equal", () => {
     expect(salesChangeVsLastMonth(100, 100)).toEqual({ label: "Same", tone: "flat" });
+  });
+
+  it("builds the vs caption for the KPI chip row", () => {
+    expect(salesVsLastMonthCaption(145_000, "2026-09")).toBe("vs ₱145,000 in Sep");
+    expect(salesVsLastMonthCaption("0.00", "2026-01")).toBe("vs ₱0 in Jan");
+  });
+
+  it("wires Up chip blue and Down chip grey in the Home sections", () => {
+    const sections = readFileSync(path.join(process.cwd(), "src/components/home/HomeSections.tsx"), "utf8");
+    const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+    expect(sections).toMatch(/home-chip-up/);
+    expect(sections).toMatch(/home-chip-down/);
+    expect(css).toMatch(/\.home-chip-up/);
+    expect(css).toMatch(/\.home-chip-down/);
+  });
+});
+
+describe("home owed overdue chip", () => {
+  it("shows All overdue when every open billing is past due", () => {
+    expect(owedOverdueChip(13, 13)).toEqual({ label: "All overdue", tone: "overdue" });
+    expect(owedOverdueChip(5, 5)).toEqual({ label: "All overdue", tone: "overdue" });
+  });
+
+  it("shows N overdue when only some are past due", () => {
+    expect(owedOverdueChip(3, 10)).toEqual({ label: "3 overdue", tone: "overdue" });
+  });
+
+  it("hides the chip when nothing is overdue", () => {
+    expect(owedOverdueChip(0, 10)).toBeNull();
+    expect(owedOverdueChip(0, 0)).toBeNull();
   });
 });
 
@@ -104,10 +166,15 @@ describe("home sales nice Y max", () => {
     expect(niceSalesMax(9_900_000_000)).toBe(10_000_000_000);
   });
 
-  it("builds two gridlines (middle + top) from the nice max", () => {
-    expect(salesAxisTicks(274_000)).toEqual([150_000, 300_000]);
-    expect(salesAxisTicks(0)).toEqual([SALES_AXIS_EMPTY_MAX / 2, SALES_AXIS_EMPTY_MAX]);
-    expect(salesAxisTicks(800_000)).toEqual([400_000, 800_000]);
+  it("builds three gridlines (⅓, ⅔, top) from the nice max", () => {
+    expect(salesAxisTicks(274_000)).toEqual([100_000, 200_000, 300_000]);
+    expect(salesAxisTicks(0)).toEqual([
+      SALES_AXIS_EMPTY_MAX / 3,
+      (2 * SALES_AXIS_EMPTY_MAX) / 3,
+      SALES_AXIS_EMPTY_MAX,
+    ]);
+    // 800K is already nice; 800000 % 3 !== 0 so thirds are floats.
+    expect(salesAxisTicks(800_000)).toEqual([800_000 / 3, (2 * 800_000) / 3, 800_000]);
   });
 });
 
@@ -131,10 +198,13 @@ describe("home sales axis + empty", () => {
 
     const chartSrc = readFileSync(path.join(process.cwd(), "src/components/home/SalesChart.tsx"), "utf8");
     const homeChartSrc = readFileSync(path.join(process.cwd(), "src/components/home/HomeSalesChart.tsx"), "utf8");
+    const sections = readFileSync(path.join(process.cwd(), "src/components/home/HomeSections.tsx"), "utf8");
     expect(homeChartSrc).toMatch(/salesChartAxisTicks\(sales\.empty/);
     expect(homeChartSrc).toMatch(/empty=\{sales\.empty\}/);
     expect(chartSrc).toMatch(/showAxis/);
-    expect(chartSrc).toMatch(/home-sales-axis/);
+    expect(chartSrc).toMatch(/home-sales-line/);
+    expect(sections).toMatch(/No sales billed yet/);
+    expect(sections).toMatch(/Go to Billing/);
   });
 });
 
@@ -153,17 +223,55 @@ describe("home sales top customers", () => {
   });
 });
 
-describe("home sales wiring", () => {
+describe("home concept A layout wiring", () => {
   const root = process.cwd();
   const page = readFileSync(path.join(root, "src/app/(app)/page.tsx"), "utf8");
   const dash = readFileSync(path.join(root, "src/lib/home/dashboard.ts"), "utf8");
   const sections = readFileSync(path.join(root, "src/components/home/HomeSections.tsx"), "utf8");
+  const css = readFileSync(path.join(root, "src/app/globals.css"), "utf8");
 
-  it("places Sales after Needs action and before Money; drops Billed this month from Money", () => {
-    expect(page).toMatch(/HomeNeedsAction[\s\S]*HomeSalesSection[\s\S]*HomeMoney/);
+  it("uses KPI cards + Sales billed line chart + Needs action; drops Money and Non-VAT sections", () => {
+    expect(page).toMatch(/HomeKpiCards/);
+    expect(page).toMatch(/HomeSalesSection/);
+    expect(page).toMatch(/HomeNeedsAction/);
+    expect(page).toMatch(/HomeTaxDeadline/);
+    expect(page).toMatch(/HomeRecentActivity/);
+    expect(page).not.toMatch(/HomeMoney/);
+    expect(page).not.toMatch(/HomeNonVat/);
     expect(dash).not.toMatch(/moneyRow\("billedThisMonth"/);
     expect(sections).toMatch(/Billed this month/);
-    expect(sections).toMatch(/Go to Billing/);
-    expect(sections).toMatch(/No sales billed yet/);
+    expect(sections).toMatch(/Sales billed/);
+    expect(sections).toMatch(/home-chip-overdue/);
+    expect(css).toMatch(/#f8fafc/i);
+    expect(css).toMatch(/#e5e7eb/i);
+    expect(css).toMatch(/home-sales-line/);
+  });
+
+  it("staff layout omits sales KPIs/chart and stays full-width without holes", () => {
+    expect(page).toMatch(/is-staff/);
+    expect(page).toMatch(/home-mid-full|is-staff/);
+    expect(css).toMatch(/\.home-dashboard\.is-staff\s+\.home-mid/);
+  });
+});
+
+describe("home activity cost filter", () => {
+  it("hides supplier docs without cost access", () => {
+    expect(canShowHomeActivity("PurchaseOrder", false)).toBe(false);
+    expect(canShowHomeActivity("ReceivingReport", false)).toBe(false);
+    expect(canShowHomeActivity("SupplierBill", false)).toBe(false);
+    expect(canShowHomeActivity("Quote", false)).toBe(true);
+    expect(canShowHomeActivity("Billing", false)).toBe(true);
+    expect(canShowHomeActivity("PurchaseOrder", true)).toBe(true);
+  });
+
+  it("filters a mixed activity list down to non-cost rows", () => {
+    const rows = [
+      { id: "1", entityType: "Quote", summary: "a", detail: null, href: null, entityId: "q", at: new Date(), atLabel: "" },
+      { id: "2", entityType: "PurchaseOrder", summary: "b", detail: null, href: null, entityId: "p", at: new Date(), atLabel: "" },
+      { id: "3", entityType: "Billing", summary: "c", detail: null, href: null, entityId: "b", at: new Date(), atLabel: "" },
+    ];
+    expect(filterHomeActivity(rows, false).map((r) => r.entityType)).toEqual(["Quote", "Billing"]);
+    expect(filterHomeActivity(rows, true)).toHaveLength(3);
+    expect(activityDetail("SO-0007", "Sample Corp")).toBe("SO-0007 · Sample Corp");
   });
 });

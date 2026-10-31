@@ -19,6 +19,7 @@ import {
   salesAxisTicks,
   salesChangeVsLastMonth,
   salesMonthLabel,
+  salesMonthsRangeLabel,
   shiftMonthKey,
   topSalesCustomers,
   type HomeSales,
@@ -140,5 +141,6 @@ export async function loadHomeSales(
     })),
     empty: isSalesEmpty(months),
     axisTicks: salesAxisTicks(maxMonth),
+    rangeLabel: salesMonthsRangeLabel(months),
   };
 }

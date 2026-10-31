@@ -386,6 +386,8 @@ export async function arAgingSummary(): Promise<{
   overdue: string;
   /** Count of non-void billings with balance > 0 that are past due (grace applied). */
   overdueCount: number;
+  /** Count of non-void billings with balance > 0 (open AR). */
+  openCount: number;
   pending2307: string;
   credit: string;
   byCustomer: CustomerAgingRow[];
@@ -405,10 +407,12 @@ export async function arAgingSummary(): Promise<{
   let totalRecv = 0n;
   let totalOverdue = 0n;
   let overdueCount = 0;
+  let openCount = 0;
   for (const b of billings) {
     const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
     const bal = toScaled(balance, 2);
     if (bal <= 0n) continue;
+    openCount += 1;
     totalRecv += bal;
     const od = isOverdue(b.dueDate, balance, today, grace);
     if (od) {
@@ -459,6 +463,7 @@ export async function arAgingSummary(): Promise<{
     totalReceivable: fromScaled(totalRecv, 2),
     overdue: fromScaled(totalOverdue, 2),
     overdueCount,
+    openCount,
     pending2307: money(pending2307._sum.amount ?? 0),
     credit: fromScaled(totalCredit, 2),
     byCustomer: customers,

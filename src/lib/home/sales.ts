@@ -125,11 +125,67 @@ export function niceSalesMax(maxAmount: number): number {
   return Number.isFinite(nice) && nice > 0 ? nice : SALES_AXIS_EMPTY_MAX;
 }
 
-/** Two Y gridlines: middle and top (= nice max). */
+/**
+ * Y gridlines for the Sales line chart: ⅓, ⅔, and the nice max
+ * (zero is drawn separately). e.g. 300K → [100K, 200K, 300K].
+ */
 export function salesAxisTicks(maxAmount: number): number[] {
   const nice = niceSalesMax(maxAmount);
-  const mid = nice / 2;
-  return mid > 0 && mid < nice ? [mid, nice] : [nice];
+  // Prefer exact thirds when the nice max divides cleanly (300K → 100/200/300).
+  if (nice % 3 === 0) {
+    const third = nice / 3;
+    return [third, third * 2, nice];
+  }
+  const third = nice / 3;
+  const twoThirds = (2 * nice) / 3;
+  if (third > 0 && twoThirds < nice) return [third, twoThirds, nice];
+  return [nice];
+}
+
+/** Caption under "Billed this month": "vs ₱145,000 in Sep". */
+export function salesVsLastMonthCaption(lastMonthAmount: number | string, lastMonthKey: MonthKey): string {
+  const [ys, ms] = lastMonthKey.split("-");
+  const month = Number(ms);
+  const short = SHORT_MONTHS[month - 1] ?? lastMonthKey;
+  const year = Number(ys);
+  void year;
+  const n = typeof lastMonthAmount === "number" ? lastMonthAmount : Number(lastMonthAmount);
+  const amount = Number.isFinite(n) ? formatCompactPesoWhole(n) : "₱0";
+  return `vs ${amount} in ${short}`;
+}
+
+/** Whole-peso ₱ for KPI captions (₱145,000). */
+function formatCompactPesoWhole(amount: number): string {
+  const n = Math.abs(Number(amount));
+  if (!Number.isFinite(n)) return "₱0";
+  return `₱${new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 }).format(Math.round(n))}`;
+}
+
+/**
+ * Red overdue chip for the "Owed by customers" KPI.
+ * - all open billings past due → "All overdue"
+ * - some past due → "N overdue"
+ * - none → null (no chip)
+ */
+export function owedOverdueChip(
+  overdueCount: number,
+  openCount: number,
+): { label: string; tone: "overdue" } | null {
+  const overdue = Math.max(0, Math.trunc(Number(overdueCount) || 0));
+  const open = Math.max(0, Math.trunc(Number(openCount) || 0));
+  if (overdue <= 0) return null;
+  if (open > 0 && overdue >= open) return { label: "All overdue", tone: "overdue" };
+  return { label: `${overdue} overdue`, tone: "overdue" };
+}
+
+/** "Nov 2025 – Oct 2026" range under Sales billed. */
+export function salesMonthsRangeLabel(months: readonly { key: MonthKey; shortLabel: string }[]): string {
+  if (months.length === 0) return "";
+  const first = months[0]!;
+  const last = months[months.length - 1]!;
+  const firstYear = first.key.slice(0, 4);
+  const lastYear = last.key.slice(0, 4);
+  return `${first.shortLabel} ${firstYear} – ${last.shortLabel} ${lastYear}`;
 }
 
 /** Empty Sales chart: no ₱ axis labels / gridlines (month labels + zero bars only). */
@@ -200,4 +256,6 @@ export type HomeSales = {
   topCustomers: HomeSalesCustomer[];
   empty: boolean;
   axisTicks: number[];
+  /** e.g. "Nov 2025 – Oct 2026" under the Sales billed card. */
+  rangeLabel?: string;
 };

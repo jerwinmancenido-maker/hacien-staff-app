@@ -136,6 +136,14 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
 
     const dashStaff = await loadHomeDashboard(staff, { now });
     expect(dashStaff.sales).toBeNull();
+    expect(dashStaff.kpis).toBeNull();
+    expect(dashStaff.header.newQuoteHref).toBe("/quotes/new");
+    expect(dashStaff.header.newBillingHref).toBeNull();
+
+    const dashAdmin = await loadHomeDashboard(admin, { now });
+    expect(dashAdmin.kpis).not.toBeNull();
+    expect(dashAdmin.header.newBillingHref).toBe("/billing/billings/new");
+    expect(dashAdmin.header.newQuoteHref).toBe("/quotes/new");
   });
 
   it("excludes voided billings from months, year total and top customers", async () => {
@@ -263,5 +271,22 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     expect(sales!.months.every((m) => Number(m.amount) === 0)).toBe(true);
     expect(sales!.monthsNarrow).toHaveLength(6);
     expect(sales!.change.label).toBe("—");
+
+    const dash = await loadHomeDashboard(admin, { now: far });
+    expect(dash.kpis).not.toBeNull();
+    expect(dash.sales!.empty).toBe(true);
+    expect(dash.kpis!.billedThisMonth.change.label).toBe("—");
+  });
+
+  it("KPI overdue chip and vs caption for Admin with billing access", async () => {
+    const now = new Date();
+    const dash = await loadHomeDashboard(admin, { now });
+    expect(dash.kpis).not.toBeNull();
+    expect(dash.kpis!.billedThisMonth.vsCaption).toMatch(/^vs ₱.+ in [A-Z][a-z]{2}$/);
+    expect(dash.kpis!.owedByCustomers.billingCountLabel).toMatch(/\d[\d,]* billings?$/);
+    if (dash.kpis!.owedByCustomers.overdueChip) {
+      expect(dash.kpis!.owedByCustomers.overdueChip.tone).toBe("overdue");
+      expect(dash.kpis!.owedByCustomers.overdueChip.label).toMatch(/^(All overdue|\d+ overdue)$/);
+    }
   });
 });
