@@ -98,6 +98,11 @@ export async function getSettingsVersion(store: SettingsStore, versionId: string
   return v ? toSnapshot(v) : null;
 }
 
+/** Build a SettingsSnapshot from a stored version row (same parse path as by-id). */
+export function settingsSnapshotFromRecord(v: SettingsVersionRecord): SettingsSnapshot {
+  return toSnapshot(v);
+}
+
 export type SaveSectionInput<K extends SettingsKey> = {
   key: K;
   value: unknown;

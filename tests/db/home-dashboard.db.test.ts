@@ -9,17 +9,26 @@ const env = vi.hoisted(() => {
 });
 
 import { db } from "@/lib/db";
-import { arAgingSummary, listBillings, listCollections } from "@/lib/billing/views";
+import { isOverdue } from "@/lib/billing/dates";
+import { billingBalance } from "@/lib/billing/status";
+import {
+  arAgingSummary,
+  listBillings,
+  listCollections,
+  sumBillingsAmount,
+  sumCollectionsReceived,
+} from "@/lib/billing/views";
 import { currentMonthPeriod } from "@/lib/books/period";
 import { money } from "@/lib/documents/common";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { loadHomeDashboard, homeSumAmounts } from "@/lib/home/dashboard";
 import { listSupplierBillsDueSoon } from "@/lib/payables/views";
 import { listPurchaseOrdersView, listReceivingView } from "@/lib/purchasing/views";
+import { approvalReasons, fromScaled, toScaled } from "@/lib/quotes/calc";
 import { listQuotesView, listSalesOrdersView } from "@/lib/quotes/views";
-import { getSettingsSnapshot } from "@/lib/settings";
+import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { recordBilling } from "@/lib/services/billings";
-import { recordCollection } from "@/lib/services/collections";
+import { customerCreditBalance, recordCollection } from "@/lib/services/collections";
 import { listCustomers } from "@/lib/services/companies";
 import {
   approvePurchaseOrder,
@@ -192,14 +201,14 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     expect(owed!.overdueAmount).toBe(ar.overdue);
     expect(owed!.showOverdueRed).toBe(Number(ar.overdue) > 0);
 
-    const billedRows = await listBillings({ fromYmd: period.fromYmd, toYmd: period.toYmd });
-    const collectedRows = await listCollections({
+    const billedSum = await sumBillingsAmount({ fromYmd: period.fromYmd, toYmd: period.toYmd });
+    const collectedSum = await sumCollectionsReceived({
       status: "POSTED",
       fromYmd: period.fromYmd,
       toYmd: period.toYmd,
     });
-    expect(billed!.amount).toBe(homeSumAmounts(billedRows.map((r) => r.amount)));
-    expect(collected!.amount).toBe(homeSumAmounts(collectedRows.map((r) => r.amountReceived)));
+    expect(billed!.amount).toBe(billedSum);
+    expect(collected!.amount).toBe(collectedSum);
 
     const dashStaff = await loadHomeDashboard(staff);
     expect(dashStaff.money.some((m) => m.kind === "owedByCustomers")).toBe(true);
@@ -322,7 +331,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const needsPo = await listSalesOrdersView({ needsPo: true });
     const receiving = await listReceivingView({ history: false }, admin);
     const billedOver = await listPurchaseOrdersView({ billedOver: true }, admin);
-    const overdue = await listBillings({ status: "OVERDUE" });
+    const arForCount = await arAgingSummary();
     const noWh = await listCustomers({ withholding: "NONE" });
 
     if (byKind.quotesNeedsApproval !== undefined) expect(byKind.quotesNeedsApproval).toBe(needsApproval.length);
@@ -333,7 +342,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     }
     if (byKind.posAwaitingReceipt !== undefined) expect(byKind.posAwaitingReceipt).toBe(receiving.length);
     if (byKind.billsOverPo !== undefined) expect(byKind.billsOverPo).toBe(billedOver.length);
-    if (byKind.billingsOverdue !== undefined) expect(byKind.billingsOverdue).toBe(overdue.length);
+    if (byKind.billingsOverdue !== undefined) expect(byKind.billingsOverdue).toBe(arForCount.overdueCount);
     if (byKind.customersNoWithholding !== undefined) expect(byKind.customersNoWithholding).toBe(noWh.length);
 
     const period = currentMonthPeriod();
@@ -342,13 +351,17 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const owedMoney = dash.money.find((m) => m.kind === "owedByCustomers")!;
     const dueSoonMoney = dash.money.find((m) => m.kind === "supplierBillsDueSoon")!;
 
-    const billedList = await listBillings({ fromYmd: period.fromYmd, toYmd: period.toYmd });
-    const collectedList = await listCollections({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd });
-    const ar = await arAgingSummary();
+    const billedSum = await sumBillingsAmount({ fromYmd: period.fromYmd, toYmd: period.toYmd });
+    const collectedSum = await sumCollectionsReceived({
+      status: "POSTED",
+      fromYmd: period.fromYmd,
+      toYmd: period.toYmd,
+    });
+    const ar = arForCount;
     const dueSoon = await listSupplierBillsDueSoon(7);
 
-    expect(billedMoney.amount).toBe(homeSumAmounts(billedList.map((r) => r.amount)));
-    expect(collectedMoney.amount).toBe(homeSumAmounts(collectedList.map((r) => r.amountReceived)));
+    expect(billedMoney.amount).toBe(billedSum);
+    expect(collectedMoney.amount).toBe(collectedSum);
     expect(owedMoney.amount).toBe(ar.totalReceivable);
     expect(owedMoney.overdueAmount).toBe(ar.overdue);
     expect(dueSoonMoney.amount).toBe(homeSumAmounts(dueSoon.map((b) => b.balance)));
@@ -359,5 +372,302 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     expect(dash.nonVat.limit).toBeGreaterThan(0);
     expect(dash.withCosts).toBe(false);
     expect(isoDate(manilaToday()).length).toBe(10);
+  });
+
+  it("uncapped money aggregates: 201+ billings/collections match true sums; overdue count matches AR overdue PHP records", async () => {
+    process.env.PAYABLES_ENABLED = "false";
+    process.env.CASH_ENABLED = "false";
+    process.env.BOOKS_ENABLED = "false";
+
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, "999999999");
+    const period = currentMonthPeriod();
+    const invoiceDate = new Date(`${period.fromYmd}T00:00:00.000Z`);
+    const duePast = addDays(manilaToday(), -45);
+    const run = tag();
+
+    const maxInv = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    let inv = (maxInv._max.invoiceNo ?? 1_000_000) + 1;
+
+    const billingRows: {
+      number: string;
+      salesOrderId: string;
+      customerId: string;
+      invoiceNo: number;
+      invoiceDate: Date;
+      dueDate: Date;
+      amount: string;
+      withholdingExpected: string;
+      netExpected: string;
+      status: "OPEN" | "VOID";
+      createdById: string;
+      updatedById: string;
+      voidedAt?: Date;
+      voidReason?: string;
+    }[] = [];
+
+    let expectedBilledCents = 0n;
+    let expectedOverdueCents = 0n;
+    let expectedOverdueCount = 0;
+    // 201 open overdue billings with distinct centavo amounts + 1 VOID that must be excluded.
+    for (let i = 0; i < 201; i++) {
+      const cents = 101n + BigInt(i); // 1.01, 1.02, ...
+      const amount = fromScaled(cents, 2);
+      expectedBilledCents += cents;
+      expectedOverdueCents += cents;
+      expectedOverdueCount += 1;
+      billingRows.push({
+        number: `BL-HM-${run}-${i}`,
+        salesOrderId: so.id,
+        customerId: customer.id,
+        invoiceNo: inv++,
+        invoiceDate,
+        dueDate: duePast,
+        amount,
+        withholdingExpected: "0.00",
+        netExpected: amount,
+        status: "OPEN",
+        createdById: admin.id,
+        updatedById: admin.id,
+      });
+    }
+    billingRows.push({
+      number: `BL-HM-${run}-void`,
+      salesOrderId: so.id,
+      customerId: customer.id,
+      invoiceNo: inv++,
+      invoiceDate,
+      dueDate: duePast,
+      amount: "999.99",
+      withholdingExpected: "0.00",
+      netExpected: "999.99",
+      status: "VOID",
+      voidedAt: new Date(),
+      voidReason: "test exclude",
+      createdById: admin.id,
+      updatedById: admin.id,
+    });
+    await db.billing.createMany({ data: billingRows });
+
+    let expectedCollectedCents = 0n;
+    const collectionRows: {
+      number: string;
+      customerId: string;
+      date: Date;
+      method: "CASH";
+      amountReceived: string;
+      status: "POSTED" | "VOID";
+      createdById: string;
+      voidedAt?: Date;
+      voidReason?: string;
+    }[] = [];
+    for (let i = 0; i < 201; i++) {
+      const cents = 201n + BigInt(i); // 2.01, 2.02, ...
+      const amountReceived = fromScaled(cents, 2);
+      expectedCollectedCents += cents;
+      collectionRows.push({
+        number: `CR-HM-${run}-${i}`,
+        customerId: customer.id,
+        date: invoiceDate,
+        method: "CASH",
+        amountReceived,
+        status: "POSTED",
+        createdById: admin.id,
+      });
+    }
+    collectionRows.push({
+      number: `CR-HM-${run}-void`,
+      customerId: customer.id,
+      date: invoiceDate,
+      method: "CASH",
+      amountReceived: "888.88",
+      status: "VOID",
+      voidedAt: new Date(),
+      voidReason: "test exclude",
+      createdById: admin.id,
+    });
+    await db.collection.createMany({ data: collectionRows });
+
+    const trueBilled = fromScaled(expectedBilledCents, 2);
+    const trueCollected = fromScaled(expectedCollectedCents, 2);
+    // True sums across the whole DB (not just this run) via the same aggregates Home uses.
+    const billedAgg = await sumBillingsAmount({ fromYmd: period.fromYmd, toYmd: period.toYmd });
+    const collectedAgg = await sumCollectionsReceived({
+      status: "POSTED",
+      fromYmd: period.fromYmd,
+      toYmd: period.toYmd,
+    });
+    expect(toScaled(billedAgg, 2)).toBeGreaterThanOrEqual(expectedBilledCents);
+    expect(toScaled(collectedAgg, 2)).toBeGreaterThanOrEqual(expectedCollectedCents);
+    // This run's rows alone already exceed the list page cap.
+    expect(expectedBilledCents).toBe(toScaled(trueBilled, 2));
+    expect(expectedCollectedCents).toBe(toScaled(trueCollected, 2));
+
+    const listedBillings = await listBillings({ fromYmd: period.fromYmd, toYmd: period.toYmd });
+    const listedCollections = await listCollections({
+      status: "POSTED",
+      fromYmd: period.fromYmd,
+      toYmd: period.toYmd,
+    });
+    expect(listedBillings.length).toBe(200);
+    expect(listedCollections.length).toBe(200);
+    expect(homeSumAmounts(listedBillings.map((r) => r.amount))).not.toBe(billedAgg);
+    expect(homeSumAmounts(listedCollections.map((r) => r.amountReceived))).not.toBe(collectedAgg);
+
+    const dash = await loadHomeDashboard(admin);
+    const billedMoney = dash.money.find((m) => m.kind === "billedThisMonth")!;
+    const collectedMoney = dash.money.find((m) => m.kind === "collectedThisMonth")!;
+    expect(billedMoney.amount).toBe(billedAgg);
+    expect(collectedMoney.amount).toBe(collectedAgg);
+
+    const ar = await arAgingSummary();
+    const overdueAction = dash.actions.find((a) => a.kind === "billingsOverdue");
+    expect(ar.overdueCount).toBeGreaterThanOrEqual(expectedOverdueCount);
+    expect(toScaled(ar.overdue, 2)).toBeGreaterThanOrEqual(expectedOverdueCents);
+    if (overdueAction) expect(overdueAction.count).toBe(ar.overdueCount);
+
+    // listBillings(OVERDUE) applies take:200 BEFORE the overdue filter, so it can
+    // undercount badly; Home must use ar.overdueCount (same pass as overdue PHP).
+    const listedOverdue = await listBillings({ status: "OVERDUE" });
+    expect(listedOverdue.length).toBeLessThanOrEqual(200);
+    expect(ar.overdueCount).toBeGreaterThan(listedOverdue.length);
+    expect(ar.overdueCount).toBeGreaterThan(200);
+
+    // This run's open billings are all overdue with no allocations — their sum is
+    // part of ar.overdue, and each one is counted in ar.overdueCount.
+    const runBillings = await db.billing.findMany({
+      where: { number: { startsWith: `BL-HM-${run}-` }, status: { not: "VOID" } },
+    });
+    expect(runBillings).toHaveLength(201);
+    const runOverdueSum = runBillings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
+    expect(runOverdueSum).toBe(expectedOverdueCents);
+    expect(toScaled(ar.overdue, 2)).toBeGreaterThanOrEqual(runOverdueSum);
+
+    // Direct uncapped recount: overdueCount must equal the billings behind overdue PHP.
+    const allOpen = await db.billing.findMany({
+      where: { status: { not: "VOID" } },
+      include: { allocations: { where: { collection: { status: "POSTED" } } } },
+    });
+    const snap = await getSettingsSnapshot();
+    const grace = snap.settings.collections.overdueGraceDays;
+    const today = manilaToday();
+    let recount = 0;
+    let recountCents = 0n;
+    for (const b of allOpen) {
+      const cash = fromScaled(
+        b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n),
+        2,
+      );
+      const wh = fromScaled(
+        b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n),
+        2,
+      );
+      const balance = billingBalance(money(b.amount), { cashApplied: cash, withholdingApplied: wh });
+      const bal = toScaled(balance, 2);
+      if (bal <= 0n) continue;
+      if (isOverdue(b.dueDate, balance, today, grace)) {
+        recount += 1;
+        recountCents += bal;
+      }
+    }
+    expect(ar.overdueCount).toBe(recount);
+    expect(ar.overdue).toBe(fromScaled(recountCents, 2));
+  });
+
+  it("arAgingSummary credit matches per-customer customerCreditBalance (grouped query)", async () => {
+    const year = await freshYear();
+    const { customer } = await openSo(year, "10000");
+    await recordCollection(
+      {
+        customerId: customer.id,
+        date: manilaToday(),
+        method: "CASH",
+        amountReceived: "123.45",
+        receiptNo: `OR-${tag()}`,
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        notes: null,
+        allocations: [],
+      },
+      admin,
+    );
+
+    const ar = await arAgingSummary();
+    let summed = 0n;
+    for (const row of ar.byCustomer) {
+      const solo = await customerCreditBalance(row.customerId);
+      expect(row.credit).toBe(solo);
+      summed += toScaled(row.credit, 2);
+    }
+    expect(ar.credit).toBe(fromScaled(summed, 2));
+    const ours = ar.byCustomer.find((r) => r.customerId === customer.id);
+    expect(ours?.credit).toBe("123.45");
+  });
+
+  it("listQuotesView needsApproval batch matches per-quote approvalReasons", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer(["GOODS_1"]);
+    const supplier = await makeSupplier();
+    // Large contract → needs approval under default thresholds.
+    await createQuote(
+      quoteInput(customer.id, year, {
+        contactId: customer.contacts[0]!.id,
+        items: [
+          {
+            id: null,
+            description: `Need approval ${tag()}`,
+            kind: "GOODS",
+            qty: "1",
+            unit: "lot",
+            supplierId: supplier.id,
+            supplierUnitCost: "100",
+            unitPrice: "600000",
+          },
+        ],
+      }),
+      admin,
+    );
+    // Small margin-ok draft should not need approval.
+    await createQuote(
+      quoteInput(customer.id, year, {
+        contactId: customer.contacts[0]!.id,
+        items: [
+          {
+            id: null,
+            description: `No approval ${tag()}`,
+            kind: "GOODS",
+            qty: "1",
+            unit: "lot",
+            supplierId: supplier.id,
+            supplierUnitCost: "8000",
+            unitPrice: "10000",
+          },
+        ],
+      }),
+      admin,
+    );
+
+    const batched = await listQuotesView({ needsApproval: true }, admin);
+    const drafts = await db.quote.findMany({
+      where: { status: "DRAFT" },
+      select: {
+        id: true,
+        settingsVersionId: true,
+        contractPrice: true,
+        netMarginPct: true,
+      },
+    });
+    const expectedIds: string[] = [];
+    const fallback = await getSettingsSnapshot();
+    for (const q of drafts) {
+      const snap = (await getSettingsVersion(q.settingsVersionId)) ?? fallback;
+      const reasons = approvalReasons(
+        { contractPrice: money(q.contractPrice), netMarginPct: money(q.netMarginPct) },
+        snap.settings.approval,
+      );
+      if (reasons.length > 0) expectedIds.push(q.id);
+    }
+    expect(batched.map((r) => r.id).sort()).toEqual(expectedIds.sort());
   });
 });

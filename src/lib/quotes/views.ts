@@ -8,7 +8,12 @@
 import type { Prisma, QuoteStatus, SalesOrderStatus } from "@prisma/client";
 import { db } from "../db";
 import { canSeeCosts, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot, getSettingsVersion } from "../settings";
+import {
+  getSettingsSnapshot,
+  getSettingsVersion,
+  getSettingsVersionsMap,
+  type SettingsSnapshot,
+} from "../settings";
 import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
@@ -97,10 +102,19 @@ function totalsView(items: ItemRow[], withholding: WithholdingSnapshot[], withCo
   return { ...base, supplierCost: t.supplierCost, netMargin: t.netMargin, netMarginPct: t.netMarginPct };
 }
 
-async function approvalFor(settingsVersionId: string, contractPrice: string, netMarginPct: string, withCosts: boolean) {
-  const snap = (await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot());
+function approvalFromSnap(
+  snap: SettingsSnapshot,
+  contractPrice: string,
+  netMarginPct: string,
+  withCosts: boolean,
+) {
   const reasons = approvalReasons({ contractPrice, netMarginPct }, snap.settings.approval);
   return withCosts ? { needed: reasons.length > 0, reasons } : { needed: reasons.length > 0 };
+}
+
+async function approvalFor(settingsVersionId: string, contractPrice: string, netMarginPct: string, withCosts: boolean) {
+  const snap = (await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot());
+  return approvalFromSnap(snap, contractPrice, netMarginPct, withCosts);
 }
 
 const itemsInclude = {
@@ -216,12 +230,12 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
   });
 
   if (needsApproval) {
-    const kept: typeof mapped = [];
-    for (const r of mapped) {
-      const approval = await approvalFor(r.settingsVersionId, r.contractPrice, r.netMarginPctStored, withCosts);
-      if (approval.needed) kept.push(r);
-    }
-    mapped = kept;
+    const snaps = await getSettingsVersionsMap(mapped.map((r) => r.settingsVersionId));
+    const fallback = await getSettingsSnapshot();
+    mapped = mapped.filter((r) => {
+      const snap = snaps.get(r.settingsVersionId) ?? fallback;
+      return approvalFromSnap(snap, r.contractPrice, r.netMarginPctStored, withCosts).needed;
+    });
   }
 
   return mapped.map(({ settingsVersionId: _s, netMarginPctStored: _n, ...rest }) => rest) as ({

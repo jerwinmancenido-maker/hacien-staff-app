@@ -1,7 +1,8 @@
-// Home dashboard read model. Counts and money use the same list filters as the
-// target pages so dashboard numbers match filtered list lengths / totals.
+// Home dashboard read model. Action counts match filtered list lengths; money
+// totals use uncapped DB aggregates with the same filters as the list pages
+// (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, listBillings, listCollections } from "../billing/views";
+import { arAgingSummary, sumBillingsAmount, sumCollectionsReceived } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -162,11 +163,10 @@ export async function loadHomeDashboard(
     quotesNoReply,
     salesOrdersNeedsPo,
     receiving,
-    billingsOverdue,
     customersNoWh,
     ar,
-    collectionsMonth,
-    billingsMonth,
+    collected,
+    billed,
     nonVatSnap,
     recent,
   ] = await Promise.all([
@@ -174,11 +174,10 @@ export async function loadHomeDashboard(
     listQuotesView({ noReplyAfterDays: 7, now }, user),
     listSalesOrdersView({ needsPo: true }),
     listReceivingView({ history: false }, user),
-    listBillings({ status: "OVERDUE" }),
     listCustomers({ withholding: "NONE" }),
     arAgingSummary(),
-    listCollections({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
-    listBillings({ fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumBillingsAmount({ fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     listRecentHomeActivity(5),
   ]);
@@ -198,7 +197,8 @@ export async function loadHomeDashboard(
     salesOrdersNeedsPo: { count: salesOrdersNeedsPo.length, href: salesOrdersNeedsPoHref() },
     posAwaitingReceipt: { count: posAwaiting, href: posAwaitingReceiptHref() },
     billsOverPo: { count: billsOverPoCount, href: billsOverPoHref() },
-    billingsOverdue: { count: billingsOverdue.length, href: billingsOverdueHref() },
+    // Uncapped: same records that contribute to ar.overdue (not listBillings take:200).
+    billingsOverdue: { count: ar.overdueCount, href: billingsOverdueHref() },
     customersNoWithholding: { count: customersNoWh.length, href: customersNoWithholdingHref() },
   };
 
@@ -212,8 +212,6 @@ export async function loadHomeDashboard(
     }));
 
   const owed = owedByCustomersSplit(ar.totalReceivable, ar.overdue);
-  const collected = sumPesoAmounts(collectionsMonth.map((c) => c.amountReceived));
-  const billed = sumPesoAmounts(billingsMonth.map((b) => b.amount));
 
   const money: HomeMoneyRow[] = [];
   if (canShowMoneyFigure("owedByCustomers", user, features)) {

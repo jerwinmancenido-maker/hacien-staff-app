@@ -7,11 +7,15 @@ import {
   getSettingsSnapshot as getSnapshotFromStore,
   getSettingsVersion as getVersionFromStore,
   saveSettingsSection as saveSectionToStore,
+  settingsSnapshotFromRecord,
+  type SettingsSnapshot,
   type SettingsStore,
   type SettingsVersionRecord,
   type SaveSectionInput,
 } from "./service";
 import type { Settings, SettingsKey } from "./schema";
+
+export type { SettingsSnapshot };
 
 type Row = {
   id: string;
@@ -60,6 +64,16 @@ export function getSettingsSnapshot() {
 /** Settings as they were in a given version (for documents created under it). */
 export function getSettingsVersion(versionId: string) {
   return getVersionFromStore(prismaSettingsStore(db), versionId);
+}
+
+/** Batch-load settings versions (one query). Missing ids are omitted from the map. */
+export async function getSettingsVersionsMap(versionIds: readonly string[]): Promise<Map<string, SettingsSnapshot>> {
+  const unique = [...new Set(versionIds.filter(Boolean))];
+  const map = new Map<string, SettingsSnapshot>();
+  if (unique.length === 0) return map;
+  const rows = await db.settingsVersion.findMany({ where: { id: { in: unique } } });
+  for (const r of rows) map.set(r.id, settingsSnapshotFromRecord(toRecord(r)));
+  return map;
 }
 
 /** Save one section as a new version and write the audit row in the same transaction. */
