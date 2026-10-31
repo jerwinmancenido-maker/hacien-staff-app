@@ -192,6 +192,11 @@ export default async function TaxCalendarPage({
                     <td className="tax-cal-desc">
                       <div>{r.description}</div>
                       {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
+                      {r.worksheetLink ? (
+                        <div className="tax-cal-desc-worksheet">
+                          <Link href={r.worksheetLink}>Open worksheet</Link>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="tax-cal-period">{r.periodLabel}</td>
                     <td className="tax-cal-due">
