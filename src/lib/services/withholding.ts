@@ -9,7 +9,7 @@
 // existing quote.
 
 import type { WithholdingRate } from "@prisma/client";
-import { db, type Db, type Tx } from "../db";
+import { db, isUniqueViolation, type Db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { ratePctLabel, type WithholdingSnapshot } from "../quotes/calc";
 import { prismaSettingsStore } from "../settings";
@@ -144,16 +144,23 @@ export async function saveWithholdingRates(rawRows: unknown, userId: string, bas
 
     if (!Object.keys(after).length) return { ok: true as const, changed: false, version: settings.version };
 
-    const version = await tx.settingsVersion.create({
-      data: {
-        version: settings.version + 1,
-        data: settings.settings,
-        changedKey: WITHHOLDING_SETTINGS_KEY,
-        before,
-        after,
-        createdById: userId,
-      },
-    });
+    let version;
+    try {
+      version = await tx.settingsVersion.create({
+        data: {
+          version: settings.version + 1,
+          data: settings.settings,
+          changedKey: WITHHOLDING_SETTINGS_KEY,
+          before,
+          after,
+          createdById: userId,
+        },
+      });
+    } catch (e) {
+      // Concurrent settings save won the SettingsVersion.version unique race (P2002).
+      if (isUniqueViolation(e)) throw new SettingsConflictError();
+      throw e;
+    }
     await writeAudit(tx, {
       userId,
       entityType: "Settings",

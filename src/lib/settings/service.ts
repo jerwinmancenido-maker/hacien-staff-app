@@ -4,6 +4,7 @@
 // The logic is written against a tiny store interface so it can be tested
 // without a database; src/lib/settings/index.ts wires it to Prisma.
 
+import { isUniqueViolation } from "@/lib/db";
 import { redactPrintAccountNumbers } from "@/lib/print/account-number";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { settingsSchema, settingsSections, type Settings, type SettingsKey } from "./schema";
@@ -143,13 +144,19 @@ export async function saveSettingsSection<K extends SettingsKey>(
   const beforeForLog = input.key === "print" ? redactPrintAccountNumbers(before) : before;
   const afterForLog = input.key === "print" ? redactPrintAccountNumbers(after) : after;
 
-  const version = await store.create({
-    version: current.version + 1,
-    data: { ...current.settings, [input.key]: after },
-    changedKey: input.key,
-    before: beforeForLog,
-    after: afterForLog,
-    createdById: input.userId,
-  });
-  return { ok: true, version, changed: true };
+  try {
+    const version = await store.create({
+      version: current.version + 1,
+      data: { ...current.settings, [input.key]: after },
+      changedKey: input.key,
+      before: beforeForLog,
+      after: afterForLog,
+      createdById: input.userId,
+    });
+    return { ok: true, version, changed: true };
+  } catch (e) {
+    // Concurrent save won the SettingsVersion.version unique race (P2002).
+    if (isUniqueViolation(e)) throw new SettingsConflictError();
+    throw e;
+  }
 }
