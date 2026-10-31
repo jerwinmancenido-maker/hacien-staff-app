@@ -9,6 +9,7 @@ import {
   convertQuoteToSalesOrder,
   createQuote,
   markQuoteLost,
+  confirmNoneAndMarkQuoteSent,
   markQuoteSent,
   refreshQuoteCompanyDetails,
   updateQuote,
@@ -50,6 +51,17 @@ export async function markQuoteSentAction(id: string): Promise<FormState> {
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Marked as sent." };
+  });
+}
+
+/** "Yes, none" on the submit confirm: store explicit none, then mark as sent. */
+export async function confirmNoneAndMarkQuoteSentAction(id: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    await confirmNoneAndMarkQuoteSent(id, user);
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    return { ok: true, message: "Marked as sent with no withholding." };
   });
 }
 

@@ -6,7 +6,7 @@ import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { editorCustomers, editorRates, editorSuppliers } from "../../editor-data";
-import { markQuoteSentAction, saveQuoteAction } from "../../actions";
+import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -47,6 +47,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         action={saveQuoteAction.bind(null, id)}
         cancelHref={`/quotes/${id}`}
         markSentAction={markQuoteSentAction}
+        confirmNoneAndMarkSentAction={confirmNoneAndMarkQuoteSentAction}
         initial={{
           customerId: quote.customer.id,
           contactId: quote.contact?.id ?? "",
@@ -56,8 +57,9 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           notes: quote.notes ?? "",
           internalNotes: quote.internalNotes ?? "",
           subject: quote.subject ?? "",
+          withholdingPick: quote.withholdingPick,
+          withholdingCodes: quote.withholdingPick,
           buyerPoNo: quote.buyerPoNo ?? "",
-          withholdingCodes: quote.withholding.map((w) => w.code),
           buyerPoDate: "",
           deliveryAddress: "",
           items: editableItems(quote.items, withCosts).map((i) => ({

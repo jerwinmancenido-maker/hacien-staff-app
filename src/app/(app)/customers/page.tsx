@@ -31,13 +31,20 @@ function href(s: Search, patch: Partial<Search>) {
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await requirePagePermission("view");
   const s = await searchParams;
+  const whNotSet = s.wh === "NOT_SET";
   const wh = WITHHOLDING_TYPES.includes(s.wh as WithholdingType) ? (s.wh as WithholdingType) : undefined;
   const showInactive = s.inactive === "1";
   const expiringOnly = s.docs === "expiring";
   const warnDays = await expiryWarningDays();
   const expiringIds = await ownersWithExpiringDocuments("customer", warnDays);
-  const customers = await listCustomers({ q: s.q, withholding: wh, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
-  const filtered = !!(s.q || wh || expiringOnly);
+  const customers = await listCustomers({
+    q: s.q,
+    withholding: wh,
+    withholdingPick: whNotSet ? "NOT_SET" : undefined,
+    showInactive,
+    ...(expiringOnly ? { onlyIds: expiringIds } : {}),
+  });
+  const filtered = !!(s.q || wh || whNotSet || expiringOnly);
 
   const filterTabs = [
     { key: "all", label: "All", href: href(s, { wh: undefined }) },
@@ -121,7 +128,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             Search by name or TIN
           </label>
           <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
-          {wh && <input type="hidden" name="wh" value={wh} />}
+          {(wh || whNotSet) && <input type="hidden" name="wh" value={wh ?? "NOT_SET"} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
           {expiringOnly && <input type="hidden" name="docs" value="expiring" />}
           {s.view && <input type="hidden" name="view" value={s.view} />}
@@ -130,7 +137,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <PillTabs
           ariaLabel="Withholding filter"
           tabs={filterTabs}
-          active={wh ?? "all"}
+          active={whNotSet ? "NOT_SET" : (wh ?? "all")}
           size="sm"
         />
 

@@ -3,6 +3,7 @@ import { currentMonthPeriod } from "@/lib/books/period";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { activitySummary, documentHref, formatHomeActivityWhen } from "@/lib/home/activity";
 import {
+  HOME_WITHHOLDING_NOT_SET_LABEL,
   billedYearPhoneLimitLabel,
   buildTaxStripLabel,
   homeMonthBounds,
@@ -10,6 +11,7 @@ import {
   homeSumAmounts,
   homeTodayPlusDaysYmd,
 } from "@/lib/home/dashboard";
+import { customersNoWithholdingHref } from "@/lib/home/hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
 import {
@@ -134,6 +136,14 @@ describe("home action count cap", () => {
     expect(formatHomeActionCount(199)).toBe("199");
     expect(formatHomeActionCount(200)).toBe("200+");
     expect(formatHomeActionCount(350)).toBe("200+");
+  });
+});
+
+describe("home Needs action — Withholding not set", () => {
+  it("uses pick-not-set wording and links to the matching customer list", () => {
+    expect(HOME_WITHHOLDING_NOT_SET_LABEL).toBe("Withholding not set");
+    expect(HOME_WITHHOLDING_NOT_SET_LABEL).not.toMatch(/WHT type|withholding type/i);
+    expect(customersNoWithholdingHref()).toBe("/customers?wh=NOT_SET");
   });
 });
 

@@ -3,9 +3,8 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
-import { documentWithholdingFromCustomer, allowGovVatOption } from "@/lib/quotes/withholding-defaults";
 import { editorCustomers, editorRates, editorSuppliers } from "../editor-data";
-import { markQuoteSentAction, saveQuoteAction } from "../actions";
+import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -14,12 +13,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
   const [customers, rates, suppliers] = await Promise.all([editorCustomers(), editorRates(), editorSuppliers(user)]);
   const today = manilaToday();
   const preset = customers.find((c) => c.id === customerParam);
-  const withholdingCodes = preset
-    ? documentWithholdingFromCustomer(preset.withholdingType, ["GOODS", "SERVICES"], {
-        includeGovVat: false,
-        businessIsVatRegistered: allowGovVatOption(),
-      }).map((w) => w.code)
-    : [];
+  const withholdingPick = preset ? preset.defaultWithholding : null;
 
   return (
     <>
@@ -44,6 +38,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         action={saveQuoteAction.bind(null, null)}
         cancelHref="/quotes"
         markSentAction={markQuoteSentAction}
+        confirmNoneAndMarkSentAction={confirmNoneAndMarkQuoteSentAction}
         initial={{
           customerId: preset?.id ?? "",
           contactId: preset?.contacts.find((c) => c.isMain)?.id ?? "",
@@ -53,8 +48,9 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           notes: "",
           internalNotes: "",
           subject: "",
+          withholdingPick,
+          withholdingCodes: withholdingPick,
           buyerPoNo: "",
-          withholdingCodes,
           buyerPoDate: "",
           deliveryAddress: "",
           items: [],

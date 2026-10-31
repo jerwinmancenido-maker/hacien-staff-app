@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { canSeeCosts, type PermissionUser } from "@/lib/permissions";
 import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
-import { allowGovVatOption, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
+import { allowGovVatOption, parseWithholdingPick, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
 import type { EditorCustomer } from "@/components/docs/DocumentEditor";
 
 export async function editorCustomers(where: { id?: string } = {}): Promise<EditorCustomer[]> {
@@ -20,15 +20,23 @@ export async function editorCustomers(where: { id?: string } = {}): Promise<Edit
     address: c.address,
     defaultTerms: c.defaultTerms,
     withholdingType: c.withholdingType,
+    defaultWithholding: parseWithholdingPick(c.defaultWithholding),
     contacts: c.contacts.map((k) => ({ id: k.id, name: k.name, isMain: k.isMain })),
   }));
 }
 
-/** Active rates, plus the snapshotted values of rates already on the document. Hides Gov VAT when non-VAT. */
+/**
+ * Active Settings → Withholding rates for the pick UI.
+ * Document summary rows (LINE_*) such as a combined "Goods 4%" are never pickable —
+ * staff combine Goods 1% + Government 3% instead. Hides Gov VAT when non-VAT.
+ */
 export async function editorRates(existing: WithholdingSnapshot[] = []): Promise<WithholdingSnapshot[]> {
   const active = (await listWithholdingRates(db, { activeOnly: true })).map(toSnapshot);
-  const kept = existing.map((e) => e);
-  const merged = [...kept, ...active.filter((a) => !kept.some((k) => k.code === a.code))];
+  // Keep inactive Settings rates still referenced on the document; never LINE_* synthetics.
+  const keptSettings = existing.filter(
+    (e) => Boolean(e.code) && !String(e.code).startsWith("LINE_") && !active.some((a) => a.code === e.code),
+  );
+  const merged = [...keptSettings, ...active];
   if (allowGovVatOption()) return merged;
   return merged.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }

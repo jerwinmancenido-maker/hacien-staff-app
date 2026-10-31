@@ -45,22 +45,31 @@ function termsField(allowedTerms: readonly string[]) {
 }
 
 /**
- * `allowedWithholdingCodes`: legacy rate codes on Customer.defaultWithholding
- * (kept for back-compat; new quotes derive from withholdingType). Omit to skip
- * the check, e.g. in tests.
+ * `allowedWithholdingCodes`: active rate codes staff may tick on
+ * Customer.defaultWithholding. Omit to skip the check, e.g. in tests.
+ *
+ * defaultWithholding semantics:
+ *   null  = not set
+ *   []    = explicit none
+ *   [codes] = saved picks
  */
 export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
   return z.object({
     name: z.string().trim().min(1, "Name is required.").max(191),
     tin: tinField,
+    // Label only — does not choose rates.
     withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
-    // Legacy key kept in the column / SettingsVersion — UI no longer edits it.
     defaultWithholding: z
-      .array(z.string().trim().min(1).max(32))
-      .max(20)
-      .default([])
-      .refine((codes) => !allowedWithholdingCodes || codes.every((c) => allowedWithholdingCodes.includes(c)), "Pick rates from the list.")
-      .transform((codes) => [...new Set(codes)]),
+      .union([
+        z.null(),
+        z
+          .array(z.string().trim().min(1).max(32))
+          .max(20)
+          .refine((codes) => !allowedWithholdingCodes || codes.every((c) => allowedWithholdingCodes.includes(c)), "Pick rates from the list.")
+          .transform((codes) => [...new Set(codes)]),
+      ])
+      .optional()
+      .default(null),
     defaultTerms: termsField(allowedTerms),
     notes: optionalText(5000),
   });

@@ -165,4 +165,15 @@ describe("print side margins", () => {
     },
     120_000,
   );
+
+  it("phone print preview CSS keeps .pp-page at 100% under 640px (no 210mm ≈ 794px h-scroll)", () => {
+    // Without this trailing @media, A4 .pp-page { width:210mm } forces ~794 scrollWidth at 390.
+    const phone = css.indexOf("Phone / narrow on-screen print preview");
+    expect(phone).toBeGreaterThan(0);
+    const block = css.slice(phone);
+    expect(block).toMatch(/@media\s*\(max-width:\s*640px\)/);
+    expect(block).toMatch(/\.pp-page[\s\S]*?width:\s*100%\s*!important/);
+    expect(block).toMatch(/\.print-shell[\s\S]*?overflow-x:\s*hidden/);
+    expect(block).toMatch(/max-width:\s*100%/);
+  });
 });

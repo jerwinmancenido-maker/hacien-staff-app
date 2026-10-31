@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Customer } from "@prisma/client";
 import { Field } from "@/components/Field";
+import { WithholdingPickField } from "@/components/WithholdingPickField";
+import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import { parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
 import {
   WITHHOLDING_TYPE_FIELD_LABEL,
   WITHHOLDING_TYPE_FORM_LABELS,
@@ -12,14 +15,21 @@ import {
 } from "@/lib/withholding/display";
 import type { FormState } from "@/lib/validation/forms";
 
+function typeIsYes(type: string): boolean {
+  return type === "GOVERNMENT" || type === "TOP_WITHHOLDING_AGENT";
+}
+
 export function CustomerForm({
   customer,
   terms,
+  rates,
   action,
   canEdit,
 }: {
   customer: Customer | null;
   terms: string[];
+  /** Active Settings → Withholding rates staff may tick. */
+  rates: WithholdingSnapshot[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
 }) {
@@ -27,9 +37,26 @@ export function CustomerForm({
   const v = (k: keyof Customer) => state.values?.[k] ?? (customer?.[k] as string | null) ?? "";
   const [name, setName] = useState(v("name"));
   const [withholding, setWithholding] = useState(v("withholdingType"));
+  const initialPick =
+    state.values?.defaultWithholding !== undefined
+      ? parseWithholdingPick(state.values.defaultWithholding)
+      : parseWithholdingPick(customer?.defaultWithholding);
+  const [pick, setPick] = useState<string[] | null>(() => {
+    // "No" always means explicit none [].
+    if (v("withholdingType") === "NONE") return [];
+    return initialPick;
+  });
   const e = state.fieldErrors ?? {};
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
   const blocked = !name.trim() || !withholding;
+  const showPick = typeIsYes(withholding);
+
+  function onTypeChange(next: string) {
+    setWithholding(next);
+    if (next === "NONE") setPick([]);
+    else if (!typeIsYes(next)) setPick(null);
+    else if (pick != null && pick.length === 0) setPick(null);
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate id="customer-form">
@@ -51,10 +78,16 @@ export function CustomerForm({
             name="withholdingType"
             required
             error={e.withholdingType}
-            hint={withholdingTypeFieldHint(withholding) ?? undefined}
+            hint={
+              showPick
+                ? (withholdingTypeFieldHint(withholding) ?? "Label only — rates are picked in Withholding below.")
+                : withholding === "NONE"
+                  ? "No withholding — rates are saved as none."
+                  : "Label only — rates are picked in Withholding below."
+            }
             full
           >
-            <select id="withholdingType" name="withholdingType" value={withholding} onChange={(ev) => setWithholding(ev.target.value)}>
+            <select id="withholdingType" name="withholdingType" value={withholding} onChange={(ev) => onTypeChange(ev.target.value)}>
               <option value="">Pick one…</option>
               {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
                 <option key={t} value={t}>
@@ -63,6 +96,20 @@ export function CustomerForm({
               ))}
             </select>
           </Field>
+          {showPick ? (
+            <div className="field full">
+              <WithholdingPickField
+                rates={rates}
+                value={pick}
+                onChange={setPick}
+                disabled={!canEdit}
+                error={e.defaultWithholding}
+              />
+            </div>
+          ) : (
+            // Persist [] when type is No so the server never keeps a stale pick.
+            <input type="hidden" name="defaultWithholdingJson" value={withholding === "NONE" ? "[]" : ""} />
+          )}
           <Field label="Default terms" name="defaultTerms" error={e.defaultTerms}>
             <select id="defaultTerms" name="defaultTerms" defaultValue={v("defaultTerms")}>
               <option value="">None</option>
@@ -82,7 +129,7 @@ export function CustomerForm({
             <button className="btn" type="submit" disabled={pending || blocked}>
               {pending ? "Saving…" : "Save"}
             </button>
-            {blocked && <span className="small faint">Name and withholding type are required.</span>}
+            {blocked && <span className="small faint">Name and customer type are required.</span>}
           </div>
         )}
       </fieldset>

@@ -342,9 +342,9 @@ describe("home concept A layout wiring", () => {
   it("keeps a compact Home: short labels, ~114px chart, 12px gaps, empty NA line", () => {
     expect(dash).toMatch(/Quotes to approve/);
     expect(dash).toMatch(/SOs needing a PO/);
-    expect(dash).toMatch(/No WHT type set/);
+    expect(dash).toMatch(/Withholding not set/);
     expect(dash).toMatch(/No payments yet/);
-    expect(dash).not.toMatch(/Customers missing WHT type/);
+    expect(dash).not.toMatch(/Customers missing WHT type|No WHT type set/);
     expect(dash).not.toMatch(/No payments recorded in/);
     expect(dash).toMatch(/Billed \(\$\{mon\}\)/);
     expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*10px/s);

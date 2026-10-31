@@ -17,8 +17,9 @@ import {
 import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
-import { approvalReasons, docTotals, ratePctLabel, toScaled, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { remainingToBill } from "../billing/status";
+import { approvalReasons, docTotals, ratePctLabel, toScaled, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { parseWithholdingPick } from "./withholding-defaults";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
@@ -123,15 +124,19 @@ function totalsView(items: ItemRow[], withholding: WithholdingSnapshot[], stored
     withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
     withholdingAtc: i.withholdingAtc ?? null,
   }));
+  // Prefer stored document withholding JSON as the pick list (one row per rate,
+  // whole-total rates as their own lines). Fall back to line grouping only when
+  // the JSON is empty but every line is snapshotted.
+  const picks = withholding.length > 0 ? withholding : undefined;
   const allSnapshotted = lineInputs.length > 0 && lineInputs.every((i) => i.withholdingRate != null);
-  // Per-line itemisation when snapshotted; otherwise TotalsBox shows the stored total alone
-  // (null line rates must not invent a new breakdown that disagrees with stored money).
-  const itemised: (WithholdingLine & { pctLabel: string })[] = allSnapshotted
-    ? docTotals(lineInputs).withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) }))
-    : [];
+  const itemised: (WithholdingLine & { pctLabel: string })[] =
+    picks || allSnapshotted
+      ? docTotals(lineInputs, picks).withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) }))
+      : [];
   const base: TotalsView = {
     contractPrice: stored.contractPrice,
     withholding: itemised,
+    // Always the stored total; when picks drove the save, it equals sum(parts).
     withholdingTotal: stored.withholdingTotal,
     netReceived: stored.netReceived,
   };
@@ -182,6 +187,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   });
   if (!q) return null;
   const withholding = snapshotList(q.withholding);
+  const withholdingPick = parseWithholdingPick(q.withholdingPick);
   const stored = {
     contractPrice: money(q.contractPrice),
     withholdingTotal: money(q.withholdingTotal),
@@ -207,6 +213,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     customer: q.customer,
     contact: q.contact,
     withholding,
+    withholdingPick,
     items: q.items.map((i) => itemView(i, withCosts)),
     totals,
     approval: await approvalFor(q.settingsVersionId, money(q.contractPrice), money(q.netMarginPct), withCosts),

@@ -1763,6 +1763,30 @@ tr.inactive .cell-primary .sub {
   background: var(--green-bg);
   color: var(--green);
 }
+/* Quote withholding not-set: grey banner, black left bar (phone + desktop). */
+.alert.wh-not-set {
+  background: #f3f4f6;
+  color: #111827;
+  border-left: 4px solid #111827;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.wh-collapsed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wh-collapsed-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+.quote-wh-pct-suffix {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin-right: 2px;
+}
 
 /* ---------- Detail layout ---------- */
 
@@ -4726,6 +4750,40 @@ button.contact-card-add {
   }
 }
 
+/*
+ * Phone / narrow on-screen print preview: A4 210mm (~794px) must not force
+ * horizontal scroll at 390px. Keep real print (@media print) on the sheet.
+ */
+@media (max-width: 640px) {
+  .print-shell,
+  .print-shell-a4,
+  .print-shell-letter {
+    padding-left: 8px;
+    padding-right: 8px;
+    overflow-x: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .print-toolbar,
+  .print-shell-letter .print-toolbar,
+  .print-shell-letter .print-toolbar-alert,
+  .print-page {
+    width: 100% !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .pp-page,
+  .print-shell-letter .pp-page,
+  .pp-page.pp-paper-a4,
+  .pp-page.pp-paper-letter {
+    width: 100% !important;
+    max-width: 100%;
+    min-height: 0;
+    padding: 16px !important;
+    box-sizing: border-box;
+  }
+}
+
 .print-preview-card {
   border: 1px solid var(--border, #e5e5e0);
   border-radius: 8px;
@@ -6814,6 +6872,20 @@ button.contact-card-add {
   min-height: 22px;
   padding: 2px 8px;
 }
+/* One chip per applied ATC — stacked picks never show a combined % beside one code. */
+.quote-tg-wh.is-chip {
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  pointer-events: none;
+}
+.quote-line-card-wh-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
 .quote-tg-wh-label {
   white-space: nowrap;
 }
@@ -7060,3 +7132,9 @@ button.contact-card-add {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* Manual withholding picks (brief 10) — pick field + internal WH panel */
+.wh-pick-list { display: flex; flex-direction: column; gap: 6px; }
+.wh-pick-row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
+.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: 12px; margin-top: 12px; background: var(--bg-muted, #f7f7f5); }
+.wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; }

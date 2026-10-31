@@ -4,11 +4,13 @@
 // the page. On save, the parent picks the new customer and keeps quote data.
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { WithholdingPickField } from "@/components/WithholdingPickField";
+import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import {
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
 } from "@/lib/withholding/display";
-import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import {
   createCustomerForQuoteAction,
   type CreatedQuoteCustomer,
@@ -19,6 +21,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSaved: (customer: CreatedQuoteCustomer) => void;
+  /** Active Settings → Withholding rates for the pick field. */
+  rates: WithholdingSnapshot[];
 };
 
 const empty = {
@@ -31,15 +35,26 @@ const empty = {
   emailOrPhone: "",
 };
 
-export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
+export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
   const titleId = useId();
   const firstRef = useRef<HTMLInputElement>(null);
   const [formKey, setFormKey] = useState(0);
   const [v, setV] = useState(empty);
+  const [pick, setPick] = useState<string[] | null>(null);
   const [state, setState] = useState<CreateCustomerForQuoteState>({});
   const [pending, startTransition] = useTransition();
   const e = state.fieldErrors ?? {};
-  const typeHintText = customerWithholdingHint(v.withholdingType);
+  const typeIsYes = v.withholdingType === "GOVERNMENT" || v.withholdingType === "TOP_WITHHOLDING_AGENT";
+  const effectivePick = v.withholdingType === "NONE" ? [] : pick;
+  const pickSnapshots =
+    effectivePick == null ? null : rates.filter((r) => effectivePick.includes(r.code));
+  const pickHint = customerWithholdingHint(pickSnapshots);
+
+  function onTypeChange(next: string) {
+    setV({ ...v, withholdingType: next });
+    if (next === "NONE") setPick([]);
+    else if (pick != null && pick.length === 0) setPick(null);
+  }
 
   function close() {
     if (pending) return;
@@ -47,6 +62,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
     // Reset on next open via remount key (avoids setState-in-effect lint).
     setFormKey((k) => k + 1);
     setV(empty);
+    setPick(null);
     setState({});
   }
 
@@ -73,6 +89,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
     ev.preventDefault();
     const fd = new FormData();
     for (const [k, val] of Object.entries(v)) fd.set(k, val);
+    fd.set("defaultWithholdingJson", pick == null ? "" : JSON.stringify(pick));
     startTransition(async () => {
       const res = await createCustomerForQuoteAction({}, fd);
       setState(res);
@@ -130,7 +147,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
               <label htmlFor="acq-type">
                 Type<span className="req"> *</span>
               </label>
-              <select id="acq-type" value={v.withholdingType} onChange={(ev) => setV({ ...v, withholdingType: ev.target.value })}>
+              <select id="acq-type" value={v.withholdingType} onChange={(ev) => onTypeChange(ev.target.value)}>
                 <option value="">Pick one…</option>
                 {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
                   <option key={t} value={t}>
@@ -138,10 +155,28 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
                   </option>
                 ))}
               </select>
-              {typeHintText ? <div className="hint">{typeHintText}</div> : null}
+              <div className="hint">
+                {v.withholdingType === "NONE"
+                  ? "No withholding — rates are saved as none."
+                  : "Label only — rates are picked in Withholding below."}
+              </div>
               {e.withholdingType && <div className="error">{e.withholdingType}</div>}
             </div>
           </div>
+          {typeIsYes ? (
+            <>
+              <WithholdingPickField
+                rates={rates}
+                value={pick}
+                onChange={setPick}
+                disabled={pending}
+                error={e.defaultWithholding}
+              />
+              <div className="hint">{pickHint}</div>
+            </>
+          ) : (
+            <input type="hidden" name="defaultWithholdingJson" value={v.withholdingType === "NONE" ? "[]" : ""} />
+          )}
           <div className={`field${e.address ? " has-error" : ""}`}>
             <label htmlFor="acq-address">Address</label>
             <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} />

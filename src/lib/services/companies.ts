@@ -18,7 +18,14 @@ export class CompanyRuleError extends Error {
 // Customers
 // ---------------------------------------------------------------------------
 
-export type CustomerFilter = { q?: string; withholding?: WithholdingType; showInactive?: boolean; onlyIds?: string[] };
+export type CustomerFilter = {
+  q?: string;
+  withholding?: WithholdingType;
+  /** Customers whose saved pick is still null (not set). Distinct from type NONE / pick []. */
+  withholdingPick?: "NOT_SET";
+  showInactive?: boolean;
+  onlyIds?: string[];
+};
 
 /** The default billing / office address, for list rows. */
 const mainAddress = {
@@ -32,6 +39,8 @@ export function listCustomers(f: CustomerFilter) {
       ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
       ...(f.showInactive ? {} : { active: true }),
       ...(f.withholding ? { withholdingType: f.withholding } : {}),
+      // JSON null only — empty [] (explicit none) and picked codes do not match.
+      ...(f.withholdingPick === "NOT_SET" ? { defaultWithholding: { equals: Prisma.DbNull } } : {}),
       ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
     },
     include: mainAddress,
@@ -58,17 +67,34 @@ async function assertTinFree(find: TinOwnerLookup, tin: string | null, exceptId:
 const customerTinOwner: TinOwnerLookup = (args) => db.customer.findFirst(args);
 const supplierTinOwner: TinOwnerLookup = (args) => db.supplier.findFirst(args);
 
+/** Prisma JSON columns reject plain `null`; use DbNull for "not set". */
+function defaultWithholdingData(
+  pick: CustomerInput["defaultWithholding"],
+): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
+  if (pick === undefined) return undefined;
+  if (pick === null) return Prisma.DbNull;
+  return pick;
+}
+
 export async function saveCustomer(id: string | null, input: CustomerInput, actorId: string) {
   await assertTinFree(customerTinOwner, input.tin, id);
+  const data = {
+    name: input.name,
+    tin: input.tin,
+    withholdingType: input.withholdingType,
+    defaultWithholding: defaultWithholdingData(input.defaultWithholding),
+    defaultTerms: input.defaultTerms,
+    notes: input.notes,
+  };
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
-        const created = await tx.customer.create({ data: input });
+        const created = await tx.customer.create({ data });
         await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: created.id, action: "create", after: created });
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
-      const after = await tx.customer.update({ where: { id }, data: input });
+      const after = await tx.customer.update({ where: { id }, data });
       await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: id, action: "update", before, after });
       return after;
     });

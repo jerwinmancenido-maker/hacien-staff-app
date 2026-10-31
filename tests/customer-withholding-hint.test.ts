@@ -1,70 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import {
-  defaultWithholdingFor,
-  KNOWN_WITHHOLDING_TYPES,
-} from "@/lib/quotes/withholding-defaults";
+  customerWithholdingHint,
+  customerWithholdingChipLabel,
+  WITHHOLDING_HINT_NOT_SET,
+  WITHHOLDING_HINT_NONE,
+} from "@/lib/quotes/customer-withholding-hint";
+import { WITHHOLDING_DEFAULT_ROWS } from "@/lib/quotes/withholding-defaults";
+import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 
-/** Pull "N% ATC" claims like "1% (WI158)" out of a hint string. */
-function claimedRates(hint: string): { pct: number; atc: string }[] {
-  const out: { pct: number; atc: string }[] = [];
-  const re = /(\d+(?:\.\d+)?)\s*%\s*\(([A-Z0-9]+)\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(hint)) != null) {
-    const pct = m[1];
-    const atc = m[2];
-    if (pct == null || atc == null) continue;
-    out.push({ pct: Number(pct), atc });
-  }
-  return out;
+function snap(code: keyof typeof WITHHOLDING_DEFAULT_ROWS): WithholdingSnapshot {
+  const row = WITHHOLDING_DEFAULT_ROWS[code];
+  return {
+    code: row.code,
+    label: row.label,
+    lineKind: row.lineKind,
+    rate: row.rate,
+    atcCode: row.atcCode,
+  };
 }
 
-describe("customerWithholdingHint", () => {
-  it("hides the rate hint for GOVERNMENT (no 1%/2% copy that disagrees with 3% WG010)", () => {
-    expect(customerWithholdingHint("GOVERNMENT")).toBe("");
-    expect(customerWithholdingHint("GOVERNMENT")).not.toMatch(/WI158|WI160|1\s*%|2\s*%/);
+describe("customerWithholdingHint (pick-based re-export)", () => {
+  it("not set / none / picked labels", () => {
+    expect(customerWithholdingHint(null)).toBe(WITHHOLDING_HINT_NOT_SET);
+    expect(customerWithholdingHint(undefined)).toBe(WITHHOLDING_HINT_NOT_SET);
+    expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
+    expect(customerWithholdingHint([snap("GOODS_1")])).toBe(
+      "Withholding: Private top agent goods 1% (WI158)",
+    );
+    expect(customerWithholdingHint([snap("GOV_GOODS_1"), snap("GOV_PT_3")])).toBe(
+      "Withholding: Government goods 1% (WI640) + Government percentage tax 3% (WB080)",
+    );
   });
+});
 
-  it("every non-empty rate hint matches defaultWithholdingFor for that customer type", () => {
-    for (const type of KNOWN_WITHHOLDING_TYPES) {
-      const hint = customerWithholdingHint(type);
-      const claims = claimedRates(hint);
-
-      if (type === "GOVERNMENT") {
-        expect(hint).toBe("");
-        expect(claims).toEqual([]);
-        continue;
-      }
-
-      if (type === "NONE") {
-        expect(hint).toBe("No withholding");
-        expect(claims).toEqual([]);
-        expect(defaultWithholdingFor("NONE", "GOODS").rate).toBe("0.0000");
-        expect(defaultWithholdingFor("NONE", "SERVICES").rate).toBe("0.0000");
-        continue;
-      }
-
-      // TOP_WITHHOLDING_AGENT — every claimed ATC/% must match the pure mapper.
-      expect(claims.length).toBeGreaterThan(0);
-      for (const claim of claims) {
-        const kinds = ["GOODS", "SERVICES"] as const;
-        const match = kinds
-          .map((k) => defaultWithholdingFor(type, k))
-          .find((d) => d.atc === claim.atc && Number(d.rate) * 100 === claim.pct);
-        expect(
-          match,
-          `hint claim ${claim.pct}% (${claim.atc}) for ${type} must match defaultWithholdingFor`,
-        ).toBeTruthy();
-      }
-
-      // And every non-zero default for GOODS/SERVICES must appear in the hint.
-      for (const kind of ["GOODS", "SERVICES"] as const) {
-        const d = defaultWithholdingFor(type, kind);
-        if (d.rate === "0.0000" || !d.atc) continue;
-        const pct = Number(d.rate) * 100;
-        expect(hint).toContain(`${pct}%`);
-        expect(hint).toContain(`(${d.atc})`);
-      }
-    }
+describe("customerWithholdingChipLabel", () => {
+  it("null → not set; [] → none; never 'No withholding' while picks are non-empty", () => {
+    expect(customerWithholdingChipLabel(null)).toBe("Withholding: not set");
+    expect(customerWithholdingChipLabel([])).toBe("Withholding: none");
+    const label = customerWithholdingChipLabel([snap("GOODS_1"), snap("SERVICES_2")]);
+    expect(label).toContain("Private top agent goods 1%");
+    expect(label).toContain("Private top agent services 2%");
+    expect(label).not.toMatch(/No withholding/i);
   });
 });

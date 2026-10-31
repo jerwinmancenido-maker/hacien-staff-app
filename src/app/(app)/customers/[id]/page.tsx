@@ -23,6 +23,13 @@ import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
 import { resolveCompanyTab } from "@/lib/company-tabs";
+import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
+import {
+  allowGovVatOption,
+  customerWithholdingChipLabel,
+  parseWithholdingPick,
+  WITHHOLDING_DEFAULT_CODES,
+} from "@/lib/quotes/withholding-defaults";
 import { CustomerForm } from "../CustomerForm";
 import { saveCustomerAction, setCustomerActiveAction } from "../actions";
 
@@ -41,6 +48,14 @@ export default async function CustomerPage({
   if (!customer) notFound();
   const { settings } = await getSettingsSnapshot();
   const canEdit = can(user, "edit_data");
+  const whRates = (await listWithholdingRates(undefined, { activeOnly: true })).map(toSnapshot);
+  const rates = allowGovVatOption()
+    ? whRates
+    : whRates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
+  const allRates = (await listWithholdingRates(undefined, { activeOnly: false })).map(toSnapshot);
+  const savedPick = parseWithholdingPick(customer.defaultWithholding);
+  const savedPickSnaps = savedPick == null ? null : allRates.filter((r) => savedPick.includes(r.code));
+  const pickChip = customerWithholdingChipLabel(savedPickSnaps);
   const { contacts, ...record } = customer;
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "customer", id } as const;
@@ -77,21 +92,16 @@ export default async function CustomerPage({
         title={
           <>
             {customer.name}
-            <Chip
-              tone={
-                customer.withholdingType === "GOVERNMENT"
-                  ? "green"
-                  : customer.withholdingType === "NONE"
-                  ? "grey"
-                  : "amber"
-              }
-            >
-              {WITHHOLDING_LABELS[customer.withholdingType]}
-            </Chip>
+            <Chip tone="grey">{pickChip}</Chip>
+            {!(savedPick && savedPick.length > 0 && customer.withholdingType === "NONE") && (
+              <Chip tone="grey">
+                {customer.withholdingType === "NONE" ? "Private" : WITHHOLDING_LABELS[customer.withholdingType]}
+              </Chip>
+            )}
             {!customer.active ? (
-              <Chip tone="red">Inactive</Chip>
+              <Chip tone="grey">Inactive</Chip>
             ) : (
-              <Chip tone="green">Active</Chip>
+              <Chip tone="grey">Active</Chip>
             )}
             {ar.anyOverdue && <OverdueBadge label="Overdue" />}
           </>
@@ -181,6 +191,7 @@ export default async function CustomerPage({
           <CustomerForm
             customer={record}
             terms={settings.lists.paymentTerms}
+            rates={rates}
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
           />

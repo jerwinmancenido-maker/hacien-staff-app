@@ -138,91 +138,184 @@ function resolveAmounts(line: LineForDocTotals): LineAmounts & { kind: ItemKind 
 
 /** Group key for the read-only document withholding summary. */
 function groupKey(rate: string, atc: string | null, kind: ItemKind): string {
-  // Government ATC shares one bucket across goods/services (same rate on every line).
-  if (atc === "WG010" || atc === "WV050") return `${rate}|${atc}`;
+  // Whole-total ATCs share one bucket across goods/services (same rate on every line).
+  // WG010 = legacy alias for WB080 (read-only; must never return to the Settings picker).
+  // WV050 is 12% VAT on non-residents — not in the 5% VAT group; group alone if seen.
+  if (atc === "WB080" || atc === "WG010" || atc === "WV010/WV020" || atc === "WV010" || atc === "WV020") {
+    return `${rate}|${atc}`;
+  }
+  if (atc === "WV050") return `${rate}|${atc}`;
   return `${rate}|${atc ?? ""}|${kind}`;
 }
 
 function summaryCode(rate: string, atc: string | null, kind: ItemKind): string {
   const r = Number(rate).toFixed(4);
+  if (kind === "GOODS" && r === "0.0100" && atc === "WI640") return "GOV_GOODS_1";
+  if (kind === "SERVICES" && r === "0.0200" && atc === "WI157") return "GOV_SERVICES_2";
   if (kind === "GOODS" && r === "0.0100" && atc === "WI158") return "GOODS_1";
   if (kind === "SERVICES" && r === "0.0200" && atc === "WI160") return "SERVICES_2";
-  if (r === "0.0300" && atc === "WG010") return "GOV_PT_3";
-  if (r === "0.0500" && atc === "WV050") return "GOV_VAT_5";
-  const atcPart = atc ? `_${atc}` : "";
+  // WG010 = legacy read-only alias → WB080 / GOV_PT_3. Never offer WG010 in Settings.
+  if (r === "0.0300" && (atc === "WB080" || atc === "WG010")) return "GOV_PT_3";
+  // 5% VAT withheld — WV010/WV020 only. WV050 is 12% non-resident VAT (not this rate).
+  if (r === "0.0500" && (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020")) return "GOV_VAT_5";
+  const atcPart = atc ? `_${atc.replace(/\//g, "_")}` : "";
   return `LINE_${kind}_${r.replace(".", "")}${atcPart}`;
 }
 
 function summaryLabel(rate: string, atc: string | null, kind: ItemKind): string {
   const pct = ratePctLabel(rate);
-  if (atc === "WG010" || atc === "WV050") {
-    return kind === "SERVICES" || kind === "GOODS"
-      ? `Government ${pct} (code to confirm)`
-      : `Government ${pct} (code to confirm)`;
+  // WG010 legacy → show as WB080. Must never return WG010 to the Settings picker.
+  if (atc === "WB080" || atc === "WG010") return `Government percentage tax ${pct} (WB080)`;
+  if (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020") {
+    return `VAT withheld ${pct} (WV010/WV020)`;
   }
-  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Goods 1%";
-  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI160") return "Services 2%";
-  const atcBit = atc ? ` · ${atc}` : "";
+  // WV050 is 12% VAT on non-residents — do not relabel as 5% WV010/WV020.
+  if (atc === "WV050") return `VAT (non-resident) ${pct} (WV050)`;
+  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI640") return "Government goods 1% (WI640)";
+  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI157") return "Government services 2% (WI157)";
+  if (kind === "GOODS" && Number(rate).toFixed(4) === "0.0100" && atc === "WI158") return "Private top agent goods 1% (WI158)";
+  if (kind === "SERVICES" && Number(rate).toFixed(4) === "0.0200" && atc === "WI160") return "Private top agent services 2% (WI160)";
+  const atcBit = atc ? ` (${atc})` : "";
   return `${kind === "GOODS" ? "Goods" : "Services"} ${pct}${atcBit}`;
 }
 
 function summaryLineKind(rate: string, atc: string | null, kind: ItemKind): WithholdingLineKind {
-  if (atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WG010" || atc == null))) return "GOV_PT";
-  if (atc === "WV050" || Number(rate).toFixed(4) === "0.0500") return "GOV_VAT";
+  if (atc === "WB080" || atc === "WG010" || (Number(rate).toFixed(4) === "0.0300" && (atc === "WB080" || atc === "WG010" || atc == null))) {
+    return "GOV_PT";
+  }
+  // WV050 is not the 5% VAT group — still whole-total when present on a legacy line.
+  if (atc === "WV010/WV020" || atc === "WV010" || atc === "WV020" || atc === "WV050" || Number(rate).toFixed(4) === "0.0500") {
+    return "GOV_VAT";
+  }
+  void kind;
   return kind;
 }
 
-/**
- * Document totals from per-line rates.
- *
- * For each line: withholding = round_half_up(line.total × line.rate) to ₱0.01.
- * Then sum those amounts. Null/blank rates contribute 0 (legacy unsapped rows).
- * The `withholding` array is a read-only grouping for display / stored JSON.
- */
-export function docTotals(lines: LineForDocTotals[]): DocTotals {
+function basesFromLines(lines: LineForDocTotals[]): {
+  contract: bigint;
+  goods: bigint;
+  services: bigint;
+  supplier: bigint;
+} {
   let contract = 0n;
+  let goods = 0n;
+  let services = 0n;
   let supplier = 0n;
-  let withheld = 0n;
-
-  type Acc = { rate: string; atc: string | null; kind: ItemKind; base: bigint; amount: bigint };
-  const groups = new Map<string, Acc>();
-
   for (const raw of lines) {
     const line = resolveAmounts(raw);
     const total = toScaled(line.total, CENTS);
     contract += total;
+    if (line.kind === "GOODS") goods += total;
+    else services += total;
     supplier += toScaled(line.supplierTotal, CENTS);
+  }
+  return { contract, goods, services, supplier };
+}
 
-    const rateRaw = raw.withholdingRate;
-    if (!hasLineWithholdingRate(rateRaw)) continue;
-    const rate = Number(String(rateRaw).trim()).toFixed(4);
-    if (rate === "0.0000") continue; // explicit zero — no withholding row
-    const atc = raw.withholdingAtc != null && String(raw.withholdingAtc).trim() !== "" ? String(raw.withholdingAtc).trim() : null;
-    const amount = lineWithholdingAmountCents(line.total, rate);
-    withheld += amount;
+function baseForPick(lineKind: WithholdingLineKind, bases: { contract: bigint; goods: bigint; services: bigint }): bigint {
+  if (lineKind === "GOODS") return bases.goods;
+  if (lineKind === "SERVICES") return bases.services;
+  // GOV_PT / GOV_VAT — whole total
+  return bases.contract;
+}
 
-    const key = groupKey(rate, atc, line.kind);
-    const prev = groups.get(key);
-    if (prev) {
-      prev.base += total;
-      prev.amount += amount;
-    } else {
-      groups.set(key, { rate, atc, kind: line.kind, base: total, amount });
+/**
+ * Internal breakdown from the quote-level pick list.
+ * Each pick is its own line (whole-total rates such as WB080 / GOV_PT stay separate).
+ * Total withholding MUST equal the sum of these parts (half-up per part).
+ */
+export function withholdingBreakdownFromPicks(
+  lines: LineForDocTotals[],
+  picks: readonly WithholdingSnapshot[],
+): WithholdingLine[] {
+  const bases = basesFromLines(lines);
+  return picks.map((p) => {
+    const rate = Number(p.rate).toFixed(4);
+    const base = baseForPick(p.lineKind, bases);
+    const amount = mulToCents(base, CENTS, toScaled(rate, RATE), RATE);
+    return {
+      code: p.code,
+      label: p.label,
+      lineKind: p.lineKind,
+      rate,
+      atcCode: p.atcCode,
+      base: fromScaled(base, CENTS),
+      amount: fromScaled(amount, CENTS),
+    };
+  });
+}
+
+/** Sum of breakdown part amounts (string pesos) → pesos string. */
+export function sumWithholdingParts(parts: readonly { amount: string }[]): string {
+  let total = 0n;
+  for (const p of parts) total += toScaled(p.amount, CENTS);
+  return fromScaled(total, CENTS);
+}
+
+/**
+ * Document totals.
+ *
+ * When `picks` is a non-empty list, the internal breakdown is one row per pick
+ * (Goods / Services / whole-total each as its own line) and
+ * `withholdingTotal` is exactly the sum of those parts.
+ *
+ * When `picks` is omitted or empty, totals come from per-line rates
+ * (round_half_up(line.total × line.rate) per line, then sum). Null/blank rates
+ * contribute 0. The `withholding` array is a read-only grouping for display.
+ */
+export function docTotals(lines: LineForDocTotals[], picks?: readonly WithholdingSnapshot[]): DocTotals {
+  const bases = basesFromLines(lines);
+  const { contract, supplier } = bases;
+
+  let withholding: WithholdingLine[];
+  let withheld: bigint;
+
+  if (picks && picks.length > 0) {
+    withholding = withholdingBreakdownFromPicks(lines, picks);
+    withheld = 0n;
+    for (const w of withholding) withheld += toScaled(w.amount, CENTS);
+  } else {
+    type Acc = { rate: string; atc: string | null; kind: ItemKind; base: bigint; amount: bigint };
+    const groups = new Map<string, Acc>();
+    withheld = 0n;
+
+    for (const raw of lines) {
+      const line = resolveAmounts(raw);
+      const total = toScaled(line.total, CENTS);
+
+      const rateRaw = raw.withholdingRate;
+      if (!hasLineWithholdingRate(rateRaw)) continue;
+      const rate = Number(String(rateRaw).trim()).toFixed(4);
+      if (rate === "0.0000") continue; // explicit zero — no withholding row
+      const atc = raw.withholdingAtc != null && String(raw.withholdingAtc).trim() !== "" ? String(raw.withholdingAtc).trim() : null;
+      const amount = lineWithholdingAmountCents(line.total, rate);
+      withheld += amount;
+
+      const key = groupKey(rate, atc, line.kind);
+      const prev = groups.get(key);
+      if (prev) {
+        prev.base += total;
+        prev.amount += amount;
+      } else {
+        groups.set(key, { rate, atc, kind: line.kind, base: total, amount });
+      }
     }
+
+    withholding = [...groups.values()].map((g) => ({
+      code: summaryCode(g.rate, g.atc, g.kind),
+      label: summaryLabel(g.rate, g.atc, g.kind),
+      lineKind: summaryLineKind(g.rate, g.atc, g.kind),
+      rate: g.rate,
+      atcCode: g.atc,
+      base: fromScaled(g.base, CENTS),
+      amount: fromScaled(g.amount, CENTS),
+    }));
   }
 
-  const withholding: WithholdingLine[] = [...groups.values()].map((g) => ({
-    code: summaryCode(g.rate, g.atc, g.kind),
-    label: summaryLabel(g.rate, g.atc, g.kind),
-    lineKind: summaryLineKind(g.rate, g.atc, g.kind),
-    rate: g.rate,
-    atcCode: g.atc,
-    base: fromScaled(g.base, CENTS),
-    amount: fromScaled(g.amount, CENTS),
-  }));
-
   const netReceived = contract - withheld;
-  const netMargin = netReceived - supplier;
+  // Margin is contract − supplier. Withholding is a tax credit (cash timing), not a cost —
+  // it must never shrink margin or make a profitable deal look like a loss.
+  const netMargin = contract - supplier;
   const pct = contract === 0n ? 0n : divRound(netMargin * 10_000n, contract);
 
   return {

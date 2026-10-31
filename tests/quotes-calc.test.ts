@@ -66,15 +66,16 @@ describe("document totals (per-line rates)", () => {
     expect(t.withholdingTotal).toBe("5600.00");
     expect(t.netReceived).toBe("534400.00");
     expect(t.supplierCost).toBe("455000.00");
-    expect(t.netMargin).toBe("79400.00");
-    expect(t.netMarginPct).toBe("14.70");
+    // Margin = contract − supplier (WH is a tax credit, not a cost).
+    expect(t.netMargin).toBe("85000.00");
+    expect(t.netMarginPct).toBe("15.74");
   });
 
   it("rounds withholding per line to the centavo (half-up), then sums", () => {
     // 100.50 × 1% = 1.005 → 1.01; 100.50 × 3% = 3.015 → 3.02
     const t = docTotals([
       { kind: "GOODS", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0100", withholdingAtc: "WI158" },
-      { kind: "SERVICES", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WG010" },
+      { kind: "SERVICES", qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WB080" },
     ]);
     expect(t.withholding.map((w) => w.amount)).toEqual(["1.01", "3.02"]);
     expect(t.withholdingTotal).toBe("4.03");
@@ -94,6 +95,44 @@ describe("document totals (per-line rates)", () => {
     ]);
     expect(t.withholdingTotal).toBe("0.00");
     expect(t.netReceived).toBe(t.contractPrice);
+  });
+
+  it("WV050 is not the 5% VAT alias group; WG010 stays a legacy WB080 alias", () => {
+    // WV050 = 12% VAT on non-residents — must never map to GOV_VAT_5 / WV010/WV020.
+    const wv050 = docTotals([
+      { kind: "GOODS", qty: "1", unitPrice: "100000", supplierUnitCost: "0", withholdingRate: "0.1200", withholdingAtc: "WV050" },
+    ]);
+    expect(wv050.withholding).toHaveLength(1);
+    expect(wv050.withholding[0]?.code).not.toBe("GOV_VAT_5");
+    expect(wv050.withholding[0]?.label).toBe("VAT (non-resident) 12% (WV050)");
+    expect(wv050.withholding[0]?.label).not.toMatch(/WV010\/WV020/);
+    expect(wv050.withholdingTotal).toBe("12000.00");
+
+    // Even a mis-stored 5% + WV050 must not join the GOV_VAT_5 / WV010 group.
+    const mislabeled = docTotals([
+      { kind: "SERVICES", qty: "1", unitPrice: "10000", supplierUnitCost: "0", withholdingRate: "0.0500", withholdingAtc: "WV050" },
+    ]);
+    expect(mislabeled.withholding[0]?.code).not.toBe("GOV_VAT_5");
+    expect(mislabeled.withholding[0]?.label).toBe("VAT (non-resident) 5% (WV050)");
+
+    // Real 5% VAT withheld still uses WV010/WV020 only.
+    const vat5 = docTotals([
+      { kind: "GOODS", qty: "1", unitPrice: "10000", supplierUnitCost: "0", withholdingRate: "0.0500", withholdingAtc: "WV010/WV020" },
+    ]);
+    expect(vat5.withholding[0]).toMatchObject({
+      code: "GOV_VAT_5",
+      label: "VAT withheld 5% (WV010/WV020)",
+    });
+
+    // WG010 = legacy read-only alias → WB080 / GOV_PT_3. Must never return to Settings.
+    const wg010 = docTotals([
+      { kind: "GOODS", qty: "1", unitPrice: "10000", supplierUnitCost: "0", withholdingRate: "0.0300", withholdingAtc: "WG010" },
+    ]);
+    expect(wg010.withholding[0]).toMatchObject({
+      code: "GOV_PT_3",
+      label: "Government percentage tax 3% (WB080)",
+      atcCode: "WG010",
+    });
   });
 
   it("with no withholding rates, net received = contract price", () => {
@@ -173,10 +212,21 @@ describe("planItems re-apply respects overrides", () => {
         },
       ],
       false,
-      { customerWithholdingType: "GOVERNMENT", reapplyWithholding: true },
+      {
+        withholdingPicks: [
+          {
+            code: "GOV_PT_3",
+            label: "Government percentage tax 3% (WB080)",
+            lineKind: "GOV_PT",
+            rate: "0.0300",
+            atcCode: "WB080",
+          },
+        ],
+        reapplyWithholding: true,
+      },
     );
     expect(items[0]).toMatchObject({ withholdingRate: "0.0150", withholdingAtc: "WI158", withholdingOverride: true });
-    expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WG010", withholdingOverride: false });
+    expect(items[1]).toMatchObject({ withholdingRate: "0.0300", withholdingAtc: "WB080", withholdingOverride: false });
   });
 });
 

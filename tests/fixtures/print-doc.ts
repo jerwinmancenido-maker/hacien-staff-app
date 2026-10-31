@@ -96,16 +96,14 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
     ],
   });
 
-/** Quote for a customer that withholds — shows est. WHT lines. */
+/** Quote for a customer that withholds internally — print still Subtotal+Total only. */
 export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
   base({
     ...quotePrintFixture(),
-    number: "QT-2026-WHT1",
+    number: "QT-2026-0002",
     totals: [
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
-      { label: "Less: withholding tax (est.) 1% + 3%", amount: "20800.00" },
-      { label: "Net amount due", amount: "499200.00", emphasize: true },
     ],
   });
 

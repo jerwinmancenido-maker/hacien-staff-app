@@ -1,159 +1,187 @@
 import { describe, expect, it } from "vitest";
+import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import {
   ATC_LABELS,
-  MISSING_WITHHOLDING_TYPE_WARNING,
-  OVERRIDE_NOTE,
-  allowGovVatOption,
+  WITHHOLDING_DEFAULT_CATALOG,
+  WITHHOLDING_DEFAULT_ROWS,
+  WITHHOLDING_HINT_NONE,
+  WITHHOLDING_HINT_NOT_SET,
+  WITHHOLDING_NOT_SET_NOTICE,
+  customerWithholdingHint,
   defaultWithholdingFor,
-  documentWithholdingFromCustomer,
-  lineDiffersFromUsual,
-  lineWithholdingSnapshot,
+  isWithholdingNone,
+  isWithholdingNotSet,
+  lineWithholdingChipsFromPicks,
+  lineWithholdingFromPicks,
   needsWithholdingTypeWarning,
 } from "@/lib/quotes/withholding-defaults";
-import { BUSINESS_IS_VAT_REGISTERED } from "@/lib/tax/constants";
 
-describe("defaultWithholdingFor (customer type × line kind)", () => {
-  it("TWA goods → 1% WI158", () => {
-    expect(defaultWithholdingFor("TOP_WITHHOLDING_AGENT", "GOODS")).toEqual({
-      rate: "0.0100",
-      atc: "WI158",
-      code: "GOODS_1",
-      label: "Goods 1%",
-      lineKind: "GOODS",
-    });
+const ZERO = { rate: "0.0000", atc: null, code: null, label: null, lineKind: null };
+
+function snap(code: keyof typeof WITHHOLDING_DEFAULT_ROWS): WithholdingSnapshot {
+  const r = WITHHOLDING_DEFAULT_ROWS[code];
+  return { code: r.code, label: r.label, lineKind: r.lineKind, rate: r.rate, atcCode: r.atcCode };
+}
+
+describe("defaultWithholdingFor (deprecated — type never chooses rates)", () => {
+  it("always returns ZERO for GOVERNMENT / TWA / NONE / unknown", () => {
+    for (const type of [
+      "GOVERNMENT",
+      "TOP_WITHHOLDING_AGENT",
+      "NONE",
+      undefined,
+      null,
+      "",
+      "UNKNOWN",
+      "twa",
+    ]) {
+      for (const kind of ["GOODS", "SERVICES", "GOV_VAT"] as const) {
+        expect(defaultWithholdingFor(type, kind)).toEqual(ZERO);
+      }
+    }
+    expect(needsWithholdingTypeWarning("GOVERNMENT")).toBe(false);
+    expect(needsWithholdingTypeWarning(undefined)).toBe(false);
+    expect(WITHHOLDING_NOT_SET_NOTICE).toMatch(/not set/i);
   });
+});
 
-  it("TWA services → 2% WI160", () => {
-    expect(defaultWithholdingFor("TOP_WITHHOLDING_AGENT", "SERVICES")).toEqual({
-      rate: "0.0200",
-      atc: "WI160",
-      code: "SERVICES_2",
-      label: "Services 2%",
-      lineKind: "SERVICES",
-    });
-  });
-
-  it("Gov goods → existing gov PT 3% (code to confirm)", () => {
-    expect(defaultWithholdingFor("GOVERNMENT", "GOODS")).toEqual({
-      rate: "0.0300",
-      atc: "WG010",
-      code: "GOV_PT_3",
-      label: "Government percentage tax 3% (code to confirm)",
-      lineKind: "GOV_PT",
-    });
-  });
-
-  it("Gov services → existing gov PT 3% (code to confirm)", () => {
-    expect(defaultWithholdingFor("GOVERNMENT", "SERVICES")).toEqual({
-      rate: "0.0300",
-      atc: "WG010",
-      code: "GOV_PT_3",
-      label: "Government percentage tax 3% (code to confirm)",
-      lineKind: "GOV_PT",
-    });
-  });
-
-  it("Gov VAT → existing gov VAT 5% (code to confirm)", () => {
-    expect(defaultWithholdingFor("GOVERNMENT", "GOV_VAT")).toEqual({
-      rate: "0.0500",
-      atc: "WV050",
-      code: "GOV_VAT_5",
-      label: "Government VAT 5% (code to confirm)",
-      lineKind: "GOV_VAT",
-    });
-  });
-
-  it("None → 0", () => {
-    expect(defaultWithholdingFor("NONE", "GOODS")).toEqual({
-      rate: "0.0000",
+describe("lineWithholdingFromPicks", () => {
+  it("government goods 1% + percentage tax 3% → goods 4% with no ATC (never 4% WI640)", () => {
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
+    expect(lineWithholdingFromPicks(picks, "GOODS")).toEqual({
+      rate: "0.0400",
       atc: null,
       code: null,
       label: null,
       lineKind: null,
     });
-    expect(defaultWithholdingFor("NONE", "SERVICES").rate).toBe("0.0000");
-    expect(defaultWithholdingFor("NONE", "GOV_VAT").rate).toBe("0.0000");
+    expect(lineWithholdingFromPicks(picks, "SERVICES")).toEqual({
+      rate: "0.0300",
+      atc: "WB080",
+      code: "GOV_PT_3",
+      label: WITHHOLDING_DEFAULT_ROWS.GOV_PT_3.label,
+      lineKind: "GOV_PT",
+    });
   });
 
-  it("unknown or missing type → 0 (never guess)", () => {
-    for (const t of [undefined, null, "", "UNKNOWN", "twa"]) {
-      expect(defaultWithholdingFor(t, "GOODS")).toEqual({
-        rate: "0.0000",
-        atc: null,
-        code: null,
-        label: null,
-        lineKind: null,
-      });
-      expect(needsWithholdingTypeWarning(t)).toBe(true);
+  it("government services 2% + percentage tax 3% → services 5% with no ATC", () => {
+    const picks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
+    expect(lineWithholdingFromPicks(picks, "SERVICES")).toEqual({
+      rate: "0.0500",
+      atc: null,
+      code: null,
+      label: null,
+      lineKind: null,
+    });
+    expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
+      rate: "0.0300",
+      atc: "WB080",
+      code: "GOV_PT_3",
+    });
+  });
+
+  it("empty picks → zero", () => {
+    expect(lineWithholdingFromPicks([], "GOODS")).toEqual(ZERO);
+  });
+});
+
+describe("lineWithholdingChipsFromPicks", () => {
+  it("stacked goods line → one chip per code; each % matches its own ATC (never 4% WI640)", () => {
+    const picks = [snap("GOV_GOODS_1"), snap("GOV_PT_3")];
+    const goods = lineWithholdingChipsFromPicks(picks, "GOODS");
+    expect(goods.map((c) => c.chipLabel)).toEqual(["WHT 1% WI640", "WHT 3% WB080"]);
+    for (const c of goods) {
+      const ownPct = (Number(c.rate) * 100).toFixed(2).replace(/\.?0+$/, "");
+      expect(c.chipLabel).toBe(`WHT ${ownPct}% ${c.atc}`);
+      expect(c.chipLabel).not.toMatch(/WHT 4%/);
     }
-    expect(MISSING_WITHHOLDING_TYPE_WARNING).toBe("Set this customer's withholding type");
+    // Combined money rate still 4%, but never paired with a single ATC.
+    const money = lineWithholdingFromPicks(picks, "GOODS");
+    expect(money.rate).toBe("0.0400");
+    expect(money.atc).toBeNull();
+
+    const services = lineWithholdingChipsFromPicks(picks, "SERVICES");
+    expect(services.map((c) => c.chipLabel)).toEqual(["WHT 3% WB080"]);
   });
 
-  it("TWA + GOV_VAT → 0 (not applicable)", () => {
-    expect(defaultWithholdingFor("TOP_WITHHOLDING_AGENT", "GOV_VAT").rate).toBe("0.0000");
+  it("stacked services line → WHT 2% WI157 + WHT 3% WB080", () => {
+    const picks = [snap("GOV_SERVICES_2"), snap("GOV_PT_3")];
+    const chips = lineWithholdingChipsFromPicks(picks, "SERVICES");
+    expect(chips.map((c) => ({ code: c.code, chipLabel: c.chipLabel, rate: c.rate }))).toEqual([
+      { code: "GOV_SERVICES_2", chipLabel: "WHT 2% WI157", rate: "0.0200" },
+      { code: "GOV_PT_3", chipLabel: "WHT 3% WB080", rate: "0.0300" },
+    ]);
+  });
+});
+
+describe("Pass 3 Settings catalog", () => {
+  it("lists six rates in order; VAT inactive by default; no Goods 4% / code to confirm", () => {
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.code)).toEqual([
+      "GOV_GOODS_1",
+      "GOV_SERVICES_2",
+      "GOV_PT_3",
+      "GOODS_1",
+      "SERVICES_2",
+      "GOV_VAT_5",
+    ]);
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_GOODS_1.label).toBe("Government goods 1% (WI640)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_2.label).toBe("Government services 2% (WI157)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_PT_3.label).toBe("Government percentage tax 3% (WB080)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOODS_1.label).toBe("Private top agent goods 1% (WI158)");
+    expect(WITHHOLDING_DEFAULT_ROWS.SERVICES_2.label).toBe("Private top agent services 2% (WI160)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.label).toBe("VAT withheld 5% (WV010/WV020)");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.active).toBe(false);
+    for (const r of WITHHOLDING_DEFAULT_CATALOG) {
+      expect(r.label).not.toMatch(/code to confirm/i);
+      expect(r.label).not.toBe("Goods 4%");
+      expect(r.code).not.toMatch(/^LINE_/);
+    }
+    expect(WITHHOLDING_DEFAULT_CATALOG.filter((r) => r.active).map((r) => r.code)).not.toContain("GOV_VAT_5");
+    // WG010 is a legacy WB080 alias only — must never return to the Settings picker.
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.code)).not.toContain("WG010");
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.atcCode)).not.toContain("WG010");
+    // WV050 is 12% non-resident VAT — not a Settings catalog / 5% VAT row.
+    expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.atcCode)).not.toContain("WV050");
+  });
+});
+
+describe("customerWithholdingHint", () => {
+  it("not set / none / picked labels", () => {
+    expect(customerWithholdingHint(null)).toBe(WITHHOLDING_HINT_NOT_SET);
+    expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
+    expect(customerWithholdingHint([snap("GOODS_1")])).toBe(
+      "Withholding: Private top agent goods 1% (WI158)",
+    );
+    expect(customerWithholdingHint([snap("GOV_GOODS_1"), snap("GOV_PT_3")])).toBe(
+      "Withholding: Government goods 1% (WI640) + Government percentage tax 3% (WB080)",
+    );
+  });
+});
+
+describe("isWithholdingNotSet / isWithholdingNone", () => {
+  it("null/undefined = not set; [] = none; codes = neither", () => {
+    expect(isWithholdingNotSet(null)).toBe(true);
+    expect(isWithholdingNotSet(undefined)).toBe(true);
+    expect(isWithholdingNotSet([])).toBe(false);
+    expect(isWithholdingNotSet(["GOODS_1"])).toBe(false);
+
+    expect(isWithholdingNone([])).toBe(true);
+    expect(isWithholdingNone(null)).toBe(false);
+    expect(isWithholdingNone(undefined)).toBe(false);
+    expect(isWithholdingNone(["GOODS_1"])).toBe(false);
   });
 });
 
 describe("ATC_LABELS config map", () => {
-  it("keeps TWA and gov labels in one map; gov marked UNVERIFIED + code to confirm", () => {
+  it("Confirmed ATC codes from 2307; no code-to-confirm wording", () => {
+    expect(ATC_LABELS.WI640).toContain("government goods");
+    expect(ATC_LABELS.WI157).toContain("government services");
+    expect(ATC_LABELS.WB080).toContain("percentage tax");
     expect(ATC_LABELS.WI158).toContain("goods");
     expect(ATC_LABELS.WI160).toContain("services");
-    expect(ATC_LABELS.WG010).toMatch(/UNVERIFIED/);
-    expect(ATC_LABELS.WG010).toMatch(/code to confirm/);
-    expect(ATC_LABELS.WV050).toMatch(/UNVERIFIED/);
-    expect(ATC_LABELS.WV050).toMatch(/code to confirm/);
-  });
-});
-
-describe("documentWithholdingFromCustomer", () => {
-  it("builds TWA document rates from line kinds present", () => {
-    expect(documentWithholdingFromCustomer("TOP_WITHHOLDING_AGENT", ["GOODS"]).map((w) => w.code)).toEqual(["GOODS_1"]);
-    expect(documentWithholdingFromCustomer("TOP_WITHHOLDING_AGENT", ["SERVICES"]).map((w) => [w.code, w.atcCode])).toEqual([
-      ["SERVICES_2", "WI160"],
-    ]);
-    expect(documentWithholdingFromCustomer("TOP_WITHHOLDING_AGENT", ["GOODS", "SERVICES"]).map((w) => w.code)).toEqual([
-      "GOODS_1",
-      "SERVICES_2",
-    ]);
-  });
-
-  it("builds Government document rates; hides Gov VAT when business is non-VAT", () => {
-    expect(BUSINESS_IS_VAT_REGISTERED).toBe(false);
-    expect(allowGovVatOption()).toBe(false);
-    expect(documentWithholdingFromCustomer("GOVERNMENT", ["GOODS"]).map((w) => w.code)).toEqual(["GOV_PT_3"]);
-    expect(
-      documentWithholdingFromCustomer("GOVERNMENT", ["GOODS"], { includeGovVat: true, businessIsVatRegistered: false }).map((w) => w.code),
-    ).toEqual(["GOV_PT_3"]);
-    expect(
-      documentWithholdingFromCustomer("GOVERNMENT", ["GOODS"], { includeGovVat: true, businessIsVatRegistered: true }).map((w) => w.code),
-    ).toEqual(["GOV_PT_3", "GOV_VAT_5"]);
-  });
-
-  it("None / unknown → empty document withholding", () => {
-    expect(documentWithholdingFromCustomer("NONE", ["GOODS"])).toEqual([]);
-    expect(documentWithholdingFromCustomer(undefined, ["GOODS"])).toEqual([]);
-  });
-});
-
-describe("line snapshot / override helpers", () => {
-  it("lineWithholdingSnapshot clears override", () => {
-    expect(lineWithholdingSnapshot("TOP_WITHHOLDING_AGENT", "GOODS")).toEqual({
-      withholdingRate: "0.0100",
-      withholdingAtc: "WI158",
-      withholdingOverride: false,
-    });
-  });
-
-  it("lineDiffersFromUsual matches OVERRIDE_NOTE semantics", () => {
-    expect(OVERRIDE_NOTE).toBe("Changed from this customer's usual");
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0100", atc: "WI158" })).toBe(false);
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0200", atc: "WI158" })).toBe(true);
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0100", atc: "WI160" })).toBe(true);
-  });
-
-  it("null/blank rate is not snapshotted yet — never a false override note", () => {
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: null, atc: null })).toBe(false);
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: undefined, atc: "WI158" })).toBe(false);
-    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "", atc: null })).toBe(false);
+    expect(ATC_LABELS["WV010/WV020"]).toContain("VAT");
+    for (const v of Object.values(ATC_LABELS)) {
+      expect(v).not.toMatch(/code to confirm/i);
+    }
   });
 });

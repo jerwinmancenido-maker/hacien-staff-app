@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Address, Contact, Customer, WithholdingType } from "@prisma/client";
 import { formatDateTime, formatPeso, initials } from "@/lib/format";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
+import { customerWithholdingChipLabel, parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
+import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
 import type { AgingAmounts } from "@/lib/billing/aging";
 import { Avatar, Chip, type ChipTone } from "./ui";
 import { Activity } from "./Activity";
@@ -10,11 +12,17 @@ import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from 
 import { formatAddress } from "@/lib/addresses/format";
 import { PlusIcon } from "./Icons";
 
+/** Brand: black/white/blue; WH and type chips stay grey/neutral. Red only for overdue. */
 const TONE: Record<WithholdingType, ChipTone> = {
-  GOVERNMENT: "green",
-  TOP_WITHHOLDING_AGENT: "amber",
+  GOVERNMENT: "grey",
+  TOP_WITHHOLDING_AGENT: "grey",
   NONE: "grey",
 };
+
+function pickTone(_pick: string[] | null): ChipTone {
+  void _pick;
+  return "grey";
+}
 
 export async function CustomerOverview({
   customer,
@@ -45,6 +53,10 @@ export async function CustomerOverview({
     activeAddresses.find((a) => a.isDefault && a.kind === "BILLING") ?? activeAddresses.find((a) => a.isDefault && a.kind === "OFFICE") ?? activeAddresses[0];
   const activeContacts = contacts.filter((c) => c.active);
   const mainContact = contacts.find((c) => c.isMain && c.active) ?? activeContacts[0];
+  const pick = parseWithholdingPick(customer.defaultWithholding);
+  const rates = (await listWithholdingRates(undefined, { activeOnly: false })).map(toSnapshot);
+  const pickSnaps = pick == null ? null : rates.filter((r) => pick.includes(r.code));
+  const pickLabel = customerWithholdingChipLabel(pickSnaps);
 
   return (
     <div className="overview-dashboard">
@@ -57,13 +69,17 @@ export async function CustomerOverview({
           <div className="overview-identity">
             <div className="overview-name-row">
               <h2 className="overview-title">{customer.name}</h2>
-              <Chip tone={TONE[customer.withholdingType]}>
-                {WITHHOLDING_LABELS[customer.withholdingType]}
-              </Chip>
+              {/* Saved pick is the withholding signal — never show type "No withholding" while rates are picked. */}
+              <Chip tone={pickTone(pick)}>{pickLabel}</Chip>
+              {!(pick && pick.length > 0 && customer.withholdingType === "NONE") && (
+                <Chip tone={TONE[customer.withholdingType]}>
+                  {customer.withholdingType === "NONE" ? "Private" : WITHHOLDING_LABELS[customer.withholdingType]}
+                </Chip>
+              )}
               {!customer.active ? (
-                <Chip tone="red">Inactive</Chip>
+                <Chip tone="grey">Inactive</Chip>
               ) : (
-                <Chip tone="green">Active</Chip>
+                <Chip tone="grey">Active</Chip>
               )}
               {ar?.anyOverdue && <OverdueBadge label={ar.overdueLabel ?? "Overdue"} />}
             </div>

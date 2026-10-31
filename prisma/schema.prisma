@@ -161,11 +161,14 @@ model Customer {
   // DEPRECATED (kept for one release, then dropped): the old free-text address.
   // Copied into a default BILLING Address by migration 20261030120000. Use Address.
   address            String?         @db.Text
+  // Label only (Government / TWA / None) — never chooses a withholding rate.
   withholdingType    WithholdingType
-  // DEPRECATED for new quotes: previously a JSON array of WithholdingRate codes
-  // (e.g. ["GOODS_1","GOV_PT_3"]) copied onto new quotes. New quotes derive
-  // withholding from withholdingType + line kind (see withholding-defaults.ts).
-  // Key kept in the column / SettingsVersion history — no destructive migration.
+  // Saved withholding rate codes from Settings → Withholding, copied onto new
+  // quotes. Semantics (HIGH RISK: tax — needs CTO review on the migration):
+  //   null  = not set
+  //   []    = explicit none
+  //   ["GOODS_1","GOV_PT_3",…] = picked rates (may be combined)
+  // Changing this never rewrites existing quotes, SOs or billings.
   defaultWithholding Json?
   defaultTerms       String?         @db.VarChar(100)
   notes              String?         @db.Text
@@ -494,6 +497,11 @@ model Quote {
   buyerPoNo         String?     @db.VarChar(64)
   settingsVersionId String
   withholding       Json
+  // Quote-level pick (copied from Customer.defaultWithholding on create).
+  // Same semantics as Customer.defaultWithholding: null / [] / [codes].
+  // Independent of later customer edits. Drives line defaults; money still
+  // comes from per-line rates. Internal only — never printed.
+  withholdingPick   Json?
 
   contractPrice    Decimal @default(0) @db.Decimal(15, 2)
   withholdingTotal Decimal @default(0) @db.Decimal(15, 2)
@@ -541,11 +549,11 @@ model QuoteItem {
   supplierTotal    Decimal   @default(0) @db.Decimal(15, 2)
   // total − supplierTotal
   margin           Decimal   @default(0) @db.Decimal(15, 2)
-  // Snapshotted at line creation from the customer's withholding type + kind.
-  // Later customer-type edits never change these; staff must re-apply.
+  // Snapshotted at line creation from the quote's withholding pick + kind.
+  // Later customer-pick edits never change these; staff must re-apply.
   withholdingRate     Decimal? @db.Decimal(5, 4)
   withholdingAtc      String?  @db.VarChar(20)
-  // Explicit staff override vs the customer's usual default for this kind.
+  // Explicit staff override vs the pick-derived usual for this kind.
   withholdingOverride Boolean  @default(false)
   removedAt        DateTime?
   createdAt        DateTime  @default(now())

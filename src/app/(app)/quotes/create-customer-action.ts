@@ -11,6 +11,8 @@ import { db } from "@/lib/db";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { saveCustomer } from "@/lib/services/companies";
 import { addContact } from "@/lib/services/contacts";
+import { listWithholdingRates } from "@/lib/services/withholding";
+import { parseWithholdingPick, resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema, WITHHOLDING_TYPES } from "@/lib/validation/companies";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 import { z } from "zod";
@@ -44,12 +46,26 @@ export type CreatedQuoteCustomer = {
   address: string | null;
   defaultTerms: string | null;
   withholdingType: string;
+  /** null = not set, [] = none, [codes] = picks. */
+  defaultWithholding: string[] | null;
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 
 export type CreateCustomerForQuoteState = FormState & {
   customer?: CreatedQuoteCustomer;
 };
+
+function parsePickFromForm(form: FormData): string[] | null {
+  const raw = str(form, "defaultWithholdingJson");
+  if (raw === "") return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
+}
 
 export async function createCustomerForQuoteAction(
   _prev: CreateCustomerForQuoteState,
@@ -59,6 +75,7 @@ export async function createCustomerForQuoteAction(
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
     const { settings } = await getSettingsSnapshot();
+    const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
 
     const name = str(form, "name");
     const tin = str(form, "tin");
@@ -67,12 +84,13 @@ export async function createCustomerForQuoteAction(
     const contactName = str(form, "contactName");
     const contactRole = str(form, "contactRole");
     const emailOrPhone = str(form, "emailOrPhone");
+    const pick = resolveCustomerSavedPick(withholdingType, parsePickFromForm(form));
 
-    const parsedCustomer = customerSchema(settings.lists.paymentTerms).safeParse({
+    const parsedCustomer = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
       name,
       tin,
       withholdingType: withholdingType || undefined,
-      defaultWithholding: [],
+      defaultWithholding: pick,
       defaultTerms: "",
       notes: "",
     });
@@ -130,6 +148,7 @@ export async function createCustomerForQuoteAction(
       address: addressTrim || created.address,
       defaultTerms: created.defaultTerms,
       withholdingType: created.withholdingType,
+      defaultWithholding: parseWithholdingPick(created.defaultWithholding),
       contacts,
     };
     return { ok: true, message: "Customer saved." };

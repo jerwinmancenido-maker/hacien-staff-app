@@ -44,10 +44,15 @@ describe("customer validation", () => {
     expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "Net 30" }).success).toBe(true);
   });
 
-  it("accepts default withholding codes from the allowed list only", () => {
+  it("accepts defaultWithholding null / [] / [codes] from the allowed list", () => {
     const schema = customerSchema(TERMS, ["GOODS_1", "GOV_PT_3"]);
-    expect(schema.parse({ ...base, defaultWithholding: ["GOODS_1", "GOV_PT_3", "GOODS_1"] }).defaultWithholding).toEqual(["GOODS_1", "GOV_PT_3"]);
-    expect(schema.parse(base).defaultWithholding).toEqual([]);
+    expect(schema.parse(base).defaultWithholding).toBeNull();
+    expect(schema.parse({ ...base, defaultWithholding: null }).defaultWithholding).toBeNull();
+    expect(schema.parse({ ...base, defaultWithholding: [] }).defaultWithholding).toEqual([]);
+    expect(schema.parse({ ...base, defaultWithholding: ["GOODS_1", "GOV_PT_3", "GOODS_1"] }).defaultWithholding).toEqual([
+      "GOODS_1",
+      "GOV_PT_3",
+    ]);
     expect(schema.safeParse({ ...base, defaultWithholding: ["NOPE"] }).success).toBe(false);
   });
 
