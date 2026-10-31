@@ -5,7 +5,11 @@ import { activitySummary, documentHref } from "@/lib/home/activity";
 import { homeMonthBounds, homeOwedSplit, homeSumAmounts, homeTodayPlusDaysYmd } from "@/lib/home/dashboard";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
-import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
+import {
+  formatCompactPesoLimit,
+  homeNonVatHelperLine,
+  homeNonVatTitle,
+} from "@/lib/home/nonVatCopy";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -117,8 +121,17 @@ describe("home getting-started hrefs", () => {
 });
 
 describe("home Non-VAT card copy", () => {
-  it("uses the agreed title and settings-driven warn percents in the helper", () => {
-    expect(HOME_NON_VAT_TITLE).toBe("Non-VAT sales limit (₱3M)");
+  it("formats the settings limit compactly in the home title and sidebar label", () => {
+    expect(formatCompactPesoLimit(3_000_000)).toBe("₱3M");
+    expect(formatCompactPesoLimit(1_500_000)).toBe("₱1.5M");
+    expect(homeNonVatTitle(3_000_000)).toBe("Non-VAT sales limit (₱3M)");
+    expect(homeNonVatTitle(1_500_000)).toBe("Non-VAT sales limit (₱1.5M)");
+    // Same helper used for the sidebar tracker label.
+    expect(homeNonVatTitle(3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
+    expect(homeNonVatTitle(1_500_000)).toContain(formatCompactPesoLimit(1_500_000));
+  });
+
+  it("uses settings-driven warn percents in the helper", () => {
     expect(homeNonVatHelperLine(70, 90)).toBe(
       "Estimate based on invoices in this app for this year. Your accountant's books are the official count. Warns at 70% and 90%.",
     );

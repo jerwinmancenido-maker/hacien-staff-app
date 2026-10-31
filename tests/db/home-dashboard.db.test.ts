@@ -331,7 +331,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const needsPo = await listSalesOrdersView({ needsPo: true });
     const receiving = await listReceivingView({ history: false }, admin);
     const billedOver = await listPurchaseOrdersView({ billedOver: true }, admin);
-    const arForCount = await arAgingSummary();
+    const overdueList = await listBillings({ status: "OVERDUE" });
     const noWh = await listCustomers({ withholding: "NONE" });
 
     if (byKind.quotesNeedsApproval !== undefined) expect(byKind.quotesNeedsApproval).toBe(needsApproval.length);
@@ -342,7 +342,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     }
     if (byKind.posAwaitingReceipt !== undefined) expect(byKind.posAwaitingReceipt).toBe(receiving.length);
     if (byKind.billsOverPo !== undefined) expect(byKind.billsOverPo).toBe(billedOver.length);
-    if (byKind.billingsOverdue !== undefined) expect(byKind.billingsOverdue).toBe(arForCount.overdueCount);
+    if (byKind.billingsOverdue !== undefined) expect(byKind.billingsOverdue).toBe(overdueList.length);
     if (byKind.customersNoWithholding !== undefined) expect(byKind.customersNoWithholding).toBe(noWh.length);
 
     const period = currentMonthPeriod();
@@ -357,7 +357,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       fromYmd: period.fromYmd,
       toYmd: period.toYmd,
     });
-    const ar = arForCount;
+    const ar = await arAgingSummary();
     const dueSoon = await listSupplierBillsDueSoon(7);
 
     expect(billedMoney.amount).toBe(billedSum);
@@ -524,13 +524,12 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const overdueAction = dash.actions.find((a) => a.kind === "billingsOverdue");
     expect(ar.overdueCount).toBeGreaterThanOrEqual(expectedOverdueCount);
     expect(toScaled(ar.overdue, 2)).toBeGreaterThanOrEqual(expectedOverdueCents);
-    if (overdueAction) expect(overdueAction.count).toBe(ar.overdueCount);
 
-    // listBillings(OVERDUE) applies take:200 BEFORE the overdue filter, so it can
-    // undercount badly; Home must use ar.overdueCount (same pass as overdue PHP).
+    // OVERDUE filters before paging; Home action count matches the list page.
     const listedOverdue = await listBillings({ status: "OVERDUE" });
     expect(listedOverdue.length).toBeLessThanOrEqual(200);
-    expect(ar.overdueCount).toBeGreaterThan(listedOverdue.length);
+    expect(listedOverdue.length).toBe(Math.min(200, ar.overdueCount));
+    if (overdueAction) expect(overdueAction.count).toBe(listedOverdue.length);
     expect(ar.overdueCount).toBeGreaterThan(200);
 
     // This run's open billings are all overdue with no allocations — their sum is
@@ -572,6 +571,100 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     }
     expect(ar.overdueCount).toBe(recount);
     expect(ar.overdue).toBe(fromScaled(recountCents, 2));
+  });
+
+  it("OVERDUE list filters before paging so count equals Home overdue count (201+ billings)", async () => {
+    process.env.PAYABLES_ENABLED = "false";
+    process.env.CASH_ENABLED = "false";
+    process.env.BOOKS_ENABLED = "false";
+
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, "999999999");
+    const run = tag();
+    const today = manilaToday();
+    const dueFuture = addDays(today, 45);
+    const duePast = addDays(today, -40);
+    // Newer invoice date than the current fillers so these overdue rows sort first
+    // among OVERDUE after the filter-before-page fix.
+    const invoiceOverdue = today;
+    const invoiceCurrent = addDays(today, -1);
+
+    const maxInv = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    let inv = (maxInv._max.invoiceNo ?? 1_000_000) + 1;
+
+    const rows: {
+      number: string;
+      salesOrderId: string;
+      customerId: string;
+      invoiceNo: number;
+      invoiceDate: Date;
+      dueDate: Date;
+      amount: string;
+      withholdingExpected: string;
+      netExpected: string;
+      status: "OPEN";
+      createdById: string;
+      updatedById: string;
+    }[] = [];
+
+    // 201 current (not overdue) billings — previously filled take:200 and hid overdue.
+    for (let i = 0; i < 201; i++) {
+      rows.push({
+        number: `BL-ODCUR-${run}-${i}`,
+        salesOrderId: so.id,
+        customerId: customer.id,
+        invoiceNo: inv++,
+        invoiceDate: invoiceCurrent,
+        dueDate: dueFuture,
+        amount: "10.00",
+        withholdingExpected: "0.00",
+        netExpected: "10.00",
+        status: "OPEN",
+        createdById: admin.id,
+        updatedById: admin.id,
+      });
+    }
+    // 201 overdue with the newest invoice dates so they win the overdue page order.
+    const overdueIds: string[] = [];
+    for (let i = 0; i < 201; i++) {
+      const number = `BL-ODOD-${run}-${i}`;
+      rows.push({
+        number,
+        salesOrderId: so.id,
+        customerId: customer.id,
+        invoiceNo: inv++,
+        invoiceDate: invoiceOverdue,
+        dueDate: duePast,
+        amount: "11.00",
+        withholdingExpected: "0.00",
+        netExpected: "11.00",
+        status: "OPEN",
+        createdById: admin.id,
+        updatedById: admin.id,
+      });
+    }
+    await db.billing.createMany({ data: rows });
+    const planted = await db.billing.findMany({
+      where: { number: { startsWith: `BL-ODOD-${run}-` } },
+      select: { id: true, number: true },
+    });
+    expect(planted).toHaveLength(201);
+    overdueIds.push(...planted.map((p) => p.id));
+
+    const listed = await listBillings({ status: "OVERDUE" });
+    const dash = await loadHomeDashboard(admin);
+    const overdueAction = dash.actions.find((a) => a.kind === "billingsOverdue");
+
+    expect(listed.length).toBeLessThanOrEqual(200);
+    expect(listed.every((r) => r.overdue.overdue)).toBe(true);
+    // Home overdue count matches the Overdue list page (filter-before-page).
+    expect(overdueAction?.count ?? 0).toBe(listed.length);
+    expect(listed.length).toBe(200);
+
+    // Our newest-invoice overdue rows must appear (would be missing if take ran first).
+    const listedIds = new Set(listed.map((r) => r.id));
+    const plantedOnPage = overdueIds.filter((id) => listedIds.has(id));
+    expect(plantedOnPage.length).toBe(200);
   });
 
   it("arAgingSummary credit matches per-customer customerCreditBalance (grouped query)", async () => {

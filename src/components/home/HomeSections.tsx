@@ -4,7 +4,7 @@ import Link from "next/link";
 import { formatPeso } from "@/lib/format";
 import type { HomeDashboard } from "@/lib/home/dashboard";
 import { nonVatBarFillClass } from "@/lib/home/nonVatBar";
-import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
+import { homeNonVatHelperLine, homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import type { NonVatLevel } from "@/lib/services/non-vat";
 import { EmptyState } from "@/components/ui";
 
@@ -116,7 +116,7 @@ export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
   return (
     <div className={`card home-section home-nonvat level-${meter.level}`}>
       <div className="card-head">
-        <h2>{HOME_NON_VAT_TITLE}</h2>
+        <h2>{homeNonVatTitle(meter.limit)}</h2>
         <div className="right">
           <Link className="btn-link small" href={meter.href}>
             Billing →

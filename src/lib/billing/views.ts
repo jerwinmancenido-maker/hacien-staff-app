@@ -98,7 +98,12 @@ export async function listBillings(filters: BillingListFilters = {}) {
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
   const today = billingToday();
+  const overdueOnly = filters.status === "OVERDUE";
   const where = billingsWhere(filters);
+  // OVERDUE: exclude voids up front; filter overdue before take:200 so recent
+  // current invoices cannot crowd overdue rows off the page.
+  if (overdueOnly) where.status = { not: "VOID" };
+
   const rows = await db.billing.findMany({
     where,
     include: {
@@ -107,7 +112,8 @@ export async function listBillings(filters: BillingListFilters = {}) {
       allocations: { where: { collection: { status: "POSTED" } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    take: 200,
+    // Page after overdue filter (below). Other statuses keep the DB take.
+    ...(overdueOnly ? {} : { take: 200 }),
   });
   const mapped = rows.map((b) => {
     const applied = appliedOf(b.allocations);
@@ -128,7 +134,7 @@ export async function listBillings(filters: BillingListFilters = {}) {
       aging: agingBucket(b.dueDate, today) as AgingBucket,
     };
   });
-  if (filters.status === "OVERDUE") return mapped.filter((r) => r.overdue.overdue && r.status !== "VOID");
+  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(0, 200);
   return mapped;
 }
 

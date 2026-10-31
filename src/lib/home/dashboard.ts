@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, sumBillingsAmount, sumCollectionsReceived } from "../billing/views";
+import { arAgingSummary, listBillings, sumBillingsAmount, sumCollectionsReceived } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -168,6 +168,7 @@ export async function loadHomeDashboard(
     quotesNoReply,
     salesOrdersNeedsPo,
     receiving,
+    billingsOverdue,
     customersNoWh,
     ar,
     collected,
@@ -179,6 +180,8 @@ export async function loadHomeDashboard(
     listQuotesView({ noReplyAfterDays: 7, now }, user),
     listSalesOrdersView({ needsPo: true }),
     listReceivingView({ history: false }, user),
+    // OVERDUE filters before take:200 — same page Home links to.
+    listBillings({ status: "OVERDUE" }),
     listCustomers({ withholding: "NONE" }),
     arAgingSummary(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
@@ -202,8 +205,7 @@ export async function loadHomeDashboard(
     salesOrdersNeedsPo: { count: salesOrdersNeedsPo.length, href: salesOrdersNeedsPoHref() },
     posAwaitingReceipt: { count: posAwaiting, href: posAwaitingReceiptHref() },
     billsOverPo: { count: billsOverPoCount, href: billsOverPoHref() },
-    // Uncapped: same records that contribute to ar.overdue (not listBillings take:200).
-    billingsOverdue: { count: ar.overdueCount, href: billingsOverdueHref() },
+    billingsOverdue: { count: billingsOverdue.length, href: billingsOverdueHref() },
     customersNoWithholding: { count: customersNoWh.length, href: customersNoWithholdingHref() },
   };
 
