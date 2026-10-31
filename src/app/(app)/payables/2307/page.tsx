@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { ymd } from "@/lib/documents/common";
+import { isPayables2307Enabled } from "@/lib/payables/issue2307";
 import { listSupplier2307 } from "@/lib/payables/views";
 import { PayablesNav } from "@/components/payables/PayablesNav";
 import { Supplier2307StatusChip } from "@/components/payables/PayablesParts";
@@ -14,6 +16,7 @@ import { markSupplier2307IssuedAction } from "../actions";
 const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—");
 
 export default async function Supplier2307Page({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  if (!(await isPayables2307Enabled())) redirect("/payables");
   const user = await requirePagePermission("view");
   const sp = await searchParams;
   const status = (sp.status === "TO_ISSUE" || sp.status === "ISSUED" ? sp.status : "TO_ISSUE") as SupplierWithholding2307Status | "ALL";

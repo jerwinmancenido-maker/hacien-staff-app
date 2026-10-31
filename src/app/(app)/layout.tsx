@@ -9,6 +9,7 @@ import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
+import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
@@ -26,90 +27,91 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const booksEnabled = await isBooksEnabled();
   const nonVatTitle = homeNonVatTitle(meter.limit);
 
-  return (
-    <div className="frame">
-      <aside className="sidebar">
-        <div className="brand">
-          <Link href="/" className="brand-link" aria-label="HACIEN home">
-            <BrandLogo variant="wordmark" />
-          </Link>
-        </div>
-        <SidebarNav
-          isAdmin={can(user, "manage_settings")}
-          canSeeCosts={canSeeCosts(user)}
-          canEdit={can(user, "edit_data")}
-          canViewBooks={can(user, "view_books")}
-          booksEnabled={booksEnabled}
-          cashEnabled={cashEnabled}
-          payablesEnabled={payablesEnabled}
-        />
-        <div className="sidebar-spacer" />
-        <a
-          href="/billing"
-          className={`tracker-card level-${meter.level}`}
-          aria-label={nonVatTitle}
-          data-level={meter.level}
-        >
-          <div className="label tracker-head">
-            <span>{nonVatTitle}</span>
-            <b className="num tracker-pct">{meter.pctLabel}</b>
-          </div>
-          <div className="value" style={{ textAlign: "left" }}>
-            <span className="num">{formatPeso(meter.used)}</span>{" "}
-            <span className="faint small tracker-of">of {formatPesoLimit(meter.limit)}</span>
-          </div>
-          <div
-            className="bar"
-            role="meter"
-            aria-label="Share of the non-VAT limit used"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(meter.barPct)}
-            aria-valuetext={`${meter.pctLabel} of ${formatPesoLimit(meter.limit)}`}
-          >
-            <span style={{ width: `${meter.barPct}%` }} />
-          </div>
-          {warning ? (
-            <div className="tracker-warning small" role="status">
-              {warning}
-            </div>
-          ) : (
-            <div className="faint small" style={{ marginTop: 6 }}>
-              Warns at {meter.warnFirstPct}% and {meter.warnSecondPct}%
-            </div>
-          )}
-        </a>
-        <div className="user-row">
-          <Avatar name={user.name} dark />
-          <div className="who">
-            <div className="strong">{user.name}</div>
-            <div className="small muted">{roleLabel(user)}</div>
-          </div>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <Breadcrumb />
-          <div className="right">
-            <div className="topbar-search">
-              <SearchIcon size={14} />
-              <input type="text" placeholder="Search quotes, SOs, customers…" aria-label="Quick search" readOnly />
-              <span className="kbd-shortcut">⌘K</span>
-            </div>
-            <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
-              <BellIcon size={16} />
-            </button>
-            <Avatar name={user.name} small dark />
-            <span className="user-name">{user.name}</span>
-            <form action={signOut}>
-              <button className="btn btn-secondary btn-sm" type="submit">
-                <LogoutIcon size={14} /> Sign out
-              </button>
-            </form>
-          </div>
-        </header>
-        <main className="content">{children}</main>
+  const sidebar = (
+    <>
+      <div className="brand">
+        <Link href="/" className="brand-link" aria-label="HACIEN home">
+          <BrandLogo variant="wordmark" />
+        </Link>
       </div>
-    </div>
+      <SidebarNav
+        isAdmin={can(user, "manage_settings")}
+        canSeeCosts={canSeeCosts(user)}
+        canEdit={can(user, "edit_data")}
+        canViewBooks={can(user, "view_books")}
+        booksEnabled={booksEnabled}
+        cashEnabled={cashEnabled}
+        payablesEnabled={payablesEnabled}
+      />
+      <div className="sidebar-spacer" />
+      <a
+        href="/billing"
+        className={`tracker-card level-${meter.level}`}
+        aria-label={nonVatTitle}
+        data-level={meter.level}
+      >
+        <div className="label tracker-head">
+          <span>{nonVatTitle}</span>
+          <b className="num tracker-pct">{meter.pctLabel}</b>
+        </div>
+        <div className="value" style={{ textAlign: "left" }}>
+          <span className="num">{formatPeso(meter.used)}</span>{" "}
+          <span className="faint small tracker-of">of {formatPesoLimit(meter.limit)}</span>
+        </div>
+        <div
+          className="bar"
+          role="meter"
+          aria-label="Share of the non-VAT limit used"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(meter.barPct)}
+          aria-valuetext={`${meter.pctLabel} of ${formatPesoLimit(meter.limit)}`}
+        >
+          <span style={{ width: `${meter.barPct}%` }} />
+        </div>
+        {warning ? (
+          <div className="tracker-warning small" role="status">
+            {warning}
+          </div>
+        ) : (
+          <div className="faint small" style={{ marginTop: 6 }}>
+            Warns at {meter.warnFirstPct}% and {meter.warnSecondPct}%
+          </div>
+        )}
+      </a>
+      <div className="user-row">
+        <Avatar name={user.name} dark />
+        <div className="who">
+          <div className="strong">{user.name}</div>
+          <div className="small muted">{roleLabel(user)}</div>
+        </div>
+      </div>
+    </>
+  );
+
+  const topbarRight = (
+    <>
+      <div className="topbar-search">
+        <SearchIcon size={14} />
+        <input type="text" placeholder="Search quotes, SOs, customers…" aria-label="Quick search" readOnly />
+        <span className="kbd-shortcut">⌘K</span>
+      </div>
+      <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
+        <BellIcon size={16} />
+      </button>
+      <Avatar name={user.name} small dark />
+      <span className="user-name">{user.name}</span>
+      <form action={signOut}>
+        <button className="btn btn-secondary btn-sm" type="submit">
+          <LogoutIcon size={14} /> Sign out
+        </button>
+      </form>
+    </>
+  );
+
+  return (
+    <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb />} topbarRight={topbarRight}>
+      {children}
+    </AppFrame>
   );
 }

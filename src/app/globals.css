@@ -1094,6 +1094,10 @@ pre.json {
 .pill-tabs-wrap {
   margin-bottom: 16px;
   max-width: 100%;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
 }
 .pill-tabs-track {
   display: inline-flex;
@@ -1104,11 +1108,46 @@ pre.json {
   border-radius: 12px;
   overflow-x: auto;
   max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   scrollbar-width: none;
   white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
 }
 .pill-tabs-track::-webkit-scrollbar {
   display: none;
+}
+.pill-tabs-arrow {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+.pill-tabs-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pill-tabs-wrap.has-overflow.fade-left .pill-tabs-track {
+  mask-image: linear-gradient(to right, transparent, #000 16px, #000 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 100%);
+}
+.pill-tabs-wrap.has-overflow.fade-right .pill-tabs-track {
+  mask-image: linear-gradient(to left, transparent, #000 16px, #000 100%);
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 16px, #000 100%);
+}
+.pill-tabs-wrap.has-overflow.fade-left.fade-right .pill-tabs-track {
+  mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+.pill-tab-label {
+  white-space: nowrap;
 }
 .pill-tabs-track.track-sm {
   padding: 3px;
@@ -2059,6 +2098,30 @@ pre.json {
   font-weight: 500;
 }
 
+/* Mobile nav toggle / drawer (collapsed by default ≤768). Hidden on desktop. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.nav-backdrop {
+  display: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  appearance: none;
+  background: rgba(10, 10, 10, 0.4);
+}
+
 /* ---------- Mobile Responsiveness (down to 375px) ---------- */
 @media (max-width: 768px) {
   .frame {
@@ -2068,10 +2131,41 @@ pre.json {
     min-height: 100vh;
     grid-template-columns: 1fr;
   }
+  .nav-toggle {
+    display: inline-flex;
+  }
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+  .frame.nav-open .nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
   .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 88vw);
+    z-index: 40;
     padding: 16px;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--white);
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: none;
+  }
+  .frame.nav-open .sidebar {
+    transform: translateX(0);
+    box-shadow: var(--shadow-overlay);
   }
   .sidebar-spacer {
     display: none;
@@ -2082,6 +2176,7 @@ pre.json {
   .main {
     border-left: none;
     border-radius: 0;
+    min-width: 0;
   }
   .topbar {
     padding: 10px 12px;
@@ -3589,10 +3684,40 @@ button.contact-card-add {
 .home-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
 }
 .home-dashboard > .card {
   margin-top: 0;
+}
+/* Unboxed sections: whitespace + thin divider (no card chrome). */
+.home-section {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.home-section + .home-section {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.home-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.home-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+.home-section-head .right {
+  flex: 0 0 auto;
 }
 .home-getting-started-actions {
   display: flex;

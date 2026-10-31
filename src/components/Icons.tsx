@@ -91,4 +91,16 @@ export const AlertTriangleIcon = ({ size }: P) => (
 export const ClockIcon = ({ size }: P) => (
   <svg {...base(size)}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
 );
+export const MenuIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+);
+export const CloseIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M6 6l12 12M18 6 6 18" /></svg>
+);
+export const ChevronLeftIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="m15 6-6 6 6 6" /></svg>
+);
+export const ChevronRightIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="m9 6 6 6-6 6" /></svg>
+);
 

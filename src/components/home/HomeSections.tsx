@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { formatPeso, formatPesoLimit } from "@/lib/format";
+import { formatHomeActionCount } from "@/lib/home/actionCount";
 import type { HomeDashboard } from "@/lib/home/dashboard";
 import { nonVatBarFillClass } from "@/lib/home/nonVatBar";
 import { homeNonVatHelperLine, homeNonVatTitle } from "@/lib/home/nonVatCopy";
@@ -33,8 +34,8 @@ export function HomeGettingStarted({
 export function HomeNeedsAction({ rows }: { rows: HomeDashboard["actions"] }) {
   if (rows.length === 0) return null;
   return (
-    <div className="card home-section">
-      <div className="card-head">
+    <section className="home-section">
+      <div className="home-section-head">
         <h2>Needs action</h2>
       </div>
       <ul className="home-action-list">
@@ -42,20 +43,20 @@ export function HomeNeedsAction({ rows }: { rows: HomeDashboard["actions"] }) {
           <li key={r.kind}>
             <Link className="home-action-row" href={r.href}>
               <span className="home-action-label">{r.label}</span>
-              <span className="home-action-count num">{r.count}</span>
+              <span className="home-action-count num">{formatHomeActionCount(r.count)}</span>
             </Link>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
 export function HomeMoney({ rows }: { rows: HomeDashboard["money"] }) {
   if (rows.length === 0) return null;
   return (
-    <div className="card home-section">
-      <div className="card-head">
+    <section className="home-section">
+      <div className="home-section-head">
         <h2>Money</h2>
       </div>
       <ul className="home-money-list">
@@ -75,14 +76,14 @@ export function HomeMoney({ rows }: { rows: HomeDashboard["money"] }) {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
 export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]> }) {
   return (
-    <div className="card home-section">
-      <div className="card-head">
+    <section className="home-section">
+      <div className="home-section-head">
         <h2>Next tax deadline</h2>
         <div className="right">
           <Link className="btn-link small" href={tax.href}>
@@ -107,15 +108,15 @@ export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]
           </Link>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 
 export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
   const helper = homeNonVatHelperLine(meter.warnFirstPct, meter.warnSecondPct);
   return (
-    <div className={`card home-section home-nonvat level-${meter.level}`}>
-      <div className="card-head">
+    <section className={`home-section home-nonvat level-${meter.level}`}>
+      <div className="home-section-head">
         <h2>{homeNonVatTitle(meter.limit)}</h2>
         <div className="right">
           <Link className="btn-link small" href={meter.href}>
@@ -145,15 +146,15 @@ export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
         <p className="home-nonvat-helper faint small">{helper}</p>
         {meter.warning ? <div className="home-nonvat-warn small">{meter.warning}</div> : null}
       </Link>
-    </div>
+    </section>
   );
 }
 
 export function HomeRecentActivity({ rows }: { rows: HomeDashboard["recent"] }) {
   if (rows.length === 0) return null;
   return (
-    <div className="card home-section">
-      <div className="card-head">
+    <section className="home-section">
+      <div className="home-section-head">
         <h2>Recent activity</h2>
       </div>
       <ul className="home-activity-list">
@@ -173,6 +174,6 @@ export function HomeRecentActivity({ rows }: { rows: HomeDashboard["recent"] }) 
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

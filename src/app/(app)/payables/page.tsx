@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
+import { isPayables2307Enabled } from "@/lib/payables/issue2307";
 import { apAgingSummary, listSupplierBillsOpen } from "@/lib/payables/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { PayablesNav } from "@/components/payables/PayablesNav";
@@ -21,11 +22,12 @@ export default async function PayablesHomePage({
   const dueFrom = sp.dueFrom && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueFrom) ? sp.dueFrom : undefined;
   const dueTo = sp.dueTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueTo) ? sp.dueTo : undefined;
   const showDueSoon = !!(dueFrom || dueTo) && canSeeCosts(user);
-  const [summary, dueSoon] = await Promise.all([
+  const [summary, dueSoon, issue2307Enabled] = await Promise.all([
     apAgingSummary(),
     showDueSoon
       ? listSupplierBillsOpen({ dueFromYmd: dueFrom, dueToYmd: dueTo, openBalanceOnly: true })
       : Promise.resolve([]),
+    isPayables2307Enabled(),
   ]);
 
   return (
@@ -49,11 +51,13 @@ export default async function PayablesHomePage({
           <div className="value num">{formatPeso(summary.totalPayable)}</div>
           <div className="foot">Open supplier bill balances</div>
         </Link>
-        <Link className="card stat stat-link" href="/payables/2307?status=TO_ISSUE">
-          <div className="label">2307 to issue</div>
-          <div className="value num">{formatPeso(summary.pending2307ToIssue)}</div>
-          <div className="foot">EWT pending certificate (unverified)</div>
-        </Link>
+        {issue2307Enabled ? (
+          <Link className="card stat stat-link" href="/payables/2307?status=TO_ISSUE">
+            <div className="label">2307 to issue</div>
+            <div className="value num">{formatPeso(summary.pending2307ToIssue)}</div>
+            <div className="foot">EWT pending certificate (unverified)</div>
+          </Link>
+        ) : null}
         <Link className="card stat stat-link" href="/payables/payments">
           <div className="label">Suppliers with balance</div>
           <div className="value num">{summary.bySupplier.length}</div>

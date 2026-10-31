@@ -25,3 +25,13 @@ Merge of `origin/main` @ `f38e9dad` into `brand-06-hacien-restyle`. Home uses br
 |---|---|
 | Home (post-merge) | `home-after-pr20-merge-1280.png`, `home-after-pr20-merge-360.png` |
 | Sidebar Non-VAT meter | `sidebar-nonvat-meter-1280.png`, `sidebar-nonvat-meter-360.png` |
+
+## Product-owner follow-ups (post PR 20 merge)
+
+Unboxed Home sections, collapsed mobile nav on every page, Payables tabs readable at 360, 2307 UI behind `PAYABLES_2307_ENABLED` (off by default).
+
+| Screen | Files |
+|---|---|
+| Home | `home-po-fixes-1280.png`, `home-po-fixes-360.png` |
+| Payables (PAYABLES_ENABLED=true, 2307 off) | `payables-po-fixes-1280.png`, `payables-po-fixes-360.png` |
+

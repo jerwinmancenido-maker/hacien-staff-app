@@ -4,7 +4,9 @@ import { agingBucket, sumAging } from "@/lib/billing/aging";
 import { autoAllocateBillsOldestFirst, validatePaymentAllocations } from "@/lib/payables/allocations";
 import { deriveSupplierBillStatus, supplierBillBalance, withholdingFromRate } from "@/lib/payables/status";
 import { dealsNavHrefs } from "@/components/Sidebar";
+import { visiblePayablesNavTabs } from "@/components/payables/PayablesNav";
 import { payablesEnabledFromEnv } from "@/lib/payables/features";
+import { payables2307EnabledFromEnv } from "@/lib/payables/issue2307";
 import { can, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { formatDocNumber } from "@/lib/settings/numbering";
@@ -31,6 +33,25 @@ describe("feature flag", () => {
     expect(payablesEnabledFromEnv({ PAYABLES_ENABLED: "0" })).toBe(false);
     expect(DEFAULT_SETTINGS.features.payablesEnabled).toBe(false);
     expect(DEFAULT_SETTINGS.features.cashEnabled).toBe(false);
+  });
+});
+
+describe("Payables 2307 (withholding agent) flag", () => {
+  it("defaults off; env overrides", () => {
+    expect(payables2307EnabledFromEnv({})).toBe(null);
+    expect(payables2307EnabledFromEnv({ PAYABLES_2307_ENABLED: "true" })).toBe(true);
+    expect(payables2307EnabledFromEnv({ PAYABLES_2307_ENABLED: "0" })).toBe(false);
+    expect(DEFAULT_SETTINGS.features.payables2307Enabled).toBe(false);
+  });
+
+  it("hides the 2307 tab by default and shows it when the flag is on", () => {
+    const off = visiblePayablesNavTabs(false);
+    expect(off.map((t) => t.key)).toEqual(["home", "payments", "aging"]);
+    expect(off.some((t) => /2307|EWT pending/i.test(t.label))).toBe(false);
+
+    const on = visiblePayablesNavTabs(true);
+    expect(on.map((t) => t.key)).toEqual(["home", "payments", "aging", "2307"]);
+    expect(on.find((t) => t.key === "2307")?.label).toBe("2307 to issue");
   });
 });
 

@@ -68,7 +68,12 @@ export const DEFAULT_SETTINGS: Settings = {
   documents: { expiryWarningDays: 30 },
   invoiceBooklet: { seriesFrom: 1, seriesTo: 500, label: "Booklet 1" },
   collections: { overdueGraceDays: 0 },
-  features: { payablesEnabled: false, cashEnabled: false, booksEnabled: false },
+  features: {
+    payablesEnabled: false,
+    cashEnabled: false,
+    booksEnabled: false,
+    payables2307Enabled: false,
+  },
   taxCalendar: {
     corUploadedAndChecked: false,
     obligations: {
