@@ -8,6 +8,18 @@
       "scrollWidth": 1265
     },
     {
+      "name": "quote-editor-not-set-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
+      "name": "quote-submit-confirm-none-1280.png",
+      "width": 1280,
+      "height": 1739,
+      "scrollWidth": 1265
+    },
+    {
       "name": "quote-add-customer-pick-1280.png",
       "width": 1280,
       "height": 1739,
@@ -27,6 +39,18 @@
     },
     {
       "name": "quote-editor-pick-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-editor-not-set-360.png",
+      "width": 360,
+      "height": 2444,
+      "scrollWidth": 360
+    },
+    {
+      "name": "quote-submit-confirm-none-360.png",
       "width": 360,
       "height": 2444,
       "scrollWidth": 360

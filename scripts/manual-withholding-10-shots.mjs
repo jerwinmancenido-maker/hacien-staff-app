@@ -269,6 +269,73 @@ async function main() {
     let m = await fullPageShot(cdp, `quote-editor-pick-${width}.png`);
     report.push({ name: `quote-editor-pick-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
 
+    // Clear pick → "not set" notice (same draft; restore later for print)
+    await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const btn = [...document.querySelectorAll('button,a')].find((el) => /Clear \\(not set\\)/i.test(el.textContent || ''));
+        if (!btn) return false;
+        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+        const onClick = propsKey ? btn[propsKey]?.onClick : null;
+        if (typeof onClick === 'function') {
+          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+        } else {
+          btn.click();
+        }
+        return true;
+      })()`,
+      returnByValue: true,
+    });
+    await waitFor(
+      cdp,
+      `(document.body.innerText || '').includes('Withholding not set for this customer') || (document.body.innerText || '').includes('Withholding: not set')`,
+    );
+    await sleep(300);
+    m = await fullPageShot(cdp, `quote-editor-not-set-${width}.png`);
+    report.push({ name: `quote-editor-not-set-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
+
+    // Submit confirm when pick is not set
+    await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const btn = [...document.querySelectorAll('button')].find((el) => /Submit for approval/i.test(el.textContent || ''));
+        if (!btn) return false;
+        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+        const onClick = propsKey ? btn[propsKey]?.onClick : null;
+        if (typeof onClick === 'function') {
+          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+        } else {
+          btn.click();
+        }
+        return true;
+      })()`,
+      returnByValue: true,
+    });
+    await waitFor(cdp, `(document.body.innerText || '').includes('No withholding on this quote')`);
+    await sleep(250);
+    m = await fullPageShot(cdp, `quote-submit-confirm-none-${width}.png`);
+    report.push({ name: `quote-submit-confirm-none-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
+    // Dismiss confirm (Pick rates) so we don't mark the quote sent
+    await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const btn = [...document.querySelectorAll('button')].find((el) => /Pick rates/i.test(el.textContent || ''));
+        if (!btn) return false;
+        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+        const onClick = propsKey ? btn[propsKey]?.onClick : null;
+        if (typeof onClick === 'function') {
+          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+        } else {
+          btn.click();
+        }
+        return true;
+      })()`,
+      returnByValue: true,
+    });
+    await sleep(200);
+
+    // Restore combined pick (Goods 1% + Gov 3%) for remaining shots / print
+    await cdp.send("Page.navigate", { url: `${BASE}${editorPath}` });
+    await waitFor(cdp, `!!document.querySelector('.quote-editor')`);
+    await sleep(400);
+
     // Add-customer drawer with Withholding pick field
     await openAddCustomerDrawer(cdp);
     m = await fullPageShot(cdp, `quote-add-customer-pick-${width}.png`);

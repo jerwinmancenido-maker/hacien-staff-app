@@ -4,7 +4,9 @@ Full-page PNG shots of the pick-based withholding UI and print (no WH on custome
 
 | File | Viewport | Notes |
 |---|---|---|
-| `quote-editor-pick-1280.png` / `quote-editor-pick-360.png` | 1280 / 360 | Quote editor: pick hint under Customer + internal WH panel |
+| `quote-editor-pick-1280.png` / `quote-editor-pick-360.png` | 1280 / 360 | Combined rates (Goods 1% + Gov 3%), mixed goods/services + internal panel |
+| `quote-editor-not-set-1280.png` / `quote-editor-not-set-360.png` | 1280 / 360 | Quote with pick cleared — "Withholding not set…" notice |
+| `quote-submit-confirm-none-1280.png` / `quote-submit-confirm-none-360.png` | 1280 / 360 | Submit confirm: Yes, none / Pick rates |
 | `quote-add-customer-pick-1280.png` / `quote-add-customer-pick-360.png` | 1280 / 360 | Add-customer drawer with Withholding multi-select |
 | `customer-overview-pick-1280.png` / `customer-overview-pick-360.png` | 1280 / 360 | Customer header chip shows saved pick (not type "No withholding") |
 | `customer-edit-pick-1280.png` / `customer-edit-pick-360.png` | 1280 / 360 | Customer form Withholding field |
