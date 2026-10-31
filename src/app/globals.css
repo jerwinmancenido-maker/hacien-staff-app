@@ -1316,9 +1316,6 @@ pre.json {
   align-items: center;
   min-width: 0;
 }
-.topbar-search-toggle {
-  display: none;
-}
 .topbar-search {
   display: flex;
   align-items: center;
@@ -1367,6 +1364,10 @@ pre.json {
 .topbar-icon-btn:hover {
   color: var(--text);
   background: var(--hover);
+}
+/* Desktop: inline search field only (must follow .topbar-icon-btn so display wins). */
+.topbar-search-toggle {
+  display: none;
 }
 
 /* ---------- RecordList Component ---------- */

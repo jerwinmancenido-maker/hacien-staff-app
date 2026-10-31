@@ -35,3 +35,11 @@ Unboxed Home sections, collapsed mobile nav on every page, Payables tabs readabl
 | Home | `home-po-fixes-1280.png`, `home-po-fixes-360.png` |
 | Payables (PAYABLES_ENABLED=true, 2307 off) | `payables-po-fixes-1280.png`, `payables-po-fixes-360.png` |
 
+## After merging PR 21 (withholding-from-customer)
+
+| Screen | Files |
+|---|---|
+| Home | `home-after-pr21-1280.png`, `home-after-pr21-360.png` |
+| Payables (2307 off) | `payables-after-pr21-1280.png`, `payables-after-pr21-360.png` |
+| Payables 360 with `PAYABLES_2307_ENABLED=true` (tab scroll demo) | `payables-2307-on-360.png` |
+
