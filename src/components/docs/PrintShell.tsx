@@ -30,14 +30,16 @@ export function PrintShell({
         <PrintButton missing={missing} documentTitle={doc.number} />
       </div>
       {warning && (
-        <div className="alert warn print-toolbar-alert no-print" role="status">
-          <b>{warning}</b>{" "}
-          {canManageSettings ? (
-            <Link href="/settings?tab=print">Settings → Print &amp; company</Link>
-          ) : (
-            "Ask an admin to fill in Print & company details."
-          )}
-        </div>
+        <aside className="tax-cal-notice print-toolbar-alert no-print" role="status">
+          <p className="tax-cal-notice-line">
+            {warning}{" "}
+            {canManageSettings ? (
+              <Link href="/settings?tab=print">Settings → Print &amp; company</Link>
+            ) : (
+              "Ask an admin to fill in Print & company details."
+            )}
+          </p>
+        </aside>
       )}
       <ProfessionalPrintDocument doc={doc} />
     </div>

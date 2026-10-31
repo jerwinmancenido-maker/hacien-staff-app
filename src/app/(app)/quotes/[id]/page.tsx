@@ -101,12 +101,33 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               <dd>{day(q.validUntil)}</dd>
               <dt>Terms</dt>
               <dd>{q.terms ?? "—"}</dd>
+              {q.subject && (
+                <>
+                  <dt>Subject / project</dt>
+                  <dd>{q.subject}</dd>
+                </>
+              )}
+              {q.buyerPoNo && (
+                <>
+                  <dt>Customer PO / RFQ no.</dt>
+                  <dd>{q.buyerPoNo}</dd>
+                </>
+              )}
               <dt>Withholding</dt>
               <dd>{q.withholding.length ? q.withholding.map((w) => w.label).join(", ") : "None"}</dd>
               {q.notes && (
                 <>
-                  <dt>Notes</dt>
+                  <dt>Notes on quote</dt>
                   <dd style={{ whiteSpace: "pre-wrap" }}>{q.notes}</dd>
+                </>
+              )}
+              {q.internalNotes && (
+                <>
+                  <dt>Internal notes</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>
+                    <span className="small muted">Internal only, never prints</span>
+                    <div>{q.internalNotes}</div>
+                  </dd>
                 </>
               )}
             </dl>
