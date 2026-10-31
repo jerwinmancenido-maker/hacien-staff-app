@@ -8,6 +8,7 @@ import {
   lastNMonthKeys,
   manilaDayOfMonth,
   manilaMonthKey,
+  monthKeyLastDay,
   mtdVsSameDaysChip,
   niceSalesMax,
   owedOverdueChip,
@@ -172,6 +173,23 @@ describe("home MTD vs same days of last month (fixed clock)", () => {
     expect(withPrior).not.toBeNull();
     expect(withPrior!.vsCaption).toBe("vs ₱0 by Oct 1");
     expect(withPrior!.change.tone).toBe("none"); // prior 0 → no % chip
+  });
+
+  it("caps same-days end to the prior month’s last day (31 → Feb 28/29, Apr 30)", () => {
+    expect(monthKeyLastDay("2026-02")).toBe(28);
+    expect(monthKeyLastDay("2024-02")).toBe(29);
+    expect(monthKeyLastDay("2026-04")).toBe(30);
+    expect(monthKeyLastDay("2026-01")).toBe(31);
+
+    expect(sameDaysEndYmd("2026-02", 31)).toBe("2026-02-28");
+    expect(sameDaysEndYmd("2024-02", 31)).toBe("2024-02-29");
+    expect(sameDaysEndYmd("2026-04", 31)).toBe("2026-04-30");
+    expect(sameDaysEndYmd("2026-01", 31)).toBe("2026-01-31");
+
+    // Day 31 of March → compare into Feb 2026 caps to Feb 28 in the chip caption.
+    const chip = mtdVsSameDaysChip(100_000, 80_000, "2026-02", 31);
+    expect(chip).not.toBeNull();
+    expect(chip!.vsCaption).toBe("vs ₱80,000 by Feb 28");
   });
 });
 
