@@ -316,7 +316,12 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
                 <span className="pp-pre">{doc.warrantyNotes}</span>
               </div>
             )}
-            {doc.notes && <div className="pp-pre">{doc.notes}</div>}
+            {doc.notes && (
+              <div>
+                <span className="pp-label-inline">Notes: </span>
+                <span className="pp-pre">{doc.notes}</span>
+              </div>
+            )}
           </section>
         )}
 

@@ -131,7 +131,7 @@ export function QuoteEditor({
   status,
   initial,
   customers: customersProp,
-  rates: _rates,
+  rates,
   suppliers,
   termsOptions,
   defaultValidityDays,
@@ -144,6 +144,7 @@ export function QuoteEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
   const [sentPending, startSentTransition] = useTransition();
+  void rates; // API parity with DocumentEditor; line rates drive WH display.
   const withCosts = suppliers !== null;
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
@@ -246,8 +247,13 @@ export function QuoteEditor({
 
   function onCustomerCreated(c: CreatedQuoteCustomer) {
     const ec = createdToEditorCustomer(c);
-    setCustomerList((xs) => [...xs, ec]);
-    pickCustomer(ec.id);
+    setCustomerList((xs) => (xs.some((x) => x.id === ec.id) ? xs : [...xs, ec]));
+    // Apply immediately — customerList state is not updated yet for pickCustomer().
+    applyCustomerDefaults(ec.withholdingType, items, {
+      customerId: ec.id,
+      contactId: ec.contacts.find((k) => k.isMain)?.id ?? "",
+      terms: ec.defaultTerms ?? h.terms,
+    });
   }
 
   function changeKind(key: string, kind: ItemKind) {
