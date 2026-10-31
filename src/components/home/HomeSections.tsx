@@ -43,9 +43,8 @@ export function HomeGettingStarted({
 }
 
 function ChangeChip({ change }: { change: HomeKpis["billedThisMonth"]["change"] }) {
-  if (change.tone === "none") {
-    return <span className="home-change-none">{change.label}</span>;
-  }
+  // tone "none" with "—" used to mean “no prior”; MTD both-zero hides the whole row instead.
+  if (change.tone === "none") return null;
   if (change.tone === "up") {
     return (
       <span className="home-chip home-chip-up">
@@ -69,6 +68,29 @@ function ChangeChip({ change }: { change: HomeKpis["billedThisMonth"]["change"] 
   return <span className="home-chip home-chip-muted">{change.label}</span>;
 }
 
+function KpiMtdFoot({
+  change,
+  vsCaption,
+  fallback,
+}: {
+  change: HomeKpis["billedThisMonth"]["change"];
+  vsCaption: string;
+  fallback?: string;
+}) {
+  const showChip = Boolean(vsCaption) || change.tone !== "none";
+  if (!showChip) {
+    return fallback ? <div className="home-ks">{fallback}</div> : <div className="home-ks" />;
+  }
+  return (
+    <div className="home-ks">
+      <ChangeChip change={change} />
+      {vsCaption ? <span className="home-ks-vs home-desktop-only">{vsCaption}</span> : null}
+      {/* Phone: prefer the vs caption as the only MTD signal when % chip is hidden. */}
+      {vsCaption ? <span className="home-ks-vs home-phone-only">{vsCaption}</span> : null}
+    </div>
+  );
+}
+
 export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
   return (
     <div className="home-kps">
@@ -78,11 +100,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           {kpis.billedThisMonth.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisMonth.amount)}</div>
-        <div className="home-ks">
-          <ChangeChip change={kpis.billedThisMonth.change} />
-          {/* Phone hides the vs-caption; chip stays. */}
-          <span className="home-ks-vs home-desktop-only">{kpis.billedThisMonth.vsCaption}</span>
-        </div>
+        <KpiMtdFoot change={kpis.billedThisMonth.change} vsCaption={kpis.billedThisMonth.vsCaption} />
       </div>
 
       <div className="card home-kp">
@@ -105,7 +123,11 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           {kpis.collectedThisMonth.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</div>
-        <div className="home-ks">{kpis.collectedThisMonth.caption}</div>
+        <KpiMtdFoot
+          change={kpis.collectedThisMonth.change}
+          vsCaption={kpis.collectedThisMonth.vsCaption}
+          fallback={kpis.collectedThisMonth.caption || undefined}
+        />
       </div>
 
       <div className="card home-kp">
