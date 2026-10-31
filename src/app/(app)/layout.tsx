@@ -39,9 +39,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           payablesEnabled={payablesEnabled}
         />
         <div className="sidebar-spacer" />
-        <div className={`tracker-card level-${meter.level}`} aria-label="Non-VAT limit tracker" data-level={meter.level}>
+        <a
+          href="/billing"
+          className={`tracker-card level-${meter.level}`}
+          aria-label="Non-VAT sales limit (₱3M)"
+          data-level={meter.level}
+        >
           <div className="label tracker-head">
-            <span>Non-VAT limit · {meter.year}</span>
+            <span>Non-VAT sales limit (₱3M)</span>
             <b className="num tracker-pct">{meter.pctLabel}</b>
           </div>
           <div className="value num" style={{ textAlign: "left" }}>
@@ -67,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               Warns at {meter.warnFirstPct}% and {meter.warnSecondPct}%
             </div>
           )}
-        </div>
+        </a>
         <div className="user-row">
           <Avatar name={user.name} dark />
           <div className="who">

@@ -12,7 +12,14 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
             <div key={w.code} className="alert warn" role="status">
               <b>{w.title}</b>
               <div className="small" style={{ marginTop: 4 }}>
-                {w.hint}
+                {w.code === "BILLED_OVER_PO" && w.href ? (
+                  <>
+                    At least one supplier bill total is higher than its purchase-order total.{" "}
+                    <Link href={w.href}>Check the PO&apos;s Match tab</Link> before paying the difference.
+                  </>
+                ) : (
+                  w.hint
+                )}
               </div>
             </div>
           ))}
@@ -82,11 +89,11 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
             <span className="strong">{formatPeso(summary.actual.margin)}</span>
             <span className="muted"> ({summary.actual.marginPct}%)</span>
           </dd>
-          <dt>Planned margin</dt>
+          <dt>Planned margin (before withholding)</dt>
           <dd className="num">
             {formatPeso(summary.planned.margin)}
             <span className="muted"> ({summary.planned.marginPct}%)</span>
-            <div className="small faint">Contract − planned supplier cost (before withholding)</div>
+            <div className="small faint">Contract minus planned supplier cost, before customer withholding</div>
           </dd>
         </dl>
       </div>

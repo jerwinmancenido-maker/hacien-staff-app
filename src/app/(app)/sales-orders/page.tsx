@@ -50,7 +50,15 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           {filtered ? (
             <EmptyState title="No matches" line="Try another number or customer, or clear the filter." />
           ) : (
-            <EmptyState title="All clear here" line="No sales orders yet. Convert a won quote to make one." />
+            <EmptyState
+              title="All clear here"
+              line="No sales orders yet. Convert a won quote to make one."
+              action={
+                <Link className="btn btn-secondary" href="/quotes">
+                  Open quotes
+                </Link>
+              }
+            />
           )}
         </div>
       ) : (

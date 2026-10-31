@@ -132,7 +132,12 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
           <div className="totals-sep" />
           <Row label="Supplier cost" value={`−${formatPeso(totals.supplierCost)}`} />
           <div className={`totals-row strong${Number(totals.netMargin) < 0 ? " neg" : ""}`}>
-            <span>Net margin</span>
+            <span>
+              Margin after customer withholding
+              <div className="small faint" style={{ fontWeight: 400 }}>
+                Net received minus supplier cost
+              </div>
+            </span>
             <span className="num">
               {formatPeso(totals.netMargin ?? 0)} <span className="muted">({totals.netMarginPct}%)</span>
             </span>
