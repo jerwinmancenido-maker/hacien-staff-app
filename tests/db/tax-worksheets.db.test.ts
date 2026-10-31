@@ -46,13 +46,16 @@ import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures
 describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
   let admin: DocActor;
   let staff: DocActor;
-  let invoiceSeq = 900_000 + Math.floor(Math.random() * 40_000);
+  // Start past any leftover booklet numbers in the shared test DB (unique invoiceNo).
+  let invoiceSeq = 0;
   const nextInvoice = () => ++invoiceSeq;
 
   beforeAll(async () => {
     process.env.UPLOAD_DIR = mkdtempSync(path.join(tmpdir(), "hacien-tax-uploads-"));
     [admin, staff] = await Promise.all([makeUser("costs"), makeUser("staff")]);
     await ensureWideBooklet();
+    const max = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    invoiceSeq = Math.max(900_000, Number(max._max.invoiceNo ?? 0)) + Math.floor(Math.random() * 100);
   });
 
   afterAll(async () => {

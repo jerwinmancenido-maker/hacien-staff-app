@@ -92,7 +92,6 @@ describe("home visibility / feature flags", () => {
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsPayables)).toBe(true);
     expect(canShowMoneyFigure("owedByCustomers", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("collectedThisMonth", staff, flagsOff)).toBe(true);
-    expect(canShowMoneyFigure("billedThisMonth", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsOff)).toBe(false);
   });
 
@@ -120,6 +119,17 @@ describe("home getting-started hrefs", () => {
   });
 });
 
+describe("home action count cap", () => {
+  it("shows 200+ when the list page cap is hit", async () => {
+    const { formatHomeActionCount, HOME_ACTION_COUNT_CAP } = await import("@/lib/home/actionCount");
+    expect(HOME_ACTION_COUNT_CAP).toBe(200);
+    expect(formatHomeActionCount(0)).toBe("0");
+    expect(formatHomeActionCount(199)).toBe("199");
+    expect(formatHomeActionCount(200)).toBe("200+");
+    expect(formatHomeActionCount(350)).toBe("200+");
+  });
+});
+
 describe("home Non-VAT card copy", () => {
   it("formats the settings limit compactly in the home title and sidebar label", () => {
     expect(formatCompactPesoLimit(3_000_000)).toBe("₱3M");
@@ -129,6 +139,17 @@ describe("home Non-VAT card copy", () => {
     // Same helper used for the sidebar tracker label.
     expect(homeNonVatTitle(3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
     expect(homeNonVatTitle(1_500_000)).toContain(formatCompactPesoLimit(1_500_000));
+  });
+
+  it("never emits 1000K / 1000M and always keeps the ₱ sign at unit boundaries", () => {
+    expect(formatCompactPesoLimit(999_949)).toBe("₱999.9K");
+    expect(formatCompactPesoLimit(999_999)).toBe("₱1.0M");
+    expect(formatCompactPesoLimit(1_000_000)).toBe("₱1M");
+    expect(formatCompactPesoLimit(999_999_999)).toBe("₱1.0B");
+    for (const n of [999_949, 999_999, 1_000_000, 999_999_999]) {
+      expect(formatCompactPesoLimit(n).startsWith("₱")).toBe(true);
+      expect(formatCompactPesoLimit(n)).not.toMatch(/1000K|1000M|P\d/);
+    }
   });
 
   it("uses settings-driven warn percents in the helper", () => {
@@ -169,5 +190,16 @@ describe("home activity helpers", () => {
     expect(documentHref("ReceivingReport", "rr1", { purchaseOrderId: "po1" })).toBe("/receiving/po1");
     expect(documentHref("SupplierBill", "b1", { purchaseOrderId: "po1" })).toBe("/purchase-orders/po1?tab=bills");
     expect(documentHref("SupplierBill", "b1")).toBeNull();
+  });
+});
+
+describe("home concept A staff / empty wiring", () => {
+  it("page gates sales KPIs and chart on manage_billing and keeps staff layout full", () => {
+    const page = readFileSync(path.join(process.cwd(), "src/app/(app)/page.tsx"), "utf8");
+    expect(page).toMatch(/showSales/);
+    expect(page).toMatch(/is-staff/);
+    expect(page).toMatch(/HomeKpiCards/);
+    expect(page).not.toMatch(/HomeMoney/);
+    expect(page).not.toMatch(/HomeNonVat/);
   });
 });

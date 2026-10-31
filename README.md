@@ -41,6 +41,11 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest; the database suites in tests/db are skipped unless TEST_DATABASE_URL is set
 TEST_DATABASE_URL=mysql://USER:PASS@127.0.0.1:3306/hacien_test npm test   # also runs the MySQL suites
 npm run build       # prisma generate + next build
+
+# Local Home screenshot seeds only (mutates throwaway DB). Requires a
+# localhost / 127.0.0.1 DATABASE_URL — see scripts/lib/assert-local-db.mjs.
+npm run shots:home-a-seed -- fill          # sets ALLOW_SEED_SHOTS=1
+npm run shots:home-sales-07-seed -- empty
 ```
 
 The Vitest suites (`tests/`) cover:

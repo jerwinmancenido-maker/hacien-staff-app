@@ -76,3 +76,11 @@ export function newCustomerHref(): string {
 export function newQuoteHref(): string {
   return "/quotes/new";
 }
+
+export function newBillingHref(): string {
+  return "/billing/billings/new";
+}
+
+export function auditLogHref(): string {
+  return "/audit";
+}

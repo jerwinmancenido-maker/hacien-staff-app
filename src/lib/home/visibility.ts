@@ -14,7 +14,6 @@ export type HomeActionKind =
 export type HomeMoneyKind =
   | "owedByCustomers"
   | "collectedThisMonth"
-  | "billedThisMonth"
   | "supplierBillsDueSoon";
 
 /** Action rows that need the "Can see costs" flag (supplier cost / PO totals). */

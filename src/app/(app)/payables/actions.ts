@@ -10,6 +10,7 @@ import { voidReasonSchema } from "@/lib/validation/quotes";
 import { type FormState } from "@/lib/validation/forms";
 import { formFiles } from "@/lib/form-files";
 import { isPayablesEnabled } from "@/lib/payables/features";
+import { assertPayables2307Enabled } from "@/lib/payables/issue2307";
 import { DocRuleError } from "@/lib/documents/common";
 
 async function assertFeatureOn() {
@@ -76,6 +77,7 @@ export async function markSupplier2307IssuedAction(id: string, _prev: FormState,
   }
   return runAction(async () => {
     await assertFeatureOn();
+    await assertPayables2307Enabled();
     const user = await requireActionPermission("manage_payables");
     const { files, error } = await formFiles(form);
     if (error) return { values, fieldErrors: { files: error } };

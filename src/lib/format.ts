@@ -13,6 +13,37 @@ export function formatPeso(amount: number | string | { toString(): string }): st
   return `${sign}₱${pesoFormatter.format(Math.abs(n))}`;
 }
 
+const pesoWholeFormatter = new Intl.NumberFormat("en-PH", {
+  maximumFractionDigits: 0,
+});
+
+/**
+ * Limits and similar whole-peso ceilings: drop ".00" when the amount is an
+ * exact peso (e.g. ₱3,000,000). Fractional amounts keep two decimals.
+ */
+export function formatPesoLimit(amount: number | string | { toString(): string }): string {
+  const n = typeof amount === "number" ? amount : Number(amount.toString());
+  if (!Number.isFinite(n)) return formatPeso(0);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  const cents = Math.round(abs * 100);
+  if (cents % 100 === 0) {
+    return `${sign}₱${pesoWholeFormatter.format(cents / 100)}`;
+  }
+  return formatPeso(amount);
+}
+
+/**
+ * Always whole pesos (no centavos), e.g. ₱274,000. Used on Home KPI cards and
+ * the Sales chart tooltip; elsewhere keep {@link formatPeso} with cents.
+ */
+export function formatPesoWhole(amount: number | string | { toString(): string }): string {
+  const n = typeof amount === "number" ? amount : Number(amount.toString());
+  if (!Number.isFinite(n)) return "₱0";
+  const sign = n < 0 ? "-" : "";
+  return `${sign}₱${pesoWholeFormatter.format(Math.round(Math.abs(n)))}`;
+}
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: TIME_ZONE,
   year: "numeric",

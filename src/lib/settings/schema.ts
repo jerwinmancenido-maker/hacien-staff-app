@@ -190,11 +190,13 @@ export const settingsSections = {
   collections: z.object({
     overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),
   }),
-  // Feature flags (OFF by default). Staging: turn on here or set PAYABLES_ENABLED / CASH_ENABLED / BOOKS_ENABLED.
+  // Feature flags (OFF by default). Staging: turn on here or set PAYABLES_ENABLED / CASH_ENABLED / BOOKS_ENABLED / PAYABLES_2307_ENABLED.
   features: z.object({
     payablesEnabled: z.boolean(),
     cashEnabled: z.boolean(),
     booksEnabled: z.boolean(),
+    /** Issue supplier 2307s (withholding agent). OFF — HACIEN is not a withholding agent by default. */
+    payables2307Enabled: z.boolean(),
   }),
   // Tax calendar. Owner-only via manage_settings.
   taxCalendar: z.object({

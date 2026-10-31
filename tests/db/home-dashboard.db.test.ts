@@ -42,7 +42,8 @@ import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from
 describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
   let admin: DocActor;
   let staff: DocActor;
-  let invoiceSeq = 910_000 + Math.floor(Math.random() * 40_000);
+  // Start past leftover booklet numbers in the shared test DB (unique invoiceNo).
+  let invoiceSeq = 0;
   const nextInvoice = () => ++invoiceSeq;
 
   const prevEnv: Record<string, string | undefined> = {};
@@ -50,6 +51,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
   beforeAll(async () => {
     [admin, staff] = await Promise.all([makeUser("costs"), makeUser("staff")]);
     await ensureWideBooklet();
+    const max = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    invoiceSeq = Math.max(910_000, Number(max._max.invoiceNo ?? 0)) + Math.floor(Math.random() * 100);
     for (const k of ["PAYABLES_ENABLED", "CASH_ENABLED", "BOOKS_ENABLED"] as const) {
       prevEnv[k] = process.env[k];
     }
@@ -191,10 +194,12 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const dashAdmin = await loadHomeDashboard(admin);
     const owed = dashAdmin.money.find((m) => m.kind === "owedByCustomers");
     const collected = dashAdmin.money.find((m) => m.kind === "collectedThisMonth");
-    const billed = dashAdmin.money.find((m) => m.kind === "billedThisMonth");
     expect(owed).toBeTruthy();
     expect(collected).toBeTruthy();
-    expect(billed).toBeTruthy();
+    // Billed this month moved to Sales (billing access); not in Money.
+    expect(dashAdmin.money.some((m) => (m as { kind: string }).kind === "billedThisMonth")).toBe(false);
+    expect(dashAdmin.sales).toBeTruthy();
+    expect(dashAdmin.sales!.thisMonth).toBeTruthy();
 
     const ar = await arAgingSummary();
     expect(owed!.amount).toBe(ar.totalReceivable);
@@ -207,13 +212,14 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       fromYmd: period.fromYmd,
       toYmd: period.toYmd,
     });
-    expect(billed!.amount).toBe(billedSum);
+    expect(dashAdmin.sales!.thisMonth).toBe(billedSum);
     expect(collected!.amount).toBe(collectedSum);
 
     const dashStaff = await loadHomeDashboard(staff);
     expect(dashStaff.money.some((m) => m.kind === "owedByCustomers")).toBe(true);
     expect(dashStaff.money.some((m) => m.kind === "supplierBillsDueSoon")).toBe(false);
     expect(dashStaff.actions.some((a) => a.kind === "billsOverPo")).toBe(false);
+    expect(dashStaff.sales).toBeNull();
   });
 
   it("feature flags: supplier due soon needs PAYABLES or CASH; tax needs Books + view_books", async () => {
@@ -349,7 +355,6 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     if (byKind.customersNoWithholding !== undefined) expect(byKind.customersNoWithholding).toBe(noWh.length);
 
     const period = currentMonthPeriod();
-    const billedMoney = dash.money.find((m) => m.kind === "billedThisMonth")!;
     const collectedMoney = dash.money.find((m) => m.kind === "collectedThisMonth")!;
     const owedMoney = dash.money.find((m) => m.kind === "owedByCustomers")!;
     const dueSoonMoney = dash.money.find((m) => m.kind === "supplierBillsDueSoon")!;
@@ -363,7 +368,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const ar = await arAgingSummary();
     const dueSoon = await listSupplierBillsDueSoon(7);
 
-    expect(billedMoney.amount).toBe(billedSum);
+    expect(dash.sales).toBeTruthy();
+    expect(dash.sales!.thisMonth).toBe(billedSum);
     expect(collectedMoney.amount).toBe(collectedSum);
     expect(owedMoney.amount).toBe(ar.totalReceivable);
     expect(owedMoney.overdueAmount).toBe(ar.overdue);
@@ -518,9 +524,9 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     expect(homeSumAmounts(listedCollections.map((r) => r.amountReceived))).not.toBe(collectedAgg);
 
     const dash = await loadHomeDashboard(admin);
-    const billedMoney = dash.money.find((m) => m.kind === "billedThisMonth")!;
     const collectedMoney = dash.money.find((m) => m.kind === "collectedThisMonth")!;
-    expect(billedMoney.amount).toBe(billedAgg);
+    expect(dash.sales).toBeTruthy();
+    expect(dash.sales!.thisMonth).toBe(billedAgg);
     expect(collectedMoney.amount).toBe(collectedAgg);
 
     const ar = await arAgingSummary();
