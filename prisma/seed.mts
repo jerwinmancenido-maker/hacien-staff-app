@@ -17,7 +17,8 @@ import { DEFAULT_SETTINGS } from "../src/lib/settings/defaults.ts";
 import { seedRefusal } from "../src/lib/seed-guard.ts";
 import { manilaToday } from "../src/lib/format.ts";
 import { formatAddress } from "../src/lib/addresses/format.ts";
-import { docTotals, lineAmounts, type WithholdingSnapshot } from "../src/lib/quotes/calc.ts";
+import { docTotals, lineAmounts, withholdingSnapshotFromLines } from "../src/lib/quotes/calc.ts";
+import { lineWithholdingSnapshot } from "../src/lib/quotes/withholding-defaults.ts";
 import { allocateDocNumber, ensureSeries, type NumberFormat } from "../src/lib/documents/series.ts";
 
 type SeedUser = {
@@ -282,11 +283,6 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
     quotes: { defaultValidityDays: number };
     numbering: { quote: NumberFormat; salesOrder: NumberFormat };
   };
-  const rates = await db.withholdingRate.findMany();
-  const snapshot = (codes: string[]): WithholdingSnapshot[] =>
-    rates
-      .filter((r) => codes.includes(r.code))
-      .map((r) => ({ code: r.code, label: r.label, lineKind: r.lineKind, rate: Number(r.rate).toFixed(4), atcCode: r.atcCode }));
   const suppliers = await db.supplier.findMany();
   const supplierId = (name: string | null) => (name ? (suppliers.find((s) => s.name === name)?.id ?? null) : null);
 
@@ -295,19 +291,27 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
   const validUntil = new Date(today.getTime() + settings.quotes.defaultValidityDays * 86_400_000);
 
   async function makeQuote(customer: NonNullable<typeof tesda>, codes: string[], lines: SeedLine[], status: "DRAFT" | "WON") {
-    const withholding = snapshot(codes);
-    const items = lines.map((l, i) => ({
-      sortOrder: i + 1,
-      description: l.description,
-      kind: l.kind,
-      qty: l.qty,
-      unit: l.unit,
-      supplierId: supplierId(l.supplier),
-      supplierUnitCost: l.supplierUnitCost,
-      unitPrice: l.unitPrice,
-      ...lineAmounts(l),
-    }));
-    const t = docTotals(items, withholding);
+    // Prefer per-line snapshots from the customer's type; `codes` kept for audit of intent.
+    void codes;
+    const items = lines.map((l, i) => {
+      const wh = lineWithholdingSnapshot(customer.withholdingType, l.kind);
+      return {
+        sortOrder: i + 1,
+        description: l.description,
+        kind: l.kind,
+        qty: l.qty,
+        unit: l.unit,
+        supplierId: supplierId(l.supplier),
+        supplierUnitCost: l.supplierUnitCost,
+        unitPrice: l.unitPrice,
+        ...lineAmounts(l),
+        withholdingRate: wh.withholdingRate,
+        withholdingAtc: wh.withholdingAtc,
+        withholdingOverride: wh.withholdingOverride,
+      };
+    });
+    const withholding = withholdingSnapshotFromLines(items);
+    const t = docTotals(items);
     const totals = {
       contractPrice: t.contractPrice,
       withholdingTotal: t.withholdingTotal,
@@ -402,6 +406,9 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
             total: i.total,
             supplierTotal: i.supplierTotal,
             margin: i.margin,
+            withholdingRate: i.withholdingRate,
+            withholdingAtc: i.withholdingAtc,
+            withholdingOverride: i.withholdingOverride,
           })),
         },
       },

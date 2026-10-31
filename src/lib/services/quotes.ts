@@ -10,16 +10,11 @@ import { assertCan, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
-import { docTotals, type WithholdingSnapshot } from "../quotes/calc";
+import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
-import {
-  allowGovVatOption,
-  documentWithholdingFromCustomer,
-  WITHHOLDING_DEFAULT_CODES,
-} from "../quotes/withholding-defaults";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
-import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
+import { snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -48,8 +43,9 @@ export function quoteAudit(q: QuoteWithItems) {
   };
 }
 
-function totalsData(items: PlannedItem[], withholding: WithholdingSnapshot[]) {
-  const t = docTotals(items, withholding);
+/** Money fields from per-line rates (round per line, then sum). */
+function totalsData(items: PlannedItem[]) {
+  const t = docTotals(items);
   return {
     contractPrice: t.contractPrice,
     withholdingTotal: t.withholdingTotal,
@@ -58,6 +54,11 @@ function totalsData(items: PlannedItem[], withholding: WithholdingSnapshot[]) {
     netMargin: t.netMargin,
     netMarginPct: t.netMarginPct,
   };
+}
+
+/** Read-only document JSON summary derived from line rates (not a second rate source). */
+function withholdingFromItems(items: PlannedItem[]) {
+  return withholdingSnapshotFromLines(items);
 }
 
 async function lockQuote(tx: Tx, id: string): Promise<QuoteWithItems> {
@@ -93,26 +94,6 @@ export async function checkSuppliers(items: readonly Pick<ItemInput, "supplierId
 // Create / edit
 // ---------------------------------------------------------------------------
 
-function resolveQuoteWithholding(
-  customerType: string,
-  itemKinds: readonly ItemInput["kind"][],
-  codes: readonly string[] | undefined,
-  rates: Awaited<ReturnType<typeof listWithholdingRates>>,
-  existing: readonly WithholdingSnapshot[] = [],
-): WithholdingSnapshot[] {
-  // Hide Gov VAT when the business is non-VAT (existing setting).
-  const filteredCodes = (codes ?? []).filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption());
-  if (codes === undefined) {
-    return documentWithholdingFromCustomer(customerType, itemKinds, {
-      includeGovVat: false,
-      businessIsVatRegistered: allowGovVatOption(),
-    });
-  }
-  const snap = buildWithholdingSnapshot(filteredCodes, rates, existing);
-  // Drop GOV_VAT from an existing snapshot when the business is non-VAT.
-  return allowGovVatOption() ? snap : snap.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
-}
-
 export async function createQuote(input: QuoteInput, actor: DocActor): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   const withCosts = canSeeCosts(actor);
@@ -120,18 +101,12 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
 
-  const rates = await listWithholdingRates();
-  // Defaults come from the customer's withholding type + line kinds — not defaultWithholding.
-  const withholding = resolveQuoteWithholding(
-    customer.withholdingType,
-    input.items.map((i) => i.kind),
-    input.withholdingCodes,
-    rates,
-  );
+  // Line rates drive totals; document withholding JSON is a read-only summary.
   const { items } = planItems([], input.items, withCosts, {
     customerWithholdingType: customer.withholdingType,
     reapplyWithholding: input.reapplyWithholding === true,
   });
+  const withholding = withholdingFromItems(items);
   const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
@@ -151,7 +126,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           notes: input.notes,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
-          ...totalsData(items, withholding),
+          ...totalsData(items),
           createdById: actor.id,
           updatedById: actor.id,
           items: { create: items.map(itemData) },
@@ -171,7 +146,6 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   if (!current) throw new DocRuleError("Quote not found.");
   const customer = await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
-  const rates = await listWithholdingRates();
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -179,17 +153,6 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       if (!(EDITABLE_QUOTE_STATUSES as readonly string[]).includes(before.status)) {
         throw new DocRuleError("Only draft or sent quotes can be edited.");
       }
-      const existingWithholding = snapshotList(before.withholding);
-      const withholding =
-        input.reapplyWithholding === true
-          ? documentWithholdingFromCustomer(
-              customer.withholdingType,
-              input.items.map((i) => i.kind),
-              { includeGovVat: existingWithholding.some((w) => w.code === WITHHOLDING_DEFAULT_CODES.GOV_VAT_5), businessIsVatRegistered: allowGovVatOption() },
-            )
-          : input.withholdingCodes === undefined
-            ? existingWithholding.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption())
-            : resolveQuoteWithholding(customer.withholdingType, input.items.map((i) => i.kind), input.withholdingCodes, rates, existingWithholding);
       const stored = before.items.map((i) => ({
         id: i.id,
         kind: i.kind,
@@ -203,6 +166,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         customerWithholdingType: customer.withholdingType,
         reapplyWithholding: input.reapplyWithholding === true,
       });
+      const withholding = withholdingFromItems(items);
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -221,7 +185,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           terms: input.terms,
           notes: input.notes,
           withholding: withholding as unknown as Prisma.InputJsonValue,
-          ...totalsData(items, withholding),
+          ...totalsData(items),
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

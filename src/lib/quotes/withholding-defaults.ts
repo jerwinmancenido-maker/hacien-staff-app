@@ -3,11 +3,12 @@
 //
 // Snapshot rate + ATC onto each quote/SO line at creation. Later changes to the
 // customer's type never alter existing lines; staff must click
-// "Re-apply customer's withholding" on a draft to refresh.
+// "Re-apply customer's withholding" on a draft to refresh non-override lines
+// (lines with withholdingOverride=true are skipped).
 //
-// Document totals still use the document-level withholding snapshot
-// (src/lib/quotes/calc.ts). Line fields are the source of truth for what was
-// defaulted / overridden on each line (prints, EWT summaries, convert-to-SO).
+// Document totals = sum of per-line (line total × line rate), rounded per line
+// (src/lib/quotes/calc.ts). The document-level withholding JSON is a read-only
+// summary of those line rates — not a second rate source.
 
 import type { ItemKind, WithholdingLineKind, WithholdingSnapshot } from "./calc";
 import { BUSINESS_IS_VAT_REGISTERED } from "../tax/constants";
@@ -27,9 +28,16 @@ export const ATC_LABELS = {
   WI158: "EWT — goods (TWA) 1%",
   WI160: "EWT — services (TWA) 2%",
   // UNVERIFIED — confirm with accountant / BIR before relying on these codes:
-  WG010: "Government percentage tax 3% (UNVERIFIED)",
-  WV050: "Government VAT withholding 5% (UNVERIFIED)",
+  WG010: "Government percentage tax 3% (UNVERIFIED — code to confirm)",
+  WV050: "Government VAT withholding 5% (UNVERIFIED — code to confirm)",
 } as const;
+
+/** Government ATCs stay UNVERIFIED; UI may hide the code and show this instead. */
+export const GOV_ATC_CODE_TO_CONFIRM = "code to confirm";
+
+export function isUnverifiedGovAtc(atc: string | null | undefined): boolean {
+  return atc === "WG010" || atc === "WV050";
+}
 
 export type AtcCode = keyof typeof ATC_LABELS;
 
@@ -67,14 +75,14 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
   },
   GOV_PT_3: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_PT_3,
-    label: "Government percentage tax 3%",
+    label: "Government percentage tax 3% (code to confirm)",
     lineKind: "GOV_PT",
     rate: "0.0300",
     atcCode: "WG010",
   },
   GOV_VAT_5: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_VAT_5,
-    label: "Government VAT 5%",
+    label: "Government VAT 5% (code to confirm)",
     lineKind: "GOV_VAT",
     rate: "0.0500",
     atcCode: "WV050",
@@ -186,14 +194,18 @@ export function documentWithholdingFromCustomer(
   return out;
 }
 
-/** True when the line's stored rate/ATC differ from the customer's usual for its kind. */
+/**
+ * True when the line's stored rate/ATC differ from the customer's usual for its kind.
+ * A null/blank rate means "not snapshotted yet" — never treat that as an override.
+ */
 export function lineDiffersFromUsual(
   customerType: string | null | undefined,
   kind: ItemKind,
   stored: { rate: string | null | undefined; atc: string | null | undefined },
 ): boolean {
+  if (stored.rate == null || String(stored.rate).trim() === "") return false;
   const usual = defaultForItemKind(customerType, kind);
-  const rate = stored.rate == null || stored.rate === "" ? "0.0000" : Number(stored.rate).toFixed(4);
+  const rate = Number(stored.rate).toFixed(4);
   const atc = stored.atc ?? null;
   return rate !== usual.rate || atc !== usual.atc;
 }

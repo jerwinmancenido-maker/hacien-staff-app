@@ -33,9 +33,26 @@ export type PlannedItem = LineAmounts & {
 export type PlanItemsOpts = {
   /** Customer withholding type used to default new lines when the payload omits rate/ATC. */
   customerWithholdingType?: string | null;
-  /** When true, every line is re-snapshotted from the customer type (clears overrides). */
+  /**
+   * When true, non-override lines are re-snapshotted from the customer type.
+   * Lines with withholdingOverride=true keep their submitted rate/ATC/flag.
+   */
   reapplyWithholding?: boolean;
 };
+
+function fromInputFields(input: ItemInput): { withholdingRate: string | null; withholdingAtc: string | null; withholdingOverride: boolean } {
+  const rate =
+    input.withholdingRate === null || input.withholdingRate === ""
+      ? null
+      : input.withholdingRate !== undefined
+        ? Number(input.withholdingRate).toFixed(4)
+        : "0.0000";
+  return {
+    withholdingRate: rate,
+    withholdingAtc: input.withholdingAtc != null && input.withholdingAtc !== "" ? input.withholdingAtc : null,
+    withholdingOverride: input.withholdingOverride ?? false,
+  };
+}
 
 function resolveLineWithholding(
   input: ItemInput,
@@ -43,22 +60,16 @@ function resolveLineWithholding(
   opts: PlanItemsOpts,
 ): { withholdingRate: string | null; withholdingAtc: string | null; withholdingOverride: boolean } {
   if (opts.reapplyWithholding) {
+    // Manual overrides survive re-apply (UI + server share this rule).
+    if (input.withholdingOverride === true) return fromInputFields(input);
     return lineWithholdingSnapshot(opts.customerWithholdingType, input.kind);
   }
   if (input.withholdingRate !== undefined || input.withholdingAtc !== undefined || input.withholdingOverride !== undefined) {
-    const rate =
-      input.withholdingRate !== undefined && input.withholdingRate !== null && input.withholdingRate !== ""
-        ? Number(input.withholdingRate).toFixed(4)
-        : "0.0000";
-    return {
-      withholdingRate: rate,
-      withholdingAtc: input.withholdingAtc != null && input.withholdingAtc !== "" ? input.withholdingAtc : null,
-      withholdingOverride: input.withholdingOverride ?? false,
-    };
+    return fromInputFields(input);
   }
   if (old && (old.withholdingRate != null || old.withholdingAtc != null || old.withholdingOverride)) {
     return {
-      withholdingRate: old.withholdingRate != null ? Number(old.withholdingRate).toFixed(4) : "0.0000",
+      withholdingRate: old.withholdingRate != null ? Number(old.withholdingRate).toFixed(4) : null,
       withholdingAtc: old.withholdingAtc ?? null,
       withholdingOverride: old.withholdingOverride ?? false,
     };

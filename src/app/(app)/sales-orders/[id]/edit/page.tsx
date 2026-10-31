@@ -44,7 +44,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
             ...i,
             supplierId: i.supplierId ?? null,
             supplierUnitCost: i.supplierUnitCost ?? "",
-            withholdingRate: i.withholdingRate ?? "0.0000",
+            withholdingRate: i.withholdingRate,
             withholdingAtc: i.withholdingAtc ?? null,
             withholdingOverride: i.withholdingOverride ?? false,
           })),

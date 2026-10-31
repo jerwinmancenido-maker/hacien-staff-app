@@ -84,10 +84,19 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
           <dd className="num strong">{formatPeso(summary.contractPrice)}</dd>
           <dt>Cost so far</dt>
           <dd className="num strong">{formatPeso(summary.totalCost)}</dd>
-          <dt>Actual margin</dt>
+          <dt>Actual margin (before withholding)</dt>
           <dd className="num">
             <span className="strong">{formatPeso(summary.actual.margin)}</span>
             <span className="muted"> ({summary.actual.marginPct}%)</span>
+          </dd>
+          <dt>Actual margin after customer withholding</dt>
+          <dd className="num">
+            <span className="strong">{formatPeso(summary.afterWithholding.margin)}</span>
+            <span className="muted"> ({summary.afterWithholding.marginPct}%)</span>
+            <div className="small faint">
+              Net received ({formatPeso(summary.afterWithholding.netReceived)}) minus cost so far — same per-line
+              withholding sum as the document totals
+            </div>
           </dd>
           <dt>Planned margin (before withholding)</dt>
           <dd className="num">

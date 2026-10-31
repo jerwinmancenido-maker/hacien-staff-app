@@ -2137,11 +2137,101 @@ pre.json {
 /* Editable tables (editor items, withholding rates) */
 .edit-table {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .edit-table table.list td {
   height: auto;
   padding: 6px 6px;
   vertical-align: top;
+}
+/*
+ * Quote/SO item editors: WH%/ATC share one narrow column; Description stays
+ * sticky. ≥1200px: fixed layout so cost users fit with no sideways scroll.
+ */
+.edit-table.items-edit {
+  overflow-x: auto;
+}
+.edit-table.items-edit table.list {
+  width: 100%;
+}
+.edit-table.items-edit table.list th:first-child,
+.edit-table.items-edit table.list td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  min-width: 7.5rem;
+}
+.edit-table.items-edit table.list th:first-child {
+  z-index: 3;
+}
+.edit-table.items-edit .col-wh {
+  width: 4.5rem;
+  min-width: 4.5rem;
+  white-space: normal;
+}
+.edit-table.items-edit .w-wh,
+.edit-table.items-edit .w-atc {
+  width: 100%;
+  max-width: 4.25rem;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: right;
+  padding: 4px 5px;
+  font-size: 12px;
+}
+.edit-table.items-edit .w-atc {
+  text-align: left;
+  margin-top: 4px;
+}
+.edit-table.items-edit select {
+  max-width: 100%;
+  width: 100%;
+}
+.edit-table.items-edit .w-num {
+  width: 100%;
+  max-width: 72px;
+}
+.edit-table.items-edit .w-num-s {
+  width: 100%;
+  max-width: 52px;
+}
+.edit-table.items-edit .w-unit {
+  width: 100%;
+  max-width: 44px;
+}
+.edit-table.items-edit table.list th,
+.edit-table.items-edit table.list td {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.wh-computed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+}
+@media (min-width: 1200px) {
+  .edit-table.items-edit {
+    overflow-x: visible;
+  }
+  .edit-table.items-edit table.list {
+    table-layout: fixed;
+  }
+  .edit-table.items-edit textarea {
+    min-width: 0;
+  }
+  .edit-table.items-edit table.list th:first-child,
+  .edit-table.items-edit table.list td:first-child {
+    width: 14%;
+    min-width: 0;
+    max-width: none;
+  }
+  .edit-table.items-edit .col-wh {
+    width: 7%;
+    min-width: 0;
+  }
 }
 .edit-table input,
 .edit-table select,
@@ -2156,6 +2246,9 @@ pre.json {
   width: 100%;
   min-width: 200px;
   resize: vertical;
+}
+.edit-table.items-edit textarea {
+  min-width: 120px;
 }
 .edit-table select {
   max-width: 170px;

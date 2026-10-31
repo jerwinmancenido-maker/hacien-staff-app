@@ -51,11 +51,15 @@ export const itemSchema = z.object({
   supplierId: optionalId,
   supplierUnitCost: amount("Supplier unit cost").optional().default("0"),
   unitPrice: amount("Unit price"),
-  /** Snapshotted withholding fraction ("0.0100"); omitted → server defaults from customer type. */
+  /** Snapshotted withholding fraction ("0.0100"); null = not snapshotted; omitted → server defaults. */
   withholdingRate: z
-    .string()
-    .trim()
-    .regex(/^\d+(\.\d+)?$/, "Withholding rate: enter a decimal fraction.")
+    .union([
+      z.null(),
+      z
+        .string()
+        .trim()
+        .regex(/^\d+(\.\d+)?$/, "Withholding rate: enter a decimal fraction."),
+    ])
     .optional(),
   withholdingAtc: z.string().trim().max(20).nullable().optional(),
   /** Explicit staff override vs the customer's usual default for this kind. */

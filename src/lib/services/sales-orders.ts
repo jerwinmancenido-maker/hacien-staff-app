@@ -6,9 +6,8 @@ import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, canSeeCosts } from "../permissions";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
-import { docTotals } from "../quotes/calc";
+import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
 import { itemData, planItems } from "../quotes/items";
-import { allowGovVatOption, documentWithholdingFromCustomer, WITHHOLDING_DEFAULT_CODES } from "../quotes/withholding-defaults";
 import type { SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { snapshotList } from "./withholding";
@@ -58,19 +57,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           throw new DocRuleError("Pick an active contact of this customer.", "contactId");
         }
       }
-      const existingWithholding = snapshotList(before.withholding);
       const customer = await tx.customer.findUniqueOrThrow({ where: { id: before.customerId } });
-      const withholding =
-        input.reapplyWithholding === true
-          ? documentWithholdingFromCustomer(
-              customer.withholdingType,
-              input.items.map((i) => i.kind),
-              {
-                includeGovVat: existingWithholding.some((w) => w.code === WITHHOLDING_DEFAULT_CODES.GOV_VAT_5),
-                businessIsVatRegistered: allowGovVatOption(),
-              },
-            )
-          : existingWithholding.filter((w) => w.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption());
       const stored = before.items.map((i) => ({
         id: i.id,
         kind: i.kind,
@@ -84,6 +71,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         customerWithholdingType: customer.withholdingType,
         reapplyWithholding: input.reapplyWithholding === true,
       });
+      const withholding = withholdingSnapshotFromLines(items);
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });
       }
@@ -91,7 +79,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         if (item.id) await tx.salesOrderItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.salesOrderItem.create({ data: { ...itemData(item), salesOrderId: id } });
       }
-      const t = docTotals(items, withholding);
+      const t = docTotals(items);
       const after = await tx.salesOrder.update({
         where: { id },
         data: {

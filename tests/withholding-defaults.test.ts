@@ -33,32 +33,32 @@ describe("defaultWithholdingFor (customer type × line kind)", () => {
     });
   });
 
-  it("Gov goods → existing gov PT 3%", () => {
+  it("Gov goods → existing gov PT 3% (code to confirm)", () => {
     expect(defaultWithholdingFor("GOVERNMENT", "GOODS")).toEqual({
       rate: "0.0300",
       atc: "WG010",
       code: "GOV_PT_3",
-      label: "Government percentage tax 3%",
+      label: "Government percentage tax 3% (code to confirm)",
       lineKind: "GOV_PT",
     });
   });
 
-  it("Gov services → existing gov PT 3%", () => {
+  it("Gov services → existing gov PT 3% (code to confirm)", () => {
     expect(defaultWithholdingFor("GOVERNMENT", "SERVICES")).toEqual({
       rate: "0.0300",
       atc: "WG010",
       code: "GOV_PT_3",
-      label: "Government percentage tax 3%",
+      label: "Government percentage tax 3% (code to confirm)",
       lineKind: "GOV_PT",
     });
   });
 
-  it("Gov VAT → existing gov VAT 5%", () => {
+  it("Gov VAT → existing gov VAT 5% (code to confirm)", () => {
     expect(defaultWithholdingFor("GOVERNMENT", "GOV_VAT")).toEqual({
       rate: "0.0500",
       atc: "WV050",
       code: "GOV_VAT_5",
-      label: "Government VAT 5%",
+      label: "Government VAT 5% (code to confirm)",
       lineKind: "GOV_VAT",
     });
   });
@@ -95,11 +95,13 @@ describe("defaultWithholdingFor (customer type × line kind)", () => {
 });
 
 describe("ATC_LABELS config map", () => {
-  it("keeps TWA and gov labels in one map; gov marked UNVERIFIED in source", () => {
+  it("keeps TWA and gov labels in one map; gov marked UNVERIFIED + code to confirm", () => {
     expect(ATC_LABELS.WI158).toContain("goods");
     expect(ATC_LABELS.WI160).toContain("services");
     expect(ATC_LABELS.WG010).toMatch(/UNVERIFIED/);
+    expect(ATC_LABELS.WG010).toMatch(/code to confirm/);
     expect(ATC_LABELS.WV050).toMatch(/UNVERIFIED/);
+    expect(ATC_LABELS.WV050).toMatch(/code to confirm/);
   });
 });
 
@@ -147,5 +149,11 @@ describe("line snapshot / override helpers", () => {
     expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0100", atc: "WI158" })).toBe(false);
     expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0200", atc: "WI158" })).toBe(true);
     expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "0.0100", atc: "WI160" })).toBe(true);
+  });
+
+  it("null/blank rate is not snapshotted yet — never a false override note", () => {
+    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: null, atc: null })).toBe(false);
+    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: undefined, atc: "WI158" })).toBe(false);
+    expect(lineDiffersFromUsual("TOP_WITHHOLDING_AGENT", "GOODS", { rate: "", atc: null })).toBe(false);
   });
 });

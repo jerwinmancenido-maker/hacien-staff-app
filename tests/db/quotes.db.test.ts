@@ -162,15 +162,19 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       }
     });
 
-    it("saves a per-quote document override and per-line override flag", async () => {
+    it("line WH% drives totals; mixed 1% goods + 2% services", async () => {
       const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
-      const created = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: ["SERVICES_2"] }), costUser);
-      expect(snapshotList(created.withholding).map((w) => w.code)).toEqual(["SERVICES_2"]);
+      const created = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      expect(created.withholdingTotal.toFixed(2)).toBe("5600.00"); // 5200 + 400
+    });
+
+    it("manual line override drives totals and survives re-apply", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const created = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       const input = quoteInput(customer.id, 2026, {
-        withholdingCodes: ["GOODS_1", "SERVICES_2"],
         items: [
           {
-            id: null,
+            id: created.items.find((i) => i.kind === "GOODS")!.id,
             description: "Laptop i5",
             kind: "GOODS",
             qty: "10",
@@ -183,7 +187,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
             withholdingOverride: true,
           },
           {
-            id: null,
+            id: created.items.find((i) => i.kind === "SERVICES")!.id,
             description: "Installation",
             kind: "SERVICES",
             qty: "1",
@@ -198,12 +202,46 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
         ],
       });
       const updated = await updateQuote(created.id, { ...input, date: created.date }, costUser);
-      expect(snapshotList(updated.withholding).map((w) => w.code)).toEqual(["GOODS_1", "SERVICES_2"]);
-      // Document math still uses document snapshot rates (1% + 2%), not the line override percent.
-      expect(updated.withholdingTotal.toFixed(2)).toBe("5600.00");
+      // 520000×1.5% + 20000×2% = 7800 + 400
+      expect(updated.withholdingTotal.toFixed(2)).toBe("8200.00");
       const goods = updated.items.find((i) => i.kind === "GOODS")!;
       expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0150");
       expect(goods.withholdingOverride).toBe(true);
+
+      await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "GOVERNMENT" } });
+      const reapplied = await updateQuote(
+        created.id,
+        {
+          ...input,
+          date: created.date,
+          reapplyWithholding: true,
+          items: updated.items
+            .filter((i) => !i.removedAt)
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((i) => ({
+              id: i.id,
+              description: i.description,
+              kind: i.kind,
+              qty: Number(i.qty).toFixed(2),
+              unit: i.unit,
+              unitPrice: Number(i.unitPrice).toFixed(2),
+              supplierId: i.supplierId,
+              supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+              withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+              withholdingAtc: i.withholdingAtc,
+              withholdingOverride: i.withholdingOverride,
+            })),
+        },
+        costUser,
+      );
+      const goodsAfter = reapplied.items.find((i) => i.kind === "GOODS")!;
+      const servicesAfter = reapplied.items.find((i) => i.kind === "SERVICES")!;
+      expect(Number(goodsAfter.withholdingRate).toFixed(4)).toBe("0.0150");
+      expect(goodsAfter.withholdingOverride).toBe(true);
+      expect(Number(servicesAfter.withholdingRate).toFixed(4)).toBe("0.0300");
+      expect(servicesAfter.withholdingAtc).toBe("WG010");
+      // 520000×1.5% + 20000×3% = 7800 + 600
+      expect(reapplied.withholdingTotal.toFixed(2)).toBe("8400.00");
     });
 
     it("a later customer type change does not alter existing lines, prints or EWT document snapshot", async () => {
@@ -254,7 +292,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(edited.withholdingTotal.toFixed(2)).toBe(Number(q.withholdingTotal).toFixed(2));
     });
 
-    it("Re-apply customer's withholding refreshes lines from the current type", async () => {
+    it("Re-apply customer's withholding refreshes non-override lines from the current type", async () => {
       const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "GOVERNMENT" } });
@@ -275,6 +313,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       });
       const reapplied = await updateQuote(q.id, { ...input, date: q.date }, costUser);
       expect(snapshotList(reapplied.withholding).map((w) => w.code)).toEqual(["GOV_PT_3"]);
+      // 520000×3% + 20000×3% = 15600 + 600
       expect(reapplied.withholdingTotal.toFixed(2)).toBe("16200.00");
       for (const i of reapplied.items.filter((x) => !x.removedAt)) {
         expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
@@ -283,7 +322,41 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       }
     });
 
-    it("a Settings rate change doesn't alter an existing quote's snapshotted document rates", async () => {
+    it("legacy NULL line rates do not change stored totals on view", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      // Simulate pre-migration rows: clear line rates, keep stored money.
+      await db.quoteItem.updateMany({ where: { quoteId: q.id }, data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false } });
+      const view = await getQuoteView(q.id, costUser);
+      expect(view?.totals.withholdingTotal).toBe(Number(q.withholdingTotal).toFixed(2));
+      expect(view?.totals.contractPrice).toBe(Number(q.contractPrice).toFixed(2));
+      expect(view?.totals.netReceived).toBe(Number(q.netReceived).toFixed(2));
+      expect(view?.items.every((i) => i.withholdingRate == null)).toBe(true);
+    });
+
+    it("an issued (Won) document is not recalculated when lines or the customer change", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      expect(Number(so.withholdingTotal).toFixed(2)).toBe(Number(q.withholdingTotal).toFixed(2));
+
+      const won = await db.quote.findUniqueOrThrow({ where: { id: q.id } });
+      expect(won.status).toBe("WON");
+      const storedTotal = Number(won.withholdingTotal).toFixed(2);
+
+      await db.customer.update({ where: { id: customer.id }, data: { withholdingType: "NONE" } });
+      await db.quoteItem.updateMany({
+        where: { quoteId: q.id },
+        data: { withholdingRate: "0.0500", withholdingAtc: "WV050", unitPrice: 1 },
+      });
+
+      const view = await getQuoteView(q.id, costUser);
+      expect(view?.totals.withholdingTotal).toBe(storedTotal);
+      expect(view?.status).toBe("WON");
+      await expect(updateQuote(q.id, quoteInput(customer.id, 2026), costUser)).rejects.toBeInstanceOf(DocRuleError);
+    });
+
+    it("a Settings rate change doesn't alter an existing quote's snapshotted line rates", async () => {
       const code = `T_${tag().toUpperCase()}`;
       const rowsNow = async () =>
         (await listWithholdingRates()).map((r) => ({
@@ -304,7 +377,40 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       await save([...(await rowsNow()), { code, label: "Test goods 1%", lineKind: "GOODS", atcCode: "WI158", ratePct: "1", active: true, note: "verify with BIR" }]);
 
       const customer = await makeCustomer([], "NONE");
-      const q = await createQuote(quoteInput(customer.id, (await freshYear()), { withholdingCodes: [code] }), costUser);
+      const year = await freshYear();
+      const q = await createQuote(
+        quoteInput(customer.id, year, {
+          items: [
+            {
+              id: null,
+              description: "Laptop i5",
+              kind: "GOODS",
+              qty: "10",
+              unit: "pc",
+              supplierId: null,
+              supplierUnitCost: "45000",
+              unitPrice: "52000",
+              withholdingRate: "0.0100",
+              withholdingAtc: "WI158",
+              withholdingOverride: true,
+            },
+            {
+              id: null,
+              description: "Installation",
+              kind: "SERVICES",
+              qty: "1",
+              unit: "lot",
+              supplierId: null,
+              supplierUnitCost: "5000",
+              unitPrice: "20000",
+              withholdingRate: "0.0000",
+              withholdingAtc: null,
+              withholdingOverride: false,
+            },
+          ],
+        }),
+        costUser,
+      );
       expect(q.withholdingTotal.toFixed(2)).toBe("5200.00");
 
       await save((await rowsNow()).map((r) => (r.code === code ? { ...r, ratePct: "5" } : r)));
@@ -313,7 +419,23 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const view = await getQuoteView(q.id, costUser);
       expect(view?.withholding.map((w) => w.rate)).toEqual(["0.0100"]);
       expect(view?.totals.withholdingTotal).toBe("5200.00");
-      const input = quoteInput(customer.id, 2026, { withholdingCodes: [code] });
+      const input = quoteInput(customer.id, 2026, {
+        items: q.items
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+            withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+            withholdingAtc: i.withholdingAtc,
+            withholdingOverride: i.withholdingOverride,
+          })),
+      });
       const edited = await updateQuote(q.id, { ...input, date: q.date }, costUser);
       expect(edited.withholdingTotal.toFixed(2)).toBe("5200.00");
 
@@ -345,9 +467,10 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       }
 
       const full = await getQuoteView(q.id, costUser);
-      expect(full?.totals.netMargin).toBe("79800.00"); // 540,000 − 5,200 − 455,000
+      // TWA: 1% goods + 2% services = 5,600; net margin 540,000 − 5,600 − 455,000
+      expect(full?.totals.netMargin).toBe("79400.00");
       expect(full?.items[0]?.supplierName).toBe(supplier.name);
-      expect((await listQuotesView({ q: customer.name }, costUser))[0]?.netMarginPct).toBe("14.78");
+      expect((await listQuotesView({ q: customer.name }, costUser))[0]?.netMarginPct).toBe("14.70");
     });
 
     it("a non-cost user's edit keeps the existing costs", async () => {

@@ -1,21 +1,32 @@
 "use client";
 
 // Editor for quotes (new / edit) and sales orders (edit): header fields,
-// withholding picks, item lines and a live totals box. Totals here are a
-// preview; the server recomputes and stores them on save (src/lib/quotes/calc.ts).
+// item lines and a live totals box. Totals here are a preview; the server
+// recomputes and stores them on save (src/lib/quotes/calc.ts).
 //
 // Cost fields (supplier, supplier unit cost, margins) only exist when the
 // server says the user can see costs; otherwise they're never rendered or sent.
 //
 // Line withholding defaults come from the customer's withholding type + kind.
-// Staff can override a line (flag + note); "Re-apply customer's withholding"
-// resets every line from the customer's current type.
+// Staff can override a line (flag + note). "Re-apply customer's withholding"
+// refreshes non-override lines from the customer's current type; lines with
+// withholdingOverride=true are left alone.
+//
+// Expected withholding = sum of (each line's total × that line's rate), rounded
+// per line to the centavo. The document-level withholding summary is read-only.
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
-import { docTotals, lineAmounts, ratePctLabel, toScaled, type ItemKind, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import {
-  documentWithholdingFromCustomer,
+  docTotals,
+  lineAmounts,
+  ratePctLabel,
+  toScaled,
+  withholdingSnapshotFromLines,
+  type ItemKind,
+  type WithholdingSnapshot,
+} from "@/lib/quotes/calc";
+import {
   lineDiffersFromUsual,
   lineWithholdingSnapshot,
   MISSING_WITHHOLDING_TYPE_WARNING,
@@ -23,6 +34,8 @@ import {
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
   allowGovVatOption,
+  GOV_ATC_CODE_TO_CONFIRM,
+  isUnverifiedGovAtc,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { formatPeso } from "@/lib/format";
@@ -119,13 +132,17 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
   const { state, pending, onSubmit } = useFormAction(action);
   const withCosts = suppliers !== null;
   const rates = visibleRates(allRates);
-  const [h, setH] = useState(() => ({ ...initial, withholdingCodes: initial.withholdingCodes.filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption()) }));
+  const [h, setH] = useState(() => ({
+    ...initial,
+    withholdingCodes: initial.withholdingCodes.filter((c) => c !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5 || allowGovVatOption()),
+  }));
   const [items, setItems] = useState<EditorItem[]>(() =>
     initial.items.length
       ? initial.items.map((i) => ({
           ...i,
           key: newKey(),
-          withholdingRate: i.withholdingRate ?? "0.0000",
+          // Keep null as null — "not snapshotted yet" must not look like an override.
+          withholdingRate: i.withholdingRate,
           withholdingAtc: i.withholdingAtc ?? null,
           withholdingOverride: i.withholdingOverride ?? false,
         }))
@@ -138,12 +155,20 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
   const typeWarning = customer ? needsWithholdingTypeWarning(customer.withholdingType) : false;
 
-  const selectedRates = rates.filter((r) => h.withholdingCodes.includes(r.code));
-  const t = docTotals(
-    items.map((i) => ({ kind: i.kind, ...safeLine(i) })),
-    selectedRates,
-  );
+  const lineInputs = items.map((i) => {
+    const a = safeLine(i);
+    return {
+      kind: i.kind,
+      total: a.total,
+      supplierTotal: a.supplierTotal,
+      margin: a.margin,
+      withholdingRate: i.withholdingRate,
+      withholdingAtc: i.withholdingAtc,
+    };
+  });
+  const t = docTotals(lineInputs);
   const totals = { ...t, withholding: t.withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) })) };
+  const computedDocRates = withholdingSnapshotFromLines(lineInputs);
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const move = (idx: number, by: number) =>
@@ -154,22 +179,36 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       return next;
     });
 
-  function applyCustomerDefaults(type: string | null | undefined, nextItems: EditorItem[], headerPatch: Partial<typeof h> = {}) {
-    const kinds = nextItems.map((i) => i.kind);
-    const doc = documentWithholdingFromCustomer(type, kinds, { includeGovVat: false, businessIsVatRegistered: allowGovVatOption() });
-    setH((v) => ({ ...v, ...headerPatch, withholdingCodes: doc.map((w) => w.code) }));
-    setItems(
-      nextItems.map((i) => {
-        const wh = lineWithholdingSnapshot(type, i.kind);
-        return { ...i, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
+  /**
+   * Refresh lines from the customer type.
+   * When `skipOverrides` is true (Re-apply button), lines with
+   * withholdingOverride=true keep their rate/ATC/flag.
+   */
+  function applyCustomerDefaults(
+    type: string | null | undefined,
+    nextItems: EditorItem[],
+    headerPatch: Partial<typeof h> = {},
+    opts: { skipOverrides?: boolean } = {},
+  ) {
+    const refreshed = nextItems.map((i) => {
+      if (opts.skipOverrides && i.withholdingOverride) return i;
+      const wh = lineWithholdingSnapshot(type, i.kind);
+      return { ...i, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
+    });
+    setItems(refreshed);
+    const codes = withholdingSnapshotFromLines(
+      refreshed.map((i) => {
+        const a = safeLine(i);
+        return { kind: i.kind, total: a.total, supplierTotal: a.supplierTotal, margin: a.margin, withholdingRate: i.withholdingRate, withholdingAtc: i.withholdingAtc };
       }),
-    );
+    ).map((w) => w.code);
+    setH((v) => ({ ...v, ...headerPatch, withholdingCodes: codes }));
     setReapplyWithholding(true);
   }
 
   function pickCustomer(id: string) {
     const c = customers.find((x) => x.id === id);
-    // Refresh line + document defaults from the withholding type (not defaultWithholding).
+    // Changing customer resets every line (including prior overrides).
     applyCustomerDefaults(c?.withholdingType, items, {
       customerId: id,
       contactId: c?.contacts.find((k) => k.isMain)?.id ?? "",
@@ -188,7 +227,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
     );
   }
 
-  function changeLineWithholding(key: string, patch: { withholdingRate?: string; withholdingAtc?: string | null }) {
+  function changeLineWithholding(key: string, patch: { withholdingRate?: string | null; withholdingAtc?: string | null }) {
     setItems((xs) =>
       xs.map((x) => {
         if (x.key !== key) return x;
@@ -208,7 +247,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
           validUntil: h.validUntil,
           terms: h.terms,
           notes: h.notes,
-          withholdingCodes: h.withholdingCodes,
+          withholdingCodes: computedDocRates.map((w) => w.code),
           reapplyWithholding: reapplyWithholding || undefined,
           items: items.map(itemPayload),
         }
@@ -338,33 +377,28 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
               ))}
             </select>
           </div>
-          {mode === "quote" && (
-            <div className={`field${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
-              <span className="label">Withholding</span>
-              <div className="check-row" role="group" aria-label="Withholding">
-                {rates.length === 0 && <span className="small faint">No rates in Settings.</span>}
-                {rates.map((r) => (
-                  <label key={r.code} className="check">
-                    <input
-                      type="checkbox"
-                      checked={h.withholdingCodes.includes(r.code)}
-                      onChange={(ev) => {
-                        setReapplyWithholding(false);
-                        setH({ ...h, withholdingCodes: ev.target.checked ? [...h.withholdingCodes, r.code] : h.withholdingCodes.filter((c) => c !== r.code) });
-                      }}
-                    />
-                    {r.label}
-                    {r.atcCode ? ` · ${r.atcCode}` : ""}
-                  </label>
-                ))}
-              </div>
-              {e.withholdingCodes || e.withholding ? (
-                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+          <div className={`field${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+            <span className="label">Withholding</span>
+            <div className="wh-computed" role="status" aria-label="Withholding from line rates">
+              {computedDocRates.length === 0 ? (
+                <span className="small faint">None from line rates</span>
               ) : (
-                <div className="hint">Defaults from the customer&apos;s withholding type; change for this quote if needed.</div>
+                computedDocRates.map((r) => (
+                  <span key={r.code} className="chip">
+                    {r.label}
+                    {r.atcCode && !isUnverifiedGovAtc(r.atcCode) ? ` · ${r.atcCode}` : isUnverifiedGovAtc(r.atcCode) ? ` · ${GOV_ATC_CODE_TO_CONFIRM}` : ""}
+                  </span>
+                ))
               )}
             </div>
-          )}
+            {e.withholdingCodes || e.withholding ? (
+              <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+            ) : (
+              <div className="hint">From each line&apos;s WH% · ATC (read-only). Change a line to update the total.</div>
+            )}
+            {/* rates kept available for label lookup; unused pick list intentionally omitted */}
+            {rates.length === 0 && null}
+          </div>
           <div className="field full">
             <label htmlFor="notes">Notes</label>
             <textarea id="notes" rows={2} value={h.notes} onChange={(ev) => setH({ ...h, notes: ev.target.value })} />
@@ -380,7 +414,7 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
               type="button"
               className="btn btn-secondary btn-sm"
               disabled={!customer}
-              onClick={() => applyCustomerDefaults(customer?.withholdingType, items)}
+              onClick={() => applyCustomerDefaults(customer?.withholdingType, items, {}, { skipOverrides: true })}
             >
               {REAPPLY_WITHHOLDING_LABEL}
             </button>
@@ -411,16 +445,21 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                 <th className="num">HACIEN price</th>
                 <th className="num">Total</th>
                 {withCosts && <th className="num">Margin</th>}
-                <th className="num">WH %</th>
-                <th>ATC</th>
+                <th className="num col-wh">WH% / ATC</th>
                 <th aria-label="Line actions" />
               </tr>
             </thead>
             <tbody>
               {items.map((i, idx) => {
                 const a = safeLine(i);
-                const pct = (Number(i.withholdingRate || "0") * 100).toFixed(2).replace(/\.?0+$/, "");
-                const showOverride = i.withholdingOverride || lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
+                const pct =
+                  i.withholdingRate == null || i.withholdingRate === ""
+                    ? ""
+                    : (Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "");
+                const showOverride =
+                  i.withholdingOverride ||
+                  lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
+                const govAtc = isUnverifiedGovAtc(i.withholdingAtc);
                 return (
                   <tr key={i.key}>
                     <td>
@@ -468,26 +507,37 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                     </td>
                     <td className="num strong">{formatPeso(a.total)}</td>
                     {withCosts && <td className={`num${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>}
-                    <td className="num">
+                    <td className="num col-wh">
                       <input
                         aria-label={`Line ${idx + 1} withholding percent`}
                         inputMode="decimal"
-                        className="w-num-s"
+                        className="w-wh"
                         value={pct}
+                        placeholder="—"
                         onChange={(ev) => {
-                          const n = Number(ev.target.value);
+                          const raw = ev.target.value.trim();
+                          if (raw === "") {
+                            changeLineWithholding(i.key, { withholdingRate: null });
+                            return;
+                          }
+                          const n = Number(raw);
                           const rate = Number.isFinite(n) ? (n / 100).toFixed(4) : "0.0000";
                           changeLineWithholding(i.key, { withholdingRate: rate });
                         }}
                       />
-                    </td>
-                    <td>
-                      <input
-                        aria-label={`Line ${idx + 1} ATC`}
-                        className="w-unit"
-                        value={i.withholdingAtc ?? ""}
-                        onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                      />
+                      {govAtc ? (
+                        <div className="small muted" title={i.withholdingAtc ?? undefined}>
+                          {GOV_ATC_CODE_TO_CONFIRM}
+                        </div>
+                      ) : (
+                        <input
+                          aria-label={`Line ${idx + 1} ATC`}
+                          className="w-atc"
+                          value={i.withholdingAtc ?? ""}
+                          placeholder="ATC"
+                          onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                        />
+                      )}
                     </td>
                     <td className="line-actions">
                       <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} up`} disabled={idx === 0} onClick={() => move(idx, -1)}>

@@ -103,17 +103,16 @@ describe("buildCostMarginSummary", () => {
     expect(summary.warnings).toEqual([]);
   });
 
-  it("with ₱695 withholding and matching costs, Planned equals Actual (withholding is not a cost)", () => {
-    // Contract 100_000, planned supplier cost 40_000, actual PO cost 40_000.
-    // Old netMargin would be (100_000 − 695) − 40_000 = 59_305 — that must NOT be used.
+  it("after customer withholding uses the stored per-line withholding sum", () => {
+    // Contract 100_000, planned supplier cost 40_000, WH 695 → net received 99_305.
     const contract = "100000.00";
     const plannedCost = "40000.00";
-    const withholding = "695.00"; // tax credit only; ignored by Cost & margin
-    expect(withholding).toBe("695.00");
+    const withholding = "695.00";
 
     const summary = buildCostMarginSummary({
       contractPrice: contract,
       plannedCost,
+      withholdingTotal: withholding,
       uncoveredLineCount: 0,
       pos: [po({ poTotal: "40000.00", hasBills: true, billedAmount: "40000.00" })],
     });
@@ -121,9 +120,11 @@ describe("buildCostMarginSummary", () => {
     expect(summary.totalCost).toBe("40000.00");
     expect(summary.planned).toEqual({ margin: "60000.00", marginPct: "60.00" });
     expect(summary.actual).toEqual({ margin: "60000.00", marginPct: "60.00" });
-    expect(summary.planned).toEqual(summary.actual);
-    // Sanity: the withholding-based net margin differs — we must not have used it.
-    expect(summary.planned.margin).not.toBe("59305.00");
+    expect(summary.afterWithholding).toEqual({
+      netReceived: "99305.00",
+      margin: "59305.00",
+      marginPct: "59.72", // 59305 / 99305
+    });
   });
 
   it("emits both warnings with hints; void docs are simply never passed in", () => {

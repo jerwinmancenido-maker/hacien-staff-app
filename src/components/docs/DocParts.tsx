@@ -125,7 +125,10 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
     <div className="totals-box" aria-label="Totals">
       <Row label="Contract price" value={formatPeso(totals.contractPrice)} strong />
       {totals.withholding.length === 0 ? (
-        <Row label="Less withholding" value={formatPeso(0)} />
+        <Row
+          label="Less withholding"
+          value={Number(totals.withholdingTotal) ? `−${formatPeso(totals.withholdingTotal)}` : formatPeso(0)}
+        />
       ) : (
         <>
           <div className="totals-row">
