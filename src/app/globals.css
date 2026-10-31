@@ -4127,18 +4127,39 @@ button.contact-card-add {
   white-space: nowrap;
 }
 
+/* Mobile: every Home section row stacks the same way — label on top,
+ * value flush left at the same indent (no right-aligned / indented counts). */
 @media (max-width: 640px) {
   .home-action-row,
   .home-money-row,
-  .home-activity-row {
-    align-items: flex-start;
+  .home-activity-row,
+  .home-tax-link {
     flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
     gap: 4px;
   }
+  .home-action-count,
   .home-money-amounts,
-  .home-tax-due {
-    align-items: flex-start;
+  .home-tax-due,
+  .home-activity-when,
+  .home-action-row .num,
+  .home-money-row .num,
+  .home-tax-link .num {
     text-align: left;
+    align-self: flex-start;
+    margin-left: 0;
+    min-width: 0;
+    width: auto;
+  }
+  .home-money-amounts {
+    align-items: flex-start;
+  }
+  .home-tax-due {
+    text-align: left;
+  }
+  .home-nonvat-figures {
+    justify-content: flex-start;
   }
   .home-nonvat-pct {
     margin-left: 0;
