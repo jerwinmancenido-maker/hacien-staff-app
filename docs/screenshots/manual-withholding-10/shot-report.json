@@ -2,112 +2,144 @@
   "host": "127.0.0.1",
   "report": [
     {
-      "name": "quote-withholding-1280.png",
-      "width": 1280,
-      "height": 1855,
-      "scrollWidth": 1265
-    },
-    {
-      "name": "home-withholding-not-set-1280.png",
-      "width": 1280,
-      "height": 940,
-      "scrollWidth": 1280
-    },
-    {
-      "name": "settings-withholding-360.png",
-      "width": 360,
-      "height": 2414,
-      "scrollWidth": 360
-    },
-    {
-      "name": "settings-withholding-1280.png",
-      "width": 1280,
-      "height": 1440,
-      "scrollWidth": 1280
-    },
-    {
       "name": "quote-editor-pick-1280.png",
       "width": 1280,
-      "height": 1855,
+      "height": 1611,
       "scrollWidth": 1265
     },
     {
       "name": "quote-editor-not-set-1280.png",
       "width": 1280,
-      "height": 1730,
+      "height": 1795,
       "scrollWidth": 1250
     },
     {
       "name": "quote-submit-confirm-none-1280.png",
       "width": 1280,
-      "height": 1730,
+      "height": 1795,
       "scrollWidth": 1250
     },
     {
       "name": "quote-add-customer-pick-1280.png",
       "width": 1280,
-      "height": 1730,
+      "height": 1795,
       "scrollWidth": 1250
     },
     {
       "name": "customer-overview-pick-1280.png",
       "width": 1280,
-      "height": 1730,
+      "height": 1795,
       "scrollWidth": 1250
     },
     {
       "name": "customer-edit-yes-1280.png",
       "width": 1280,
-      "height": 1730,
+      "height": 1795,
       "scrollWidth": 1250
     },
     {
       "name": "customer-edit-no-1280.png",
       "width": 1280,
-      "height": 940,
-      "scrollWidth": 1280
+      "height": 1795,
+      "scrollWidth": 1250
     },
     {
       "name": "quote-editor-pick-360.png",
       "width": 360,
-      "height": 2486,
+      "height": 2418,
       "scrollWidth": 360
     },
     {
       "name": "quote-editor-not-set-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
     },
     {
       "name": "quote-submit-confirm-none-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
     },
     {
       "name": "quote-add-customer-pick-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
     },
     {
       "name": "customer-overview-pick-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
     },
     {
       "name": "customer-edit-yes-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
     },
     {
       "name": "customer-edit-no-360.png",
       "width": 360,
-      "height": 2455,
+      "height": 2589,
       "scrollWidth": 360
+    },
+    {
+      "name": "quote-line-chips-1280.png",
+      "width": 1280,
+      "height": 1611,
+      "scrollWidth": 1265,
+      "chipCheck": {
+        "chips": [
+          "WHT 1% WI640",
+          "WHT 3% WB080",
+          "WHT 3% WB080",
+          "WHT 1% WI640",
+          "WHT 3% WB080",
+          "WHT 3% WB080"
+        ],
+        "labels": [
+          "Line 1 WHT 1% WI640",
+          "Line 1 WHT 3% WB080",
+          "Line 2 WHT 3% WB080",
+          "Line 1 WHT 1% WI640",
+          "Line 1 WHT 3% WB080",
+          "Line 2 WHT 3% WB080"
+        ],
+        "hasCombined4Wi640": false,
+        "hasGoods1": true,
+        "hasGoods3": true,
+        "hasServicesOnly3": true
+      }
+    },
+    {
+      "name": "quote-line-chips-390.png",
+      "width": 390,
+      "height": 2306,
+      "scrollWidth": 390,
+      "chipCheck": {
+        "chips": [
+          "WHT 1% WI640",
+          "WHT 3% WB080",
+          "WHT 3% WB080",
+          "WHT 1% WI640",
+          "WHT 3% WB080",
+          "WHT 3% WB080"
+        ],
+        "labels": [
+          "Line 1 WHT 1% WI640",
+          "Line 1 WHT 3% WB080",
+          "Line 2 WHT 3% WB080",
+          "Line 1 WHT 1% WI640",
+          "Line 1 WHT 3% WB080",
+          "Line 2 WHT 3% WB080"
+        ],
+        "hasCombined4Wi640": false,
+        "hasGoods1": true,
+        "hasGoods3": true,
+        "hasServicesOnly3": true
+      }
     },
     {
       "name": "quote-print-no-withholding-1280.png",
@@ -122,6 +154,17 @@
         "hasSubtotal": true,
         "hasTotal": true,
         "hasInternal": false
+      }
+    },
+    {
+      "name": "quote-print-preview-390.png",
+      "width": 390,
+      "height": 1506,
+      "scrollWidth": 390,
+      "print390Measure": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "pageWidth": 374
       }
     }
   ]
