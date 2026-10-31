@@ -5,8 +5,54 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC = ["/login", "/forgot-password", "/reset-password"];
 
+/**
+ * Exact public asset paths that skip the session gate (favicon, app icons, PWA
+ * manifest). Prefixes are listed separately — never a generic file-extension rule.
+ */
+export const PUBLIC_ASSET_EXACT = [
+  "/favicon.ico",
+  "/icon.png",
+  "/apple-icon.png",
+  "/icon",
+  "/apple-icon",
+  "/site.webmanifest",
+] as const;
+
+/** Public asset path prefixes (Next internals + brand kit under /public/brand/). */
+export const PUBLIC_ASSET_PREFIXES = ["/_next/static", "/_next/image", "/brand/"] as const;
+
+/**
+ * Final middleware matcher (must be a static string for Next to parse at build time).
+ * Skips: _next/static, _next/image, /brand/*, and the exact favicon / app-icon /
+ * manifest paths. No generic "any .png/.svg" exception.
+ */
+export const PROXY_MATCHER =
+  "/((?!_next/static|_next/image|brand/|favicon\\.ico(?:/|$)|icon\\.png(?:/|$)|apple-icon\\.png(?:/|$)|icon(?:/|$)|apple-icon(?:/|$)|site\\.webmanifest(?:/|$)).*)";
+
+/** True when the path is a no-auth static asset (matcher + proxy share this list). */
+export function isPublicAssetPath(pathname: string): boolean {
+  if (PUBLIC_ASSET_EXACT.includes(pathname as (typeof PUBLIC_ASSET_EXACT)[number])) return true;
+  // Next metadata icons may append a size suffix: /icon/32, /apple-icon/180, etc.
+  if (pathname.startsWith("/icon/") || pathname.startsWith("/apple-icon/")) return true;
+  if (pathname.startsWith("/_next/static/") || pathname === "/_next/static") return true;
+  if (pathname.startsWith("/_next/image/") || pathname === "/_next/image") return true;
+  // Brand kit folder only — bare /brand is not public.
+  if (pathname.startsWith("/brand/")) return true;
+  return false;
+}
+
+/**
+ * Whether the proxy session check should run for this pathname.
+ * Mirrors `config.matcher`: returns false for the same paths the matcher skips.
+ */
+export function shouldCheckSession(pathname: string): boolean {
+  return !isPublicAssetPath(pathname);
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Defense in depth: even if the matcher is widened later, public assets stay open.
+  if (isPublicAssetPath(pathname)) return NextResponse.next();
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
   if (!req.cookies.has("hacien_session")) {
     // File downloads answer 401 instead of redirecting to the login page.
@@ -22,9 +68,8 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Skip Next internals, favicon, brand kit assets and other static public files
-  // so login (no session) can still load logos / icons / the web manifest.
+  // Static string required by Next — keep identical to PROXY_MATCHER (tested).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|brand/|site\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|brand/|favicon\\.ico(?:/|$)|icon\\.png(?:/|$)|apple-icon\\.png(?:/|$)|icon(?:/|$)|apple-icon(?:/|$)|site\\.webmanifest(?:/|$)).*)",
   ],
-}
+};

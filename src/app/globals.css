@@ -536,6 +536,15 @@ a.tracker-card:hover {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
   margin-bottom: 14px;
+  align-items: stretch;
+}
+/* Defeat `.card + .card { margin-top }` so every card in a row shares one top edge. */
+.stat-grid > .card,
+.stat-grid > a.card {
+  margin-top: 0;
+  height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
 }
 .stat .label {
   color: var(--text-2);
