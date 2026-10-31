@@ -2990,8 +2990,11 @@ button.contact-card-add {
  */
 .tax-cal-table th:nth-child(1),
 .tax-cal-table td.tax-cal-form {
-  width: 8%;
-  white-space: nowrap;
+  width: 10%;
+  /* Wrap multi-word names ("Books of accounts"); never split short codes (2551Q). */
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .tax-cal-table th:nth-child(2),
 .tax-cal-table td.tax-cal-desc {
@@ -3010,7 +3013,8 @@ button.contact-card-add {
 .tax-cal-table td.tax-cal-due > div:first-child {
   white-space: nowrap;
 }
-.tax-cal-table td.tax-cal-due .small {
+.tax-cal-table td.tax-cal-due .small,
+.tax-cal-table td.tax-cal-due .tax-cal-fileby {
   /* File-by hint wraps freely — never truncated / no line-clamp / no ellipsis. */
   display: block;
   overflow: visible;
@@ -3020,10 +3024,15 @@ button.contact-card-add {
   text-overflow: clip;
   -webkit-line-clamp: unset;
 }
+.tax-cal-table td.tax-cal-due .tax-cal-fileby-date {
+  /* Keep YYYY-MM-DD whole; hint may still wrap around it. */
+  white-space: nowrap;
+}
 .tax-cal-table th:nth-child(5),
 .tax-cal-table td.tax-cal-status {
-  width: 9%;
-  white-space: nowrap;
+  width: 10%;
+  white-space: normal;
+  overflow: hidden; /* keep Marked done chip out of Applies padding */
 }
 .tax-cal-table th:nth-child(6),
 .tax-cal-table td.tax-cal-applies {
@@ -3041,6 +3050,8 @@ button.contact-card-add {
   font-size: 10px;
   flex-shrink: 1;
   box-sizing: border-box;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .tax-cal-table th:nth-child(7),
 .tax-cal-table td.tax-cal-worksheet {
@@ -3086,6 +3097,29 @@ button.contact-card-add {
   color: var(--text);
   background: var(--card);
   border-color: var(--border);
+}
+/* Open Mark-as-done form spans the full table width under the row (not the Done cell). */
+.tax-cal-done-form-row td {
+  padding: 4px 12px 14px;
+  vertical-align: top;
+  overflow: visible;
+}
+.tax-cal-mark-done-form {
+  width: 100%;
+  max-width: 520px;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form input[type="date"],
+.tax-cal-mark-done-form input[type="text"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form .faint.small {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
 }
 /* Mute copy, not the action control — secondary Done must stay readable. */
 .tax-cal-row-muted td:not(.tax-cal-done) {
@@ -3192,15 +3226,15 @@ button.contact-card-add {
   /* Percentages sum to 100% of the card content box (~660px at 1024). */
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 8%;
+    width: 12%;
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 20%;
+    width: 18%;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
-    width: 10%;
+    width: 9%;
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
@@ -3253,11 +3287,11 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 68px;
+    width: 96px; /* room for "Books of accounts" to wrap at spaces */
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 240px;
+    width: 220px;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
@@ -3269,11 +3303,11 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
-    width: 72px;
+    width: 80px;
   }
   .tax-cal-table th:nth-child(6),
   .tax-cal-table td.tax-cal-applies {
-    width: 120px;
+    width: 118px;
   }
   .tax-cal-table th:nth-child(7),
   .tax-cal-table td.tax-cal-worksheet {

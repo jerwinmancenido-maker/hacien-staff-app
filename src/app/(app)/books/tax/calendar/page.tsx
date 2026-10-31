@@ -12,6 +12,7 @@ import type { TaxCalendarRow } from "@/lib/tax/calendar-build";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxCalendarBanner } from "@/components/books/TaxCalendarBanner";
 import { TaxCalendarMarkDoneForm } from "@/components/books/TaxCalendarMarkDoneForm";
+import { TaxCalendarDesktopBody } from "@/components/books/TaxCalendarDesktopBody";
 import { Chip, EmptyState, PageHeader, type ChipTone } from "@/components/ui";
 
 const STATUS_TONE: Record<string, ChipTone> = {
@@ -55,11 +56,6 @@ function AppliesChip({ r }: { r: TaxCalendarRow }) {
 
 function StatusChip({ r }: { r: TaxCalendarRow }) {
   return <Chip tone={STATUS_TONE[r.status] ?? "grey"}>{r.statusLabel}</Chip>;
-}
-
-function WorksheetCell({ r }: { r: TaxCalendarRow }) {
-  if (r.worksheetLink) return <Link href={r.worksheetLink}>Open worksheet</Link>;
-  return <span className="faint">—</span>;
 }
 
 export default async function TaxCalendarPage({
@@ -180,44 +176,7 @@ export default async function TaxCalendarPage({
                   <th>Done</th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.occurrenceKey}
-                    className={r.applies === "does_not_apply" || r.greyedOut ? "tax-cal-row-muted" : undefined}
-                  >
-                    <td className="tax-cal-form">
-                      <b>{r.form}</b>
-                    </td>
-                    <td className="tax-cal-desc">
-                      <div>{r.description}</div>
-                      {r.appliesNote ? <div className="faint small">{r.appliesNote}</div> : null}
-                      {r.worksheetLink ? (
-                        <div className="tax-cal-desc-worksheet">
-                          <Link href={r.worksheetLink}>Open worksheet</Link>
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="tax-cal-period">{r.periodLabel}</td>
-                    <td className="tax-cal-due">
-                      <div>{r.dueDisplay}</div>
-                      {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
-                    </td>
-                    <td className="tax-cal-status">
-                      <StatusChip r={r} />
-                    </td>
-                    <td className="tax-cal-applies">
-                      <AppliesChip r={r} />
-                    </td>
-                    <td className="tax-cal-worksheet">
-                      <WorksheetCell r={r} />
-                    </td>
-                    <td className="tax-cal-done">
-                      <MarkDone r={r} doneDefault={doneDefault} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              <TaxCalendarDesktopBody rows={rows} doneDefault={doneDefault} />
             </table>
           </div>
         </>
