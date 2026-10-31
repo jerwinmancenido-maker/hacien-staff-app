@@ -44,39 +44,37 @@ export default async function PaymentsListPage({ searchParams }: { searchParams:
           Filter
         </button>
       </form>
-      <div className="card">
-        <div className="table-wrap">
-          <table className="list" aria-label="Supplier payments">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Date</th>
-                <th>Supplier</th>
-                <th>Method</th>
-                <th>Reference</th>
-                <th className="num">Paid</th>
-                <th className="num">EWT</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="card">
+          <div className="empty payments-empty" style={{ padding: "24px 8px" }}>
+            <p className="faint">No payments recorded yet.</p>
+            {canManage && (
+              <div className="empty-actions" style={{ justifyContent: "center" }}>
+                <Link className="btn" href="/payables/payments/new">
+                  Record the first payment
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="card payments-table-card">
+          <div className="table-wrap">
+            <table className="list" aria-label="Supplier payments">
+              <thead>
                 <tr>
-                  <td colSpan={8}>
-                    <div className="empty" style={{ padding: "24px 8px" }}>
-                      <p className="faint">No payments recorded yet.</p>
-                      {canManage && (
-                        <p style={{ marginTop: 8 }}>
-                          <Link className="btn" href="/payables/payments/new">
-                            Record the first payment
-                          </Link>
-                        </p>
-                      )}
-                    </div>
-                  </td>
+                  <th>Number</th>
+                  <th>Date</th>
+                  <th>Supplier</th>
+                  <th>Method</th>
+                  <th>Reference</th>
+                  <th className="num">Paid</th>
+                  <th className="num">EWT</th>
+                  <th>Status</th>
                 </tr>
-              ) : (
-                rows.map((r) => (
+              </thead>
+              <tbody>
+                {rows.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <Link href={`/payables/payments/${r.id}`}>{r.number}</Link>
@@ -95,12 +93,12 @@ export default async function PaymentsListPage({ searchParams }: { searchParams:
                       <PaymentStatusChip status={r.status} />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

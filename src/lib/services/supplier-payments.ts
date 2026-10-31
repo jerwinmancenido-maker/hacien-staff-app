@@ -11,6 +11,7 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { assertCashEnabled } from "../cash/features";
+import { assertPayables2307Enabled } from "../payables/issue2307";
 import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationInput } from "../payables/allocations";
 import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
@@ -347,6 +348,7 @@ export async function markSupplier2307Issued(
   actor: PayablesActor,
   files: readonly UploadFile[] = [],
 ) {
+  await assertPayables2307Enabled();
   assertManagePayables(actor);
   const uploads = await prepareUploads(files);
   try {

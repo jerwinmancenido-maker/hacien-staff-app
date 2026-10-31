@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/Icons";
 
 export type PillTabItem = {
   key: string;
@@ -36,6 +37,16 @@ export function PillTabs({
 }: PillTabsProps) {
   const router = useRouter();
   const trackRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateOverflow = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const max = track.scrollWidth - track.clientWidth;
+    setCanLeft(track.scrollLeft > 2);
+    setCanRight(max > 2 && track.scrollLeft < max - 2);
+  }, []);
 
   // Scroll active tab into view if needed
   useEffect(() => {
@@ -49,7 +60,29 @@ export function PillTabs({
         activeEl.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       }
     }
-  }, [active]);
+    updateOverflow();
+  }, [active, tabs, updateOverflow]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    updateOverflow();
+    track.addEventListener("scroll", updateOverflow, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateOverflow) : null;
+    ro?.observe(track);
+    window.addEventListener("resize", updateOverflow);
+    return () => {
+      track.removeEventListener("scroll", updateOverflow);
+      ro?.disconnect();
+      window.removeEventListener("resize", updateOverflow);
+    };
+  }, [tabs, updateOverflow]);
+
+  function scrollByDir(dir: -1 | 1) {
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollBy({ left: dir * Math.max(120, track.clientWidth * 0.6), behavior: "smooth" });
+  }
 
   function handleKeyDown(e: KeyboardEvent, currentKey: string) {
     const keys = tabs.filter((t) => !t.disabled).map((t) => t.key);
@@ -84,8 +117,23 @@ export function PillTabs({
     }
   }
 
+  const showArrows = canLeft || canRight;
+
   return (
-    <div className={`pill-tabs-wrap ${className}`}>
+    <div
+      className={`pill-tabs-wrap${showArrows ? " has-overflow" : ""}${canLeft ? " fade-left" : ""}${canRight ? " fade-right" : ""} ${className}`}
+    >
+      {showArrows ? (
+        <button
+          type="button"
+          className="pill-tabs-arrow left"
+          aria-label="Scroll tabs left"
+          disabled={!canLeft}
+          onClick={() => scrollByDir(-1)}
+        >
+          <ChevronLeftIcon size={16} />
+        </button>
+      ) : null}
       <div
         ref={trackRef}
         role="tablist"
@@ -151,6 +199,17 @@ export function PillTabs({
           );
         })}
       </div>
+      {showArrows ? (
+        <button
+          type="button"
+          className="pill-tabs-arrow right"
+          aria-label="Scroll tabs right"
+          disabled={!canRight}
+          onClick={() => scrollByDir(1)}
+        >
+          <ChevronRightIcon size={16} />
+        </button>
+      ) : null}
     </div>
   );
 }

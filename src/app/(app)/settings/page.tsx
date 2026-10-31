@@ -323,6 +323,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.booksEnabled,
                 hint: "OFF by default. Ask your admin to turn this on. Draft BIR format — confirm with accountant/RDO.",
               },
+              {
+                name: "payables2307Enabled",
+                label: "Enable Payables 2307 to issue (withholding agent)",
+                kind: "checkbox",
+                value: s.features.payables2307Enabled,
+                hint: "OFF by default. HACIEN is not a withholding agent until RDO confirms. Env override: PAYABLES_2307_ENABLED.",
+              },
             ]}
           />
         )}

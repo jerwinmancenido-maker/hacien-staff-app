@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 import { findValidToken } from "@/lib/services/users";
 import { ResetForm } from "./ResetForm";
 
@@ -10,9 +11,8 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
   return (
     <main className="auth-wrap">
       <div className="auth-card">
-        <div className="brand">
-          <span className="brand-logo">H</span>
-          <span>HACIEN</span>
+        <div className="brand brand-full">
+          <BrandLogo variant="full" />
         </div>
         <h1>{row?.purpose === "INVITE" ? "Set your password" : "New password"}</h1>
         {row ? (

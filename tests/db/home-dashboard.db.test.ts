@@ -42,7 +42,8 @@ import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from
 describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
   let admin: DocActor;
   let staff: DocActor;
-  let invoiceSeq = 910_000 + Math.floor(Math.random() * 40_000);
+  // Start past leftover booklet numbers in the shared test DB (unique invoiceNo).
+  let invoiceSeq = 0;
   const nextInvoice = () => ++invoiceSeq;
 
   const prevEnv: Record<string, string | undefined> = {};
@@ -50,6 +51,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
   beforeAll(async () => {
     [admin, staff] = await Promise.all([makeUser("costs"), makeUser("staff")]);
     await ensureWideBooklet();
+    const max = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    invoiceSeq = Math.max(910_000, Number(max._max.invoiceNo ?? 0)) + Math.floor(Math.random() * 100);
     for (const k of ["PAYABLES_ENABLED", "CASH_ENABLED", "BOOKS_ENABLED"] as const) {
       prevEnv[k] = process.env[k];
     }
