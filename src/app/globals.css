@@ -1427,6 +1427,18 @@ tr.inactive .cell-primary .sub {
   color: var(--text);
   background: transparent;
 }
+/* Desktop: table headers name the columns; keep labels for a11y + phone cards. */
+.numbering-field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* Withholding: Code/Label/Applies full text; Note narrow + wraps; rows ≤48px.
  * Beat later .edit-table table.list td padding/align with equal-or-higher specificity. */
@@ -4958,7 +4970,7 @@ button.contact-card-add {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: 8px;
     row-gap: 4px;
-    align-items: center;
+    align-items: start;
     padding: 6px 0;
     border-bottom: 1px solid var(--border);
   }
@@ -5006,6 +5018,20 @@ button.contact-card-add {
   .numbering-digits {
     grid-column: 2;
     grid-row: 2;
+  }
+  .numbering-field-label {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0 0 6px;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    border: 0;
+    display: block;
+    font-size: 12px;
+    color: var(--text-2);
   }
   .numbering-prefix input,
   .numbering-digits input {

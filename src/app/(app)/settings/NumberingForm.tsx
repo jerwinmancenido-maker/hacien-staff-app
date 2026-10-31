@@ -102,8 +102,8 @@ export function NumberingForm({
                       </label>
                     </td>
                     <td className={`numbering-prefix${e[prefixName] ? " has-error" : ""}`} data-label="Prefix">
-                      <label className="sr-only" htmlFor={prefixName}>
-                        Prefix for {d.label}
+                      <label className="numbering-field-label" htmlFor={prefixName}>
+                        Prefix
                       </label>
                       <input
                         id={prefixName}
@@ -119,8 +119,8 @@ export function NumberingForm({
                       )}
                     </td>
                     <td className={`numbering-digits${e[paddingName] ? " has-error" : ""}`} data-label="Next no.">
-                      <label className="sr-only" htmlFor={paddingName}>
-                        Counter digits for {d.label}
+                      <label className="numbering-field-label" htmlFor={paddingName}>
+                        Next no.
                       </label>
                       <input
                         id={paddingName}
