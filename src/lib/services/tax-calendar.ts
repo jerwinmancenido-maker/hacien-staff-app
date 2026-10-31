@@ -26,17 +26,17 @@ import {
 } from "../tax/calendar-obligations";
 import { normalizeHolidays, type TaxHoliday } from "../tax/holidays";
 
-/** Drop stale 2551q.dueDay from older Settings snapshots (was 15 under old catalog). */
+/** Drop only stale 2551q.dueDay === 15 from older Settings snapshots; keep dueMonth. */
 export function sanitizeTaxCalendarSettings(
   settings: TaxCalendarSettingsShape,
 ): TaxCalendarSettingsShape {
   const row = settings.obligations["2551q"];
-  if (!row || row.dueDay == null) return settings;
+  if (!row || row.dueDay !== 15) return settings;
   return {
     ...settings,
     obligations: {
       ...settings.obligations,
-      "2551q": { ...row, dueDay: null, dueMonth: null },
+      "2551q": { ...row, dueDay: null },
     },
   };
 }
