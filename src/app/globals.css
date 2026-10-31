@@ -2939,3 +2939,72 @@ button.contact-card-add {
 .print-preview-card .pp-nonvat {
   margin: 4px 0;
 }
+
+/* ---------- Tax calendar (Part 7d) — phone cards / desktop table ---------- */
+/* sm breakpoint (~640px), matching Tailwind sm: */
+
+.tax-cal-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+.tax-cal-desktop {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tax-cal-table td {
+  height: auto;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.tax-cal-table th {
+  padding: 8px 8px 6px;
+}
+
+.tax-cal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+.tax-cal-card-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tax-cal-card-desc {
+  font-size: 14px;
+}
+.tax-cal-card-due {
+  font-variant-numeric: tabular-nums;
+}
+.tax-cal-card-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tax-cal-card-action {
+  margin-top: 4px;
+}
+.tax-cal-card-action > .btn,
+.tax-cal-card-action form .btn {
+  width: 100%;
+  justify-content: center;
+}
+.tax-cal-card-action form > div {
+  flex-direction: column;
+}
+.tax-cal-card-action form > div .btn {
+  width: 100%;
+}
+
+@media (max-width: 639px) {
+  .tax-cal-mobile {
+    display: flex;
+  }
+  .tax-cal-desktop {
+    display: none;
+  }
+}
