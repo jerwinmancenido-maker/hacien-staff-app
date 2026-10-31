@@ -232,6 +232,11 @@ export function obligationUsesDueMonth(_def?: TaxCalendarObligationDef): boolean
   return true;
 }
 
+/** Default due-day hint shared by most rows (shown once in the column header). */
+export function obligationDueDayHintDefault(): string {
+  return "1–31. Used with the catalog month rule for this form.";
+}
+
 /** Exact Settings → Tax calendar due-day field hints (match main wording). */
 export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
   switch (def.schedule.kind) {
@@ -240,8 +245,13 @@ export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
     case "quarterly_last_day_after":
       return "Leave blank to use the last day of the month after the quarter.";
     default:
-      return "1–31. Used with the catalog month rule for this form.";
+      return obligationDueDayHintDefault();
   }
+}
+
+/** True when the row uses the shared default due-day hint (not a special per-row hint). */
+export function obligationDueDayHintIsShared(def: TaxCalendarObligationDef): boolean {
+  return obligationDueDayHint(def) === obligationDueDayHintDefault();
 }
 
 /** Exact Settings → Tax calendar due-month field hint (match main wording). */

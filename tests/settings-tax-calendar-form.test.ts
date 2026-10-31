@@ -14,6 +14,8 @@ import {
   TAX_CALENDAR_OBLIGATIONS,
   defaultTaxCalendarSettings,
   obligationDueDayHint,
+  obligationDueDayHintDefault,
+  obligationDueDayHintIsShared,
   obligationDueMonthHint,
   obligationUsesDueMonth,
 } from "@/lib/tax/calendar-obligations";
@@ -29,6 +31,12 @@ const INTRO =
 
 const COR_HINT = `When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`;
 
+const SHARED_DAY = "1–31. Used with the catalog month rule for this form.";
+const SHARED_MONTH = "1–12. Used for 1701 annual and year-end items; leave blank otherwise.";
+const UNDATED_HINT =
+  "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.";
+const QUARTERLY_HINT = "Leave blank to use the last day of the month after the quarter.";
+
 describe("obligationUsesDueMonth", () => {
   it("is true for every catalog row (including undated_year_end / inventory)", () => {
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
@@ -40,26 +48,26 @@ describe("obligationUsesDueMonth", () => {
 
 describe("obligation due-day / due-month hints (main wording)", () => {
   it("matches main field hints for each schedule kind", () => {
-    expect(obligationDueMonthHint()).toBe(
-      "1–12. Used for 1701 annual and year-end items; leave blank otherwise.",
-    );
+    expect(obligationDueMonthHint()).toBe(SHARED_MONTH);
+    expect(obligationDueDayHintDefault()).toBe(SHARED_DAY);
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
       const hint = obligationDueDayHint(def);
       if (def.schedule.kind === "undated_year_end") {
-        expect(hint).toBe(
-          "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.",
-        );
+        expect(hint).toBe(UNDATED_HINT);
+        expect(obligationDueDayHintIsShared(def)).toBe(false);
       } else if (def.schedule.kind === "quarterly_last_day_after") {
-        expect(hint).toBe("Leave blank to use the last day of the month after the quarter.");
+        expect(hint).toBe(QUARTERLY_HINT);
+        expect(obligationDueDayHintIsShared(def)).toBe(false);
       } else {
-        expect(hint).toBe("1–31. Used with the catalog month rule for this form.");
+        expect(hint).toBe(SHARED_DAY);
+        expect(obligationDueDayHintIsShared(def)).toBe(true);
       }
     }
   });
 });
 
 describe("TaxCalendarForm markup", () => {
-  it("renders intro, COR banner hint, sourceNotes, and editable due day/month for every row", () => {
+  it("renders intro, COR banner hint, sourceNotes under Form, shared hints once, editable due day/month", () => {
     const seed = defaultTaxCalendarSettings();
     // Prove undated inventory can carry confirmed month/day overrides in settings shape.
     seed.obligations.inventory_list = { enabled: true, dueDay: 15, dueMonth: 1 };
@@ -84,15 +92,27 @@ describe("TaxCalendarForm markup", () => {
     expect(html).toContain("tax-cal-settings-table");
     expect(html).toContain(">Form</th>");
     expect(html).toContain(">Show</th>");
-    expect(html).toContain(">Due day (1–31)</th>");
-    expect(html).toContain(">Due month (1–12)</th>");
-    expect(html).toContain(obligationDueMonthHint());
-    expect(html).toContain(
-      "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.",
-    );
-    expect(html).toContain("1–31. Used with the catalog month rule for this form.");
+    expect(html).toContain("tax-cal-th-label");
+    expect(html).toContain("Due day (1–31)");
+    expect(html).toContain("Due month (1–12)");
+    expect(html).toContain('data-shared-hint="due-day"');
+    expect(html).toContain('data-shared-hint="due-month"');
+    expect(html).toContain('data-shared-hints="mobile"');
+    expect(html).toContain("tax-cal-shared-hints-mobile");
+    expect(html).toContain("tax-cal-col-hint");
+    expect(html).toContain(SHARED_MONTH);
+    expect(html).toContain(SHARED_DAY);
+    expect(html).toContain(UNDATED_HINT);
+    expect(html).toContain(QUARTERLY_HINT);
     expect(html).toContain("settings-form-actions");
     expect(html).toContain("Save changes");
+
+    // Shared default hints appear once in desktop headers + once in the mobile banner
+    // (not repeated on every row).
+    const sharedDayCount = html.split(SHARED_DAY).length - 1;
+    const sharedMonthCount = html.split(SHARED_MONTH).length - 1;
+    expect(sharedDayCount).toBe(2);
+    expect(sharedMonthCount).toBe(2);
 
     // App defaults: 2551Q and 2550Q Show ON (not a seed override).
     expect(seed.obligations["2551q"].enabled).toBe(true);
@@ -107,10 +127,21 @@ describe("TaxCalendarForm markup", () => {
       expect(row).toContain(`data-uses-due-month="1"`);
       expect(row).toContain(`data-schedule="${def.schedule.kind}"`);
 
-      // Show + sourceNote restored on every row.
+      // Show toggle; sourceNote under Form column (not Show).
       expect(row).toContain(`name="obligations.${def.key}.enabled"`);
+      expect(row).toContain("tax-cal-settings-form");
       expect(row).toContain("tax-cal-source-note");
       expect(row).toContain(def.sourceNote);
+      const formCell = row.match(
+        /<td class="tax-cal-settings-form"[^>]*>[\s\S]*?<\/td>/,
+      )![0];
+      expect(formCell).toContain("tax-cal-source-note");
+      expect(formCell).toContain(def.sourceNote);
+      const showCell = row.match(
+        /<td class="tax-cal-settings-show"[^>]*>[\s\S]*?<\/td>/,
+      )![0];
+      expect(showCell).not.toContain("tax-cal-source-note");
+      expect(showCell).not.toContain(def.sourceNote);
 
       // Due day + due month are real number inputs (submit-able), never month-na stubs.
       expect(row).toContain(`id="obligations.${def.key}.dueDay"`);
@@ -129,15 +160,27 @@ describe("TaxCalendarForm markup", () => {
         ),
       );
       expect(row.match(/type="number"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+
+      // Per-row day hint only when it differs from the shared default.
+      if (obligationDueDayHintIsShared(def)) {
+        expect(row).not.toContain("tax-cal-row-day-hint");
+        expect(row).not.toContain(SHARED_DAY);
+        expect(row).not.toContain(SHARED_MONTH);
+      } else {
+        expect(row).toContain("tax-cal-row-day-hint");
+        expect(row).toContain(obligationDueDayHint(def));
+        expect(row).not.toContain(SHARED_MONTH);
+      }
     }
 
-    // Inventory (undated_year_end) still renders saved month/day values.
+    // Inventory (undated_year_end) still renders saved month/day values + special day hint.
     const inv = html.match(/<tr data-obligation="inventory_list"[^>]*>[\s\S]*?<\/tr>/)![0];
     expect(inv).toContain('data-schedule="undated_year_end"');
     expect(inv).toContain('name="obligations.inventory_list.dueDay"');
     expect(inv).toContain('value="15"');
     expect(inv).toContain('name="obligations.inventory_list.dueMonth"');
     expect(inv).toContain('value="1"');
+    expect(inv).toContain(UNDATED_HINT);
 
     expect(html).toContain("1701Q Quarterly income tax");
     expect(html).toContain("1701A Annual income tax");
@@ -192,6 +235,9 @@ describe("settings layout CSS contracts", () => {
     );
     expect(css).toMatch(/\.tax-cal-settings-table/);
     expect(css).toMatch(/\.tax-cal-settings-table\s+th\s*\{[^}]*font-size:\s*11px/);
+    expect(css).toMatch(/\.tax-cal-col-hint/);
+    expect(css).toMatch(/\.tax-cal-shared-hints-mobile/);
+    expect(css).toMatch(/\.tax-cal-settings-form\s+\.tax-cal-source-note/);
     expect(css).toMatch(/\.settings-form-actions[^}]*sticky/);
     expect(css).toMatch(/\.settings-pill-tabs[\s\S]*\.pill-tab[\s\S]*min-height:\s*40px/);
     expect(css).toMatch(/\.settings-pill-tabs[\s\S]*\.pill-tabs-arrow[\s\S]*display:\s*none/);

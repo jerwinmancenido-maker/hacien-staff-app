@@ -9,6 +9,8 @@ import type { FormState } from "@/lib/validation/forms";
 import {
   TAX_CALENDAR_OBLIGATIONS,
   obligationDueDayHint,
+  obligationDueDayHintDefault,
+  obligationDueDayHintIsShared,
   obligationDueMonthHint,
   type ObligationSettingsRow,
   type TaxCalendarObligationKey,
@@ -39,6 +41,7 @@ export function TaxCalendarForm({
   const [confirming, setConfirming] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const e = state.fieldErrors ?? {};
+  const sharedDayHint = obligationDueDayHintDefault();
   const monthHint = obligationDueMonthHint();
 
   const checked = (name: string, fallback: boolean) => {
@@ -94,13 +97,28 @@ export function TaxCalendarForm({
         </div>
 
         <div className="tax-cal-settings-wrap">
+          {/* Shared default hints once on phone (desktop shows them under column headers). */}
+          <div className="tax-cal-shared-hints-mobile" data-shared-hints="mobile">
+            <div className="hint">{sharedDayHint}</div>
+            <div className="hint">{monthHint}</div>
+          </div>
           <table className="tax-cal-settings-table">
             <thead>
               <tr>
                 <th scope="col">Form</th>
                 <th scope="col">Show</th>
-                <th scope="col">Due day (1–31)</th>
-                <th scope="col">Due month (1–12)</th>
+                <th scope="col" className="tax-cal-settings-day-head">
+                  <span className="tax-cal-th-label">Due day (1–31)</span>
+                  <div className="hint tax-cal-col-hint" data-shared-hint="due-day">
+                    {sharedDayHint}
+                  </div>
+                </th>
+                <th scope="col" className="tax-cal-settings-month-head">
+                  <span className="tax-cal-th-label">Due month (1–12)</span>
+                  <div className="hint tax-cal-col-hint" data-shared-hint="due-month">
+                    {monthHint}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -110,6 +128,7 @@ export function TaxCalendarForm({
                 const dueDayName = `obligations.${def.key}.dueDay`;
                 const dueMonthName = `obligations.${def.key}.dueMonth`;
                 const dayHint = obligationDueDayHint(def);
+                const showRowDayHint = !obligationDueDayHintIsShared(def);
                 const dayErr = e[dueDayName];
                 const monthErr = e[dueMonthName];
                 return (
@@ -119,6 +138,7 @@ export function TaxCalendarForm({
                         <span className="strong">
                           {def.form} {def.description}
                         </span>
+                        <div className="hint tax-cal-source-note">{def.sourceNote}</div>
                       </td>
                       <td className="tax-cal-settings-show" data-label="Show">
                         <label className="check tax-cal-show-toggle" htmlFor={enabledName}>
@@ -133,7 +153,6 @@ export function TaxCalendarForm({
                           />
                           <span className="tax-cal-show-text">Show</span>
                         </label>
-                        <div className="hint tax-cal-source-note">{def.sourceNote}</div>
                       </td>
                       <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day (1–31)">
                         <label className="sr-only" htmlFor={dueDayName}>
@@ -152,9 +171,9 @@ export function TaxCalendarForm({
                           <div className="error" role="alert">
                             {dayErr}
                           </div>
-                        ) : (
-                          <div className="hint">{dayHint}</div>
-                        )}
+                        ) : showRowDayHint ? (
+                          <div className="hint tax-cal-row-day-hint">{dayHint}</div>
+                        ) : null}
                       </td>
                       <td
                         className={`tax-cal-settings-month${monthErr ? " has-error" : ""}`}
@@ -176,9 +195,7 @@ export function TaxCalendarForm({
                           <div className="error" role="alert">
                             {monthErr}
                           </div>
-                        ) : (
-                          <div className="hint">{monthHint}</div>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   </Fragment>

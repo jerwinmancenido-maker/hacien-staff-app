@@ -1232,6 +1232,25 @@ tr.inactive .cell-primary .sub {
   padding: 5px 8px;
   vertical-align: bottom;
 }
+.tax-cal-settings-table th .tax-cal-th-label {
+  display: block;
+}
+.tax-cal-settings-table th .tax-cal-col-hint {
+  /* Shared default hints once under Due day / Due month headers (desktop). */
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: normal;
+}
+.tax-cal-shared-hints-mobile {
+  /* Phone only — desktop uses column-header hints. */
+  display: none;
+}
 .tax-cal-settings-table td {
   padding: 3px 8px;
   vertical-align: top;
@@ -1242,17 +1261,18 @@ tr.inactive .cell-primary .sub {
 }
 .tax-cal-settings-table th:nth-child(1),
 .tax-cal-settings-table td:nth-child(1) {
-  width: 40%;
+  /* Form + sourceNote under name — wider so notes wrap to 1–2 lines at 1280. */
+  width: 48%;
 }
 .tax-cal-settings-table th:nth-child(2),
 .tax-cal-settings-table td:nth-child(2) {
-  width: 10%;
+  width: 8%;
 }
 .tax-cal-settings-table th:nth-child(3),
 .tax-cal-settings-table td:nth-child(3),
 .tax-cal-settings-table th:nth-child(4),
 .tax-cal-settings-table td:nth-child(4) {
-  width: 25%;
+  width: 22%;
 }
 .tax-cal-settings-form .strong {
   display: block;
@@ -1261,6 +1281,17 @@ tr.inactive .cell-primary .sub {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tax-cal-settings-form .tax-cal-source-note {
+  /* One muted line under the form name (form-column width). */
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 .tax-cal-show-toggle {
   min-height: 32px;
@@ -1275,7 +1306,7 @@ tr.inactive .cell-primary .sub {
 }
 .tax-cal-settings-day,
 .tax-cal-settings-month {
-  /* Keep input + special hint on one compact block; top-aligned with Show/Form. */
+  /* Keep input + special (non-default) hint on one compact block. */
 }
 .tax-cal-settings-day input,
 .tax-cal-settings-month input {
@@ -1295,9 +1326,7 @@ tr.inactive .cell-primary .sub {
   outline: none;
 }
 .tax-cal-settings-day .hint,
-.tax-cal-settings-month .hint,
-.tax-cal-settings-show .hint,
-.tax-cal-source-note {
+.tax-cal-settings-month .hint {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text-3);
@@ -3057,6 +3086,20 @@ pre.json {
   .tax-cal-settings-wrap {
     overflow-x: visible;
   }
+  .tax-cal-shared-hints-mobile {
+    display: block;
+    margin: 0 0 10px;
+    padding: 0;
+  }
+  .tax-cal-shared-hints-mobile .hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-3);
+    line-height: 1.35;
+  }
+  .tax-cal-shared-hints-mobile .hint + .hint {
+    margin-top: 4px;
+  }
   .tax-cal-settings-table,
   .tax-cal-settings-table thead,
   .tax-cal-settings-table tbody,
@@ -3093,6 +3136,11 @@ pre.json {
   }
   .tax-cal-settings-form {
     grid-column: 1 / -1;
+  }
+  .tax-cal-settings-form .strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
   }
   .tax-cal-settings-show {
     grid-column: 2;
