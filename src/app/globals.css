@@ -2946,28 +2946,113 @@ button.contact-card-add {
 .tax-cal-mobile {
   display: none;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px; /* ~half of the earlier 12px flex gap */
+}
+/* Defeat global `.card + .card { margin-top: 14px }` which doubled the phone gap. */
+.tax-cal-mobile > .tax-cal-card + .tax-cal-card {
+  margin-top: 0;
 }
 .tax-cal-desktop {
   display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Prefer fitting the table; no overflow-x unless a narrower viewport still clips. */
+  overflow-x: visible;
 }
 
+.tax-cal-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.tax-cal-table th,
 .tax-cal-table td {
   height: auto;
-  padding: 6px 8px;
+  padding: 5px 6px;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 .tax-cal-table th {
-  padding: 8px 8px 6px;
+  padding: 6px 6px 4px;
+  font-size: 10px;
+}
+.tax-cal-table th:nth-child(1),
+.tax-cal-table td:nth-child(1) {
+  width: 7%;
+}
+.tax-cal-table th:nth-child(2),
+.tax-cal-table td.tax-cal-desc {
+  width: 22%;
+}
+.tax-cal-table th:nth-child(3),
+.tax-cal-table td:nth-child(3) {
+  width: 8%;
+}
+.tax-cal-table th:nth-child(4),
+.tax-cal-table td.tax-cal-due {
+  width: 12%;
+  white-space: normal;
+}
+.tax-cal-table th:nth-child(5),
+.tax-cal-table td:nth-child(5) {
+  width: 10%;
+}
+.tax-cal-table th:nth-child(6),
+.tax-cal-table td:nth-child(6) {
+  width: 14%;
+}
+.tax-cal-table th:nth-child(7),
+.tax-cal-table td:nth-child(7) {
+  width: 11%;
+  white-space: nowrap;
+}
+.tax-cal-table th:nth-child(8),
+.tax-cal-table td.tax-cal-done {
+  width: 16%;
+}
+.tax-cal-desc {
+  white-space: normal;
+}
+.tax-cal-desc .small {
+  white-space: normal;
+}
+.tax-cal-table td:nth-child(7) a {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.tax-cal-done .btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tax-cal-done .btn.btn-secondary {
+  /* Keep outline readable on muted rows (do not inherit faded text color). */
+  color: var(--text);
+  background: var(--card);
+  border-color: var(--border);
+}
+/* Mute copy, not the action control — secondary Done must stay readable. */
+.tax-cal-row-muted td:not(.tax-cal-done) {
+  color: var(--text-3);
+}
+.tax-cal-row-muted td:not(.tax-cal-done) b {
+  color: var(--text-2);
+  font-weight: 600;
 }
 
 .tax-cal-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
+  padding: 12px 14px;
+}
+.tax-cal-card-muted .tax-cal-card-name,
+.tax-cal-card-muted .tax-cal-card-desc,
+.tax-cal-card-muted .tax-cal-card-period,
+.tax-cal-card-muted .tax-cal-card-due {
+  color: var(--text-3);
+}
+.tax-cal-card-muted .tax-cal-card-name b {
+  color: var(--text-2);
 }
 .tax-cal-card-name {
   display: flex;
@@ -2977,16 +3062,24 @@ button.contact-card-add {
 .tax-cal-card-desc {
   font-size: 14px;
 }
+.tax-cal-card-period {
+  font-size: 13px;
+  color: var(--text-2);
+}
 .tax-cal-card-due {
   font-variant-numeric: tabular-nums;
 }
-.tax-cal-card-status {
+.tax-cal-card-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
+}
+.tax-cal-card-worksheet {
+  font-size: 13px;
 }
 .tax-cal-card-action {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .tax-cal-card-action > .btn,
 .tax-cal-card-action form .btn {
@@ -2994,7 +3087,9 @@ button.contact-card-add {
   justify-content: center;
 }
 .tax-cal-card-action form > div {
+  display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 .tax-cal-card-action form > div .btn {
   width: 100%;
@@ -3006,5 +3101,16 @@ button.contact-card-add {
   }
   .tax-cal-desktop {
     display: none;
+  }
+}
+
+/* Last resort only if a mid-size desktop still clips the Done column. */
+@media (min-width: 640px) and (max-width: 900px) {
+  .tax-cal-desktop {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tax-cal-table {
+    min-width: 720px;
   }
 }

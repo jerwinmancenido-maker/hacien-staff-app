@@ -265,6 +265,28 @@ describe("calendar build views", () => {
     expect(q3?.doneNote).toBe("paid at bank");
   });
 
+  it("upcoming keeps past overdue in window and sorts Overdue status first", () => {
+    const now = new Date("2026-10-30T08:00:00.000Z");
+    const rows = buildTaxCalendarRows({
+      settings: defaultTaxCalendarSettings(),
+      view: "upcoming",
+      now,
+    });
+    // Filter includes undone dues on or before horizon (not only next 90 days forward) —
+    // so past-year / earlier-this-year overdue stay visible within fromYear..toYear.
+    const overdue = rows.filter((r) => r.status === "overdue");
+    expect(overdue.length).toBeGreaterThan(0);
+    expect(overdue.some((r) => r.dueYmd !== null && r.dueYmd < "2026-10-30")).toBe(true);
+    let seenNonOverdue = false;
+    for (const r of rows) {
+      if (r.status === "overdue") {
+        expect(seenNonOverdue).toBe(false);
+      } else {
+        seenNonOverdue = true;
+      }
+    }
+  });
+
   it("hides Confirmed Applies chip until COR uploaded and checked (1701Q / 1701)", () => {
     const now = new Date("2026-10-30T08:00:00.000Z");
     const off = defaultTaxCalendarSettings();

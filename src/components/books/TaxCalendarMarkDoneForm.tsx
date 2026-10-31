@@ -12,6 +12,7 @@ export function TaxCalendarMarkDoneForm({
   markedDone,
   doneDateYmd,
   doneNote,
+  secondary = false,
 }: {
   occurrenceKey: string;
   dueYmd: string | null;
@@ -19,10 +20,13 @@ export function TaxCalendarMarkDoneForm({
   markedDone: boolean;
   doneDateYmd: string | null;
   doneNote: string | null;
+  /** Outline style (e.g. does-not-apply rows) so opacity fade does not look disabled. */
+  secondary?: boolean;
 }) {
   const mark = useFormAction(markTaxCalendarDoneAction);
   const undo = useFormAction(undoTaxCalendarDoneAction);
   const [open, setOpen] = useState(false);
+  const openBtnClass = secondary ? "btn btn-secondary btn-sm" : "btn btn-sm";
 
   if (markedDone) {
     return (
@@ -54,7 +58,7 @@ export function TaxCalendarMarkDoneForm({
 
   if (!open) {
     return (
-      <button className="btn btn-sm" type="button" onClick={() => setOpen(true)}>
+      <button className={openBtnClass} type="button" onClick={() => setOpen(true)}>
         Mark as done
       </button>
     );
