@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { formatPeso } from "@/lib/format";
 import type { HomeDashboard } from "@/lib/home/dashboard";
+import { nonVatBarFillClass } from "@/lib/home/nonVatBar";
 import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
+import type { NonVatLevel } from "@/lib/services/non-vat";
 import { EmptyState } from "@/components/ui";
 
 export function HomeGettingStarted({
@@ -136,7 +138,7 @@ export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
           aria-valuenow={Math.round(meter.barPct)}
         >
           <div
-            className={`aging-bar-fill${meter.level === "over" || meter.level === "second" ? " red" : meter.level === "first" ? " amber" : ""}`}
+            className={`aging-bar-fill${nonVatBarFillClass(meter.level as NonVatLevel)}`}
             style={{ width: `${meter.barPct}%` }}
           />
         </div>

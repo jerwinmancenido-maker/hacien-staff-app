@@ -2,6 +2,11 @@
    Monochrome: black, white, warm greys. Muted status colors only for chips. */
 
 :root {
+  /* Brand accent (same names/values as brand-06 / PR 23) so the branches merge cleanly. */
+  --blue: #2563eb;
+  --blue-dark: #1d4ed8;
+  --blue-tint: #eff6ff;
+
   --bg: #f4f4f2;
   --card: #ffffff;
   --border: #e9e9e6;
@@ -242,7 +247,8 @@ a.tracker-card:hover {
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--text);
+  /* Non-VAT sidebar meter: brand accent below warn % (level-first/second override). */
+  background: var(--blue);
   border-radius: 999px;
 }
 
@@ -2576,9 +2582,23 @@ button.contact-card-add {
   margin-right: 4px;
   vertical-align: middle;
 }
-.aging-bar-fill.amber { background: var(--amber, #b45309); }
-.aging-bar-fill.red { background: var(--red); }
-.aging-bar-fill:not(.empty) { height: 100%; background: #4ade80; border-radius: inherit; }
+.aging-bar-fill:not(.empty) {
+  height: 100%;
+  border-radius: inherit;
+  background: #4ade80;
+}
+/* Home Non-VAT card: accent below warn %; amber/red win once warn thresholds hit. */
+.home-nonvat .aging-bar-fill:not(.empty) {
+  background: var(--blue);
+}
+.aging-bar-fill.amber,
+.home-nonvat .aging-bar-fill.amber {
+  background: var(--amber);
+}
+.aging-bar-fill.red,
+.home-nonvat .aging-bar-fill.red {
+  background: var(--red);
+}
 .statement-doc .print-doc-title h1 { font-size: 1.35rem; margin: 0; }
 .statement-aging { margin-top: 1.5rem; page-break-inside: avoid; }
 .print-placeholder { color: var(--red); font-weight: 600; }

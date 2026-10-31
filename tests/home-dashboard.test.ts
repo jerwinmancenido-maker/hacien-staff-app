@@ -4,7 +4,10 @@ import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { activitySummary, documentHref } from "@/lib/home/activity";
 import { homeMonthBounds, homeOwedSplit, homeSumAmounts, homeTodayPlusDaysYmd } from "@/lib/home/dashboard";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
+import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
 import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   canShowActionRow,
   canShowMoneyFigure,
@@ -120,6 +123,28 @@ describe("home Non-VAT card copy", () => {
       "Estimate based on invoices in this app for this year. Your accountant's books are the official count. Warns at 70% and 90%.",
     );
     expect(homeNonVatHelperLine(50, 80)).toContain("Warns at 50% and 80%.");
+  });
+});
+
+describe("home Non-VAT bar tone", () => {
+  it("uses accent below warn %, warning at first threshold, danger at second/over", () => {
+    expect(nonVatBarTone("ok")).toBe("accent");
+    expect(nonVatBarTone("first")).toBe("warning");
+    expect(nonVatBarTone("second")).toBe("danger");
+    expect(nonVatBarTone("over")).toBe("danger");
+    expect(nonVatBarFillClass("ok")).toBe("");
+    expect(nonVatBarFillClass("first")).toBe(" amber");
+    expect(nonVatBarFillClass("second")).toBe(" red");
+    expect(nonVatBarFillClass("over")).toBe(" red");
+  });
+
+  it("wires accent fill to var(--blue) in globals.css for home + sidebar meters", () => {
+    const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+    expect(css).toMatch(/--blue:\s*#2563eb;/i);
+    expect(css).toMatch(/\.home-nonvat\s+\.aging-bar-fill:not\(\.empty\)\s*\{[^}]*background:\s*var\(--blue\)/s);
+    expect(css).toMatch(/\.bar\s*>\s*span\s*\{[^}]*background:\s*var\(--blue\)/s);
+    expect(css).toMatch(/\.tracker-card\.level-first\s+\.bar\s*>\s*span\s*\{[^}]*background:\s*var\(--amber\)/s);
+    expect(css).toMatch(/\.home-nonvat\s+\.aging-bar-fill\.amber\s*\{[^}]*background:\s*var\(--amber\)/s);
   });
 });
 
