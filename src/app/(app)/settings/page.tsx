@@ -11,6 +11,7 @@ import { formatDateTime, formatPeso } from "@/lib/format";
 import {
   BOOKS_OF_ACCOUNTS_TYPE_LABELS,
   INCOME_TAX_METHOD_LABELS,
+  TAX_CALENDAR_PROVISIONAL_BANNER,
 } from "@/lib/tax/calendar-constants";
 import { formatHolidayLines } from "@/lib/tax/holidays";
 import {
@@ -153,8 +154,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   ],
                   hint:
                     y === s.taxYear.year
-                      ? "On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly and annual is 1701 or 1701A."
-                      : "Saving one year leaves other years untouched.",
+                      ? "Seed: 2026 = 8%; 2027 onward defaults to Graduated. On 8%, 2551Q is hidden and the annual return is 1701A. On Graduated, 2551Q is quarterly (25 days after quarter end) and annual is 1701 or 1701A."
+                      : "Saving another year’s method leaves other years untouched.",
                   group: "Income tax method by year",
                 }),
               ),
@@ -168,7 +169,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   { value: "loose_leaf", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.loose_leaf },
                   { value: "computerized", label: BOOKS_OF_ACCOUNTS_TYPE_LABELS.computerized },
                 ],
-                hint: "Loose-leaf due Jan 15; computerized due Jan 30. Weekend or holiday dates roll to the next working day.",
+                hint: "Loose-leaf due Jan 15; computerized due Jan 30 — both rolled to the next working day when they fall on a weekend or holiday.",
               },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
               { name: "warnFirstPct", label: "First warning at", kind: "number", value: s.taxYear.warnFirstPct, suffix: "% of the limit" },
@@ -178,7 +179,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Holiday list (YYYY-MM-DD [regular|special] [name])",
                 kind: "lines",
                 value: formatHolidayLines(s.taxYear.holidays ?? []),
-                hint: "One date per line. Add years as needed; the calendar warns when a year has none. Weekend or holiday due dates move to the next working day (RMC 65-2016).",
+                hint: "Editable. Seeded with 2026 only — add 2025 / 2027 (and later) yourself; the calendar warns when a year has no holidays. Due dates on a weekend or holiday move to the next working day (RMC 65-2016).",
                 full: true,
               },
             ]}
@@ -192,7 +193,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             action={save("taxCalendar")}
             corUploadedAndChecked={s.taxCalendar.corUploadedAndChecked}
             obligations={s.taxCalendar.obligations}
-            intro="Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and checked. This app never files or pays. Do not add the abolished 0605 fee."
+            intro="Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee."
+            corHint={`When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`}
           />
         )}
 
@@ -211,7 +213,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   label: "Series from",
                   kind: "number",
                   value: s.invoiceBooklet.seriesFrom,
-                  hint: "Start of the pre-printed booklet. The app only records these numbers.",
+                  hint: "Pre-printed booklet start. The app only records these numbers.",
                 },
                 { name: "seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.seriesTo },
                 { name: "label", label: "Label", kind: "text", value: s.invoiceBooklet.label ?? "", hint: "e.g. Booklet 1" },
@@ -265,14 +267,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Enable Books (read-only registers / export)",
                 kind: "checkbox",
                 value: s.features.booksEnabled,
-                hint: "OFF by default. Draft BIR format — confirm with accountant/RDO.",
+                hint: "OFF by default. Ask your admin to turn this on. Draft BIR format — confirm with accountant/RDO.",
               },
               {
                 name: "payables2307Enabled",
                 label: "Enable Payables 2307 to issue (withholding agent)",
                 kind: "checkbox",
                 value: s.features.payables2307Enabled,
-                hint: "OFF by default. HACIEN is not a withholding agent until RDO confirms.",
+                hint: "OFF by default. HACIEN is not a withholding agent until RDO confirms. Env override: PAYABLES_2307_ENABLED.",
               },
             ]}
           />

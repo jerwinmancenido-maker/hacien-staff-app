@@ -222,28 +222,31 @@ export function obligationByKey(key: TaxCalendarObligationKey): TaxCalendarOblig
   return def;
 }
 
-/** Due month is editable only for annual income-tax returns (1701 / 1701A). */
-export function obligationUsesDueMonth(def: TaxCalendarObligationDef): boolean {
-  return def.schedule.kind === "annual_1701";
+/**
+ * Due month is editable for every obligation in Settings (same as main), including
+ * undated_year_end / inventory — calendar-dates.ts reads override month+day for
+ * confirmed dates.
+ */
+export function obligationUsesDueMonth(_def?: TaxCalendarObligationDef): boolean {
+  void _def;
+  return true;
 }
 
-/**
- * Special due-day hint for Settings → Tax calendar (one line), or null when the
- * column header “Due day (1–31)” is enough.
- */
-export function obligationDueDayHint(def: TaxCalendarObligationDef): string | null {
+/** Exact Settings → Tax calendar due-day field hints (match main wording). */
+export function obligationDueDayHint(def: TaxCalendarObligationDef): string {
   switch (def.schedule.kind) {
     case "undated_year_end":
-      return "Leave blank for date to confirm. Set day once RDO confirms.";
+      return "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.";
     case "quarterly_last_day_after":
       return "Leave blank to use the last day of the month after the quarter.";
-    case "days_after_quarter_end":
-      return `Leave blank to use ${def.schedule.daysAfter} days after quarter end.`;
-    case "books_of_accounts":
-      return "Leave blank; day follows books type (Jan 15 or Jan 30).";
     default:
-      return null;
+      return "1–31. Used with the catalog month rule for this form.";
   }
+}
+
+/** Exact Settings → Tax calendar due-month field hint (match main wording). */
+export function obligationDueMonthHint(): string {
+  return "1–12. Used for 1701 annual and year-end items; leave blank otherwise.";
 }
 
 /** Human Applies? label from key (empty string for unverified — not shown on rows). */

@@ -26,7 +26,7 @@
   {
     "name": "numbering-1280.png",
     "width": 1280,
-    "height": 928,
+    "height": 960,
     "scrollWidth": 1280
   },
   {
@@ -50,23 +50,23 @@
   {
     "name": "tax-calendar-1280.png",
     "width": 1280,
-    "height": 942,
+    "height": 1611,
     "scrollWidth": 1280
   },
   {
     "name": "tax-calendar-360.png",
     "width": 360,
-    "height": 2238,
+    "height": 4297,
     "scrollWidth": 360
   },
   {
-    "name": "withholding",
+    "name": "withholding-1280.png",
     "width": 1280,
     "height": 900,
     "scrollWidth": 1280
   },
   {
-    "name": "withholding",
+    "name": "withholding-360.png",
     "width": 360,
     "height": 1771,
     "scrollWidth": 360
@@ -104,7 +104,7 @@
   {
     "name": "print-360.png",
     "width": 360,
-    "height": 1653,
+    "height": 1659,
     "scrollWidth": 360
   },
   {

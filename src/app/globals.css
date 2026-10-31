@@ -1001,6 +1001,10 @@ tr.inactive .cell-primary .sub {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
+}
+/* Settings-only: top-align label/control pairs in the 2-col grid. */
+.settings-page .form-grid,
+.settings-shell .form-grid {
   align-items: start;
 }
 .form-grid .full {
@@ -1218,7 +1222,7 @@ tr.inactive .cell-primary .sub {
   table-layout: fixed;
 }
 .tax-cal-settings-table th {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -1291,15 +1295,19 @@ tr.inactive .cell-primary .sub {
   outline: none;
 }
 .tax-cal-settings-day .hint,
-.tax-cal-settings-month .hint {
-  margin-top: 1px;
-  font-size: 10.5px;
+.tax-cal-settings-month .hint,
+.tax-cal-settings-show .hint,
+.tax-cal-source-note {
+  margin-top: 2px;
+  font-size: 11px;
   color: var(--text-3);
-  line-height: 1.15;
+  line-height: 1.25;
 }
-.tax-cal-month-na {
-  display: inline-block;
-  min-height: 1px;
+.print-company-preview > .pp-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  margin-bottom: 8px;
 }
 
 /* Settings tabs: fit all 11 at desktop; sideways scroll only below md */
@@ -1616,7 +1624,7 @@ tr.inactive .cell-primary .sub {
 }
 .tax-cal-hint-cell .hint {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-3);
   line-height: 1.3;
   white-space: nowrap;
@@ -3025,19 +3033,25 @@ pre.json {
   .topbar-search input {
     font-size: 14px;
   }
-  /* Books / tax / settings tabs: keep one row, scroll instead of wrapping */
+  /* Books / tax section tabs: keep one row, scroll instead of wrapping cramped */
   .pill-tabs-wrap {
     margin-bottom: 10px;
   }
   .pill-tabs-track {
     gap: 4px;
+  }
+  /* Settings-only mobile tab/form tweaks (do not affect Books/other PRs). */
+  .settings-shell .pill-tabs-track,
+  .settings-pill-tabs .pill-tabs-track {
     flex-wrap: nowrap;
     overflow-x: auto;
   }
-  .pill-tab {
+  .settings-shell .pill-tab,
+  .settings-pill-tabs .pill-tab {
     min-height: 40px;
   }
-  .form-grid {
+  .settings-page .form-grid,
+  .settings-shell .form-grid {
     grid-template-columns: 1fr;
   }
   .tax-cal-settings-wrap {
@@ -5010,7 +5024,7 @@ button.contact-card-add {
     line-height: 1.2;
     font-size: 13px;
   }
-  /* Row 2: Prefix | Next no. half width; values visible; ≥40px inputs */
+  /* Row 2: Prefix | Number length half width; values visible; ≥40px inputs */
   .numbering-prefix {
     grid-column: 1;
     grid-row: 2;

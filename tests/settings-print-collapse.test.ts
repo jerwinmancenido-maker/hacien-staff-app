@@ -91,4 +91,40 @@ describe("PrintCompanyForm collapsed sections", () => {
     expect(html).toContain("print-company-preview");
     expect(html).toContain("Live preview");
   });
+
+  it("collapsed sections still contribute field values (not disabled / not omitted)", () => {
+    const html = renderToStaticMarkup(
+      createElement(PrintCompanyForm, {
+        company,
+        print,
+        versionId: "ver-print",
+        action: noopAction,
+      }),
+    );
+
+    // Behavior check without a DOM: collapsed-section controls keep name + current
+    // value and are not disabled, so a real form submit would include them.
+    const inputs = [
+      { name: "banks.0.bankName", valueAttr: 'value="Sample Bank"' },
+      { name: "banks.0.accountNumberFull", valueAttr: 'value="1234-5678-9012"' },
+    ] as const;
+    for (const field of inputs) {
+      const re = new RegExp(`<[^>]+name="${field.name.replace(/\./g, "\\.")}"[^>]*>`);
+      const tag = html.match(re)?.[0];
+      expect(tag, `control ${field.name}`).toBeTruthy();
+      expect(tag!).not.toMatch(/\bdisabled\b/);
+      expect(tag!).toContain(field.valueAttr);
+    }
+
+    // Textareas put their value between tags (not value="…").
+    expect(html).toMatch(/<textarea[^>]*name="quoteTerms"[^>]*>Net 30<\/textarea>/);
+    expect(html).toMatch(/<textarea[^>]*name="deliveryNotes"[^>]*>Deliver weekdays<\/textarea>/);
+    expect(html).toMatch(/<textarea[^>]*name="warrantyNotes"[^>]*>1 year<\/textarea>/);
+    expect(html).not.toMatch(/name="quoteTerms"[^>]*\bdisabled\b/);
+
+    // Select keeps selected option; checkbox stays checked via hidden+checkbox pair.
+    expect(html).toMatch(/<select[^>]*name="paperSize"[^>]*>[\s\S]*?<option value="A4" selected=""/);
+    expect(html).toMatch(/name="showInputTaxDisclaimer"[^>]*value="true"|value="true"[^>]*name="showInputTaxDisclaimer"/);
+    expect(html).toMatch(/id="showInputTaxDisclaimer"[^>]*checked|checked[^>]*id="showInputTaxDisclaimer"/);
+  });
 });

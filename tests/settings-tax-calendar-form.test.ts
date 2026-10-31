@@ -1,4 +1,4 @@
-// Settings → Tax calendar table: Due month only for annual forms; helpers; markup.
+// Settings → Tax calendar: every row edits due day + due month; main wording/hints.
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -14,8 +14,10 @@ import {
   TAX_CALENDAR_OBLIGATIONS,
   defaultTaxCalendarSettings,
   obligationDueDayHint,
+  obligationDueMonthHint,
   obligationUsesDueMonth,
 } from "@/lib/tax/calendar-obligations";
+import { TAX_CALENDAR_PROVISIONAL_BANNER } from "@/lib/tax/calendar-constants";
 import { TaxCalendarForm } from "@/app/(app)/settings/TaxCalendarForm";
 import { SettingsForm } from "@/app/(app)/settings/SettingsForm";
 import type { FormState } from "@/lib/validation/forms";
@@ -23,44 +25,45 @@ import type { FormState } from "@/lib/validation/forms";
 const noopAction = async (): Promise<FormState> => ({ ok: true });
 
 const INTRO =
-  "Owner-only. Turn forms on or off and edit due days. Dates stay provisional until COR is uploaded and checked. This app never files or pays. Do not add the abolished 0605 fee.";
+  "Owner-only. Turn obligations on or off and edit due days. Dates are provisional until the COR is uploaded and checked. This never files or pays anything. Do not add the abolished 0605 fee.";
+
+const COR_HINT = `When off, the calendar shows: “${TAX_CALENDAR_PROVISIONAL_BANNER}”`;
 
 describe("obligationUsesDueMonth", () => {
-  it("is true only for annual_1701 (1701 / 1701A)", () => {
-    const annual = TAX_CALENDAR_OBLIGATIONS.filter((d) => obligationUsesDueMonth(d)).map((d) => d.key);
-    expect(annual.sort()).toEqual(["1701", "1701a"]);
+  it("is true for every catalog row (including undated_year_end / inventory)", () => {
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
-      if (def.schedule.kind === "annual_1701") {
-        expect(obligationUsesDueMonth(def)).toBe(true);
-      } else {
-        expect(obligationUsesDueMonth(def)).toBe(false);
-      }
+      expect(obligationUsesDueMonth(def)).toBe(true);
     }
+    expect(TAX_CALENDAR_OBLIGATIONS.some((d) => d.schedule.kind === "undated_year_end")).toBe(true);
   });
 });
 
-describe("obligationDueDayHint", () => {
-  it("returns special one-line hints only; generic day/month ranges live in headers", () => {
+describe("obligation due-day / due-month hints (main wording)", () => {
+  it("matches main field hints for each schedule kind", () => {
+    expect(obligationDueMonthHint()).toBe(
+      "1–12. Used for 1701 annual and year-end items; leave blank otherwise.",
+    );
     for (const def of TAX_CALENDAR_OBLIGATIONS) {
       const hint = obligationDueDayHint(def);
-      if (hint == null) {
-        expect(["quarterly_1701q", "annual_1701", "quarterly_after_end", "monthly"]).toContain(def.schedule.kind);
-        continue;
+      if (def.schedule.kind === "undated_year_end") {
+        expect(hint).toBe(
+          "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.",
+        );
+      } else if (def.schedule.kind === "quarterly_last_day_after") {
+        expect(hint).toBe("Leave blank to use the last day of the month after the quarter.");
+      } else {
+        expect(hint).toBe("1–31. Used with the catalog month rule for this form.");
       }
-      expect(hint.includes("\n")).toBe(false);
-      expect(hint.toLowerCase()).not.toContain("catalog month rule");
-      expect(hint).not.toBe("Day of the month (1–31).");
-      expect(hint).not.toBe("Month of the year (1–12).");
     }
-    expect(obligationDueDayHint(TAX_CALENDAR_OBLIGATIONS.find((d) => d.key === "2551q")!)).toContain(
-      "25 days after quarter end",
-    );
   });
 });
 
 describe("TaxCalendarForm markup", () => {
-  it("renders intro inside the card, COR baseline, header ranges, Due month only for annual", () => {
+  it("renders intro, COR banner hint, sourceNotes, and editable due day/month for every row", () => {
     const seed = defaultTaxCalendarSettings();
+    // Prove undated inventory can carry confirmed month/day overrides in settings shape.
+    seed.obligations.inventory_list = { enabled: true, dueDay: 15, dueMonth: 1 };
+
     const html = renderToStaticMarkup(
       createElement(TaxCalendarForm, {
         label: "Tax calendar",
@@ -69,6 +72,7 @@ describe("TaxCalendarForm markup", () => {
         corUploadedAndChecked: seed.corUploadedAndChecked,
         obligations: seed.obligations,
         intro: INTRO,
+        corHint: COR_HINT,
       }),
     );
 
@@ -76,16 +80,17 @@ describe("TaxCalendarForm markup", () => {
     expect(html).toContain(INTRO);
     expect(html).toContain("settings-cor-check");
     expect(html).toContain("COR uploaded and checked");
+    expect(html).toContain(TAX_CALENDAR_PROVISIONAL_BANNER);
     expect(html).toContain("tax-cal-settings-table");
     expect(html).toContain(">Form</th>");
     expect(html).toContain(">Show</th>");
     expect(html).toContain(">Due day (1–31)</th>");
     expect(html).toContain(">Due month (1–12)</th>");
-    expect(html).not.toContain("Day of the month (1–31).");
-    expect(html).not.toContain("Month of the year (1–12).");
-    expect(html).toContain("Leave blank to use 25 days after quarter end.");
-    expect(html).toContain("tax-cal-hint-row");
-    expect(html).toContain('data-hint-for="2551q"');
+    expect(html).toContain(obligationDueMonthHint());
+    expect(html).toContain(
+      "Leave blank for “date to confirm”. Set day (and month below) once RDO confirms.",
+    );
+    expect(html).toContain("1–31. Used with the catalog month rule for this form.");
     expect(html).toContain("settings-form-actions");
     expect(html).toContain("Save changes");
 
@@ -99,20 +104,40 @@ describe("TaxCalendarForm markup", () => {
       );
       expect(rowMatch, `row for ${def.key}`).toBeTruthy();
       const row = rowMatch![0];
-      const uses = obligationUsesDueMonth(def);
-      expect(row).toContain(`data-uses-due-month="${uses ? "1" : "0"}"`);
-      if (uses) {
-        expect(row).toContain(`id="obligations.${def.key}.dueMonth"`);
-        expect(row).toContain(`name="obligations.${def.key}.dueMonth"`);
-        expect(row).not.toContain("tax-cal-month-na");
-        expect(row).toContain('type="number"');
-      } else {
-        expect(row).toContain(`type="hidden"`);
-        expect(row).toContain(`name="obligations.${def.key}.dueMonth"`);
-        expect(row).toContain("tax-cal-month-na");
-        expect(row).not.toContain(`id="obligations.${def.key}.dueMonth"`);
-      }
+      expect(row).toContain(`data-uses-due-month="1"`);
+      expect(row).toContain(`data-schedule="${def.schedule.kind}"`);
+
+      // Show + sourceNote restored on every row.
+      expect(row).toContain(`name="obligations.${def.key}.enabled"`);
+      expect(row).toContain("tax-cal-source-note");
+      expect(row).toContain(def.sourceNote);
+
+      // Due day + due month are real number inputs (submit-able), never month-na stubs.
+      expect(row).toContain(`id="obligations.${def.key}.dueDay"`);
+      expect(row).toContain(`name="obligations.${def.key}.dueDay"`);
+      expect(row).toContain(`id="obligations.${def.key}.dueMonth"`);
+      expect(row).toContain(`name="obligations.${def.key}.dueMonth"`);
+      expect(row).not.toContain("tax-cal-month-na");
+      expect(row).toMatch(
+        new RegExp(
+          `<input[^>]*id="obligations\\.${def.key}\\.dueDay"[^>]*type="number"|<input[^>]*type="number"[^>]*id="obligations\\.${def.key}\\.dueDay"`,
+        ),
+      );
+      expect(row).toMatch(
+        new RegExp(
+          `<input[^>]*id="obligations\\.${def.key}\\.dueMonth"[^>]*type="number"|<input[^>]*type="number"[^>]*id="obligations\\.${def.key}\\.dueMonth"`,
+        ),
+      );
+      expect(row.match(/type="number"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     }
+
+    // Inventory (undated_year_end) still renders saved month/day values.
+    const inv = html.match(/<tr data-obligation="inventory_list"[^>]*>[\s\S]*?<\/tr>/)![0];
+    expect(inv).toContain('data-schedule="undated_year_end"');
+    expect(inv).toContain('name="obligations.inventory_list.dueDay"');
+    expect(inv).toContain('value="15"');
+    expect(inv).toContain('name="obligations.inventory_list.dueMonth"');
+    expect(inv).toContain('value="1"');
 
     expect(html).toContain("1701Q Quarterly income tax");
     expect(html).toContain("1701A Annual income tax");
@@ -157,18 +182,21 @@ describe("SettingsForm layout helpers", () => {
 });
 
 describe("settings layout CSS contracts", () => {
-  it("keeps settings page width, form grid collapse, and tax calendar stack rules", async () => {
+  it("scopes form-grid / pill-tab mobile rules to Settings and keeps ≥11px tax-cal/print headers", async () => {
     const fs = await import("node:fs");
     const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.settings-page\s*\{[^}]*max-width:\s*960px/);
-    expect(css).toMatch(/\.form-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2/);
-    expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*\.form-grid\s*\{[^}]*grid-template-columns:\s*1fr/);
+    expect(css).toMatch(/\.settings-page\s+\.form-grid|\.settings-shell\s+\.form-grid/);
+    expect(css).toMatch(
+      /@media\s*\(max-width:\s*768px\)[\s\S]*\.settings-page\s+\.form-grid[\s\S]*grid-template-columns:\s*1fr/,
+    );
     expect(css).toMatch(/\.tax-cal-settings-table/);
+    expect(css).toMatch(/\.tax-cal-settings-table\s+th\s*\{[^}]*font-size:\s*11px/);
     expect(css).toMatch(/\.settings-form-actions[^}]*sticky/);
-    expect(css).toMatch(/\.pill-tab[^}]*min-height:\s*40px/);
-    expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*\.pill-tabs-track\s*\{[^}]*overflow-x:\s*auto/);
+    expect(css).toMatch(/\.settings-pill-tabs[\s\S]*\.pill-tab[\s\S]*min-height:\s*40px/);
     expect(css).toMatch(/\.settings-pill-tabs[\s\S]*\.pill-tabs-arrow[\s\S]*display:\s*none/);
     expect(css).toMatch(/\.settings-notice/);
     expect(css).toMatch(/\.print-collapse-body\.is-collapsed/);
+    expect(css).toMatch(/\.print-company-preview\s*>\s*\.pp-label\s*\{[^}]*font-size:\s*11px/);
   });
 });

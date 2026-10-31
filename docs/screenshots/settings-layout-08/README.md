@@ -6,13 +6,13 @@ Local throwaway DB only (`jerwin@example.com` seed). Full-page shots at real pag
 |---|---:|---:|---:|
 | users | 900 | 1411 | 360 |
 | approval | 900 | 900 | 360 |
-| numbering | 928 | 1583 | 360 |
+| numbering | 960 | 1583 | 360 |
 | tax | 1139 | 1536 | 360 |
-| tax-calendar | 942 | 2238 | 360 |
+| tax-calendar | 1611 | 4297 | 360 |
 | withholding | 900 | 1771 | 360 |
 | billing | 900 | 1012 | 360 |
 | features | 900 | 900 | 360 |
-| print | 1167 | 1653 | 360 |
+| print | 1167 | 1659 | 360 |
 | lists | 1085 | 1136 | 360 |
 | changelog | 900 | 900 | 360 |
 

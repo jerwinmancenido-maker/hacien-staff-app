@@ -9,7 +9,7 @@ import type { FormState } from "@/lib/validation/forms";
 import {
   TAX_CALENDAR_OBLIGATIONS,
   obligationDueDayHint,
-  obligationUsesDueMonth,
+  obligationDueMonthHint,
   type ObligationSettingsRow,
   type TaxCalendarObligationKey,
 } from "@/lib/tax/calendar-obligations";
@@ -22,6 +22,8 @@ export type TaxCalendarFormProps = {
   obligations: Record<TaxCalendarObligationKey, ObligationSettingsRow>;
   /** Intro copy shown inside the card (full width). */
   intro: string;
+  /** COR checkbox hint (exact main wording with provisional banner). */
+  corHint: string;
 };
 
 export function TaxCalendarForm({
@@ -31,11 +33,13 @@ export function TaxCalendarForm({
   corUploadedAndChecked,
   obligations,
   intro,
+  corHint,
 }: TaxCalendarFormProps) {
   const { state, pending, submit } = useFormAction(action);
   const [confirming, setConfirming] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const e = state.fieldErrors ?? {};
+  const monthHint = obligationDueMonthHint();
 
   const checked = (name: string, fallback: boolean) => {
     const echoed = state.values?.[name];
@@ -85,9 +89,7 @@ export function TaxCalendarForm({
               {e.corUploadedAndChecked}
             </div>
           ) : (
-            <div className="hint">
-              When off, the calendar shows the provisional notice until COR is checked.
-            </div>
+            <div className="hint">{corHint}</div>
           )}
         </div>
 
@@ -107,13 +109,12 @@ export function TaxCalendarForm({
                 const enabledName = `obligations.${def.key}.enabled`;
                 const dueDayName = `obligations.${def.key}.dueDay`;
                 const dueMonthName = `obligations.${def.key}.dueMonth`;
-                const showMonth = obligationUsesDueMonth(def);
                 const dayHint = obligationDueDayHint(def);
                 const dayErr = e[dueDayName];
                 const monthErr = e[dueMonthName];
                 return (
                   <Fragment key={def.key}>
-                    <tr data-obligation={def.key} data-uses-due-month={showMonth ? "1" : "0"}>
+                    <tr data-obligation={def.key} data-uses-due-month="1" data-schedule={def.schedule.kind}>
                       <td className="tax-cal-settings-form" data-label="Form">
                         <span className="strong">
                           {def.form} {def.description}
@@ -127,15 +128,16 @@ export function TaxCalendarForm({
                             name={enabledName}
                             type="checkbox"
                             value="true"
-                            aria-label={`Show ${def.form}`}
+                            aria-label={`Show ${def.form} on the calendar`}
                             defaultChecked={checked(enabledName, o.enabled)}
                           />
                           <span className="tax-cal-show-text">Show</span>
                         </label>
+                        <div className="hint tax-cal-source-note">{def.sourceNote}</div>
                       </td>
                       <td className={`tax-cal-settings-day${dayErr ? " has-error" : ""}`} data-label="Due day (1–31)">
                         <label className="sr-only" htmlFor={dueDayName}>
-                          Due day for {def.form}
+                          Due day of month for {def.form}
                         </label>
                         <input
                           id={dueDayName}
@@ -146,53 +148,39 @@ export function TaxCalendarForm({
                           max={31}
                           defaultValue={numVal(dueDayName, o.dueDay)}
                         />
-                        {dayErr && (
+                        {dayErr ? (
                           <div className="error" role="alert">
                             {dayErr}
                           </div>
+                        ) : (
+                          <div className="hint">{dayHint}</div>
                         )}
                       </td>
                       <td
                         className={`tax-cal-settings-month${monthErr ? " has-error" : ""}`}
                         data-label="Due month (1–12)"
                       >
-                        {showMonth ? (
-                          <>
-                            <label className="sr-only" htmlFor={dueMonthName}>
-                              Due month for {def.form}
-                            </label>
-                            <input
-                              id={dueMonthName}
-                              name={dueMonthName}
-                              type="number"
-                              step="1"
-                              min={1}
-                              max={12}
-                              defaultValue={numVal(dueMonthName, o.dueMonth)}
-                            />
-                            {monthErr && (
-                              <div className="error" role="alert">
-                                {monthErr}
-                              </div>
-                            )}
-                          </>
+                        <label className="sr-only" htmlFor={dueMonthName}>
+                          Due month (annual / year-end) for {def.form}
+                        </label>
+                        <input
+                          id={dueMonthName}
+                          name={dueMonthName}
+                          type="number"
+                          step="1"
+                          min={1}
+                          max={12}
+                          defaultValue={numVal(dueMonthName, o.dueMonth)}
+                        />
+                        {monthErr ? (
+                          <div className="error" role="alert">
+                            {monthErr}
+                          </div>
                         ) : (
-                          <>
-                            <input type="hidden" name={dueMonthName} value={numVal(dueMonthName, o.dueMonth)} />
-                            <span className="tax-cal-month-na" data-empty="1" />
-                            <span className="sr-only">Due month not used for this form</span>
-                          </>
+                          <div className="hint">{monthHint}</div>
                         )}
                       </td>
                     </tr>
-                    {dayHint && !dayErr ? (
-                      <tr className="tax-cal-hint-row" data-hint-for={def.key}>
-                        <td colSpan={2} className="tax-cal-hint-pad" aria-hidden="true" />
-                        <td colSpan={2} className="tax-cal-hint-cell">
-                          <div className="hint">{dayHint}</div>
-                        </td>
-                      </tr>
-                    ) : null}
                   </Fragment>
                 );
               })}

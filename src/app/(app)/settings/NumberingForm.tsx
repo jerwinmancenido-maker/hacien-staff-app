@@ -60,7 +60,7 @@ export function NumberingForm({
                 <th scope="col">Doc type</th>
                 <th scope="col">Restart yearly</th>
                 <th scope="col">Prefix</th>
-                <th scope="col">Next no.</th>
+                <th scope="col">Number length (digits)</th>
                 <th scope="col">Example</th>
               </tr>
             </thead>
@@ -118,9 +118,9 @@ export function NumberingForm({
                         </div>
                       )}
                     </td>
-                    <td className={`numbering-digits${e[paddingName] ? " has-error" : ""}`} data-label="Next no.">
+                    <td className={`numbering-digits${e[paddingName] ? " has-error" : ""}`} data-label="Number length (digits)">
                       <label className="numbering-field-label" htmlFor={paddingName}>
-                        Next no.
+                        Number length (digits)
                       </label>
                       <input
                         id={paddingName}
