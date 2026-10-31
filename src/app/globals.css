@@ -2866,7 +2866,7 @@ button.contact-card-add {
   gap: 14px 28px;
   margin: 14px 0;
   padding-top: 10px;
-  border-top: 1px solid #e5e5e5;
+  /* No border-top: .pp-head already has the single rule under the letterhead. */
 }
 .pp-party-box {
   /* No boxes — thin rule + plain spacing (Jerwin: avoid boxy print). */
