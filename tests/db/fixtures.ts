@@ -12,33 +12,34 @@ export const tag = () => randomBytes(4).toString("hex");
 
 const taken = new Set<number>();
 
-/** A year (and the year after it) with no number series yet, so its counters start at 0001. */
+/** A year with no number series yet, so its counters start at 0001. */
 export async function freshYear(): Promise<number> {
-  // Prefer sparse modern/future years so Asia/Manila UTC+8 stays stable (pre-1970
-  // TZDB offsets break PHT boundary tests). Keep years ≤9998 for MySQL DATE.
-  // Local `taken` only avoids same-process races before DocumentSeries rows exist;
-  // clear it between rounds so a long worker cannot hang forever.
+  // Prefer modern/future years so Asia/Manila UTC+8 stays stable (pre-1970 TZDB
+  // offsets break PHT boundary tests). Keep years ≤9998 for MySQL DATE.
+  // Shared hacien_test is checkerboarded — require only one free year (not a
+  // consecutive pair). Scan linearly per range (one distinct-year query) instead
+  // of random COUNT loops that hang when the pool is dense.
   const ranges: Array<[number, number]> = [
     [2027, 2199],
-    [2100, 2999],
-    [3000, 9997],
+    [2200, 9998],
   ];
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 2; round++) {
     for (const [lo, hi] of ranges) {
-      const span = hi - lo + 1;
-      for (let attempt = 0; attempt < Math.min(2500, span * 2); attempt++) {
-        const y = lo + Math.floor(Math.random() * span);
-        if (y + 1 > 9998) continue;
-        if (taken.has(y) || taken.has(y + 1)) continue;
-        const used = await db.documentSeries.count({ where: { year: { in: [y, y + 1] } } });
-        if (used) continue;
-        taken.add(y).add(y + 1);
+      const rows = await db.documentSeries.findMany({
+        where: { year: { gte: lo, lte: hi } },
+        select: { year: true },
+        distinct: ["year"],
+      });
+      const occupied = new Set(rows.map((r) => r.year));
+      for (let y = lo; y <= hi; y++) {
+        if (taken.has(y) || occupied.has(y)) continue;
+        taken.add(y);
         return y;
       }
     }
     taken.clear();
   }
-  throw new Error("freshYear: no free year pair in 2027–9997");
+  throw new Error("freshYear: no free year in 2027–9998");
 }
 
 export async function makeUser(kind: "costs" | "staff" | "viewer"): Promise<DocActor> {

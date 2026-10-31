@@ -96,12 +96,13 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     it("restarts at 0001 in a new year", async () => {
       const customer = await makeCustomer();
       const year = await freshYear();
+      const otherYear = await freshYear();
       const first = await createQuote(quoteInput(customer.id, year), costUser);
       const second = await createQuote(quoteInput(customer.id, year), costUser);
-      const nextYear = await createQuote(quoteInput(customer.id, year + 1), costUser);
+      const nextYear = await createQuote(quoteInput(customer.id, otherYear), costUser);
       expect(first.number).toBe(qt(year, 1));
       expect(second.number).toBe(qt(year, 2));
-      expect(nextYear.number).toBe(qt(year + 1, 1));
+      expect(nextYear.number).toBe(qt(otherYear, 1));
     });
 
     it("never reissues a voided number", async () => {
