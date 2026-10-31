@@ -15,7 +15,8 @@ if (!gate.ok) {
 }
 
 const CHROME = process.env.CHROME || "/usr/bin/google-chrome-stable";
-const BASE = (process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+// Prefer localhost over 127.0.0.1 so Next.js dev hydrates (allowedDevOrigins).
+const BASE = (process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "").replace("://127.0.0.1", "://localhost");
 const PORT = Number(process.env.SHOT_CDP_PORT || 9461);
 const adminEmail = process.env.GUARD_EMAIL || "jerwin@example.com";
 const password = process.env.GUARD_PASSWORD || process.env.SEED_PASSWORD || "TestPass123!";
@@ -180,16 +181,24 @@ async function openQuoteEditor(cdp) {
 }
 
 async function clickTab(cdp, label) {
-  await cdp.send("Runtime.evaluate", {
+  const r = await cdp.send("Runtime.evaluate", {
     expression: `(() => {
       const tabs = [...document.querySelectorAll('.quote-tab')];
       const t = tabs.find(el => (el.textContent || '').includes(${JSON.stringify(label)}));
-      if (t) t.click();
-      return !!t;
+      if (!t) return false;
+      const propsKey = Object.keys(t).find((k) => k.startsWith('__reactProps$'));
+      const onClick = propsKey ? t[propsKey]?.onClick : null;
+      if (typeof onClick === 'function') {
+        onClick({ preventDefault() {}, stopPropagation() {}, target: t, currentTarget: t, type: 'click', bubbles: true });
+      } else {
+        t.click();
+      }
+      return true;
     })()`,
     returnByValue: true,
   });
-  await sleep(350);
+  if (!r.result?.value) throw new Error("clickTab failed: " + label);
+  await sleep(400);
 }
 
 async function main() {
@@ -264,8 +273,15 @@ async function main() {
       expression: `(() => {
         const sel = document.querySelector('#customerId');
         if (!sel) return false;
-        sel.value = '__add__';
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        const d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        d.set.call(sel, '__add__');
+        const propsKey = Object.keys(sel).find((k) => k.startsWith('__reactProps$'));
+        const onChange = propsKey ? sel[propsKey]?.onChange : null;
+        if (typeof onChange === 'function') {
+          onChange({ target: sel, currentTarget: sel, type: 'change', bubbles: true, preventDefault() {}, stopPropagation() {} });
+        } else {
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         return true;
       })()`,
       returnByValue: true,

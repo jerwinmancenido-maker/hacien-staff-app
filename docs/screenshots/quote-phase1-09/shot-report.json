@@ -1,11 +1,10 @@
 {
   "host": "127.0.0.1",
-  "editPath": "/quotes/cmvwka2xs000xjseo5cjj0eok/edit",
   "report": [
     {
       "name": "quote-items-1280.png",
       "width": 1280,
-      "height": 1311,
+      "height": 1303,
       "scrollWidth": 1265
     },
     {
@@ -35,31 +34,31 @@
     {
       "name": "quote-items-360.png",
       "width": 360,
-      "height": 1691,
+      "height": 1963,
       "scrollWidth": 360
     },
     {
       "name": "quote-terms-360.png",
       "width": 360,
-      "height": 1691,
+      "height": 1963,
       "scrollWidth": 360
     },
     {
       "name": "quote-notes-360.png",
       "width": 360,
-      "height": 1691,
+      "height": 1963,
       "scrollWidth": 360
     },
     {
       "name": "quote-signoff-360.png",
       "width": 360,
-      "height": 1691,
+      "height": 1963,
       "scrollWidth": 360
     },
     {
       "name": "quote-add-customer-360.png",
       "width": 360,
-      "height": 1691,
+      "height": 1963,
       "scrollWidth": 360
     },
     {
@@ -68,9 +67,8 @@
       "height": 1600,
       "scrollWidth": 1280,
       "printCheck": {
-        "hasCustomer": true,
-        "hasInternal": false,
-        "snippet": "Back\nQT-2026-0001 · DRAFT · Choose \"Save as PDF\" in the print dialog. Paper: A4. Turn off browser headers and footers.\nPrint / Save PDF\nAdd your TIN and address so they print on documents. Settings → Print & company\nDRAFT\nHACIEN\nAddress: [not set — Add your address so it prints on documents]\nTIN: [not set — Add your TIN so it prints on documents]\nNON-VAT\nQUOTATION\nQuote no.\tQT-2026-0001\nDate\tOct 31, 2026\nStatus\tDRAFT\nValid until\tNov 30, 2026\nSubject / project\tSupply of laptops, printers and setu"
+        "hasCustomerNote": true,
+        "hasInternal": false
       }
     }
   ]

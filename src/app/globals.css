@@ -2839,17 +2839,22 @@ pre.json {
     min-width: 88px;
   }
   .edit-table.items-edit .col-money {
-    width: 80px;
-    min-width: 80px;
+    width: 76px;
+    min-width: 76px;
   }
   .edit-table.items-edit .col-wh {
-    width: 56px;
-    min-width: 56px;
+    width: 64px;
+    min-width: 64px;
+  }
+  .edit-table.items-edit table.list th.col-wh {
+    white-space: nowrap;
+    letter-spacing: 0;
+    font-size: 11px;
   }
   .edit-table.items-edit .col-actions,
   .edit-table.items-edit td.line-actions {
-    width: 68px;
-    min-width: 68px;
+    width: 72px;
+    min-width: 72px;
   }
 }
 .btn-link.danger {
@@ -3472,9 +3477,9 @@ button.contact-card-add {
 }
 .pp-title-block {
   text-align: right;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
-  max-width: 42%;
+  max-width: 40%;
 }
 .pp-title-block h1 {
   margin: 0 0 8px;
@@ -3491,6 +3496,11 @@ button.contact-card-add {
   gap: 8px;
   max-width: 100%;
   box-sizing: border-box;
+}
+.pp-title-block .pp-meta {
+  margin-left: auto;
+  width: max-content;
+  max-width: 100%;
 }
 /* Pixel Blue square — the only blue on the page besides the logo. */
 .pp-title-pixel {
@@ -4971,14 +4981,20 @@ button.contact-card-add {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 28px;
+  width: 36px;
   pointer-events: none;
-  background: linear-gradient(to right, transparent, #fff);
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), #fff 55%, #fff);
   opacity: 0;
+  z-index: 2;
 }
 @media (max-width: 640px) {
   .quote-tabs-wrap::after {
     opacity: 1;
+  }
+  .quote-tab {
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 13px;
   }
 }
 .quote-tab {
@@ -5160,6 +5176,7 @@ button.contact-card-add {
 .quote-drawer-body .field textarea {
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 .quote-drawer-row {
@@ -5168,9 +5185,14 @@ button.contact-card-add {
   gap: 12px;
   width: 100%;
   box-sizing: border-box;
+  align-items: start;
 }
 .quote-drawer-row > .field {
   min-width: 0;
+  max-width: 100%;
+}
+.quote-drawer-row > .field select {
+  max-width: 100%;
 }
 .quote-drawer-foot {
   display: flex;

@@ -103,7 +103,7 @@ function safeLine(i: EditorItem) {
 function growDesc(el: HTMLTextAreaElement | null) {
   if (!el) return;
   el.style.height = "0px";
-  el.style.height = `${Math.max(el.scrollHeight, 36)}px`;
+  el.style.height = `${Math.max(el.scrollHeight + 2, 36)}px`;
 }
 
 function DescTextarea({
