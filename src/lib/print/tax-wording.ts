@@ -26,8 +26,11 @@ export const EWT_2307_NOTE =
 /** Courtesy line on customer-facing documents. */
 export const THANK_YOU = "Thank you for your business" as const;
 
-/** Quotation / sales-order footer — not an invoice. Do not put on billing prints. */
+/** Quotation footer — not an invoice. Do not put on billing or sales-order prints. */
 export const QUOTATION_NOT_INVOICE = "This is a quotation, not an invoice." as const;
+
+/** Sales-order footer — not an invoice. Do not put on billing or quote prints. */
+export const SALES_ORDER_NOT_INVOICE = "This is a sales order, not an invoice." as const;
 
 export type PrintDocKind =
   | "quote"
@@ -50,9 +53,6 @@ const CUSTOMER_FACING: ReadonlySet<PrintDocKind> = new Set([
   "customer_statement",
 ]);
 const STATEMENT_KINDS: ReadonlySet<PrintDocKind> = new Set(["customer_statement", "supplier_statement"]);
-/** Quote + SO get the quotation disclaimer; billing keeps BIR wording only. */
-const QUOTE_LIKE: ReadonlySet<PrintDocKind> = new Set(["quote", "sales_order"]);
-
 /** Customer docs that hide internal status (WON / OPEN / …) on paper. */
 export const HIDE_STATUS_ON_PRINT: ReadonlySet<PrintDocKind> = new Set(["quote", "sales_order", "billing"]);
 
@@ -66,8 +66,11 @@ export function taxFooterLines(
   opts: { showInputTaxDisclaimer: boolean } = { showInputTaxDisclaimer: true },
 ): string[] {
   const lines: string[] = [];
-  if (QUOTE_LIKE.has(kind)) {
+  if (kind === "quote") {
     lines.push(QUOTATION_NOT_INVOICE);
+  }
+  if (kind === "sales_order") {
+    lines.push(SALES_ORDER_NOT_INVOICE);
   }
   if (BILLING_COLLECTION.has(kind)) {
     lines.push(NOT_OFFICIAL_INVOICE);

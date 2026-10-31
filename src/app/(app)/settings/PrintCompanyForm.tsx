@@ -422,7 +422,7 @@ export function PrintCompanyForm({
 
         <div className="form-actions settings-form-actions">
           <span className="small faint settings-form-footnote">
-            Changes apply to new documents; current letterhead also feeds PO/statement prints.
+            Changes apply to all prints (quote, SO, billing, PO, receiving, statements).
           </span>
           <button className="btn" type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save changes"}

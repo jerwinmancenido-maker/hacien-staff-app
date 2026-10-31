@@ -69,11 +69,23 @@ export function customerMoneyTotals(opts: {
 const day = (ymdStr: string | null | undefined) =>
   ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—";
 
+/**
+ * Letterhead for every professional print.
+ *
+ * Company name / TIN / address / logo always come from the *current* Settings
+ * snapshot — same rule as PO prints. Quote and sales-order rows still pin a
+ * `settingsVersionId` for withholding / approval math elsewhere, but that older
+ * snapshot often had a blank letterhead; reading it made prints show red
+ * "[not set]" even after Settings → Print & company was filled in.
+ *
+ * Print options (paper, banks, notes, input-tax toggle) still prefer the pinned
+ * version when the document has one, falling back to current settings.
+ */
 async function letterhead(settingsVersionId?: string | null) {
-  const snap = settingsVersionId
-    ? ((await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot()))
-    : await getSettingsSnapshot();
-  const { company, print } = snap.settings;
+  const latest = await getSettingsSnapshot();
+  const pinned = settingsVersionId ? await getSettingsVersion(settingsVersionId) : null;
+  const company = latest.settings.company;
+  const print = (pinned ?? latest).settings.print;
   return {
     company: printCompanyBlock(company),
     print,

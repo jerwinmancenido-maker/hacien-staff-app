@@ -446,8 +446,9 @@ export type PrintDoc = {
 
 const printItem = (i: ItemRow): PrintItem => ({ description: i.description, qty: money(i.qty), unit: i.unit, unitPrice: money(i.unitPrice), total: money(i.total) });
 
-async function companyFor(settingsVersionId: string) {
-  const snap = (await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot());
+/** Letterhead always from current Settings (pinned version may predate TIN/address). */
+async function companyFor(_settingsVersionId: string) {
+  const snap = await getSettingsSnapshot();
   return snap.settings.company;
 }
 
