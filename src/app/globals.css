@@ -4127,42 +4127,42 @@ button.contact-card-add {
   white-space: nowrap;
 }
 
-/* Mobile: every Home section row stacks the same way — label on top,
- * value flush left at the same indent (no right-aligned / indented counts). */
+/* Mobile: every Home section row uses the same layout — label left, value
+ * right on one line (label may wrap). Matches Needs action / Money / tax /
+ * activity; Non-VAT figures stay a single flush row with pct on the right. */
 @media (max-width: 640px) {
   .home-action-row,
   .home-money-row,
   .home-activity-row,
   .home-tax-link {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
-    justify-content: flex-start;
-    gap: 4px;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .home-action-label,
+  .home-money-label,
+  .home-activity-summary,
+  .home-tax-main {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .home-action-count,
   .home-money-amounts,
   .home-tax-due,
-  .home-activity-when,
-  .home-action-row .num,
-  .home-money-row .num,
-  .home-tax-link .num {
-    text-align: left;
+  .home-activity-when {
+    flex: 0 0 auto;
+    text-align: right;
     align-self: flex-start;
-    margin-left: 0;
-    min-width: 0;
-    width: auto;
   }
   .home-money-amounts {
-    align-items: flex-start;
+    align-items: flex-end;
   }
   .home-tax-due {
-    text-align: left;
-  }
-  .home-nonvat-figures {
-    justify-content: flex-start;
+    text-align: right;
   }
   .home-nonvat-pct {
-    margin-left: 0;
+    margin-left: auto;
   }
 }
 
