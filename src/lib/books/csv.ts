@@ -1,5 +1,5 @@
 /**
- * Shared CSV cell escape for Books (and Cash ledger export).
+ * Shared CSV cell escape for Books, Cash ledger, and tax worksheet exports.
  * Neutralizes spreadsheet formula injection by prefixing a leading apostrophe
  * when the value starts with = + @ tab CR, or a leading minus that is *not* a
  * plain number, then applies normal RFC-style quoting for comma / quote / newline.

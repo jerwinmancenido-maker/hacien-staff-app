@@ -67,6 +67,7 @@ model User {
   cashAccountsUpdated          CashAccount[]             @relation("CashAccountUpdatedBy")
   expensesCreated              Expense[]                 @relation("ExpenseCreatedBy")
   cashTransfersCreated         CashTransfer[]            @relation("CashTransferCreatedBy")
+  taxPaidQuartersUpdated       TaxPaidQuarter[]          @relation("TaxPaidQuarterUpdatedBy")
 }
 
 model Session {
@@ -1267,4 +1268,28 @@ model CashTransfer {
   @@index([status])
   @@index([fromAccountId])
   @@index([toAccountId])
+}
+
+// ---------------------------------------------------------------------------
+// Tax worksheets (Part 7c) — manual tax-paid entries for 1701Q worksheets.
+// Additive only. Never files returns; never connects to BIR / eBIRForms.
+// ---------------------------------------------------------------------------
+
+/// Amount the owner actually paid for a quarter's income tax (typed by staff).
+/// Used on line (e) of the 1701Q 8% worksheet as "tax paid in earlier quarters".
+model TaxPaidQuarter {
+  id          String   @id @default(cuid())
+  year        Int
+  /// Calendar quarter 1–4 (Manila).
+  quarter     Int
+  /// Pesos actually paid for this quarter's return (manual entry).
+  amountPaid  Decimal  @db.Decimal(15, 2)
+  notes       String?  @db.Text
+  updatedById String
+  updatedBy   User     @relation("TaxPaidQuarterUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([year, quarter])
+  @@index([year])
 }
