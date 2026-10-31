@@ -283,21 +283,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Enable Payables (supplier payments)",
                 kind: "checkbox",
                 value: s.features.payablesEnabled,
-                hint: "OFF by default. Turn on for staging to use /payables. Or set env PAYABLES_ENABLED=true (env wins when set).",
+                hint: "OFF by default. Ask your admin to turn this on.",
               },
               {
                 name: "cashEnabled",
                 label: "Enable Cash (accounts, expenses, transfers)",
                 kind: "checkbox",
                 value: s.features.cashEnabled,
-                hint: "OFF by default. Turn on for staging to use /cash. Or set env CASH_ENABLED=true (env wins when set).",
+                hint: "OFF by default. Ask your admin to turn this on.",
               },
               {
                 name: "booksEnabled",
                 label: "Enable Books (read-only registers / export)",
                 kind: "checkbox",
                 value: s.features.booksEnabled,
-                hint: "OFF by default. Turn on for staging to use /books. Or set env BOOKS_ENABLED=true (env wins when set). Draft BIR format — confirm with accountant/RDO.",
+                hint: "OFF by default. Ask your admin to turn this on. Draft BIR format — confirm with accountant/RDO.",
               },
             ]}
           />

@@ -161,6 +161,9 @@ const CRUMB_LABELS: Record<string, string> = {
   disbursements: "Cash disbursements",
   purchases: "Purchases",
   journal: "General journal",
+  // Tax wording kept from tax-calendar-rules-02 (PR 18 had shorter Tax/Calendar/Income
+  // labels to avoid "Record"; breadcrumbLabelsForPath still yields Books / Tax calendar
+  // and Books / Tax worksheets).
   tax: "Tax worksheets",
   calendar: "Tax calendar",
   income: "1701Q",

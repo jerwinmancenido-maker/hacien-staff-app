@@ -24,7 +24,7 @@ export type WithholdingTypeValue = (typeof WITHHOLDING_TYPES)[number];
 export const WITHHOLDING_LABELS: Record<WithholdingTypeValue, string> = {
   GOVERNMENT: "Government",
   TOP_WITHHOLDING_AGENT: "Top Withholding Agent",
-  NONE: "None",
+  NONE: "No withholding",
 };
 
 export const SUPPLIER_TAX_TYPES = ["VAT", "NON_VAT", "NO_RECEIPT"] as const;
