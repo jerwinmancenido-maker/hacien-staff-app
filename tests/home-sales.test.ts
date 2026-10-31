@@ -330,7 +330,12 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*min-width:\s*0/s);
     expect(css).toMatch(/\.home-tax-body\s*\{[^}]*min-width:\s*0/s);
     expect(css).toMatch(/\.home-ra-summary\s*\{[^}]*text-overflow:\s*ellipsis/s);
-    expect(css).toMatch(/\.home-tax-due\s*\{[^}]*text-overflow:\s*ellipsis/s);
+    // Due date wraps fully (no money/date ellipsis); sideways overflow guarded by min-width 0 + shots.
+    expect(css).toMatch(/\.home-tax-due\s*\{[^}]*white-space:\s*normal/s);
+    expect(css).toMatch(/\.home-pipeline-row-caption\s*\{[^}]*white-space:\s*normal/s);
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-pipeline-phone\s*\{[^}]*align-items:\s*stretch/s,
+    );
     const shots = readFileSync(path.join(root, "scripts/home-a-shots.mjs"), "utf8");
     expect(shots).toMatch(/scrollWidth/);
     expect(shots).toMatch(/assertNoHorizontalScroll/);
