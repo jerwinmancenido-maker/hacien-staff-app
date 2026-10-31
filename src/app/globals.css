@@ -2955,7 +2955,7 @@ button.contact-card-add {
 .tax-cal-desktop {
   display: block;
   overflow-x: visible;
-  /* Slightly tighter card pad so the fixed columns fit at 1280 without clipping. */
+  /* Slightly tighter card pad so fixed columns fit without horizontal scroll. */
   padding-left: 12px;
   padding-right: 12px;
 }
@@ -2963,87 +2963,104 @@ button.contact-card-add {
 .tax-cal-table {
   table-layout: fixed;
   width: 100%;
+  min-width: 0;
   border-collapse: separate;
   border-spacing: 0;
 }
 .tax-cal-table th,
 .tax-cal-table td {
   height: auto;
-  /* Consistent cell padding (~Tailwind px-3) so Form/Period/Due/Worksheet never touch. */
+  /* Consistent cell padding (~Tailwind px-3). */
   padding: 8px 12px;
   vertical-align: top;
   overflow-wrap: normal;
   word-break: normal;
   box-sizing: border-box;
+  /* Never truncate cell copy with ellipsis. */
+  text-overflow: clip;
+  overflow: visible;
 }
 .tax-cal-table th {
   font-size: 10px;
 }
 /*
- * Explicit widths at 1280 (Description = remainder).
- * Form ~72, Period ~80, Due ~120, Status ~90, Applies ~150, Worksheet ~120, Done ~130.
- * Applies tuned to ~158 so long chips ("Unverified: ask RDO") keep ≥10px before Worksheet.
+ * Default desktop (≥1150): Worksheet column visible; width 100% of card.
+ * Percentages keep scrollWidth === clientWidth. ≥1280 retunes Description
+ * to ~220–260 by trimming Status/Applies/Worksheet (media query below).
  */
 .tax-cal-table th:nth-child(1),
 .tax-cal-table td.tax-cal-form {
-  width: 72px;
-  white-space: nowrap;
+  width: 10%;
+  /* Wrap multi-word names ("Books of accounts"); never split short codes (2551Q). */
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .tax-cal-table th:nth-child(2),
 .tax-cal-table td.tax-cal-desc {
-  /* remainder — no fixed width; title wraps (no ellipsis) */
-  width: auto;
+  width: 22%;
 }
 .tax-cal-table th:nth-child(3),
 .tax-cal-table td.tax-cal-period {
-  width: 80px;
+  width: 8%;
   white-space: nowrap;
 }
 .tax-cal-table th:nth-child(4),
 .tax-cal-table td.tax-cal-due {
-  width: 120px;
+  width: 12%;
   white-space: normal;
 }
 .tax-cal-table td.tax-cal-due > div:first-child {
   white-space: nowrap;
 }
-.tax-cal-table td.tax-cal-due .small {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2; /* file-by hint: at most 2 lines */
-  overflow: hidden;
+.tax-cal-table td.tax-cal-due .small,
+.tax-cal-table td.tax-cal-due .tax-cal-fileby {
+  /* File-by hint wraps freely — never truncated / no line-clamp / no ellipsis. */
+  display: block;
+  overflow: visible;
   white-space: normal;
   word-break: normal;
   overflow-wrap: break-word;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+.tax-cal-table td.tax-cal-due .tax-cal-fileby-date {
+  /* Keep YYYY-MM-DD whole; hint may still wrap around it. */
+  white-space: nowrap;
 }
 .tax-cal-table th:nth-child(5),
 .tax-cal-table td.tax-cal-status {
-  width: 90px;
-  white-space: nowrap;
+  width: 10%;
+  white-space: normal;
+  overflow: hidden; /* keep Marked done chip out of Applies padding */
 }
 .tax-cal-table th:nth-child(6),
 .tax-cal-table td.tax-cal-applies {
-  width: 158px;
+  width: 15%;
   white-space: nowrap;
 }
 .tax-cal-table td.tax-cal-status .chip,
 .tax-cal-table td.tax-cal-applies .chip {
-  white-space: nowrap;
-  max-width: none;
-  height: 22px;
-  line-height: 22px;
-  padding: 0 7px;
-  font-size: 11px;
-  flex-shrink: 0;
+  white-space: normal;
+  max-width: 100%;
+  height: auto;
+  min-height: 22px;
+  line-height: 1.25;
+  padding: 3px 5px;
+  font-size: 10px;
+  flex-shrink: 1;
+  box-sizing: border-box;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .tax-cal-table th:nth-child(7),
 .tax-cal-table td.tax-cal-worksheet {
-  width: 120px;
+  width: 12%;
   white-space: nowrap;
 }
 .tax-cal-table th:nth-child(8),
 .tax-cal-table td.tax-cal-done {
-  width: 130px;
+  width: 14%;
 }
 .tax-cal-desc {
   white-space: normal;
@@ -3053,18 +3070,25 @@ button.contact-card-add {
 .tax-cal-desc > div:first-child {
   white-space: normal;
   overflow: visible;
-  text-overflow: unset;
+  text-overflow: clip;
 }
 .tax-cal-desc .small {
   white-space: normal;
 }
-.tax-cal-table td.tax-cal-worksheet a {
+/* Inline worksheet under title — only shown when Worksheet column is hidden. */
+.tax-cal-desc-worksheet {
+  display: none;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.tax-cal-table td.tax-cal-worksheet a,
+.tax-cal-desc-worksheet a {
   white-space: nowrap;
   font-size: 12px;
 }
 .tax-cal-done .btn {
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -3073,6 +3097,29 @@ button.contact-card-add {
   color: var(--text);
   background: var(--card);
   border-color: var(--border);
+}
+/* Open Mark-as-done form spans the full table width under the row (not the Done cell). */
+.tax-cal-done-form-row td {
+  padding: 4px 12px 14px;
+  vertical-align: top;
+  overflow: visible;
+}
+.tax-cal-mark-done-form {
+  width: 100%;
+  max-width: 520px;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form input[type="date"],
+.tax-cal-mark-done-form input[type="text"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.tax-cal-mark-done-form .faint.small {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
 }
 /* Mute copy, not the action control — secondary Done must stay readable. */
 .tax-cal-row-muted td:not(.tax-cal-done) {
@@ -3150,25 +3197,101 @@ button.contact-card-add {
 }
 
 /*
- * Mid desktops (~1024): keep real column padding/widths (Description not crushed).
- * Horizontal scroll on the card — cells stay intact (no mid-chip / mid-button clip).
+ * Below ~1150: hide Worksheet column; show "Open worksheet" under the title.
+ * Remaining columns must fit at 1024 with NO horizontal scroll; Done fully visible.
  */
-@media (min-width: 640px) and (max-width: 1199px) {
+@media (min-width: 640px) and (max-width: 1149px) {
   .tax-cal-desktop {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: visible;
+    padding-left: 8px;
+    padding-right: 8px;
   }
   .tax-cal-table {
-    width: 960px;
-    min-width: 960px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
+  .tax-cal-table th:nth-child(7),
+  .tax-cal-table td.tax-cal-worksheet {
+    display: none;
+  }
+  .tax-cal-desc-worksheet {
+    display: block;
+  }
+  /* Beat table.list td padding (0,1,2) so Form/Period nowrap text fits the %. */
+  table.list.tax-cal-table th,
+  table.list.tax-cal-table td {
+    padding: 8px 6px;
+  }
+  /* Percentages sum to 100% of the card content box (~660px at 1024). */
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 64px;
+    width: 12%;
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 200px;
+    width: 18%;
+  }
+  .tax-cal-table th:nth-child(3),
+  .tax-cal-table td.tax-cal-period {
+    width: 9%;
+  }
+  .tax-cal-table th:nth-child(4),
+  .tax-cal-table td.tax-cal-due {
+    width: 14%;
+  }
+  .tax-cal-table th:nth-child(5),
+  .tax-cal-table td.tax-cal-status {
+    width: 11%;
+  }
+  .tax-cal-table th:nth-child(6),
+  .tax-cal-table td.tax-cal-applies {
+    width: 19%;
+  }
+  .tax-cal-table th:nth-child(8),
+  .tax-cal-table td.tax-cal-done {
+    width: 18%;
+  }
+  .tax-cal-table td.tax-cal-status .chip,
+  .tax-cal-table td.tax-cal-applies .chip {
+    padding: 3px 5px;
+    font-size: 10px;
+    /* Allow long chips to wrap inside the cell — never ellipsis, never widen the table. */
+    white-space: normal;
+    height: auto;
+    min-height: 22px;
+    line-height: 1.25;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .tax-cal-done .btn {
+    padding: 0 5px;
+    font-size: 11px;
+    max-width: 100%;
+  }
+}
+
+/*
+ * ≥1280: Description ~220–260px by trimming Status / Applies / Worksheet.
+ * Absolute widths sum ≤ ~908 (content box at 1280 with sidebar) so the table
+ * does not expand past the card (scrollWidth === clientWidth).
+ */
+@media (min-width: 1280px) {
+  .tax-cal-desktop {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  table.list.tax-cal-table th,
+  table.list.tax-cal-table td {
+    padding: 8px 8px;
+  }
+  .tax-cal-table th:nth-child(1),
+  .tax-cal-table td.tax-cal-form {
+    width: 96px; /* room for "Books of accounts" to wrap at spaces */
+  }
+  .tax-cal-table th:nth-child(2),
+  .tax-cal-table td.tax-cal-desc {
+    width: 220px;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
@@ -3180,18 +3303,37 @@ button.contact-card-add {
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
-    width: 90px;
+    width: 80px;
   }
   .tax-cal-table th:nth-child(6),
   .tax-cal-table td.tax-cal-applies {
-    width: 158px;
+    width: 118px;
   }
   .tax-cal-table th:nth-child(7),
   .tax-cal-table td.tax-cal-worksheet {
-    width: 120px;
+    width: 96px;
   }
   .tax-cal-table th:nth-child(8),
   .tax-cal-table td.tax-cal-done {
-    width: 130px;
+    width: 112px;
+  }
+  .tax-cal-table td.tax-cal-status .chip,
+  .tax-cal-table td.tax-cal-applies .chip {
+    padding: 3px 5px;
+    font-size: 10px;
+    white-space: normal;
+    height: auto;
+    min-height: 22px;
+    line-height: 1.25;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .tax-cal-table td.tax-cal-worksheet a {
+    font-size: 11px;
+  }
+  .tax-cal-done .btn {
+    padding: 0 6px;
+    font-size: 11px;
+    max-width: 100%;
   }
 }
