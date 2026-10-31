@@ -9,11 +9,12 @@ import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
+import { AccountMenu } from "@/components/AccountMenu";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
-import { BellIcon, LogoutIcon } from "@/components/Icons";
+import { BellIcon } from "@/components/Icons";
 import { TopbarSearch } from "@/components/TopbarSearch";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const warning = NON_VAT_MESSAGES[meter.level];
   const booksEnabled = await isBooksEnabled();
   const nonVatTitle = homeNonVatTitle(meter.limit);
+  const canOpenSettings = can(user, "manage_settings");
 
   const sidebar = (
     <>
@@ -36,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
       </div>
       <SidebarNav
-        isAdmin={can(user, "manage_settings")}
+        isAdmin={canOpenSettings}
         canSeeCosts={canSeeCosts(user)}
         canEdit={can(user, "edit_data")}
         canViewBooks={can(user, "view_books")}
@@ -96,13 +98,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
         <BellIcon size={16} />
       </button>
-      <Avatar name={user.name} small dark />
-      <span className="user-name">{user.name}</span>
-      <form action={signOut}>
-        <button className="btn btn-secondary btn-sm" type="submit">
-          <LogoutIcon size={14} /> Sign out
-        </button>
-      </form>
+      <AccountMenu
+        name={user.name}
+        role={roleLabel(user)}
+        showSettings={canOpenSettings}
+        signOutAction={signOut}
+      />
     </>
   );
 
