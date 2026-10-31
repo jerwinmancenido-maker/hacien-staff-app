@@ -19,9 +19,17 @@ import {
   shiftMonthKey,
   topSalesCustomers,
 } from "@/lib/home/sales";
-import { canShowHomeActivity, filterHomeActivity, activityDetail } from "@/lib/home/activity";
+import {
+  HOME_RECENT_DESKTOP_ROWS,
+  HOME_RECENT_PHONE_ROWS,
+  canShowHomeActivity,
+  filterHomeActivity,
+  activityDetail,
+} from "@/lib/home/activity";
 import { newBillingHref, newQuoteHref, auditLogHref } from "@/lib/home/hrefs";
 import { roleFlags, can, type PermissionUser } from "@/lib/permissions";
+import { renderToStaticMarkup } from "react-dom/server";
+import { HomeRecentActivity } from "@/components/home/HomeSections";
 
 function user(roles: ("ADMIN" | "APPROVER" | "STAFF" | "VIEWER")[], costs = false): PermissionUser {
   return { ...roleFlags(roles), active: true, canSeeCosts: costs };
@@ -261,7 +269,7 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*14px/s);
     expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*114px/s);
     expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toMatch(/\.home-tax-full\s*\{[^}]*min-height:\s*72px/s);
+    expect(css).toMatch(/\.home-tax-full\s*\{[^}]*min-height:\s*0/s);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
     expect(chartSrc).toMatch(/const VB_H = 114/);
     const hrefs = readFileSync(path.join(root, "src/lib/home/hrefs.ts"), "utf8");
@@ -276,8 +284,8 @@ describe("home concept A layout wiring", () => {
     expect(sections).toMatch(/home-tax-strip/);
     expect(sections).toMatch(/home-ra-row-extra/);
     expect(sections).toMatch(/stripLabel/);
-    // Recent: fetch 5 (desktop); phone CSS hides .home-ra-row-extra (3rd+)
-    expect(dash).toMatch(/listRecentHomeActivity\(5/);
+    // Recent: fetch HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra
+    expect(dash).toMatch(/listRecentHomeActivity\(HOME_RECENT_DESKTOP_ROWS/);
     // Phone media block: smaller cards (pad 10–12), 18px KPI, 13px titles, 40px taps, no Y-axis, 2 activity rows
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
@@ -313,14 +321,67 @@ describe("home concept A layout wiring", () => {
     expect(page).toMatch(/home-page-header/);
   });
 
-  it("renders up to 5 recent activity rows on desktop; rows past the 2nd carry the phone-hide class", () => {
-    expect(dash).toMatch(/listRecentHomeActivity\(5/);
-    // Markup: index >= 2 gets home-ra-row-extra (phone CSS hides it below md)
-    expect(sections).toMatch(/i\s*>=\s*2\s*\?\s*["'] home-ra-row-extra["']/);
+  it("fetches exactly HOME_RECENT_DESKTOP_ROWS; phone hides rows past HOME_RECENT_PHONE_ROWS", () => {
+    expect(HOME_RECENT_DESKTOP_ROWS).toBe(3);
+    expect(HOME_RECENT_PHONE_ROWS).toBe(2);
+    expect(dash).toMatch(/listRecentHomeActivity\(HOME_RECENT_DESKTOP_ROWS/);
+    expect(sections).toMatch(/HOME_RECENT_PHONE_ROWS/);
+    expect(sections).toMatch(/i\s*>=\s*HOME_RECENT_PHONE_ROWS\s*\?\s*["'] home-ra-row-extra["']/);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
     // Desktop base must NOT hide .home-ra-row-extra
     const phoneBlock = css.split(/@media\s*\(\s*max-width:\s*640px\s*\)/)[0] ?? css;
     expect(phoneBlock).not.toMatch(/\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+  });
+
+  it("shows exactly desktop/phone Recent row counts in markup classes", () => {
+    const rows = Array.from({ length: HOME_RECENT_DESKTOP_ROWS }, (_, i) => ({
+      id: `a${i}`,
+      atLabel: "1:00 PM",
+      summary: `Row ${i + 1}`,
+      detail: `QT-2026-000${i}`,
+      href: "/quotes",
+      entityType: "Quote",
+    }));
+    const html = renderToStaticMarkup(
+      HomeRecentActivity({ rows: rows as never, auditHref: "/audit" }),
+    );
+    const extras = (html.match(/home-ra-row-extra/g) || []).length;
+    // Count row roots only (class contains home-ra-row, not merely as a substring of -extra alone).
+    const all = (html.match(/class="home-ra-row(?: home-ra-row-extra)?"/g) || []).length;
+    expect(all).toBe(HOME_RECENT_DESKTOP_ROWS);
+    expect(extras).toBe(HOME_RECENT_DESKTOP_ROWS - HOME_RECENT_PHONE_ROWS);
+    // Phone visible = total − extras; desktop visible = total (extras not CSS-hidden on desktop).
+    expect(HOME_RECENT_DESKTOP_ROWS - extras).toBe(HOME_RECENT_PHONE_ROWS);
+  });
+
+  it("shows View all → /audit only when view_audit is allowed", () => {
+    expect(can(user(["ADMIN"]), "view_audit")).toBe(true);
+    expect(can(user(["APPROVER"]), "view_audit")).toBe(false);
+    expect(can(user(["STAFF"]), "view_audit")).toBe(false);
+    expect(dash).toMatch(/can\(user,\s*["']view_audit["']\)/);
+    expect(auditLogHref()).toBe("/audit");
+
+    const sample = [
+      {
+        id: "x1",
+        atLabel: "1:00 PM",
+        summary: "Jerwin created a quote",
+        detail: "QT-2026-0001",
+        href: "/quotes/1",
+        entityType: "Quote",
+      },
+    ];
+    const withLink = renderToStaticMarkup(
+      HomeRecentActivity({ rows: sample as never, auditHref: auditLogHref() }),
+    );
+    expect(withLink).toMatch(/>View all</);
+    expect(withLink).toMatch(/href="\/audit"/);
+
+    const noLink = renderToStaticMarkup(
+      HomeRecentActivity({ rows: sample as never, auditHref: null }),
+    );
+    expect(noLink).not.toMatch(/View all/);
+    expect(noLink).not.toMatch(/href="\/audit"/);
   });
 
   it("prevents sideways overflow on narrow Home (min-width 0 + truncate)", () => {

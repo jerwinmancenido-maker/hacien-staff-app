@@ -3,6 +3,16 @@
 import { db } from "../db";
 import { TIME_ZONE } from "../format";
 
+/**
+ * Desktop Home Recent activity row budget (fits ≤800px @ 1280 with Pipeline).
+ * We fetch exactly this many — phone still shows {@link HOME_RECENT_PHONE_ROWS}
+ * via `.home-ra-row-extra` CSS hide for indexes ≥ that count.
+ */
+export const HOME_RECENT_DESKTOP_ROWS = 3;
+
+/** Phone Home Recent activity visible rows (CSS hides `.home-ra-row-extra`). */
+export const HOME_RECENT_PHONE_ROWS = 2;
+
 const DOC_ENTITY_TYPES = [
   "Quote",
   "SalesOrder",
@@ -160,7 +170,7 @@ function jsonField(value: unknown, key: string): string | null {
 }
 
 export async function listRecentHomeActivity(
-  limit = 5,
+  limit = HOME_RECENT_DESKTOP_ROWS,
   opts: { withCosts?: boolean } = {},
 ): Promise<HomeActivityItem[]> {
   const withCosts = opts.withCosts !== false;

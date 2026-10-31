@@ -18,7 +18,11 @@ import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
 import { listTaxCalendar } from "../services/tax-calendar";
 import { fromScaled, toScaled } from "../quotes/calc";
-import { listRecentHomeActivity, type HomeActivityItem } from "./activity";
+import {
+  HOME_RECENT_DESKTOP_ROWS,
+  listRecentHomeActivity,
+  type HomeActivityItem,
+} from "./activity";
 import {
   auditLogHref,
   billingsOverdueHref,
@@ -180,7 +184,8 @@ export type HomeDashboard = {
   pipeline: HomePipeline | null;
   nonVat: HomeNonVat;
   recent: HomeActivityItem[];
-  auditHref: string;
+  /** Audit log href when the viewer has `view_audit`; otherwise null (no View all). */
+  auditHref: string | null;
   features: HomeFeatureFlags;
   withCosts: boolean;
 };
@@ -447,7 +452,7 @@ export async function loadHomeDashboard(
       pipeline: null,
       nonVat,
       recent: [],
-      auditHref: auditLogHref(),
+      auditHref: can(user, "view_audit") ? auditLogHref() : null,
       features,
       withCosts,
     };
@@ -480,8 +485,8 @@ export async function loadHomeDashboard(
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
-    // Desktop shows 5; phone CSS hides .home-ra-row-extra (3rd+) so phone shows 2.
-    listRecentHomeActivity(5, { withCosts }),
+    // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
+    listRecentHomeActivity(HOME_RECENT_DESKTOP_ROWS, { withCosts }),
     loadHomePipeline(user),
   ]);
 
@@ -614,7 +619,7 @@ export async function loadHomeDashboard(
     pipeline,
     nonVat,
     recent,
-    auditHref: auditLogHref(),
+    auditHref: can(user, "view_audit") ? auditLogHref() : null,
     features,
     withCosts,
   };

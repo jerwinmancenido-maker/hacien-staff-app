@@ -296,11 +296,22 @@ async function main() {
     await login(cdp, adminEmail);
     await record("home-a-empty-1280.png", 1280, readyEmpty);
     await record("home-a-empty-360.png", 360, readyEmpty, { checkScroll: true });
+  } else if (mode === "dense") {
+    await login(cdp, adminEmail);
+    await record("home-a-data-dense-1280.png", 1280, readyData);
+    if (heights["home-a-data-dense-1280.png"] > 800) {
+      throw new Error(
+        `Dense 1280 page height ${heights["home-a-data-dense-1280.png"]} > 800`,
+      );
+    }
   } else {
     await login(cdp, adminEmail);
     await record("home-a-data-1280.png", 1280, readyData);
     await record("home-a-data-360.png", 360, readyData, { checkScroll: true });
     await record("home-a-data-320.png", 320, readyData, { checkScroll: true });
+    if (heights["home-a-data-1280.png"] > 800) {
+      throw new Error(`Data 1280 page height ${heights["home-a-data-1280.png"]} > 800`);
+    }
   }
 
   cdp.close();

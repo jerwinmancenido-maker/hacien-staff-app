@@ -3,12 +3,14 @@
  * Throwaway fake billings for Home concept-A screenshots (local DB only).
  *
  *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs fill
+ *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs dense
  *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs empty
  *   ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs restore
  *
  * Requires ALLOW_SEED_SHOTS=1 and a local DATABASE_URL host (see
  * scripts/lib/assert-local-db.mjs). `empty` voids every non-VOID billing
- * (reversible) so Owed / overdue / chart all clear.
+ * (reversible) so Owed / overdue / chart all clear. `dense` = fill + ≥5
+ * extra activity audit rows (proves desktop height with a deep Recent list).
  */
 import { assertLocalSeedShotsOrExit } from "./lib/assert-local-db.mjs";
 import { PrismaClient } from "@prisma/client";
@@ -332,8 +334,37 @@ async function seedPipelineAndActivity(admin, sampleSo) {
     },
   });
 
-  // Seed create audits + these new ones (≥5) so desktop Recent shows 5 rows.
+  // Seed create audits + these new ones (≥5 activity candidates in the log).
   console.log("fill: pipeline fixtures — 2 SENT quotes, 1 unbilled OPEN SO, activity audits");
+}
+
+/** Extra Recent-activity audits (≥5) for dense 1280 height proof. */
+async function seedDenseActivity(admin) {
+  const DENSE = `${TAG}-dense-activity`;
+  await db.$executeRawUnsafe(
+    `DELETE FROM AuditLog WHERE JSON_UNQUOTE(JSON_EXTRACT(\`after\`, '$.shotTag')) = ?`,
+    DENSE,
+  );
+
+  const quote = await db.quote.findFirst({ orderBy: { createdAt: "desc" } });
+  const so = await db.salesOrder.findFirst({ orderBy: { createdAt: "desc" } });
+  if (!quote || !so) throw new Error("Need quote + sales order for dense activity seed");
+
+  const now = Date.now();
+  for (let i = 0; i < 8; i++) {
+    const useQuote = i % 2 === 0;
+    await db.auditLog.create({
+      data: {
+        userId: admin.id,
+        entityType: useQuote ? "Quote" : "SalesOrder",
+        entityId: useQuote ? quote.id : so.id,
+        action: "update",
+        after: { shotTag: DENSE, n: i, number: useQuote ? quote.number : so.number },
+        at: new Date(now - i * 30_000),
+      },
+    });
+  }
+  console.log("dense: added 8 extra activity audit rows");
 }
 
 async function main() {
@@ -342,6 +373,11 @@ async function main() {
   else if (mode === "restore") {
     await restoreEmptyVoids();
     await restoreParked();
+  } else if (mode === "dense") {
+    await fill();
+    const admin = await db.user.findFirst({ where: { isAdmin: true }, orderBy: { createdAt: "asc" } });
+    if (!admin) throw new Error("Need an admin user for dense seed");
+    await seedDenseActivity(admin);
   } else await fill();
   await db.$disconnect();
 }

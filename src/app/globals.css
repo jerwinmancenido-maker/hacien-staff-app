@@ -4680,7 +4680,7 @@ button.contact-card-add {
 .home-bot-left {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   width: 100%;
 }
@@ -4695,9 +4695,9 @@ button.contact-card-add {
   box-sizing: border-box;
 }
 
-/* Pipeline desktop: compact 2-row card under tax (fit ≤800 with 5 RA rows). */
+/* Pipeline desktop: compact under tax (≤800 @ 1280 with HOME_RECENT_DESKTOP_ROWS). */
 .home-pipeline-desktop .home-ct {
-  padding: 8px 12px 0;
+  padding: 6px 10px 0;
 }
 .home-pipeline-desktop .home-ct h3 {
   font-size: 12.5px;
@@ -4705,7 +4705,7 @@ button.contact-card-add {
 .home-pipeline-rows {
   display: flex;
   flex-direction: column;
-  padding: 2px 4px 6px;
+  padding: 0 2px 4px;
 }
 .home-pipeline-row {
   /* Label on row 1, full money caption wraps under it; chevron spans both. */
@@ -4713,10 +4713,10 @@ button.contact-card-add {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   column-gap: 6px;
-  row-gap: 1px;
+  row-gap: 0;
   align-items: start;
-  min-height: 36px;
-  padding: 6px 8px;
+  min-height: 0;
+  padding: 4px 8px;
   color: inherit;
   text-decoration: none;
   min-width: 0;
@@ -4768,10 +4768,10 @@ button.contact-card-add {
 }
 .home-tax-full {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 12px 14px;
-  min-height: 72px;
+  padding: 8px 12px;
+  min-height: 0;
   box-sizing: border-box;
 }
 .home-tax-body {
@@ -4870,7 +4870,7 @@ button.contact-card-add {
 .home-ra {
   display: flex;
   flex-direction: column;
-  padding: 2px 14px 8px;
+  padding: 0 14px 6px;
   min-width: 0;
   max-width: 100%;
 }
@@ -4878,7 +4878,7 @@ button.contact-card-add {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 6px 0;
+  padding: 5px 0;
   color: inherit;
   text-decoration: none;
   min-width: 0;

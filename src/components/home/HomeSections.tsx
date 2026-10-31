@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
+import { HOME_RECENT_PHONE_ROWS } from "@/lib/home/activity";
 import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomePipeline } from "@/lib/home/pipeline";
 import type { HomeSales } from "@/lib/home/sales";
@@ -314,16 +315,19 @@ export function HomeRecentActivity({
   auditHref,
 }: {
   rows: HomeDashboard["recent"];
-  auditHref: string;
+  /** Set when the viewer may open `/audit` (`view_audit`); omit/null hides View all. */
+  auditHref: string | null;
 }) {
   if (rows.length === 0) return null;
   return (
     <div className="card home-activity-card">
       <div className="home-ct">
         <h3>Recent activity</h3>
-        <Link className="home-lk" href={auditHref}>
-          Audit log →
-        </Link>
+        {auditHref ? (
+          <Link className="home-lk" href={auditHref}>
+            View all
+          </Link>
+        ) : null}
       </div>
       <div className="home-ra">
         {rows.map((r, i) => {
@@ -339,8 +343,8 @@ export function HomeRecentActivity({
               </div>
             </>
           );
-          // Phone CSS hides .home-ra-row-extra (3rd+); desktop shows all fetched rows (5).
-          const extra = i >= 2 ? " home-ra-row-extra" : "";
+          // Phone CSS hides .home-ra-row-extra; desktop shows every fetched row.
+          const extra = i >= HOME_RECENT_PHONE_ROWS ? " home-ra-row-extra" : "";
           return r.href ? (
             <Link key={r.id} className={`home-ra-row${extra}`} href={r.href}>
               {inner}
