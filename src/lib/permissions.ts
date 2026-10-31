@@ -18,6 +18,7 @@ export type Permission =
   | "approve" // approve supplier POs (quotes later)
   | "manage_billing" // record/void billings & collections, mark 2307 received
   | "manage_payables" // record/void supplier payments, mark 2307 issued
+  | "manage_cash" // cash accounts, expenses, transfers (Part 7a)
   | "manage_settings"
   | "manage_users"
   | "view_audit";
@@ -25,9 +26,9 @@ export type Permission =
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Admins can approve POs too, so a small team isn't blocked when the only
   // approver is away. The last-approver guard still keeps one Approver role.
-  // Admin + Approver may manage billing and payables (Jerwin Oct 30, 2026).
-  ADMIN: ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_settings", "manage_users", "view_audit"],
-  APPROVER: ["view", "edit_data", "approve", "manage_billing", "manage_payables"],
+  // Admin + Approver may manage billing, payables and cash (Jerwin Oct 30, 2026).
+  ADMIN: ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "manage_settings", "manage_users", "view_audit"],
+  APPROVER: ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash"],
   STAFF: ["view", "edit_data"],
   VIEWER: ["view"],
 };

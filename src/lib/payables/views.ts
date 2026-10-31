@@ -51,6 +51,7 @@ export async function listSupplierPayments(filters: {
     where,
     include: {
       supplier: { select: { id: true, name: true } },
+      cashAccount: { select: { id: true, name: true } },
       allocations: true,
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -66,6 +67,7 @@ export async function listSupplierPayments(filters: {
       method: p.method as SupplierPaymentMethod,
       reference: p.reference,
       amountPaid: money(p.amountPaid),
+      cashAccount: p.cashAccount,
       cashApplied: cash,
       withholdingTotal: wh,
       status: p.status,
@@ -79,6 +81,7 @@ export async function getSupplierPaymentView(id: string) {
     where: { id },
     include: {
       supplier: { select: { id: true, name: true, taxType: true } },
+      cashAccount: { select: { id: true, name: true } },
       allocations: {
         include: {
           supplierBill: {
@@ -109,6 +112,7 @@ export async function getSupplierPaymentView(id: string) {
     checkBank: p.checkBank,
     checkDate: ymd(p.checkDate),
     amountPaid: money(p.amountPaid),
+    cashAccount: p.cashAccount,
     cashApplied: cash,
     withholdingTotal: wh,
     notes: p.notes,

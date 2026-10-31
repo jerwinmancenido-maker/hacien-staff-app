@@ -181,6 +181,7 @@ export async function listCollections(filters: { customerId?: string; status?: C
     where,
     include: {
       customer: { select: { id: true, name: true } },
+      cashAccount: { select: { id: true, name: true } },
       allocations: true,
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -199,6 +200,7 @@ export async function listCollections(filters: { customerId?: string; status?: C
       method: c.method as CollectionMethod,
       receiptNo: c.receiptNo,
       amountReceived: money(c.amountReceived),
+      cashAccount: c.cashAccount,
       cashApplied,
       unappliedCredit: credit,
       status: c.status,
@@ -212,6 +214,7 @@ export async function getCollectionView(id: string) {
     where: { id },
     include: {
       customer: { select: { id: true, name: true, tin: true } },
+      cashAccount: { select: { id: true, name: true } },
       allocations: {
         include: {
           billing: { select: { id: true, number: true, invoiceNo: true, amount: true, dueDate: true, status: true } },
@@ -236,6 +239,7 @@ export async function getCollectionView(id: string) {
     checkDate: ymd(c.checkDate),
     receiptNo: c.receiptNo,
     amountReceived: money(c.amountReceived),
+    cashAccount: c.cashAccount,
     cashApplied,
     unappliedCredit: unappliedCash(money(c.amountReceived), c.allocations.map((a) => money(a.cashApplied))),
     notes: c.notes,

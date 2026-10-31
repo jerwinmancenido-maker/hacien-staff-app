@@ -7,6 +7,9 @@ import { formatPeso, manilaToday } from "@/lib/format";
 import { ymd } from "@/lib/documents/common";
 import { openSupplierBillsForPayment } from "@/lib/services/supplier-payments";
 import { supplierPayableBalance } from "@/lib/payables/views";
+import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
+import { isCashEnabled } from "@/lib/cash/features";
+import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
 import { PaymentForm } from "@/components/payables/PaymentForm";
 import { PayablesNav } from "@/components/payables/PayablesNav";
 import { EmptyState, PageHeader } from "@/components/ui";
@@ -74,6 +77,9 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
   if (!supplier) notFound();
   const open = await openSupplierBillsForPayment(supplier.id);
   const today = ymd(manilaToday())!;
+  const cashOn = await isCashEnabled();
+  const cashAccounts = cashOn ? await listActiveCashAccounts() : [];
+  const defaultCash = cashOn ? await defaultCashAccountId() : null;
 
   return (
     <>
@@ -87,7 +93,14 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           action={recordSupplierPaymentAction}
           supplierId={supplier.id}
           supplierName={supplier.name}
-          defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER" }}
+          defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
+          cashEnabled={cashOn}
+          cashAccounts={cashAccounts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            typeLabel: CASH_ACCOUNT_TYPE_LABELS[a.type],
+            hint: a.accountHintLast4,
+          }))}
           openBills={open.map((b) => ({
             id: b.id,
             billNumber: b.billNumber,

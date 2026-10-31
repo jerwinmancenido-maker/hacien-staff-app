@@ -88,6 +88,13 @@ export const collectionInputSchema = z
       .max(64)
       .transform((v) => v || null),
     amountReceived: moneyStr,
+    // Optional cash account (Part 7a). Blank = not assigned.
+    cashAccountId: z
+      .string()
+      .trim()
+      .transform((v) => v || null)
+      .nullable()
+      .optional(),
     notes: z
       .string()
       .trim()
@@ -208,6 +215,7 @@ export function parseCollectionForm(form: FormData): { ok: true; data: Collectio
     checkDate: String(form.get("checkDate") ?? ""),
     receiptNo: String(form.get("receiptNo") ?? ""),
     amountReceived: String(form.get("amountReceived") ?? ""),
+    cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
   const parsed = collectionInputSchema.safeParse({ ...values, allocations });

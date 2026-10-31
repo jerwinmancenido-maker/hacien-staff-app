@@ -13,7 +13,7 @@ export function VoidButton({ label, docLabel, body, onVoid }: { label: string; d
   const router = useRouter();
   return (
     <>
-      <button type="button" className="btn-link danger small" onClick={() => setOpen(true)}>
+      <button type="button" className="btn btn-secondary btn-sm danger" onClick={() => setOpen(true)}>
         {label}
       </button>
       {open && (

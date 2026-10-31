@@ -6,6 +6,7 @@ import { useFormAction } from "@/components/useFormAction";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { formatPeso } from "@/lib/format";
+import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
 
 export type OpenBillingRow = {
   id: string;
@@ -24,13 +25,18 @@ export function CollectionForm({
   customerName,
   defaults,
   openBillings,
+  cashAccounts = [],
+  cashEnabled = false,
   canEdit,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   customerId: string;
   customerName: string;
-  defaults: { date: string; amountReceived: string; method: string; receiptNo: string };
+  defaults: { date: string; amountReceived: string; method: string; receiptNo: string; cashAccountId?: string };
   openBillings: OpenBillingRow[];
+  cashAccounts?: CashAccountOption[];
+  /** When false (CASH_ENABLED off), hide the deposited-to account selector. */
+  cashEnabled?: boolean;
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
@@ -123,6 +129,17 @@ export function CollectionForm({
           <div className="hint">Manual — the app does not issue official receipts.</div>
           {e.receiptNo && <div className="error">{e.receiptNo}</div>}
         </div>
+        {cashEnabled && (
+          <CashAccountSelect
+            accounts={cashAccounts}
+            defaultValue={state.values?.cashAccountId ?? defaults.cashAccountId ?? ""}
+            allowBlank
+            blankLabel={cashAccounts.length ? "Not assigned" : "Not assigned (add a cash account later)"}
+            error={e.cashAccountId}
+            label="Deposited to"
+            hint="Which cash or bank account received this money. Leave blank if you are not sure yet."
+          />
+        )}
         {(method === "CHECK" || method === "BANK_TRANSFER" || method === "GCASH") && (
           <div className={`field${e.reference ? " has-error" : ""}`}>
             <label htmlFor="reference">{method === "CHECK" ? "Check no." : "Reference no."}</label>

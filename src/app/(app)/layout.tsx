@@ -1,5 +1,7 @@
 import { requireUser } from "@/lib/auth/current-user";
 import { can, canSeeCosts, roleLabel } from "@/lib/permissions";
+import { isCashEnabled } from "@/lib/cash/features";
+import { isPayablesEnabled } from "@/lib/payables/features";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
@@ -13,6 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const { settings } = await getSettingsSnapshot();
+  const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
   // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
@@ -24,7 +27,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="brand-logo">H</span>
           <span>HACIEN</span>
         </div>
-        <SidebarNav isAdmin={can(user, "manage_settings")} canSeeCosts={canSeeCosts(user)} canEdit={can(user, "edit_data")} />
+        <SidebarNav
+          isAdmin={can(user, "manage_settings")}
+          canSeeCosts={canSeeCosts(user)}
+          canEdit={can(user, "edit_data")}
+          cashEnabled={cashEnabled}
+          payablesEnabled={payablesEnabled}
+        />
         <div className="sidebar-spacer" />
         <div className={`tracker-card level-${meter.level}`} aria-label="Non-VAT limit tracker" data-level={meter.level}>
           <div className="label tracker-head">

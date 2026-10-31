@@ -63,6 +63,10 @@ model User {
   billingsUpdated              Billing[]                 @relation("BillingUpdatedBy")
   collectionsCreated           Collection[]              @relation("CollectionCreatedBy")
   supplierPaymentsCreated      SupplierPayment[]         @relation("SupplierPaymentCreatedBy")
+  cashAccountsCreated          CashAccount[]             @relation("CashAccountCreatedBy")
+  cashAccountsUpdated          CashAccount[]             @relation("CashAccountUpdatedBy")
+  expensesCreated              Expense[]                 @relation("ExpenseCreatedBy")
+  cashTransfersCreated         CashTransfer[]            @relation("CashTransferCreatedBy")
 }
 
 model Session {
@@ -206,6 +210,7 @@ model Supplier {
   supplierBills      SupplierBill[]
   supplierPayments   SupplierPayment[]
   supplierWithholdings SupplierWithholding2307[]
+  expenses           Expense[]
 
   @@index([name])
 }
@@ -401,6 +406,8 @@ enum DocType {
   BILLING
   COLLECTION
   SUPPLIER_PAYMENT
+  EXPENSE
+  CASH_TRANSFER
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -839,6 +846,8 @@ model DocumentAttachment {
   supplierPayment           SupplierPayment?         @relation(fields: [supplierPaymentId], references: [id])
   supplierWithholding2307Id String?
   supplierWithholding2307   SupplierWithholding2307? @relation(fields: [supplierWithholding2307Id], references: [id])
+  expenseId                 String?
+  expense                   Expense?                 @relation(fields: [expenseId], references: [id])
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int
@@ -856,6 +865,7 @@ model DocumentAttachment {
   @@index([withholding2307Id])
   @@index([supplierPaymentId])
   @@index([supplierWithholding2307Id])
+  @@index([expenseId])
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +958,9 @@ model Collection {
   // Hand-written OR / acknowledgment receipt number (manual text).
   receiptNo      String?            @db.VarChar(64)
   amountReceived Decimal            @db.Decimal(15, 2)
+  // Optional cash/bank account where the money landed (Part 7a). Null = not assigned.
+  cashAccountId  String?
+  cashAccount    CashAccount?       @relation(fields: [cashAccountId], references: [id])
   notes          String?            @db.Text
   status         CollectionStatus   @default(POSTED)
   voidedAt       DateTime?
@@ -964,6 +977,7 @@ model Collection {
   @@index([customerId])
   @@index([status])
   @@index([date])
+  @@index([cashAccountId])
 }
 
 // Links cash (and optional 2307 withholding) from a collection onto a billing.
@@ -1057,6 +1071,9 @@ model SupplierPayment {
   checkDate   DateTime?             @db.Date
   // Cash paid (bank/check/cash/e-wallet). Does not include EWT withheld.
   amountPaid  Decimal               @db.Decimal(15, 2)
+  // Optional cash/bank account the money left (Part 7a). Null = not assigned.
+  cashAccountId String?
+  cashAccount   CashAccount?        @relation(fields: [cashAccountId], references: [id])
   notes       String?               @db.Text
   status      SupplierPaymentStatus @default(POSTED)
   voidedAt    DateTime?
@@ -1073,6 +1090,7 @@ model SupplierPayment {
   @@index([supplierId])
   @@index([status])
   @@index([date])
+  @@index([cashAccountId])
 }
 
 // Links cash + optional EWT from a supplier payment onto a supplier bill.
@@ -1124,4 +1142,129 @@ model SupplierWithholding2307 {
   @@index([supplierBillId])
   @@index([supplierPaymentId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Cash / bank accounts, expenses, transfers (Part 7a — hand-recorded; no bank API)
+// ---------------------------------------------------------------------------
+
+enum CashAccountType {
+  CASH_ON_HAND
+  BANK
+  E_WALLET
+}
+
+enum ExpenseStatus {
+  POSTED
+  VOID
+}
+
+enum CashTransferStatus {
+  POSTED
+  VOID
+}
+
+// Wallet / bank / petty cash the business tracks by hand. Running balance is
+// computed from posted collections, supplier payments, expenses and transfers —
+// never stored. accountHintLast4 is last-4 digits only (never full account nos).
+model CashAccount {
+  id               String          @id @default(cuid())
+  name             String          @db.VarChar(120)
+  type             CashAccountType
+  bankName         String?         @db.VarChar(120)
+  accountHintLast4 String?         @db.VarChar(4)
+  openingBalance   Decimal         @default(0) @db.Decimal(15, 2)
+  openingDate      DateTime        @db.Date
+  active           Boolean         @default(true)
+  archivedAt       DateTime?
+  createdById      String
+  createdBy        User            @relation("CashAccountCreatedBy", fields: [createdById], references: [id])
+  updatedById      String
+  updatedBy        User            @relation("CashAccountUpdatedBy", fields: [updatedById], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  collections      Collection[]
+  supplierPayments SupplierPayment[]
+  expenses         Expense[]
+  transfersFrom    CashTransfer[]  @relation("TransferFrom")
+  transfersTo      CashTransfer[]  @relation("TransferTo")
+
+  @@index([active])
+  @@index([name])
+}
+
+// Seeded editable list (rent, utilities …). Never hard-deleted; untick active.
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  code      String    @unique @db.VarChar(32)
+  label     String    @db.VarChar(100)
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  expenses Expense[]
+}
+
+// Internal EXP-YYYY-####. Hand-recorded company expense (no VAT input tax).
+// Optional withholdingApplied mirrors Part 6 EWT (cash out of the account is
+// still `amount` only — withholding is not cash leaving the account).
+model Expense {
+  id                 String         @id @default(cuid())
+  number             String         @unique @db.VarChar(40)
+  date               DateTime       @db.Date
+  // Either a known supplier or free-text payee (one of the two).
+  supplierId         String?
+  supplier           Supplier?      @relation(fields: [supplierId], references: [id])
+  payeeText          String?        @db.VarChar(191)
+  categoryId         String
+  category           ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount             Decimal        @db.Decimal(15, 2)
+  // Optional EWT withheld on this expense (Part 6 already models EWT).
+  withholdingApplied Decimal        @default(0) @db.Decimal(15, 2)
+  cashAccountId      String
+  cashAccount        CashAccount    @relation(fields: [cashAccountId], references: [id])
+  receiptNo          String?        @db.VarChar(64)
+  notes              String?        @db.Text
+  status             ExpenseStatus  @default(POSTED)
+  voidedAt           DateTime?
+  voidReason         String?        @db.Text
+  createdById        String
+  createdBy          User           @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  attachments DocumentAttachment[]
+
+  @@index([date])
+  @@index([status])
+  @@index([cashAccountId])
+  @@index([categoryId])
+  @@index([supplierId])
+}
+
+// Internal TRF-YYYY-####. Move money between cash accounts (e.g. cash deposit).
+model CashTransfer {
+  id            String             @id @default(cuid())
+  number        String             @unique @db.VarChar(40)
+  date          DateTime           @db.Date
+  fromAccountId String
+  fromAccount   CashAccount        @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   String
+  toAccount     CashAccount        @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Decimal            @db.Decimal(15, 2)
+  notes         String?            @db.Text
+  status        CashTransferStatus @default(POSTED)
+  voidedAt      DateTime?
+  voidReason    String?            @db.Text
+  createdById   String
+  createdBy     User               @relation("CashTransferCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@index([fromAccountId])
+  @@index([toAccountId])
 }

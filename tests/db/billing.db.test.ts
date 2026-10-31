@@ -36,29 +36,39 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     approver = await db.user.create({
       data: { email: `approver-bill-${t}@test.example.com`, name: `Approver ${t}`, isApprover: true, canSeeCosts: true },
     });
-    const snap = await getSettingsSnapshot();
-    // Wide booklet range so parallel suites don't collide on invoiceNo (unique forever).
-    const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
-    await db.settingsVersion.create({
-      data: {
-        version: latest.version + 1,
-        data: {
-          ...snap.settings,
-          invoiceBooklet: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        } as never,
-        changedKey: "invoiceBooklet",
-        before: snap.settings.invoiceBooklet,
-        after: { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet" },
-        createdById: admin.id,
-      },
-    });
   });
 
   afterAll(async () => {
     await db.$disconnect();
   });
 
+  /** Parallel suites can republish settings with the default 1–500 booklet. */
+  async function ensureWideBooklet() {
+    const wide = { seriesFrom: 1, seriesTo: 9_999_999, label: "Test booklet billing" };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      if (snap.settings.invoiceBooklet.seriesTo >= 9_999_999) return;
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...(latest.data as object), invoiceBooklet: wide } as never,
+            changedKey: "invoiceBooklet",
+            before: snap.settings.invoiceBooklet,
+            after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race with another suite — retry.
+      }
+    }
+  }
+
   async function openSo(year: number, contractExtra?: { unitPrice?: string }) {
+    await ensureWideBooklet();
     const customer = await makeCustomer(["GOODS_1"]);
     const supplier = await makeSupplier();
     // Ensure GOODS_1 rate exists for snapshot.

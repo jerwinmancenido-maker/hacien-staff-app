@@ -75,6 +75,13 @@ export const supplierPaymentInputSchema = z
       .transform((v) => (v ? v : null))
       .pipe(z.union([ymd, z.null()])),
     amountPaid: moneyStr,
+    // Optional cash account (Part 7a). Blank = not assigned.
+    cashAccountId: z
+      .string()
+      .trim()
+      .transform((v) => v || null)
+      .nullable()
+      .optional(),
     notes: z
       .string()
       .trim()
@@ -128,6 +135,7 @@ export function parseSupplierPaymentForm(
     checkBank: String(form.get("checkBank") ?? ""),
     checkDate: String(form.get("checkDate") ?? ""),
     amountPaid: String(form.get("amountPaid") ?? ""),
+    cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
   const parsed = supplierPaymentInputSchema.safeParse({ ...values, allocations });

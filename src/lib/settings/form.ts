@@ -21,6 +21,8 @@ export const NUMBERED_DOCS = [
   { key: "billing", label: "Billings (internal)" },
   { key: "collection", label: "Collections (internal)" },
   { key: "supplierPayment", label: "Supplier payments (internal)" },
+  { key: "expense", label: "Expenses (internal)" },
+  { key: "cashTransfer", label: "Cash transfers (internal)" },
 ] as const;
 
 export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
@@ -62,7 +64,10 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
     case "collections":
       return { overdueGraceDays: get("overdueGraceDays") };
     case "features":
-      return { payablesEnabled: checked(get("payablesEnabled")) };
+      return {
+        payablesEnabled: checked(get("payablesEnabled")),
+        cashEnabled: checked(get("cashEnabled")),
+      };
   }
 }
 
