@@ -37,7 +37,16 @@ describe("settings defaults", () => {
   it("seeds the agreed defaults", () => {
     expect(DEFAULT_SETTINGS.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000 });
     expect(DEFAULT_SETTINGS.quotes.defaultValidityDays).toBe(30);
-    expect(DEFAULT_SETTINGS.taxYear).toEqual({ year: 2026, nonVatLimit: 3000000, warnFirstPct: 70, warnSecondPct: 90 });
+    expect(DEFAULT_SETTINGS.taxYear).toMatchObject({
+      year: 2026,
+      nonVatLimit: 3000000,
+      warnFirstPct: 70,
+      warnSecondPct: 90,
+      incomeTaxMethod: "EIGHT_PERCENT",
+      booksType: null,
+    });
+    expect(DEFAULT_SETTINGS.taxYear.incomeTaxMethodsByYear["2026"]).toBe("EIGHT_PERCENT");
+    expect(DEFAULT_SETTINGS.taxYear.holidays.length).toBe(20);
     const y = DEFAULT_SETTINGS.taxYear.year;
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.quote, y, 1)).toBe("QT-2026-0001");
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.salesOrder, y, 1)).toBe("SO-2026-0001");

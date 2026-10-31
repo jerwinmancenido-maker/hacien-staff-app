@@ -76,13 +76,15 @@ export function buildTaxCalendarIcs(
 
   for (const row of rows) {
     if (!row.dueYmd) continue;
-    if (row.greyedOut) continue;
+    if (row.greyedOut || row.notApplicable) continue;
     if (!row.enabled) continue;
 
     const summary = `${row.form} — ${row.periodLabel}`;
-    const descParts = [row.description, `Period: ${row.periodLabel}`, `Applies?: ${row.appliesLabel}`];
+    const descParts = [row.description, `Period: ${row.periodLabel}`];
+    if (row.appliesLabel) descParts.push(`Applies?: ${row.appliesLabel}`);
+    if (row.tasks.length) descParts.push(...row.tasks);
     if (row.fileByHint) descParts.push(row.fileByHint);
-    descParts.push("Provisional — not filed by this app. Confirm with accountant/RDO.");
+    descParts.push("Dates follow BIR rules. Check with your accountant if unsure. Not filed by this app.");
     const description = descParts.join("\n");
     const uid = `tax-cal-${row.occurrenceKey.replace(/\|/g, "-")}@hacien.local`;
     const dtStart = ymdToIcsDate(row.dueYmd);
