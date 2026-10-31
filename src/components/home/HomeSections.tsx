@@ -1,7 +1,7 @@
 // Presentational Home sections (server components) — concept A card layout.
 
 import Link from "next/link";
-import { formatPeso, formatPesoLimit } from "@/lib/format";
+import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomeSales } from "@/lib/home/sales";
@@ -74,7 +74,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CoinIcon size={15} />
           Billed this month
         </div>
-        <div className="home-kv num">{formatPeso(kpis.billedThisMonth.amount)}</div>
+        <div className="home-kv num">{formatPesoWhole(kpis.billedThisMonth.amount)}</div>
         <div className="home-ks">
           <ChangeChip change={kpis.billedThisMonth.change} />
           <span>{kpis.billedThisMonth.vsCaption}</span>
@@ -86,7 +86,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <InboxIcon size={15} />
           Owed by customers
         </div>
-        <div className="home-kv num">{formatPeso(kpis.owedByCustomers.amount)}</div>
+        <div className="home-kv num">{formatPesoWhole(kpis.owedByCustomers.amount)}</div>
         <div className="home-ks">
           {kpis.owedByCustomers.overdueChip ? (
             <span className="home-chip home-chip-overdue">{kpis.owedByCustomers.overdueChip.label}</span>
@@ -100,7 +100,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CartIcon size={15} />
           Collected this month
         </div>
-        <div className="home-kv num">{formatPeso(kpis.collectedThisMonth.amount)}</div>
+        <div className="home-kv num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</div>
         <div className="home-ks">{kpis.collectedThisMonth.caption}</div>
       </div>
 
@@ -109,7 +109,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <FileIcon size={15} />
           Billed this year
         </div>
-        <div className="home-kv num">{formatPeso(kpis.billedThisYear.amount)}</div>
+        <div className="home-kv num">{formatPesoWhole(kpis.billedThisYear.amount)}</div>
         <div className="home-ks home-ks-bar">
           <span className="home-mini-bar" aria-hidden>
             <i style={{ width: `${Math.min(100, Math.max(0, kpis.billedThisYear.barPct))}%` }} />

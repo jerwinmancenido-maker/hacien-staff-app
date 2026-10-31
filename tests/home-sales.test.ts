@@ -247,6 +247,18 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/home-sales-line/);
   });
 
+  it("keeps KPI cards equal height, left-aligned, and whole-peso amounts", () => {
+    expect(css).toMatch(/\.home-kps\s*\{[^}]*align-items:\s*stretch/s);
+    expect(css).toMatch(/\.home-kps\s*>\s*\.card[^}]*margin-top:\s*0/s);
+    expect(css).toMatch(/\.home-kv(?:\.num)?\s*\{[^}]*text-align:\s*left/s);
+    expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisMonth\.amount\)/);
+    expect(sections).toMatch(/formatPesoWhole\(kpis\.owedByCustomers\.amount\)/);
+    expect(sections).toMatch(/formatPesoWhole\(kpis\.collectedThisMonth\.amount\)/);
+    expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisYear\.amount\)/);
+    const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/formatPesoWhole\(current\.month\.amount\)/);
+  });
+
   it("staff layout omits sales KPIs/chart and stays full-width without holes", () => {
     expect(page).toMatch(/is-staff/);
     expect(page).toMatch(/home-mid-full|is-staff/);
