@@ -198,7 +198,7 @@ export default async function TaxCalendarPage({
                       <div>{r.dueDisplay}</div>
                       {r.fileByHint ? <div className="faint small">{r.fileByHint}</div> : null}
                     </td>
-                    <td>
+                    <td className="tax-cal-status">
                       <StatusChip r={r} />
                     </td>
                     <td className="tax-cal-applies">
