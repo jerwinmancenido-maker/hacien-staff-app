@@ -8,6 +8,7 @@ import {
   HomeGettingStarted,
   HomeKpiCards,
   HomeNeedsAction,
+  HomePipelineCard,
   HomeRecentActivity,
   HomeSalesSection,
   HomeTaxDeadline,
@@ -35,7 +36,7 @@ export default async function HomePage() {
   const dash = await loadHomeDashboard(user);
   const first = user.name.split(" ")[0];
   const showSales = !!dash.sales && !!dash.kpis;
-  const hasBot = !!dash.tax || dash.recent.length > 0;
+  const hasBot = !!dash.tax || dash.recent.length > 0 || !!dash.pipeline;
 
   const actions =
     dash.header.newQuoteHref || dash.header.newBillingHref ? (
@@ -72,6 +73,7 @@ export default async function HomePage() {
       ) : (
         <div className={`home-dashboard${showSales ? " has-sales" : " is-staff"}`}>
           {showSales && dash.kpis ? <HomeKpiCards kpis={dash.kpis} /> : null}
+          {dash.pipeline ? <HomePipelineCard pipeline={dash.pipeline} variant="phone" /> : null}
 
           <div className={`home-mid${showSales ? "" : " home-mid-full"}`}>
             {showSales && dash.sales ? <HomeSalesSection sales={dash.sales} /> : null}
@@ -79,9 +81,20 @@ export default async function HomePage() {
           </div>
 
           {hasBot ? (
-            <div className={`home-bot${!dash.tax || dash.recent.length === 0 ? " home-bot-full" : ""}`}>
-              {dash.tax ? <HomeTaxDeadline tax={dash.tax} /> : null}
-              <HomeRecentActivity rows={dash.recent} auditHref={dash.auditHref} />
+            <div
+              className={`home-bot${
+                (!dash.tax && !dash.pipeline) || dash.recent.length === 0 ? " home-bot-full" : ""
+              }`}
+            >
+              {dash.tax || dash.pipeline ? (
+                <div className="home-bot-left">
+                  {dash.tax ? <HomeTaxDeadline tax={dash.tax} /> : null}
+                  {dash.pipeline ? <HomePipelineCard pipeline={dash.pipeline} variant="desktop" /> : null}
+                </div>
+              ) : null}
+              {dash.recent.length > 0 ? (
+                <HomeRecentActivity rows={dash.recent} auditHref={dash.auditHref} />
+              ) : null}
             </div>
           ) : null}
         </div>

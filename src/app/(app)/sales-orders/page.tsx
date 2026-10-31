@@ -8,7 +8,7 @@ import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
 import { SO_STATUS_LABELS, SoStatusChip } from "@/components/docs/DocParts";
 
-type Search = { q?: string; status?: string; needsPo?: string };
+type Search = { q?: string; status?: string; needsPo?: string; open?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -21,9 +21,15 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
   await requirePagePermission("view");
   const s = await searchParams;
   const needsPo = s.needsPo === "1";
+  const openOnly = s.open === "1";
   const status = SALES_ORDER_STATUSES.includes(s.status as SalesOrderStatus) ? (s.status as SalesOrderStatus) : undefined;
-  const orders = await listSalesOrdersView({ q: s.q, status, needsPo: needsPo || undefined });
-  const filtered = !!(s.q || status || needsPo);
+  const orders = await listSalesOrdersView({
+    q: s.q,
+    status: openOnly || needsPo ? undefined : status,
+    needsPo: needsPo || undefined,
+    open: openOnly || undefined,
+  });
+  const filtered = !!(s.q || status || needsPo || openOnly);
 
   return (
     <>
@@ -38,21 +44,30 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           {status && <input type="hidden" name="status" value={status} />}
         </form>
         <Link
-          className={`filter-chip${!status && !needsPo ? " active" : ""}`}
-          href={href(s, { status: undefined, needsPo: undefined })}
+          className={`filter-chip${!status && !needsPo && !openOnly ? " active" : ""}`}
+          href={href(s, { status: undefined, needsPo: undefined, open: undefined })}
         >
           All
+        </Link>
+        <Link
+          className={`filter-chip${openOnly && !needsPo ? " active" : ""}`}
+          href={href(s, { status: undefined, needsPo: undefined, open: "1" })}
+        >
+          Open
         </Link>
         {SALES_ORDER_STATUSES.map((t) => (
           <Link
             key={t}
-            className={`filter-chip${status === t && !needsPo ? " active" : ""}`}
-            href={href(s, { status: t, needsPo: undefined })}
+            className={`filter-chip${status === t && !needsPo && !openOnly ? " active" : ""}`}
+            href={href(s, { status: t, needsPo: undefined, open: undefined })}
           >
             {SO_STATUS_LABELS[t]}
           </Link>
         ))}
-        <Link className={`filter-chip${needsPo ? " active" : ""}`} href={href(s, { status: undefined, needsPo: "1" })}>
+        <Link
+          className={`filter-chip${needsPo ? " active" : ""}`}
+          href={href(s, { status: undefined, needsPo: "1", open: undefined })}
+        >
           Needs supplier PO
         </Link>
       </div>

@@ -39,6 +39,12 @@ import {
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
 import { formatCompactPesoLimit } from "./nonVatCopy";
+import {
+  buildHomePipeline,
+  type HomePipeline,
+  OPEN_QUOTE_STATUSES,
+  soUnbilledAmount,
+} from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
   manilaMonthKey,
@@ -170,6 +176,8 @@ export type HomeDashboard = {
   header: HomeHeaderActions;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
+  /** Open quotes + open unbilled SOs; null when viewer lacks view on both. */
+  pipeline: HomePipeline | null;
   nonVat: HomeNonVat;
   recent: HomeActivityItem[];
   auditHref: string;
@@ -340,6 +348,47 @@ function headerActions(user: PermissionUser): HomeHeaderActions {
   };
 }
 
+async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | null> {
+  const [quoteAgg, openSos] = await Promise.all([
+    db.quote.aggregate({
+      where: { status: { in: [...OPEN_QUOTE_STATUSES] } },
+      _count: true,
+      _sum: { contractPrice: true },
+    }),
+    db.salesOrder.findMany({
+      where: { status: "OPEN" },
+      select: {
+        contractPrice: true,
+        billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
+      },
+    }),
+  ]);
+
+  let soCount = 0;
+  let soUnbilled = 0n;
+  for (const so of openSos) {
+    const remaining = soUnbilledAmount(
+      String(so.contractPrice),
+      so.billings.map((b) => String(b.amount)),
+    );
+    const rem = toScaled(remaining, 2);
+    if (rem > 0n) {
+      soCount += 1;
+      soUnbilled += rem;
+    }
+  }
+
+  const quotesTotal = quoteAgg._sum.contractPrice != null ? String(quoteAgg._sum.contractPrice) : "0.00";
+
+  return buildHomePipeline({
+    user,
+    quotesCount: quoteAgg._count,
+    quotesTotal,
+    salesOrdersCount: soCount,
+    salesOrdersUnbilled: fromScaled(soUnbilled, 2),
+  });
+}
+
 export async function loadHomeDashboard(
   user: PermissionUser,
   opts: { now?: Date } = {},
@@ -395,6 +444,7 @@ export async function loadHomeDashboard(
       header,
       money: [],
       tax: null,
+      pipeline: null,
       nonVat,
       recent: [],
       auditHref: auditLogHref(),
@@ -417,6 +467,7 @@ export async function loadHomeDashboard(
     nonVatSnap,
     sales,
     recent,
+    pipeline,
   ] = await Promise.all([
     listQuotesView({ needsApproval: true, now }, user),
     listQuotesView({ noReplyAfterDays: 7, now }, user),
@@ -429,8 +480,9 @@ export async function loadHomeDashboard(
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
-    // Desktop shows 3; phone CSS hides the 3rd (shows 2).
-    listRecentHomeActivity(3, { withCosts }),
+    // Desktop shows 5; phone CSS hides .home-ra-row-extra (3rd+) so phone shows 2.
+    listRecentHomeActivity(5, { withCosts }),
+    loadHomePipeline(user),
   ]);
 
   // Same list as /receiving (Awaiting delivery).
@@ -559,6 +611,7 @@ export async function loadHomeDashboard(
     header,
     money,
     tax,
+    pipeline,
     nonVat,
     recent,
     auditHref: auditLogHref(),

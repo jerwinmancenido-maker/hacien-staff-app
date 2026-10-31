@@ -183,7 +183,157 @@ async function fill() {
     });
   }
 
+  await seedPipelineAndActivity(admin, so);
   console.log("fill: created 12-month shot billings for", so.customer.name);
+}
+
+/** Open quotes + unbilled SO for Pipeline, and ≥5 recent-activity audit rows. */
+async function seedPipelineAndActivity(admin, sampleSo) {
+  const PIPE = `${TAG}-pipeline`;
+  // Tear down prior pipeline fixtures — SOs first (FK to quote), then quotes.
+  const oldSos = await db.salesOrder.findMany({ where: { notes: PIPE }, select: { id: true } });
+  for (const s of oldSos) {
+    await db.salesOrderItem.deleteMany({ where: { salesOrderId: s.id } });
+    await db.auditLog.deleteMany({ where: { entityType: "SalesOrder", entityId: s.id } });
+    await db.salesOrder.delete({ where: { id: s.id } });
+  }
+  const oldQuotes = await db.quote.findMany({ where: { notes: PIPE }, select: { id: true } });
+  for (const q of oldQuotes) {
+    await db.quoteItem.deleteMany({ where: { quoteId: q.id } });
+    await db.auditLog.deleteMany({ where: { entityType: "Quote", entityId: q.id } });
+    await db.quote.delete({ where: { id: q.id } });
+  }
+
+  const settings = await db.settingsVersion.findFirst({ orderBy: { version: "desc" } });
+  if (!settings) throw new Error("Need a settings version");
+  const customer = await db.customer.findFirst({ where: { id: sampleSo.customerId } });
+  if (!customer) throw new Error("Need sample customer");
+  const year = Number(manilaYmd().slice(0, 4));
+  const today = new Date(`${manilaYmd()}T00:00:00.000Z`);
+
+  async function nextNumber(docType, prefix) {
+    const series = await db.documentSeries.upsert({
+      where: { docType_year: { docType, year } },
+      create: { docType, year, prefix, nextNumber: 9000, padding: 4 },
+      update: {},
+    });
+    const n = series.nextNumber;
+    await db.documentSeries.update({
+      where: { id: series.id },
+      data: { nextNumber: n + 1 },
+    });
+    return `${prefix}-${year}-${String(n).padStart(4, "0")}`;
+  }
+
+  async function createQuote(status, amount, label) {
+    const number = await nextNumber("QUOTE", "QT");
+    const quote = await db.quote.create({
+      data: {
+        number,
+        customerId: customer.id,
+        date: today,
+        validUntil: today,
+        status,
+        notes: PIPE,
+        settingsVersionId: settings.id,
+        withholding: [],
+        contractPrice: amount,
+        withholdingTotal: 0,
+        netReceived: amount,
+        supplierCost: 0,
+        netMargin: amount,
+        netMarginPct: 100,
+        createdById: admin.id,
+        updatedById: admin.id,
+        items: {
+          create: [
+            {
+              sortOrder: 1,
+              description: label,
+              kind: "GOODS",
+              qty: 1,
+              unit: "lot",
+              supplierUnitCost: 0,
+              unitPrice: amount,
+              total: amount,
+              supplierTotal: 0,
+              margin: amount,
+              withholdingRate: 0,
+            },
+          ],
+        },
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        userId: admin.id,
+        entityType: "Quote",
+        entityId: quote.id,
+        action: "create",
+        after: { number, status, shotTag: PIPE },
+        at: new Date(Date.now() - Math.random() * 120_000),
+      },
+    });
+    return quote;
+  }
+
+  // Two SENT quotes → open pipeline (plus any existing DRAFT from main seed).
+  await createQuote("SENT", 180_000, "Pipeline open quote A");
+  await createQuote("SENT", 225_000, "Pipeline open quote B");
+
+  // WON quote + OPEN SO with no billings → unbilled pipeline amount.
+  const won = await createQuote("WON", 320_000, "Pipeline won quote for unbilled SO");
+  const soNumber = await nextNumber("SALES_ORDER", "SO");
+  const pipeSo = await db.salesOrder.create({
+    data: {
+      number: soNumber,
+      quoteId: won.id,
+      customerId: customer.id,
+      date: today,
+      status: "OPEN",
+      notes: PIPE,
+      settingsVersionId: settings.id,
+      withholding: [],
+      contractPrice: 320_000,
+      withholdingTotal: 0,
+      netReceived: 320_000,
+      supplierCost: 0,
+      netMargin: 320_000,
+      netMarginPct: 100,
+      createdById: admin.id,
+      updatedById: admin.id,
+      items: {
+        create: [
+          {
+            sortOrder: 1,
+            description: "Pipeline unbilled SO line",
+            kind: "GOODS",
+            qty: 1,
+            unit: "lot",
+            supplierUnitCost: 0,
+            unitPrice: 320_000,
+            total: 320_000,
+            supplierTotal: 0,
+            margin: 320_000,
+            withholdingRate: 0,
+          },
+        ],
+      },
+    },
+  });
+  await db.auditLog.create({
+    data: {
+      userId: admin.id,
+      entityType: "SalesOrder",
+      entityId: pipeSo.id,
+      action: "create",
+      after: { number: soNumber, status: "OPEN", shotTag: PIPE },
+      at: new Date(Date.now() - 15_000),
+    },
+  });
+
+  // Seed create audits + these new ones (≥5) so desktop Recent shows 5 rows.
+  console.log("fill: pipeline fixtures — 2 SENT quotes, 1 unbilled OPEN SO, activity audits");
 }
 
 async function main() {

@@ -9,7 +9,7 @@ import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { QUOTE_STATUS_LABELS, QuoteStatusChip } from "@/components/docs/DocParts";
 
-type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string };
+type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -24,14 +24,21 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const user = await requirePagePermission("view");
   const s = await searchParams;
   const needsApproval = s.needsApproval === "1";
+  const openOnly = s.open === "1";
   const noReplyDays = s.noReply === "7" ? 7 : undefined;
   const status = QUOTE_STATUSES.includes(s.status as QuoteStatus) ? (s.status as QuoteStatus) : undefined;
   const quotes = await listQuotesView(
-    { q: s.q, status, needsApproval: needsApproval || undefined, noReplyAfterDays: noReplyDays },
+    {
+      q: s.q,
+      status: openOnly ? undefined : status,
+      needsApproval: needsApproval || undefined,
+      noReplyAfterDays: noReplyDays,
+      open: openOnly || undefined,
+    },
     user,
   );
   const withCosts = canSeeCosts(user);
-  const filtered = !!(s.q || status || needsApproval || noReplyDays);
+  const filtered = !!(s.q || status || needsApproval || noReplyDays || openOnly);
 
   return (
     <>
@@ -56,29 +63,35 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           {status && <input type="hidden" name="status" value={status} />}
         </form>
         <Link
-          className={`filter-chip${!status && !needsApproval && !noReplyDays ? " active" : ""}`}
-          href={href(s, { status: undefined, needsApproval: undefined, noReply: undefined })}
+          className={`filter-chip${!status && !needsApproval && !noReplyDays && !openOnly ? " active" : ""}`}
+          href={href(s, { status: undefined, needsApproval: undefined, noReply: undefined, open: undefined })}
         >
           All
+        </Link>
+        <Link
+          className={`filter-chip${openOnly && !needsApproval && !noReplyDays ? " active" : ""}`}
+          href={href(s, { status: undefined, needsApproval: undefined, noReply: undefined, open: "1" })}
+        >
+          Open
         </Link>
         {QUOTE_STATUSES.map((t) => (
           <Link
             key={t}
-            className={`filter-chip${status === t && !needsApproval && !noReplyDays ? " active" : ""}`}
-            href={href(s, { status: t, needsApproval: undefined, noReply: undefined })}
+            className={`filter-chip${status === t && !needsApproval && !noReplyDays && !openOnly ? " active" : ""}`}
+            href={href(s, { status: t, needsApproval: undefined, noReply: undefined, open: undefined })}
           >
             {QUOTE_STATUS_LABELS[t]}
           </Link>
         ))}
         <Link
           className={`filter-chip${needsApproval ? " active" : ""}`}
-          href={href(s, { status: undefined, needsApproval: "1", noReply: undefined })}
+          href={href(s, { status: undefined, needsApproval: "1", noReply: undefined, open: undefined })}
         >
           Needs approval
         </Link>
         <Link
           className={`filter-chip${noReplyDays ? " active" : ""}`}
-          href={href(s, { status: "SENT", needsApproval: undefined, noReply: "7" })}
+          href={href(s, { status: "SENT", needsApproval: undefined, noReply: "7", open: undefined })}
         >
           No reply (7 days)
         </Link>

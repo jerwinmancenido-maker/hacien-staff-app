@@ -4677,14 +4677,68 @@ button.contact-card-add {
 .home-dashboard.is-staff .home-bot {
   /* keep tax + activity side by side when both present */
 }
-/* Defeat `.card + .card { margin-top }` so tax + Recent activity share one top. */
-.home-bot > .card {
+.home-bot-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+/* Defeat `.card + .card { margin-top }` so tax + Pipeline + Recent share one top. */
+.home-bot > .card,
+.home-bot-left > .card {
   margin-top: 0;
   align-self: start;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+/* Pipeline desktop: compact 2-row card under tax (fit ≤800 with 5 RA rows). */
+.home-pipeline-desktop .home-ct {
+  padding: 8px 12px 0;
+}
+.home-pipeline-desktop .home-ct h3 {
+  font-size: 12.5px;
+}
+.home-pipeline-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 6px;
+}
+.home-pipeline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.home-pipeline-row + .home-pipeline-row {
+  border-top: 1px solid #f1f2f4;
+}
+.home-pipeline-row-label {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.home-pipeline-row-caption {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 11.5px;
+  color: #525252;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.home-pipeline-phone {
+  display: none;
 }
 
 .home-tax {
@@ -5020,6 +5074,33 @@ button.contact-card-add {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
   }
+  /* Phone Pipeline: 2 KPI-sized tiles right after the KPI strip. */
+  .home-pipeline-phone {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+  .home-pipeline-phone .home-pipeline-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    min-height: 40px;
+    text-decoration: none;
+    color: inherit;
+    min-width: 0;
+  }
+  .home-pipeline-phone .home-pipeline-caption {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 2px 0 0;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .home-dashboard .home-kp,
   .home-kp {
     padding: 10px 12px;
@@ -5166,7 +5247,7 @@ button.contact-card-add {
     padding: 10px 12px;
   }
 
-  /* Recent activity: 2 items on phone (hide 3rd+); single tight line. */
+  /* Recent activity: 2 items on phone (hide 3rd+); 2 lines — summary + doc/time. */
   .home-ra {
     padding: 0 12px 0;
   }
@@ -5188,9 +5269,25 @@ button.contact-card-add {
   }
   .home-ra-meta {
     margin-top: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
   }
+  /* Doc line stays visible on phone; time right-aligned on the same row. */
   .home-ra-detail {
-    display: none; /* phone: time only under summary — saves a line */
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .home-ra-when {
+    margin-left: auto;
+    flex: none;
+    white-space: nowrap;
   }
 }
 

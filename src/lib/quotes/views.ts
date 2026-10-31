@@ -17,7 +17,8 @@ import {
 import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
-import { approvalReasons, docTotals, ratePctLabel, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { approvalReasons, docTotals, ratePctLabel, toScaled, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { remainingToBill } from "../billing/status";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 
@@ -224,6 +225,8 @@ export type QuoteListFilter = {
   needsApproval?: boolean;
   /** Sent quotes whose quote date is on or before Manila today − N days. */
   noReplyAfterDays?: number;
+  /** DRAFT + SENT only (Home Pipeline / open filter). Overrides single status. */
+  open?: boolean;
   /** Optional clock for no-reply cutoff (tests). */
   now?: Date;
 };
@@ -232,6 +235,7 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
   const withCosts = canSeeCosts(viewer);
   const q = filter.q?.trim();
   const needsApproval = filter.needsApproval === true;
+  const openOnly = filter.open === true;
   const noReplyAfterDays =
     typeof filter.noReplyAfterDays === "number" && filter.noReplyAfterDays > 0 ? filter.noReplyAfterDays : undefined;
 
@@ -240,7 +244,11 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
   if (noReplyAfterDays) status = "SENT";
 
   const where: Prisma.QuoteWhereInput = {
-    ...(status ? { status } : {}),
+    ...(openOnly && !needsApproval && !noReplyAfterDays
+      ? { status: { in: ["DRAFT", "SENT"] } }
+      : status
+        ? { status }
+        : {}),
     ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
   };
 
@@ -359,12 +367,15 @@ export type SalesOrderListFilter = {
   status?: SalesOrderStatus;
   /** Open SOs with at least one line still short of supplier PO coverage. */
   needsPo?: boolean;
+  /** OPEN SOs with remaining-to-bill &gt; 0 (Home Pipeline / open filter). */
+  open?: boolean;
 };
 
 export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const q = filter.q?.trim();
   const needsPo = filter.needsPo === true;
-  const status = needsPo ? "OPEN" : filter.status;
+  const openUnbilled = filter.open === true;
+  const status = needsPo || openUnbilled ? "OPEN" : filter.status;
   const where: Prisma.SalesOrderWhereInput = {
     ...(status ? { status } : {}),
     ...(q ? { OR: [{ number: { contains: q } }, { buyerPoNo: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
@@ -373,19 +384,34 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   if (!needsPo) {
     const rows = await db.salesOrder.findMany({
       where,
-      include: { customer: { select: { name: true } } },
+      include: {
+        customer: { select: { name: true } },
+        ...(openUnbilled
+          ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
+          : {}),
+      },
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 500,
     });
-    return rows.map((r) => ({
-      id: r.id,
-      number: r.number,
-      customerName: r.customer.name,
-      buyerPoNo: r.buyerPoNo,
-      contractPrice: money(r.contractPrice),
-      status: r.status,
-      date: ymd(r.date)!,
-    }));
+    type Row = (typeof rows)[number] & { billings?: { amount: unknown }[] };
+    const mapped = [];
+    for (const raw of rows as Row[]) {
+      const contractPrice = money(raw.contractPrice);
+      if (openUnbilled) {
+        const billed = (raw.billings ?? []).map((b) => money(b.amount));
+        if (toScaled(remainingToBill(contractPrice, billed), 2) <= 0n) continue;
+      }
+      mapped.push({
+        id: raw.id,
+        number: raw.number,
+        customerName: raw.customer.name,
+        buyerPoNo: raw.buyerPoNo,
+        contractPrice,
+        status: raw.status,
+        date: ymd(raw.date)!,
+      });
+    }
+    return mapped;
   }
 
   const rows = await db.salesOrder.findMany({

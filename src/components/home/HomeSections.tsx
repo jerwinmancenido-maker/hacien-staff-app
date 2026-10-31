@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
+import type { HomePipeline } from "@/lib/home/pipeline";
 import type { HomeSales } from "@/lib/home/sales";
 import { EmptyState } from "@/components/ui";
 import { HomeSalesChart } from "@/components/home/HomeSalesChart";
@@ -145,6 +146,50 @@ function actionIcon(kind: HomeDashboard["actions"][number]["kind"]) {
     default:
       return <FileIcon size={15} />;
   }
+}
+
+/** Desktop: compact card under tax. Phone: 2 KPI-sized tiles after the KPI strip. */
+export function HomePipelineCard({
+  pipeline,
+  variant,
+}: {
+  pipeline: HomePipeline;
+  variant: "desktop" | "phone";
+}) {
+  const rows = [pipeline.quotes, pipeline.salesOrders].filter(
+    (r): r is NonNullable<typeof r> => r != null,
+  );
+  if (rows.length === 0) return null;
+
+  if (variant === "phone") {
+    return (
+      <div className="home-pipeline-phone home-phone-only" aria-label="Pipeline">
+        {rows.map((r) => (
+          <Link key={r.href} className="card home-pipeline-tile" href={r.href}>
+            <div className="home-kl">{r.label}</div>
+            <div className="home-kv home-pipeline-caption">{r.caption}</div>
+          </Link>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="card home-pipeline-desktop home-desktop-only">
+      <div className="home-ct">
+        <h3>Pipeline</h3>
+      </div>
+      <div className="home-pipeline-rows">
+        {rows.map((r) => (
+          <Link key={r.href} className="home-pipeline-row" href={r.href}>
+            <span className="home-pipeline-row-label">{r.label}</span>
+            <span className="home-pipeline-row-caption num">{r.caption}</span>
+            <ChevronRightIcon size={14} />
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function HomeNeedsAction({
@@ -294,7 +339,7 @@ export function HomeRecentActivity({
               </div>
             </>
           );
-          // Phone CSS hides .home-ra-row-extra (3rd+); desktop shows 3.
+          // Phone CSS hides .home-ra-row-extra (3rd+); desktop shows all fetched rows (5).
           const extra = i >= 2 ? " home-ra-row-extra" : "";
           return r.href ? (
             <Link key={r.id} className={`home-ra-row${extra}`} href={r.href}>

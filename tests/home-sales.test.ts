@@ -276,8 +276,8 @@ describe("home concept A layout wiring", () => {
     expect(sections).toMatch(/home-tax-strip/);
     expect(sections).toMatch(/home-ra-row-extra/);
     expect(sections).toMatch(/stripLabel/);
-    // Recent: fetch 3 (desktop); phone CSS hides 3rd
-    expect(dash).toMatch(/listRecentHomeActivity\(3/);
+    // Recent: fetch 5 (desktop); phone CSS hides .home-ra-row-extra (3rd+)
+    expect(dash).toMatch(/listRecentHomeActivity\(5/);
     // Phone media block: smaller cards (pad 10–12), 18px KPI, 13px titles, 40px taps, no Y-axis, 2 activity rows
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
@@ -301,7 +301,26 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*border-radius:\s*10px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*box-shadow:\s*0\s+1px\s+1px/s);
     expect(sections).toMatch(/phoneLimitLabel/);
+    // Phone keeps the doc line (e.g. SO-2026-0001 · Sample Corp) with time on the same row
+    expect(sections).toMatch(/home-ra-detail/);
+    expect(sections).toMatch(/r\.detail/);
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-ra-detail\s*\{[^}]*text-overflow:\s*ellipsis/s,
+    );
+    expect(css).not.toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-ra-detail\s*\{[^}]*display:\s*none/s,
+    );
     expect(page).toMatch(/home-page-header/);
+  });
+
+  it("renders up to 5 recent activity rows on desktop; rows past the 2nd carry the phone-hide class", () => {
+    expect(dash).toMatch(/listRecentHomeActivity\(5/);
+    // Markup: index >= 2 gets home-ra-row-extra (phone CSS hides it below md)
+    expect(sections).toMatch(/i\s*>=\s*2\s*\?\s*["'] home-ra-row-extra["']/);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+    // Desktop base must NOT hide .home-ra-row-extra
+    const phoneBlock = css.split(/@media\s*\(\s*max-width:\s*640px\s*\)/)[0] ?? css;
+    expect(phoneBlock).not.toMatch(/\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
   });
 
   it("prevents sideways overflow on narrow Home (min-width 0 + truncate)", () => {
