@@ -38,6 +38,7 @@ import {
   isUnverifiedGovAtc,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
+import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
@@ -149,6 +150,10 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       : [blankItem(customers.find((c) => c.id === initial.customerId)?.withholdingType)],
   );
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
+  /** Per-line WH% field errors (client-side 0–15% check). */
+  const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
+  /** Raw WH% text while typing (so "1." is not snapped away by the controlled rate). */
+  const [whPctDrafts, setWhPctDrafts] = useState<Record<string, string>>({});
   const e = state.fieldErrors ?? {};
   const customer = customers.find((c) => c.id === h.customerId);
   const contacts = customer?.contacts ?? [];
@@ -196,6 +201,8 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
       return { ...i, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
     });
     setItems(refreshed);
+    setWhPctDrafts({});
+    setWhPctErrors({});
     const codes = withholdingSnapshotFromLines(
       refreshed.map((i) => {
         const a = safeLine(i);
@@ -452,10 +459,11 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
             <tbody>
               {items.map((i, idx) => {
                 const a = safeLine(i);
-                const pct =
+                const pctFromRate =
                   i.withholdingRate == null || i.withholdingRate === ""
                     ? ""
                     : (Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "");
+                const pct = Object.prototype.hasOwnProperty.call(whPctDrafts, i.key) ? whPctDrafts[i.key]! : pctFromRate;
                 const showOverride =
                   i.withholdingOverride ||
                   lineDiffersFromUsual(customer?.withholdingType, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
@@ -517,16 +525,33 @@ export function DocumentEditor({ mode, isNew, initial, customers, rates: allRate
                         value={pct}
                         placeholder="—"
                         onChange={(ev) => {
-                          const raw = ev.target.value.trim();
-                          if (raw === "") {
-                            changeLineWithholding(i.key, { withholdingRate: null });
+                          const raw = ev.target.value;
+                          setWhPctDrafts((prev) => ({ ...prev, [i.key]: raw }));
+                          // Allow in-progress decimals ("1.") without clearing the rate yet.
+                          if (/^\d+\.$/.test(raw.trim())) {
+                            setWhPctErrors((prev) => {
+                              if (!prev[i.key]) return prev;
+                              const next = { ...prev };
+                              delete next[i.key];
+                              return next;
+                            });
                             return;
                           }
-                          const n = Number(raw);
-                          const rate = Number.isFinite(n) ? (n / 100).toFixed(4) : "0.0000";
-                          changeLineWithholding(i.key, { withholdingRate: rate });
+                          const parsed = parseWithholdingPercentInput(raw);
+                          if (!parsed.ok) {
+                            setWhPctErrors((prev) => ({ ...prev, [i.key]: parsed.message }));
+                            return;
+                          }
+                          setWhPctErrors((prev) => {
+                            if (!prev[i.key]) return prev;
+                            const next = { ...prev };
+                            delete next[i.key];
+                            return next;
+                          });
+                          changeLineWithholding(i.key, { withholdingRate: parsed.rate });
                         }}
                       />
+                      {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                       {govAtc ? (
                         <div className="small muted" title={i.withholdingAtc ?? undefined}>
                           {GOV_ATC_CODE_TO_CONFIRM}

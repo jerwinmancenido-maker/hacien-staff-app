@@ -6,8 +6,8 @@ import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, canSeeCosts } from "../permissions";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
-import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
 import { itemData, planItems } from "../quotes/items";
+import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import type { SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { snapshotList } from "./withholding";
@@ -67,11 +67,13 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
-      const { items, removedIds } = planItems(stored, input.items, withCosts, {
+      const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         customerWithholdingType: customer.withholdingType,
         reapplyWithholding: input.reapplyWithholding === true,
       });
-      const withholding = withholdingSnapshotFromLines(items);
+      // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
+      const preserved = preserveLegacyWithholdingOnSave(before, planned);
+      const items = preserved.items;
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });
       }
@@ -79,7 +81,6 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         if (item.id) await tx.salesOrderItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.salesOrderItem.create({ data: { ...itemData(item), salesOrderId: id } });
       }
-      const t = docTotals(items);
       const after = await tx.salesOrder.update({
         where: { id },
         data: {
@@ -89,13 +90,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           deliveryAddress: input.deliveryAddress,
           terms: input.terms,
           notes: input.notes,
-          withholding: withholding as unknown as Prisma.InputJsonValue,
-          contractPrice: t.contractPrice,
-          withholdingTotal: t.withholdingTotal,
-          netReceived: t.netReceived,
-          supplierCost: t.supplierCost,
-          netMargin: t.netMargin,
-          netMarginPct: t.netMarginPct,
+          withholding: preserved.withholding as unknown as Prisma.InputJsonValue,
+          ...preserved.totals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

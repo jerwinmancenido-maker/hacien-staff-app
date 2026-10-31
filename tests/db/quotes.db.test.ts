@@ -2,6 +2,8 @@
 // Run: TEST_DATABASE_URL=mysql://user:pass@127.0.0.1:3306/hacien_test npm test
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const hasDb = vi.hoisted(() => {
   const url = process.env.TEST_DATABASE_URL;
@@ -334,6 +336,87 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(view?.items.every((i) => i.withholdingRate == null)).toBe(true);
     });
 
+    it("legacy NULL line rates on a draft quote keep WH amount unchanged on save", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const storedWh = Number(q.withholdingTotal).toFixed(2);
+      expect(storedWh).not.toBe("0.00");
+      await db.quoteItem.updateMany({ where: { quoteId: q.id }, data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false } });
+
+      const input = quoteInput(customer.id, 2026, {
+        items: q.items
+          .filter((i) => !i.removedAt)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: Number(i.qty).toFixed(2),
+            unit: i.unit,
+            unitPrice: Number(i.unitPrice).toFixed(2),
+            supplierId: i.supplierId,
+            supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+            withholdingRate: null,
+            withholdingAtc: null,
+            withholdingOverride: false,
+          })),
+      });
+      const saved = await updateQuote(q.id, { ...input, date: q.date }, costUser);
+      expect(saved.withholdingTotal.toFixed(2)).toBe(storedWh);
+      expect(Number(saved.netReceived).toFixed(2)).toBe(Number(q.netReceived).toFixed(2));
+      // Save guard backfills rates from the doc JSON so a later save stays correct.
+      for (const i of saved.items.filter((x) => !x.removedAt)) {
+        expect(i.withholdingRate).not.toBeNull();
+      }
+    });
+
+    it("legacy NULL line rates on an open SO keep WH amount unchanged on save", async () => {
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const storedWh = Number(so.withholdingTotal).toFixed(2);
+      expect(storedWh).not.toBe("0.00");
+      await db.salesOrderItem.updateMany({
+        where: { salesOrderId: so.id },
+        data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+      });
+
+      const items = so.items
+        .filter((i) => !i.removedAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((i) => ({
+          id: i.id,
+          description: i.description,
+          kind: i.kind,
+          qty: Number(i.qty).toFixed(2),
+          unit: i.unit,
+          unitPrice: Number(i.unitPrice).toFixed(2),
+          supplierId: i.supplierId,
+          supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+          withholdingRate: null as string | null,
+          withholdingAtc: null as string | null,
+          withholdingOverride: false,
+        }));
+      const saved = await updateSalesOrder(
+        so.id,
+        {
+          contactId: so.contactId,
+          buyerPoNo: so.buyerPoNo,
+          buyerPoDate: so.buyerPoDate ?? undefined,
+          deliveryAddress: so.deliveryAddress,
+          terms: so.terms,
+          notes: so.notes,
+          items,
+        },
+        costUser,
+      );
+      expect(saved.withholdingTotal.toFixed(2)).toBe(storedWh);
+      expect(Number(saved.netReceived).toFixed(2)).toBe(Number(so.netReceived).toFixed(2));
+      for (const i of saved.items.filter((x) => !x.removedAt)) {
+        expect(i.withholdingRate).not.toBeNull();
+      }
+    });
+
     it("an issued (Won) document is not recalculated when lines or the customer change", async () => {
       const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
@@ -641,6 +724,65 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       await expect(db.documentSeries.deleteMany({})).rejects.toBeInstanceOf(HardDeleteError);
       await expect(db.documentVoid.deleteMany({})).rejects.toBeInstanceOf(HardDeleteError);
       expect(await db.quote.findUnique({ where: { id: q.id } })).toBeTruthy();
+    });
+  });
+
+  describe("line withholding backfill migration", () => {
+    const sql = readFileSync(resolve(__dirname, "../../prisma/migrations/20261031140000_line_withholding_backfill/migration.sql"), "utf8");
+
+    function statements(block: string): string[] {
+      return block
+        .split(";")
+        .map((s) =>
+          s
+            .split("\n")
+            .filter((l) => !l.trim().startsWith("--"))
+            .join("\n")
+            .trim(),
+        )
+        .filter(Boolean);
+    }
+
+    const backfill = statements(sql.slice(sql.indexOf("-- BEGIN line withholding backfill"), sql.indexOf("-- END line withholding backfill")));
+    const commented = sql.match(/\/\*([\s\S]*?)\*\//)?.[1] ?? "";
+    const rollback = statements(
+      commented.slice(commented.indexOf("-- BEGIN rollback line withholding backfill"), commented.indexOf("-- END rollback line withholding backfill")),
+    );
+
+    it("backfill and rollback round-trip restore then clear rates from the doc JSON", async () => {
+      expect(backfill.length).toBeGreaterThanOrEqual(2);
+      expect(rollback.length).toBeGreaterThanOrEqual(2);
+
+      const customer = await makeCustomer([], "TOP_WITHHOLDING_AGENT");
+      const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+
+      await db.quoteItem.updateMany({ where: { quoteId: q.id }, data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false } });
+      await db.salesOrderItem.updateMany({
+        where: { salesOrderId: so.id },
+        data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+      });
+
+      for (const stmt of backfill) await db.$executeRawUnsafe(stmt);
+
+      const qItems = await db.quoteItem.findMany({ where: { quoteId: q.id, removedAt: null } });
+      const soItems = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null } });
+      expect(qItems.every((i) => i.withholdingRate != null)).toBe(true);
+      expect(soItems.every((i) => i.withholdingRate != null)).toBe(true);
+      expect(Number(qItems.find((i) => i.kind === "GOODS")!.withholdingRate).toFixed(4)).toBe("0.0100");
+      expect(Number(qItems.find((i) => i.kind === "SERVICES")!.withholdingRate).toFixed(4)).toBe("0.0200");
+      expect(Number(soItems.find((i) => i.kind === "GOODS")!.withholdingRate).toFixed(4)).toBe("0.0100");
+
+      for (const stmt of rollback) await db.$executeRawUnsafe(stmt);
+
+      const qAfter = await db.quoteItem.findMany({ where: { quoteId: q.id, removedAt: null } });
+      const soAfter = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null } });
+      expect(qAfter.every((i) => i.withholdingRate == null && i.withholdingAtc == null)).toBe(true);
+      expect(soAfter.every((i) => i.withholdingRate == null && i.withholdingAtc == null)).toBe(true);
+
+      // Re-run backfill restores again (idempotent for null rows).
+      for (const stmt of backfill) await db.$executeRawUnsafe(stmt);
+      expect((await db.quoteItem.findMany({ where: { quoteId: q.id, removedAt: null } })).every((i) => i.withholdingRate != null)).toBe(true);
     });
   });
 });

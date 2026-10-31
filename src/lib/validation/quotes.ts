@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WITHHOLDING_PERCENT_RANGE_ERROR, isWithholdingRateInRange } from "../quotes/withholding-percent";
 
 export const ITEM_KINDS = ["GOODS", "SERVICES"] as const;
 export const ITEM_KIND_LABELS: Record<(typeof ITEM_KINDS)[number], string> = { GOODS: "Goods", SERVICES: "Services" };
@@ -58,7 +59,7 @@ export const itemSchema = z.object({
       z
         .string()
         .trim()
-        .regex(/^\d+(\.\d+)?$/, "Withholding rate: enter a decimal fraction."),
+        .refine((v) => /^-?\d+(\.\d+)?$/.test(v) && isWithholdingRateInRange(v), WITHHOLDING_PERCENT_RANGE_ERROR),
     ])
     .optional(),
   withholdingAtc: z.string().trim().max(20).nullable().optional(),

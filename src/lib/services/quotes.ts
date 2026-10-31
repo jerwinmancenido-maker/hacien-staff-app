@@ -12,6 +12,7 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { docTotals, withholdingSnapshotFromLines } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
+import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
 import { snapshotList } from "./withholding";
@@ -162,11 +163,14 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
-      const { items, removedIds } = planItems(stored, input.items, withCosts, {
+      const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         customerWithholdingType: customer.withholdingType,
         reapplyWithholding: input.reapplyWithholding === true,
       });
-      const withholding = withholdingFromItems(items);
+      // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
+      const preserved = preserveLegacyWithholdingOnSave(before, planned);
+      const items = preserved.items;
+      const withholding = preserved.withholding;
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -185,7 +189,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           terms: input.terms,
           notes: input.notes,
           withholding: withholding as unknown as Prisma.InputJsonValue,
-          ...totalsData(items),
+          ...preserved.totals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
