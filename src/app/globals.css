@@ -4251,25 +4251,20 @@ button.contact-card-add {
   width: 100%;
   height: auto;
   max-width: 100%;
+  /* Cap tall empty area above bars on wide Home layouts (~160–200px). */
+  max-height: 180px;
 }
 .home-sales-grid {
   stroke: var(--border);
   stroke-width: 1;
   stroke-dasharray: 2 3;
 }
-.home-sales-axis {
-  fill: var(--text-2);
-  font-size: 9px;
-  font-family: inherit;
-}
+.home-sales-axis,
 .home-sales-xlabel,
 .home-sales-xyear {
   fill: var(--text-2);
-  font-size: 9px;
   font-family: inherit;
-}
-.home-sales-xyear {
-  font-size: 8px;
+  /* Font size set in viewBox units from JS so on-screen size stays ~12px. */
 }
 .home-sales-bar {
   fill: #111;
@@ -4317,14 +4312,8 @@ button.contact-card-add {
 .home-sales-rows .home-sales-stat:hover {
   background: transparent;
 }
-.home-sales-change.tone-up {
-  color: var(--green);
-}
-.home-sales-change.tone-down {
-  color: var(--red);
-}
-.home-sales-change.tone-flat,
-.home-sales-change.tone-none {
+/* Plain ink — no up/down colour (direction is in the words). */
+.home-sales-change {
   color: var(--text);
 }
 .home-sales-top-block {
@@ -4388,6 +4377,10 @@ button.contact-card-add {
   .home-sales-chart {
     margin-left: -4px;
     margin-right: -4px;
+  }
+  /* Keep natural aspect at phone widths (don't force the desktop height cap). */
+  .home-sales-svg {
+    max-height: none;
   }
 }
 

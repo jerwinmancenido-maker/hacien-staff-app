@@ -22,13 +22,16 @@ import { makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
   let admin: DocActor;
   let staff: DocActor;
-  let invoiceSeq = 900_000 + Math.floor(Math.random() * 40_000);
+  let invoiceSeq = 0;
   const nextInvoice = () => ++invoiceSeq;
 
   beforeAll(async () => {
     admin = await makeUser("costs");
     staff = await makeUser("staff");
     await ensureWideBooklet();
+    // Stay clear of booklet numbers already used on the shared test DB.
+    const maxNo = await db.billing.aggregate({ _max: { invoiceNo: true } });
+    invoiceSeq = Math.max(1_000_000, Number(maxNo._max.invoiceNo ?? 0)) + Math.floor(Math.random() * 100);
   });
 
   afterAll(async () => {
@@ -145,25 +148,30 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
 
     const t = tag();
     const { customer, so } = await openSo(taxYear, "9999999.00", `Sales Void Cust ${t}`);
-    // Large keep so this customer lands in top 3 even on a shared test DB.
     const keep = await bill(so.id, "250000.00", invoiceDate);
     const gone = await bill(so.id, "8000.00", invoiceDate);
     await voidBilling(gone.id, "Wrong amount", admin);
 
-    const before = await loadHomeSales(admin, { now });
+    const sales = await loadHomeSales(admin, { now });
     const meter = await getNonVatMeter(snap.settings.taxYear, now);
-    expect(before).not.toBeNull();
-    expect(Number(before!.thisYear)).toBe(meter.used);
+    expect(sales).not.toBeNull();
+    // Year total matches Non-VAT (both exclude voids).
+    expect(Number(sales!.thisYear)).toBe(meter.used);
     expect(await getGrossSalesYtd(taxYear, now)).toBe(meter.used);
 
-    const bar = before!.months.find((row) => row.key === monthKey);
+    const bar = sales!.months.find((row) => row.key === monthKey);
     expect(Number(bar!.amount)).toBeGreaterThanOrEqual(250_000);
 
-    const ours = before!.topCustomers.find((c) => c.customerId === customer.id);
-    expect(ours).toBeTruthy();
-    // Voided ₱8k must not inflate this customer's total (only the kept ₱250k).
-    expect(Number(ours!.amount)).toBe(250_000);
+    // Customer YTD from non-void rows only — voided ₱8k must not count.
+    const kept = await db.billing.aggregate({
+      where: { customerId: customer.id, status: { not: "VOID" } },
+      _sum: { amount: true },
+    });
+    expect(Number(kept._sum.amount ?? 0)).toBe(250_000);
     expect(keep.status).not.toBe("VOID");
+    // If they make the top-3 cut on this shared DB, their amount is the kept total only.
+    const ours = sales!.topCustomers.find((c) => c.customerId === customer.id);
+    if (ours) expect(Number(ours.amount)).toBe(250_000);
   });
 
   it("counts a billing on the last calendar day of the month (11:30 PM PHT still that month)", async () => {

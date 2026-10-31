@@ -54,6 +54,10 @@ export async function loadHomeSales(
   const to = grossSalesYtdEnd(now, taxYearStart(taxYear + 1));
 
   const [rows, thisYear] = await Promise.all([
+    // Same non-void / invoiceDate filter as Non-VAT (billingsGrossSales).
+    // Credit notes are not subtracted — the app has none yet. When credit-note
+    // documents exist, subtract them here (and in billingsGrossSales) so Home
+    // Sales and the Non-VAT meter stay in lockstep.
     db.billing.findMany({
       where: {
         status: { not: "VOID" },

@@ -55,15 +55,24 @@ describe("home sales month windows (Asia/Manila)", () => {
 });
 
 describe("home sales change vs last month", () => {
-  it("returns — when last month is 0", () => {
+  it("returns an em dash when last month is 0 or data is missing", () => {
     expect(salesChangeVsLastMonth(100, 0)).toEqual({ label: "—", tone: "none" });
     expect(salesChangeVsLastMonth(0, 0)).toEqual({ label: "—", tone: "none" });
+    expect(salesChangeVsLastMonth(100, Number.NaN)).toEqual({ label: "—", tone: "none" });
   });
 
-  it("formats up, down and flat", () => {
-    expect(salesChangeVsLastMonth(150, 100)).toEqual({ label: "+50%", tone: "up" });
-    expect(salesChangeVsLastMonth(50, 100)).toEqual({ label: "-50%", tone: "down" });
-    expect(salesChangeVsLastMonth(100, 100)).toEqual({ label: "0%", tone: "flat" });
+  it("says Up N% when this month is higher", () => {
+    expect(salesChangeVsLastMonth(188, 100)).toEqual({ label: "Up 88%", tone: "up" });
+    expect(salesChangeVsLastMonth(150, 100)).toEqual({ label: "Up 50%", tone: "up" });
+  });
+
+  it("says Down N% when this month is lower", () => {
+    expect(salesChangeVsLastMonth(88, 100)).toEqual({ label: "Down 12%", tone: "down" });
+    expect(salesChangeVsLastMonth(50, 100)).toEqual({ label: "Down 50%", tone: "down" });
+  });
+
+  it("says Same when equal", () => {
+    expect(salesChangeVsLastMonth(100, 100)).toEqual({ label: "Same", tone: "flat" });
   });
 });
 

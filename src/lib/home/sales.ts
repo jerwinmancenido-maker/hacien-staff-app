@@ -63,9 +63,10 @@ export function salesMonthLabel(key: MonthKey, prevKey: MonthKey | null): { shor
 }
 
 /**
- * Change vs last month for the Sales row.
- * - last month is 0 → "—" (no percent)
- * - otherwise signed integer percent (floored toward zero for display)
+ * Change vs last month for the Sales row (plain wording, no colour / arrows).
+ * - last month is 0 or missing → "—"
+ * - equal → "Same"
+ * - otherwise "Up N%" / "Down N%" (integer %, floored toward zero)
  */
 export function salesChangeVsLastMonth(
   thisMonth: number | string,
@@ -76,12 +77,12 @@ export function salesChangeVsLastMonth(
   if (!Number.isFinite(prev) || prev === 0) return { label: "—", tone: "none" };
   if (!Number.isFinite(cur)) return { label: "—", tone: "none" };
   const pct = ((cur - prev) / prev) * 100;
-  if (pct === 0) return { label: "0%", tone: "flat" };
+  if (pct === 0) return { label: "Same", tone: "flat" };
   const rounded = pct > 0 ? Math.floor(pct) : Math.ceil(pct);
-  if (rounded > 0) return { label: `+${rounded}%`, tone: "up" };
-  if (rounded < 0) return { label: `${rounded}%`, tone: "down" };
+  if (rounded > 0) return { label: `Up ${rounded}%`, tone: "up" };
+  if (rounded < 0) return { label: `Down ${Math.abs(rounded)}%`, tone: "down" };
   // Non-zero but rounds to 0 (e.g. 0.4%) — treat as flat.
-  return { label: "0%", tone: "flat" };
+  return { label: "Same", tone: "flat" };
 }
 
 /** Axis tick labels like ₱500K / ₱1.0M (compact, always with ₱). */

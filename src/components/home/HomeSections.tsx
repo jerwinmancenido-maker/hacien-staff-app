@@ -99,9 +99,7 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
             <div className="home-money-row home-sales-stat">
               <span className="home-money-label">Change vs last month</span>
               <span className="home-money-amounts">
-                <span className={`num strong home-sales-change tone-${sales.change.tone}`}>
-                  {sales.change.label}
-                </span>
+                <span className="num strong home-sales-change">{sales.change.label}</span>
               </span>
             </div>
           </li>
