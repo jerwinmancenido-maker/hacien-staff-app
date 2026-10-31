@@ -218,6 +218,8 @@ describe("print shell screen-only chrome", () => {
     expect(markup).toContain("no-print");
     expect(markup).toContain("Print / Save PDF");
     expect(markup).toContain("Back");
-    expect(markup).toMatch(/alert warn[^>]*no-print|no-print[^>]*alert warn/);
+    expect(markup).toMatch(/tax-cal-notice[^>]*no-print|no-print[^>]*tax-cal-notice/);
+    expect(markup).toContain("Add your TIN and address so they print on documents.");
   });
 });
+
