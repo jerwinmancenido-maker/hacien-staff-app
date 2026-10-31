@@ -131,9 +131,21 @@ export function yearsMissingHolidays(
   return missing;
 }
 
-/** Exact banner copy for a year with no holiday list. */
+/**
+ * One calm notice line for years with no holiday list.
+ * Several: "Holidays not set for 2025, 2027, 2028, so dates may be early"
+ * One:     "Holidays not set for 2027, so dates may be early"
+ * None:    null (caller hides the line)
+ */
+export function holidaysNotSetLine(years: readonly number[]): string | null {
+  const unique = [...new Set(years.filter((y) => Number.isInteger(y)))].sort((a, b) => a - b);
+  if (unique.length === 0) return null;
+  return `Holidays not set for ${unique.join(", ")}, so dates may be early`;
+}
+
+/** @deprecated Prefer holidaysNotSetLine — kept for any one-year callers. */
 export function holidaysNotSetBanner(year: number): string {
-  return `Holidays for ${year} not set, dates may be early`;
+  return holidaysNotSetLine([year]) ?? `Holidays not set for ${year}, so dates may be early`;
 }
 
 /** True when a YYYY-MM-DD falls in a year that has no holiday entries. */

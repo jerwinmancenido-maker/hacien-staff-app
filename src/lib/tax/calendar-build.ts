@@ -3,7 +3,6 @@
 import { csvCell } from "../books/csv";
 import {
   TAX_CALENDAR_APPLIES,
-  TAX_CALENDAR_DUE_UNCONFIRMED_NOTE,
   TAX_CALENDAR_SAWT_TASK,
   TAX_CALENDAR_STATUS,
   TAX_CALENDAR_UPCOMING_DAYS,
@@ -29,7 +28,7 @@ import {
   type TaxCalendarSettingsShape,
 } from "./calendar-obligations";
 import {
-  holidaysNotSetBanner,
+  holidaysNotSetLine,
   yearsMissingHolidays,
   ymdYearMissingHolidays,
   type TaxHoliday,
@@ -161,8 +160,15 @@ export function missingHolidayYearsForWindow(
   return yearsMissingHolidays(holidays, fromYear, toYear + 1);
 }
 
+/** Single notice line for missing holiday years, or null when none. */
+export function missingHolidaysLine(missingYears: readonly number[]): string | null {
+  return holidaysNotSetLine(missingYears);
+}
+
+/** @deprecated Prefer missingHolidaysLine — one combined notice, not per-year boxes. */
 export function missingHolidaysBanners(missingYears: readonly number[]): string[] {
-  return missingYears.map(holidaysNotSetBanner);
+  const line = holidaysNotSetLine(missingYears);
+  return line ? [line] : [];
 }
 
 function isEnabled(settings: TaxCalendarSettingsShape, key: TaxCalendarObligationKey): boolean {

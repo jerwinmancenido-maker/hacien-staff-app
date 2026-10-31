@@ -38,7 +38,7 @@ import {
 import { buildTaxCalendarIcs, icsEscapeText } from "@/lib/tax/calendar-ics";
 import { TAX_CALENDAR_OBLIGATIONS } from "@/lib/tax/calendar-obligations";
 import {
-  holidaysNotSetBanner,
+  holidaysNotSetLine,
   PH_HOLIDAYS_2026,
   yearsMissingHolidays,
 } from "@/lib/tax/holidays";
@@ -53,7 +53,7 @@ import { booksEnabledFromEnv } from "@/lib/books/features";
 import { filterDealsNavItems } from "@/components/Sidebar";
 import {
   missingHolidayYearsForWindow,
-  missingHolidaysBanners,
+  missingHolidaysLine,
 } from "@/lib/tax/calendar-build";
 import { sanitizeTaxCalendarSettings } from "@/lib/services/tax-calendar";
 
@@ -122,11 +122,23 @@ describe("HIGH: missing holiday years banner + unconfirmed dues", () => {
   it("2025 and 2027 are missing when only 2026 holidays are seeded", () => {
     expect(yearsMissingHolidays(PH_HOLIDAYS_2026, 2025, 2027)).toEqual([2025, 2027]);
     expect(missingHolidayYearsForWindow(PH_HOLIDAYS_2026, 2025, 2026)).toEqual([2025, 2027]);
-    expect(missingHolidaysBanners([2025, 2027])).toEqual([
-      holidaysNotSetBanner(2025),
-      holidaysNotSetBanner(2027),
-    ]);
-    expect(holidaysNotSetBanner(2025)).toBe("Holidays for 2025 not set, dates may be early");
+  });
+
+  it("missing-years notice line: several years, one year, or hidden when none", () => {
+    expect(holidaysNotSetLine([2025, 2027, 2028])).toBe(
+      "Holidays not set for 2025, 2027, 2028, so dates may be early",
+    );
+    expect(missingHolidaysLine([2025, 2027, 2028])).toBe(
+      "Holidays not set for 2025, 2027, 2028, so dates may be early",
+    );
+    expect(holidaysNotSetLine([2027])).toBe("Holidays not set for 2027, so dates may be early");
+    expect(missingHolidaysLine([2027])).toBe("Holidays not set for 2027, so dates may be early");
+    expect(holidaysNotSetLine([])).toBeNull();
+    expect(missingHolidaysLine([])).toBeNull();
+    // Sorted unique; out-of-order input still reads ascending
+    expect(holidaysNotSetLine([2028, 2025, 2025, 2027])).toBe(
+      "Holidays not set for 2025, 2027, 2028, so dates may be early",
+    );
   });
 
   it("marks dues in years without holidays as unconfirmed; 2026 dues stay confirmed", () => {

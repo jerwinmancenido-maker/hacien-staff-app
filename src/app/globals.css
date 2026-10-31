@@ -2996,6 +2996,28 @@ button.contact-card-add {
 /* ---------- Tax calendar (Part 7d) — phone cards / desktop table ---------- */
 /* sm breakpoint (~640px), matching Tailwind sm: */
 
+/* One calm notice (BIR rules + missing holidays + provisional) — not stacked alert boxes. */
+.tax-cal-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text);
+  border-radius: var(--radius);
+  background: var(--fill);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.tax-cal-notice-line {
+  margin: 0;
+}
+.tax-cal-notice-line + .tax-cal-notice-line {
+  margin-top: 6px;
+}
+.tax-cal-notice-provisional {
+  color: var(--text-3);
+}
+
 .tax-cal-mobile {
   display: none;
   flex-direction: column;

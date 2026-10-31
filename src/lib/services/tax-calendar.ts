@@ -13,7 +13,7 @@ import {
   buildTaxCalendarSections,
   defaultTaxCalendarSettings,
   missingHolidayYearsForWindow,
-  missingHolidaysBanners,
+  missingHolidaysLine,
   type CompletionRow,
   type TaxCalendarRow,
   type TaxCalendarSettingsShape,
@@ -112,8 +112,8 @@ export type ListTaxCalendarResult = {
   incomeTaxMethod: IncomeTaxMethod;
   /** Calendar years in the window with no holiday entries (owner must enter). */
   missingHolidayYears: number[];
-  /** Banner lines for missing holiday years. */
-  missingHolidayBanners: string[];
+  /** One notice line listing missing years, or null when none. */
+  missingHolidaysLine: string | null;
 };
 
 export async function listTaxCalendar(
@@ -178,7 +178,7 @@ export async function listTaxCalendar(
     booksType: taxYear.booksType ?? null,
     incomeTaxMethod: taxYear.incomeTaxMethod,
     missingHolidayYears,
-    missingHolidayBanners: missingHolidaysBanners(missingHolidayYears),
+    missingHolidaysLine: missingHolidaysLine(missingHolidayYears),
   };
 }
 

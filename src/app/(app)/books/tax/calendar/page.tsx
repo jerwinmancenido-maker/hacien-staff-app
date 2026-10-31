@@ -205,7 +205,7 @@ export default async function TaxCalendarPage({
   const sp = await searchParams;
   const view = sp.view === "all" ? "all" : "upcoming";
   const showNotApplicable = sp.showNa === "1" || sp.showNa === "true";
-  const { rows, overdue, provisional, missingHolidayBanners } = await listTaxCalendar(user, {
+  const { rows, overdue, provisional, missingHolidaysLine } = await listTaxCalendar(user, {
     view,
     showNotApplicable,
   });
@@ -232,7 +232,7 @@ export default async function TaxCalendarPage({
         }
       />
       <BooksNav active="tax-calendar" />
-      <TaxCalendarBanner provisional={provisional} missingHolidayBanners={missingHolidayBanners} />
+      <TaxCalendarBanner provisional={provisional} missingHolidaysLine={missingHolidaysLine} />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>

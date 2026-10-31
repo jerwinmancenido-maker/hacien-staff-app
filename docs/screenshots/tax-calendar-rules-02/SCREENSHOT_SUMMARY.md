@@ -110,6 +110,13 @@ App: http://127.0.0.1:3000
 - **15-header-books-tabs-360.png** ✓
   - 360px topbar + search + Books pill tabs (Tax calendar active)
 
+## Calm notice collapse (visual only)
+
+- **16-calendar-calm-notice-1280.png** ✓
+  - One calm notice block: BIR rules + "Holidays not set for 2025, 2027, 2028, so dates may be early" + provisional
+- **16-calendar-calm-notice-360.png** ✓
+  - Same single notice at 360px
+
 ## Screenshot Locations
 All screenshots saved to BOTH:
 1. `/opt/cursor/artifacts/screenshots/tax-calendar-rules-02/`
