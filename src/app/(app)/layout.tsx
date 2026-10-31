@@ -4,7 +4,8 @@ import { can, canSeeCosts, roleLabel } from "@/lib/permissions";
 import { isCashEnabled } from "@/lib/cash/features";
 import { isPayablesEnabled } from "@/lib/payables/features";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, formatPesoLimit } from "@/lib/format";
+import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { signOut } from "../auth-actions";
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const meter = await getNonVatMeter(settings.taxYear);
   const warning = NON_VAT_MESSAGES[meter.level];
   const booksEnabled = await isBooksEnabled();
+  const nonVatTitle = homeNonVatTitle(meter.limit);
 
   return (
     <div className="frame">
@@ -45,15 +47,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <a
           href="/billing"
           className={`tracker-card level-${meter.level}`}
-          aria-label="Non-VAT sales limit (₱3M)"
+          aria-label={nonVatTitle}
           data-level={meter.level}
         >
           <div className="label tracker-head">
-            <span>Non-VAT sales limit (₱3M)</span>
+            <span>{nonVatTitle}</span>
             <b className="num tracker-pct">{meter.pctLabel}</b>
           </div>
-          <div className="value num" style={{ textAlign: "left" }}>
-            {formatPeso(meter.used)} <span className="faint small">of {formatPeso(meter.limit)}</span>
+          <div className="value" style={{ textAlign: "left" }}>
+            <span className="num">{formatPeso(meter.used)}</span>{" "}
+            <span className="faint small tracker-of">of {formatPesoLimit(meter.limit)}</span>
           </div>
           <div
             className="bar"
@@ -62,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(meter.barPct)}
-            aria-valuetext={`${meter.pctLabel} of ${formatPeso(meter.limit)}`}
+            aria-valuetext={`${meter.pctLabel} of ${formatPesoLimit(meter.limit)}`}
           >
             <span style={{ width: `${meter.barPct}%` }} />
           </div>
