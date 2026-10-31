@@ -19,6 +19,7 @@ import { remainingQty } from "./receipt";
 import { approverError, canPo, PO_STATUSES, soLineProgress, type PoStatus, type ProgressState } from "./status";
 import { planPurchaseOrders } from "./plan";
 import {
+  billExceedsPo,
   buildCostMarginSummary,
   lineNeedsMorePo,
   sumMoney,
@@ -39,22 +40,43 @@ const attachmentSelect = { where: { archivedAt: null }, select: { id: true, file
 // PO list / detail (cost users only)
 // ---------------------------------------------------------------------------
 
-export type PoListFilter = { q?: string; status?: PoStatus; open?: boolean };
+export type PoListFilter = {
+  q?: string;
+  status?: PoStatus;
+  open?: boolean;
+  /** Non-void supplier bill totals higher than the PO subtotal. */
+  billedOver?: boolean;
+};
 
 export async function listPurchaseOrdersView(filter: PoListFilter, viewer: PermissionUser) {
   assertCosts(viewer);
   const q = filter.q?.trim();
+  const billedOver = filter.billedOver === true;
   const rows = await db.purchaseOrder.findMany({
     where: {
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.open ? { status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } : {}),
+      ...(billedOver ? { status: { not: "VOID" }, bills: { some: { status: { not: "VOID" } } } } : {}),
       ...(q ? { OR: [{ number: { contains: q } }, { supplier: { name: { contains: q } } }, { salesOrder: { number: { contains: q } } }] } : {}),
     },
-    include: { supplier: { select: { name: true } }, salesOrder: { select: { id: true, number: true } } },
+    include: {
+      supplier: { select: { name: true } },
+      salesOrder: { select: { id: true, number: true } },
+      ...(billedOver ? { bills: { where: { status: { not: "VOID" } }, select: { amount: true } } } : {}),
+    },
     orderBy: [{ date: "desc" }, { number: "desc" }],
     take: 500,
   });
-  return rows.map((r) => ({
+
+  const filtered = billedOver
+    ? rows.filter((r) => {
+        const bills = (r as { bills?: { amount: { toFixed(n: number): string } }[] }).bills ?? [];
+        const billed = sumMoney(bills.map((b) => money(b.amount)));
+        return billExceedsPo(money(r.subtotal), billed);
+      })
+    : rows;
+
+  return filtered.map((r) => ({
     id: r.id,
     number: r.number,
     revision: r.revision,

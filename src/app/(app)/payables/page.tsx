@@ -1,17 +1,32 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
-import { formatPeso } from "@/lib/format";
-import { apAgingSummary } from "@/lib/payables/views";
+import { can, canSeeCosts } from "@/lib/permissions";
+import { formatDate, formatPeso } from "@/lib/format";
+import { apAgingSummary, listSupplierBillsOpen } from "@/lib/payables/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { PayablesNav } from "@/components/payables/PayablesNav";
 import { PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
-export default async function PayablesHomePage() {
+const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
+
+export default async function PayablesHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dueFrom?: string; dueTo?: string }>;
+}) {
   const user = await requirePagePermission("view");
   const canManage = can(user, "manage_payables");
-  const summary = await apAgingSummary();
+  const sp = await searchParams;
+  const dueFrom = sp.dueFrom && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueFrom) ? sp.dueFrom : undefined;
+  const dueTo = sp.dueTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueTo) ? sp.dueTo : undefined;
+  const showDueSoon = !!(dueFrom || dueTo) && canSeeCosts(user);
+  const [summary, dueSoon] = await Promise.all([
+    apAgingSummary(),
+    showDueSoon
+      ? listSupplierBillsOpen({ dueFromYmd: dueFrom, dueToYmd: dueTo, openBalanceOnly: true })
+      : Promise.resolve([]),
+  ]);
 
   return (
     <>
@@ -45,6 +60,49 @@ export default async function PayablesHomePage() {
           <div className="foot">With unpaid bills</div>
         </Link>
       </div>
+
+      {showDueSoon ? (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-head">
+            <h2>Supplier bills due soon</h2>
+            <div className="right small muted">
+              {dueFrom ? day(dueFrom) : "…"} – {dueTo ? day(dueTo) : "…"}
+            </div>
+          </div>
+          {dueSoon.length === 0 ? (
+            <p className="faint">No open supplier bills due in this window.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="list" aria-label="Supplier bills due soon">
+                <thead>
+                  <tr>
+                    <th>Bill</th>
+                    <th>Supplier</th>
+                    <th>Due</th>
+                    <th className="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dueSoon.map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        {b.purchaseOrder ? (
+                          <Link href={`/purchase-orders/${b.purchaseOrder.id}?tab=bills`}>{b.billNumber}</Link>
+                        ) : (
+                          b.billNumber
+                        )}
+                      </td>
+                      <td>{b.supplier.name}</td>
+                      <td>{day(b.dueDate)}</td>
+                      <td className="num strong">{formatPeso(b.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div className="card">
         <div className="card-head">

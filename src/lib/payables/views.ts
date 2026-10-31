@@ -151,22 +151,44 @@ export async function getSupplierPaymentView(id: string) {
   };
 }
 
-export async function listSupplierBillsOpen(filters: { supplierId?: string; status?: SupplierBillStatus | "ALL" } = {}) {
-  const where: { supplierId?: string; status?: SupplierBillStatus | { not: "VOID" } } = {};
+export async function listSupplierBillsOpen(
+  filters: {
+    supplierId?: string;
+    status?: SupplierBillStatus | "ALL";
+    /** Inclusive Manila YYYY-MM-DD bounds on dueDate. */
+    dueFromYmd?: string;
+    dueToYmd?: string;
+    /** When true, drop rows whose open balance is ₱0. */
+    openBalanceOnly?: boolean;
+  } = {},
+) {
+  const where: {
+    supplierId?: string;
+    status?: SupplierBillStatus | { not: "VOID" } | { in: SupplierBillStatus[] };
+    dueDate?: { gte?: Date; lte?: Date };
+  } = {};
   if (filters.supplierId) where.supplierId = filters.supplierId;
   if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  else if (filters.openBalanceOnly) where.status = { in: ["RECORDED", "PARTIALLY_PAID"] };
   else where.status = { not: "VOID" };
+  if (filters.dueFromYmd || filters.dueToYmd) {
+    where.dueDate = {
+      ...(filters.dueFromYmd ? { gte: new Date(`${filters.dueFromYmd}T00:00:00.000Z`) } : {}),
+      ...(filters.dueToYmd ? { lte: new Date(`${filters.dueToYmd}T00:00:00.000Z`) } : {}),
+    };
+  }
   const rows = await db.supplierBill.findMany({
     where,
     include: {
       supplier: { select: { id: true, name: true } },
       allocations: { where: { supplierPayment: { status: "POSTED" } } },
+      purchaseOrder: { select: { id: true, number: true } },
     },
     orderBy: [{ dueDate: "asc" }, { billDate: "asc" }],
     take: 500,
   });
   const today = billingToday();
-  return rows.map((b) => {
+  const mapped = rows.map((b) => {
     const applied = appliedOf(b.allocations);
     const balance = supplierBillBalance(money(b.amount), applied);
     return {
@@ -178,9 +200,20 @@ export async function listSupplierBillsOpen(filters: { supplierId?: string; stat
       balance,
       status: b.status,
       supplier: b.supplier,
+      purchaseOrder: b.purchaseOrder,
       aging: agingBucket(b.dueDate, today) as AgingBucket,
     };
   });
+  if (filters.openBalanceOnly) return mapped.filter((r) => toScaled(r.balance, 2) > 0n);
+  return mapped;
+}
+
+/** Unpaid supplier bills due from Manila today through today + N days (inclusive). */
+export async function listSupplierBillsDueSoon(withinDays: number, now: Date = new Date()) {
+  const today = billingToday(now);
+  const fromYmd = ymd(today)!;
+  const toYmd = ymd(new Date(today.getTime() + withinDays * 86_400_000))!;
+  return listSupplierBillsOpen({ dueFromYmd: fromYmd, dueToYmd: toYmd, openBalanceOnly: true });
 }
 
 export type ApAgingRow = {
