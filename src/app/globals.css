@@ -1479,26 +1479,41 @@ tr.inactive .cell-primary .sub {
 .edit-table.withholding-settings-table table.list td.col-rate,
 .withholding-settings-table table.list th.col-rate,
 .withholding-settings-table table.list td.col-rate {
-  width: 5.5%;
+  width: 6%;
 }
 .edit-table.withholding-settings-table table.list th.col-active,
 .edit-table.withholding-settings-table table.list td.col-active,
 .withholding-settings-table table.list th.col-active,
 .withholding-settings-table table.list td.col-active {
-  width: 5%;
+  width: 6%;
   text-align: center;
 }
 .edit-table.withholding-settings-table table.list th.col-note,
 .edit-table.withholding-settings-table table.list td.col-note,
 .withholding-settings-table table.list th.col-note,
 .withholding-settings-table table.list td.col-note {
-  width: 12%;
+  width: 10.5%;
   vertical-align: middle;
 }
 .edit-table.withholding-settings-table table.list thead th {
   font-size: 11px;
   letter-spacing: 0.02em;
   line-height: 1.2;
+}
+/* Separate RATE % / ACTIVE / NOTE headers so they don't run together. */
+.edit-table.withholding-settings-table table.list th.col-rate,
+.withholding-settings-table table.list th.col-rate {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.edit-table.withholding-settings-table table.list th.col-active,
+.withholding-settings-table table.list th.col-active {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.edit-table.withholding-settings-table table.list th.col-note,
+.withholding-settings-table table.list th.col-note {
+  padding-left: 12px;
 }
 .withholding-settings-table table.list tbody tr {
   height: 48px;
@@ -1573,8 +1588,8 @@ tr.inactive .cell-primary .sub {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  line-height: 1.15;
-  font-size: 11.5px;
+  line-height: 1.2;
+  font-size: 13px;
   font-family: inherit;
 }
 
@@ -3079,59 +3094,7 @@ pre.json {
   .settings-form-actions {
     position: static;
   }
-  .numbering-settings-table,
-  .numbering-settings-table thead,
-  .numbering-settings-table tbody,
-  .numbering-settings-table tr,
-  .numbering-settings-table th,
-  .numbering-settings-table td {
-    display: block;
-    width: 100%;
-  }
-  .numbering-settings-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-  .numbering-settings-table tr {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .numbering-doc {
-    grid-column: 1;
-  }
-  .numbering-reset-cell {
-    grid-column: 2;
-    text-align: right;
-  }
-  .numbering-reset-text {
-    display: inline;
-  }
-  .numbering-prefix,
-  .numbering-digits {
-    grid-column: 1;
-  }
-  .numbering-example {
-    grid-column: 1 / -1;
-  }
-  .numbering-prefix input,
-  .numbering-digits input {
-    max-width: none;
-  }
-  .numbering-doc .strong {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
-  }
+  /* Numbering cards are below 640px — keep table at tablet widths. */
   .tax-cal-hint-cell .hint {
     white-space: normal;
     overflow: visible;
@@ -4960,6 +4923,115 @@ button.contact-card-add {
   }
   .tax-cal-desktop {
     display: none;
+  }
+
+  /* Numbering: one compact card per doc type (hide table header). ~1400px page. */
+  .numbering-settings-wrap {
+    overflow-x: visible;
+  }
+  .numbering-settings-table,
+  .numbering-settings-table thead,
+  .numbering-settings-table tbody,
+  .numbering-settings-table tr,
+  .numbering-settings-table th,
+  .numbering-settings-table td {
+    display: block;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .numbering-settings-table {
+    table-layout: auto;
+  }
+  .numbering-settings-table thead {
+    position: absolute;
+    width: 1px !important;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .numbering-settings-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 4px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .numbering-settings-table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .numbering-settings-table td {
+    padding: 0 !important;
+    border-bottom: none !important;
+    min-width: 0;
+  }
+  /* Row 1: doc name | Restart yearly */
+  .numbering-doc {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .numbering-reset-cell {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    justify-self: end;
+  }
+  .numbering-reset {
+    justify-content: flex-end;
+    margin: 0;
+    gap: 6px;
+    min-height: 32px;
+  }
+  .numbering-reset-text {
+    display: inline;
+    white-space: nowrap;
+  }
+  .numbering-doc .strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.2;
+    font-size: 13px;
+  }
+  /* Row 2: Prefix | Next no. half width; values visible; ≥40px inputs */
+  .numbering-prefix {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .numbering-digits {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .numbering-prefix input,
+  .numbering-digits input {
+    display: block;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  /* Row 3: Example one line, monospace, no wrap */
+  .numbering-example {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .numbering-example-code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

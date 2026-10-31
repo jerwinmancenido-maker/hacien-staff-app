@@ -6,7 +6,7 @@ Local throwaway DB only (`jerwin@example.com` seed). Full-page shots at real pag
 |---|---:|---:|---:|
 | users | 900 | 1411 | 360 |
 | approval | 900 | 900 | 360 |
-| numbering | 928 | 2851 | 360 |
+| numbering | 928 | 1373 | 360 |
 | tax | 1139 | 1536 | 360 |
 | tax-calendar | 942 | 2238 | 360 |
 | withholding | 900 | 1771 | 360 |
