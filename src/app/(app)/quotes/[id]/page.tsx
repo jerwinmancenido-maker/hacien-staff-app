@@ -85,7 +85,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         </div>
       )}
       {isWithholdingNotSet(q.withholdingPick) && q.status === "DRAFT" && (
-        <div className="alert warn" role="status">
+        <div className="alert wh-not-set" role="status">
           {WITHHOLDING_NOT_SET_NOTICE}
         </div>
       )}

@@ -39,9 +39,33 @@ export const WITHHOLDING_HINT_NONE = "Withholding: none";
 /** Internal-only panel label (never printed). */
 export const WITHHOLDING_INTERNAL_PANEL_LABEL = "Internal — withholding estimate (not on the printed quote)";
 
+/** Internal cost box — margin is contract − supplier (WH is a tax credit, not a cost). */
+export const INTERNAL_MARGIN_LABEL = "Margin";
+/** Internal cost box — cash after customer withholding. */
+export const INTERNAL_CASH_AFTER_WH_LABEL = "Cash we receive after withholding";
+
 /** Staff-facing strings (no extra customer-facing tax copy). */
 export const OVERRIDE_NOTE = "Changed from this customer's usual";
 export const REAPPLY_WITHHOLDING_LABEL = "Re-apply customer's withholding";
+
+/** Pick-field actions (quote details + customer form). */
+export const WITHHOLDING_PICK_NONE_LABEL = "No withholding";
+export const WITHHOLDING_PICK_RESET_LABEL = "Reset";
+/** Collapsed quote-details row — expand checkboxes. */
+export const WITHHOLDING_PICK_CHANGE_LABEL = "Change";
+
+/**
+ * Resolve the pick to persist from the customer type dropdown + checkbox state.
+ * "No" (NONE) always saves [] — the boxes are hidden.
+ */
+export function resolveCustomerSavedPick(
+  withholdingType: string | null | undefined,
+  pick: string[] | null | undefined,
+): string[] | null {
+  if (withholdingType === "NONE") return [];
+  if (pick === undefined) return null;
+  return pick;
+}
 
 /** @deprecated Prefer WITHHOLDING_NOT_SET_NOTICE — type no longer drives rates. */
 export const MISSING_WITHHOLDING_TYPE_WARNING = WITHHOLDING_NOT_SET_NOTICE;
@@ -103,7 +127,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
   },
   GOV_PT_3: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_PT_3,
-    label: "Government percentage tax 3% (code to confirm)",
+    label: "Government 3% (code to confirm)",
     lineKind: "GOV_PT",
     rate: "0.0300",
     atcCode: "WG010",
@@ -203,6 +227,19 @@ export function lineWithholdingFromPicks(
       code: only.code,
       label: only.label,
       lineKind: only.lineKind,
+    };
+  }
+
+  // Combined picks: keep ATC from the single line-kind-specific rate when present
+  // (e.g. Goods 1% + Gov 3% → goods line shows WI158). Otherwise blank.
+  const kindSpecific = applicable.filter((p) => p.lineKind === kind);
+  if (kindSpecific.length === 1) {
+    return {
+      rate,
+      atc: kindSpecific[0]!.atcCode,
+      code: null,
+      label: null,
+      lineKind: null,
     };
   }
 

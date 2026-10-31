@@ -11,6 +11,8 @@ import {
   isUnverifiedGovAtc,
   WITHHOLDING_PICK_FIELD_HINT,
   WITHHOLDING_PICK_FIELD_LABEL,
+  WITHHOLDING_PICK_NONE_LABEL,
+  WITHHOLDING_PICK_RESET_LABEL,
 } from "@/lib/quotes/withholding-defaults";
 
 const LINE_KIND_LABEL: Record<string, string> = {
@@ -33,6 +35,8 @@ export type WithholdingPickFieldProps = {
   clearToNotSet?: boolean;
   hint?: string;
   label?: string;
+  /** When false, hide the field label (parent shows a collapsed summary). */
+  showLabel?: boolean;
 };
 
 export function WithholdingPickField({
@@ -46,6 +50,7 @@ export function WithholdingPickField({
   clearToNotSet = true,
   hint = WITHHOLDING_PICK_FIELD_HINT,
   label = WITHHOLDING_PICK_FIELD_LABEL,
+  showLabel = true,
 }: WithholdingPickFieldProps) {
   const selected = new Set(value ?? []);
 
@@ -66,7 +71,7 @@ export function WithholdingPickField({
 
   return (
     <div className={`field${error ? " has-error" : ""}`} id={id}>
-      <span className="label">{label}</span>
+      {showLabel ? <span className="label">{label}</span> : null}
       <div className="wh-pick-list" role="group" aria-label={label}>
         {rates.length === 0 ? (
           <span className="small faint">No active rates in Settings → Withholding.</span>
@@ -101,11 +106,11 @@ export function WithholdingPickField({
       </div>
       <div className="wh-pick-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
         <button type="button" className="btn-link" disabled={disabled || (value != null && value.length === 0)} onClick={setNone}>
-          None
+          {WITHHOLDING_PICK_NONE_LABEL}
         </button>
         {clearToNotSet && value != null && (
           <button type="button" className="btn-link" disabled={disabled} onClick={() => onChange(null)}>
-            Clear (not set)
+            {WITHHOLDING_PICK_RESET_LABEL}
           </button>
         )}
       </div>

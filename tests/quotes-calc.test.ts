@@ -66,8 +66,9 @@ describe("document totals (per-line rates)", () => {
     expect(t.withholdingTotal).toBe("5600.00");
     expect(t.netReceived).toBe("534400.00");
     expect(t.supplierCost).toBe("455000.00");
-    expect(t.netMargin).toBe("79400.00");
-    expect(t.netMarginPct).toBe("14.70");
+    // Margin = contract − supplier (WH is a tax credit, not a cost).
+    expect(t.netMargin).toBe("85000.00");
+    expect(t.netMarginPct).toBe("15.74");
   });
 
   it("rounds withholding per line to the centavo (half-up), then sums", () => {

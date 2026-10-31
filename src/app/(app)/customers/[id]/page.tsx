@@ -92,24 +92,16 @@ export default async function CustomerPage({
         title={
           <>
             {customer.name}
-            <Chip tone={savedPick && savedPick.length ? "amber" : "grey"}>{pickChip}</Chip>
+            <Chip tone="grey">{pickChip}</Chip>
             {!(savedPick && savedPick.length > 0 && customer.withholdingType === "NONE") && (
-              <Chip
-                tone={
-                  customer.withholdingType === "GOVERNMENT"
-                    ? "green"
-                    : customer.withholdingType === "NONE"
-                      ? "grey"
-                      : "amber"
-                }
-              >
+              <Chip tone="grey">
                 {customer.withholdingType === "NONE" ? "Private" : WITHHOLDING_LABELS[customer.withholdingType]}
               </Chip>
             )}
             {!customer.active ? (
-              <Chip tone="red">Inactive</Chip>
+              <Chip tone="grey">Inactive</Chip>
             ) : (
-              <Chip tone="green">Active</Chip>
+              <Chip tone="grey">Active</Chip>
             )}
             {ar.anyOverdue && <OverdueBadge label="Overdue" />}
           </>

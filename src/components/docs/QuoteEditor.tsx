@@ -28,8 +28,11 @@ import {
   WITHHOLDING_NONE_CONFIRM_YES,
   WITHHOLDING_NONE_CONFIRM_PICK,
   WITHHOLDING_INTERNAL_PANEL_LABEL,
+  INTERNAL_MARGIN_LABEL,
+  INTERNAL_CASH_AFTER_WH_LABEL,
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
+  WITHHOLDING_PICK_CHANGE_LABEL,
   allowGovVatOption,
   GOV_ATC_CODE_TO_CONFIRM,
   isUnverifiedGovAtc,
@@ -252,6 +255,8 @@ export function QuoteEditor({
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
   const [whPctDrafts, setWhPctDrafts] = useState<Record<string, string>>({});
+  /** Expanded withholding checkboxes under Quote details (collapsed by default). */
+  const [whPickOpen, setWhPickOpen] = useState(() => resolveInitialPick(initial) == null);
 
   const e = state.fieldErrors ?? {};
   const customer = customerList.find((c) => c.id === h.customerId);
@@ -261,8 +266,8 @@ export function QuoteEditor({
   const pick = h.withholdingPick;
   const pickSnapshots = pickSnapshotsFromCodes(pick, rates);
   const linePicks = pickSnapshots ?? [];
-  // Customer header / hint always show the customer's saved pick (not the quote's edited pick).
-  const customerSavedPickSnapshots = pickSnapshotsFromCodes(customer?.defaultWithholding ?? null, rates);
+  // Hint under Customer always mirrors this quote's current pick (live as boxes change).
+  const quotePickHint = customerWithholdingHint(pickSnapshots);
 
   const lineInputs = items.map((i) => {
     const a = safeLine(i);
@@ -486,7 +491,7 @@ export function QuoteEditor({
         )}
 
         {notSet && (
-          <div className="alert warn" role="alert">
+          <div className="alert wh-not-set" role="alert">
             {WITHHOLDING_NOT_SET_NOTICE}
           </div>
         )}
@@ -517,9 +522,7 @@ export function QuoteEditor({
               </select>
               {customer && (
                 <div className="hint">
-                  {[customerTypeLabel(customer.withholdingType), customerWithholdingHint(customerSavedPickSnapshots)]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {[customerTypeLabel(customer.withholdingType), quotePickHint].filter(Boolean).join(" · ")}
                 </div>
               )}
               {e.customerId && <div className="error">{e.customerId}</div>}
@@ -561,13 +564,35 @@ export function QuoteEditor({
               {e.subject && <div className="error">{e.subject}</div>}
             </div>
             <div className={`quote-f field full${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
-              <WithholdingPickField
-                rates={rates}
-                value={pick}
-                onChange={changeQuotePick}
-                error={e.withholdingCodes ?? e.withholding}
-                clearToNotSet
-              />
+              <div className="wh-collapsed-row">
+                <span className="label">Withholding</span>
+                <div className="wh-collapsed-line">
+                  <span>{quotePickHint}</span>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => setWhPickOpen((o) => !o)}
+                    aria-expanded={whPickOpen}
+                  >
+                    {WITHHOLDING_PICK_CHANGE_LABEL}
+                  </button>
+                </div>
+              </div>
+              {whPickOpen ? (
+                <WithholdingPickField
+                  rates={visibleRates(rates)}
+                  value={pick}
+                  onChange={changeQuotePick}
+                  error={e.withholdingCodes ?? e.withholding}
+                  clearToNotSet
+                  showLabel={false}
+                />
+              ) : (
+                <input type="hidden" name="defaultWithholdingJson" value={pick == null ? "" : JSON.stringify(pick)} />
+              )}
+              {(e.withholdingCodes || e.withholding) && !whPickOpen ? (
+                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -661,13 +686,6 @@ export function QuoteEditor({
                               title={govAtc ? `${GOV_ATC_CODE_TO_CONFIRM}${i.withholdingAtc ? ` (${i.withholdingAtc})` : ""}` : i.withholdingAtc ?? undefined}
                             >
                               <span className="quote-tg-wh-label">{whLabel}</span>
-                              {govAtc ? (
-                                <span className="quote-wh-tip" aria-label={GOV_ATC_CODE_TO_CONFIRM}>
-                                  ?
-                                </span>
-                              ) : i.withholdingAtc ? (
-                                <span className="quote-tg-atc">{i.withholdingAtc}</span>
-                              ) : null}
                               <input
                                 aria-label={`Line ${idx + 1} withholding percent`}
                                 inputMode="decimal"
@@ -676,15 +694,18 @@ export function QuoteEditor({
                                 placeholder="—"
                                 onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
                               />
-                              {!govAtc ? (
-                                <input
-                                  aria-label={`Line ${idx + 1} ATC`}
-                                  className="w-atc"
-                                  value={i.withholdingAtc ?? ""}
-                                  placeholder="ATC"
-                                  onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                                />
-                              ) : null}
+                              <span className="quote-wh-pct-suffix" aria-hidden>
+                                %
+                              </span>
+                              {/* ATC shows the code (WI158…) or blank — never the rate number. Unverified gov codes stay blank. */}
+                              <input
+                                aria-label={`Line ${idx + 1} ATC`}
+                                className="w-atc"
+                                value={govAtc ? "" : (i.withholdingAtc ?? "")}
+                                placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
+                                title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : i.withholdingAtc ?? undefined}
+                                onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                              />
                             </span>
                             {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                           </div>
@@ -896,23 +917,14 @@ export function QuoteEditor({
                             placeholder="—"
                             onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
                           />
-                          {govAtc ? (
-                            <span
-                              className="quote-wh-tip"
-                              title={`${GOV_ATC_CODE_TO_CONFIRM}${i.withholdingAtc ? ` (${i.withholdingAtc})` : ""}`}
-                              aria-label={GOV_ATC_CODE_TO_CONFIRM}
-                            >
-                              ?
-                            </span>
-                          ) : (
-                            <input
-                              aria-label={`Line ${idx + 1} ATC`}
-                              className="w-atc"
-                              value={i.withholdingAtc ?? ""}
-                              placeholder="ATC"
-                              onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                            />
-                          )}
+                          <input
+                            aria-label={`Line ${idx + 1} ATC`}
+                            className="w-atc"
+                            value={govAtc ? "" : (i.withholdingAtc ?? "")}
+                            placeholder={govAtc ? GOV_ATC_CODE_TO_CONFIRM : "ATC"}
+                            title={govAtc ? GOV_ATC_CODE_TO_CONFIRM : i.withholdingAtc ?? undefined}
+                            onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                          />
                         </span>
                         {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                       </div>
@@ -934,10 +946,17 @@ export function QuoteEditor({
                       <span className="num">{formatPeso(totals.supplierCost)}</span>
                     </div>
                     <div className={`totals-row strong${Number(totals.netMargin) < 0 ? " neg" : ""}`}>
-                      <span>Net margin after withholding</span>
+                      <span>{INTERNAL_MARGIN_LABEL}</span>
                       <span className="num">
-                        {formatPeso(totals.netMargin)} <span className="muted">({totals.netMarginPct}%)</span>
+                        {formatPeso(totals.netMargin)}{" "}
+                        <span className="muted">
+                          ({Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%)
+                        </span>
                       </span>
+                    </div>
+                    <div className="totals-row">
+                      <span>{INTERNAL_CASH_AFTER_WH_LABEL}</span>
+                      <span className="num">{formatPeso(totals.netReceived)}</span>
                     </div>
                   </div>
                 )}
@@ -966,7 +985,7 @@ export function QuoteEditor({
                       <span className="num">{Number(totals.withholdingTotal) ? `−${formatPeso(totals.withholdingTotal)}` : formatPeso(0)}</span>
                     </div>
                     <div className="totals-row strong">
-                      <span>Net received</span>
+                      <span>{INTERNAL_CASH_AFTER_WH_LABEL}</span>
                       <span className="num">{formatPeso(totals.netReceived)}</span>
                     </div>
                     <div className="small faint" style={{ marginTop: 8 }}>

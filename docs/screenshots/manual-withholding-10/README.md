@@ -9,7 +9,8 @@ Full-page PNG shots of the pick-based withholding UI and print (no WH on custome
 | `quote-submit-confirm-none-1280.png` / `quote-submit-confirm-none-360.png` | 1280 / 360 | Submit confirm: Yes, none / Pick rates |
 | `quote-add-customer-pick-1280.png` / `quote-add-customer-pick-360.png` | 1280 / 360 | Add-customer drawer with Withholding multi-select |
 | `customer-overview-pick-1280.png` / `customer-overview-pick-360.png` | 1280 / 360 | Customer header chip shows saved pick (not type "No withholding") |
-| `customer-edit-pick-1280.png` / `customer-edit-pick-360.png` | 1280 / 360 | Customer form Withholding field |
+| `customer-edit-yes-1280.png` / `customer-edit-yes-360.png` | 1280 / 360 | Customer form: Yes → pick boxes visible |
+| `customer-edit-no-1280.png` / `customer-edit-no-360.png` | 1280 / 360 | Customer form: No → boxes hidden, saves none |
 | `quote-print-no-withholding-1280.png` | 1280 | Print: Subtotal + Total only; no WHT / ATC / Net amount due |
 
 Heights and `scrollWidth` (360 must equal 360 — no page side-scroll) are in `shot-report.json`.

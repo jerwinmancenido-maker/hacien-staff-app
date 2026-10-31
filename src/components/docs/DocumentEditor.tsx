@@ -384,7 +384,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       )}
 
       {mode === "quote" && notSet && (
-        <div className="alert warn" role="alert">
+        <div className="alert wh-not-set" role="alert">
           {WITHHOLDING_NOT_SET_NOTICE}
         </div>
       )}

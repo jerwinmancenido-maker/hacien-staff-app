@@ -222,16 +222,23 @@ async function main(db: ReturnType<typeof connect>) {
   }
 
   // Withholding rates normally come from the migration; add any that are missing.
+  // Seed may refresh labels/ATC on known codes. Never invent a "Goods 4%" rate —
+  // staff combine Goods 1% + Government 3%. Deactivate any leftover LINE_* rows.
   for (const [i, r] of WITHHOLDING_RATES.entries()) {
     const existing = await db.withholdingRate.findUnique({ where: { code: r.code } });
     if (existing) {
-      if (!existing.atcCode && "atcCode" in r && r.atcCode) {
-        await db.withholdingRate.update({ where: { code: r.code }, data: { atcCode: r.atcCode } });
-      }
+      const patch: { atcCode?: string; label?: string } = {};
+      if (!existing.atcCode && "atcCode" in r && r.atcCode) patch.atcCode = r.atcCode;
+      if (existing.label !== r.label) patch.label = r.label;
+      if (Object.keys(patch).length) await db.withholdingRate.update({ where: { code: r.code }, data: patch });
       continue;
     }
     await db.withholdingRate.create({ data: { ...r, note: "verify with BIR", sortOrder: i + 1 } });
   }
+  await db.withholdingRate.updateMany({
+    where: { OR: [{ code: { startsWith: "LINE_" } }, { label: "Goods 4%" }] },
+    data: { active: false },
+  });
 
   for (const c of CUSTOMERS) {
     const existing = await db.customer.findFirst({ where: { name: c.name } });
@@ -277,7 +284,7 @@ const WITHHOLDING_RATES = [
   // ATC labels: see src/lib/quotes/withholding-defaults.ts (ATC_LABELS). Gov codes UNVERIFIED.
   { code: "GOODS_1", label: "Goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI158" },
   { code: "SERVICES_2", label: "Services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI160" },
-  { code: "GOV_PT_3", label: "Government percentage tax 3%", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WG010" },
+  { code: "GOV_PT_3", label: "Government 3% (code to confirm)", lineKind: "GOV_PT", rate: "0.0300", atcCode: "WG010" },
   { code: "GOV_VAT_5", label: "Government VAT 5%", lineKind: "GOV_VAT", rate: "0.0500", atcCode: "WV050" },
 ] as const;
 

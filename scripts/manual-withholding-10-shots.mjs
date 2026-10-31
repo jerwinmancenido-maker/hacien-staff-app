@@ -269,22 +269,29 @@ async function main() {
     let m = await fullPageShot(cdp, `quote-editor-pick-${width}.png`);
     report.push({ name: `quote-editor-pick-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
 
-    // Clear pick → "not set" notice (same draft; restore later for print)
-    await cdp.send("Runtime.evaluate", {
-      expression: `(() => {
-        const btn = [...document.querySelectorAll('button,a')].find((el) => /Clear \\(not set\\)/i.test(el.textContent || ''));
-        if (!btn) return false;
-        const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
-        const onClick = propsKey ? btn[propsKey]?.onClick : null;
-        if (typeof onClick === 'function') {
-          onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
-        } else {
-          btn.click();
-        }
-        return true;
-      })()`,
-      returnByValue: true,
-    });
+    // Expand pick (Change), then Reset → "not set" notice (same draft; restore later for print)
+    async function clickLabeled(labelRe) {
+      const r = await cdp.send("Runtime.evaluate", {
+        expression: `(() => {
+          const re = ${labelRe};
+          const btn = [...document.querySelectorAll('button,a')].find((el) => re.test((el.textContent || '').trim()));
+          if (!btn) return false;
+          const propsKey = Object.keys(btn).find((k) => k.startsWith('__reactProps$'));
+          const onClick = propsKey ? btn[propsKey]?.onClick : null;
+          if (typeof onClick === 'function') {
+            onClick({ preventDefault() {}, stopPropagation() {}, target: btn, currentTarget: btn, type: 'click', bubbles: true });
+          } else {
+            btn.click();
+          }
+          return true;
+        })()`,
+        returnByValue: true,
+      });
+      return r.result?.value;
+    }
+    await clickLabeled("/^Change$/i");
+    await sleep(250);
+    await clickLabeled("/^Reset$/i");
     await waitFor(
       cdp,
       `(document.body.innerText || '').includes('Withholding not set for this customer') || (document.body.innerText || '').includes('Withholding: not set')`,
@@ -353,12 +360,54 @@ async function main() {
       m = await fullPageShot(cdp, `customer-overview-pick-${width}.png`);
       report.push({ name: `customer-overview-pick-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
 
-      // Customer Details tab — Withholding multi-select
+      // Customer Details — Yes (Government) shows pick boxes
       await cdp.send("Page.navigate", { url: `${BASE}/customers/${custId}?tab=details` });
-      await waitFor(cdp, `!!document.querySelector('.wh-pick, [name=defaultWithholdingJson], form')`);
+      await waitFor(cdp, `!!document.querySelector('#withholdingType, form')`);
       await sleep(400);
-      m = await fullPageShot(cdp, `customer-edit-pick-${width}.png`);
-      report.push({ name: `customer-edit-pick-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
+      // Ensure type is Yes / Government
+      await cdp.send("Runtime.evaluate", {
+        expression: `(() => {
+          const sel = document.querySelector('#withholdingType');
+          if (!sel) return false;
+          const d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+          d.set.call(sel, 'GOVERNMENT');
+          const propsKey = Object.keys(sel).find((k) => k.startsWith('__reactProps$'));
+          const onChange = propsKey ? sel[propsKey]?.onChange : null;
+          if (typeof onChange === 'function') {
+            onChange({ target: sel, currentTarget: sel, type: 'change', bubbles: true, preventDefault() {}, stopPropagation() {} });
+          } else {
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return true;
+        })()`,
+        returnByValue: true,
+      });
+      await sleep(300);
+      await waitFor(cdp, `!!document.querySelector('.wh-pick-list, .wh-pick-row')`);
+      m = await fullPageShot(cdp, `customer-edit-yes-${width}.png`);
+      report.push({ name: `customer-edit-yes-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
+
+      // Switch to No → boxes hidden
+      await cdp.send("Runtime.evaluate", {
+        expression: `(() => {
+          const sel = document.querySelector('#withholdingType');
+          if (!sel) return false;
+          const d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+          d.set.call(sel, 'NONE');
+          const propsKey = Object.keys(sel).find((k) => k.startsWith('__reactProps$'));
+          const onChange = propsKey ? sel[propsKey]?.onChange : null;
+          if (typeof onChange === 'function') {
+            onChange({ target: sel, currentTarget: sel, type: 'change', bubbles: true, preventDefault() {}, stopPropagation() {} });
+          } else {
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return true;
+        })()`,
+        returnByValue: true,
+      });
+      await sleep(300);
+      m = await fullPageShot(cdp, `customer-edit-no-${width}.png`);
+      report.push({ name: `customer-edit-no-${width}.png`, width, height: m.scrollHeight, scrollWidth: m.scrollWidth });
     }
   }
 

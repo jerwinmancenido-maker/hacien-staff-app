@@ -12,7 +12,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { saveCustomer } from "@/lib/services/companies";
 import { addContact } from "@/lib/services/contacts";
 import { listWithholdingRates } from "@/lib/services/withholding";
-import { parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
+import { parseWithholdingPick, resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema, WITHHOLDING_TYPES } from "@/lib/validation/companies";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 import { z } from "zod";
@@ -84,7 +84,7 @@ export async function createCustomerForQuoteAction(
     const contactName = str(form, "contactName");
     const contactRole = str(form, "contactRole");
     const emailOrPhone = str(form, "emailOrPhone");
-    const pick = parsePickFromForm(form);
+    const pick = resolveCustomerSavedPick(withholdingType, parsePickFromForm(form));
 
     const parsedCustomer = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
       name,

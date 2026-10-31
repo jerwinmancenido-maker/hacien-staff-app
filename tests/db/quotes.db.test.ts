@@ -715,9 +715,9 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
       const full = await getQuoteView(q.id, costUser);
       // TWA: 1% goods + 2% services = 5,600; net margin 540,000 − 5,600 − 455,000
-      expect(full?.totals.netMargin).toBe("79400.00");
+      expect(full?.totals.netMargin).toBe("85000.00");
       expect(full?.items[0]?.supplierName).toBe(supplier.name);
-      expect((await listQuotesView({ q: customer.name }, costUser))[0]?.netMarginPct).toBe("14.70");
+      expect((await listQuotesView({ q: customer.name }, costUser))[0]?.netMarginPct).toBe("15.74");
     });
 
     it("a non-cost user's edit keeps the existing costs", async () => {

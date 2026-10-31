@@ -9,10 +9,12 @@ import { customerMoneyTotals } from "@/lib/print/views";
 import {
   WITHHOLDING_DEFAULT_ROWS,
   WITHHOLDING_HINT_NONE,
+  WITHHOLDING_HINT_NOT_SET,
   customerWithholdingChipLabel,
   customerWithholdingHint,
   defaultWithholdingFor,
   lineWithholdingFromPicks,
+  resolveCustomerSavedPick,
 } from "@/lib/quotes/withholding-defaults";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
 
@@ -62,6 +64,9 @@ describe("manual withholding picks (build brief 10)", () => {
     const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
     expect(lineWithholdingFromPicks(picks, "GOODS").rate).toBe("0.0400");
     expect(lineWithholdingFromPicks(picks, "SERVICES").rate).toBe("0.0300");
+    // Combined goods keeps the goods-specific ATC (not the rate number).
+    expect(lineWithholdingFromPicks(picks, "GOODS").atc).toBe("WI158");
+    expect(lineWithholdingFromPicks(picks, "SERVICES").atc).toBe("WG010");
     // 520000 × 0.04 + 20000 × 0.03 = 20800 + 600
     expect(520000 * 0.04 + 20000 * 0.03).toBe(21400);
   });
@@ -105,5 +110,55 @@ describe("manual withholding picks (build brief 10)", () => {
     expect(header).not.toBe(WITHHOLDING_LABELS.NONE);
     expect(customerWithholdingChipLabel([])).toBe("Withholding: none");
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
+  });
+
+  it("quote hint follows the quote pick, not the customer's saved pick", () => {
+    // Customer still has Goods 1% + Gov 3% saved; quote pick was cleared → not set.
+    const customerSaved = [snap("GOODS_1"), snap("GOV_PT_3")];
+    expect(customerWithholdingHint(customerSaved)).toContain("Goods 1%");
+    const quotePickCleared: WithholdingSnapshot[] | null = null;
+    expect(customerWithholdingHint(quotePickCleared)).toBe(WITHHOLDING_HINT_NOT_SET);
+    expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
+  });
+
+  it("internal margin ignores WH; cash after WH = contract − WH (seed 535k / 450k / 21,250)", () => {
+    const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
+    const lines = [
+      {
+        kind: "GOODS" as const,
+        total: "520000.00",
+        supplierTotal: "450000.00",
+        margin: "70000.00",
+        withholdingRate: "0.0400",
+        withholdingAtc: "WI158",
+      },
+      {
+        kind: "SERVICES" as const,
+        total: "15000.00",
+        supplierTotal: "0.00",
+        margin: "15000.00",
+        withholdingRate: "0.0300",
+        withholdingAtc: "WG010",
+      },
+    ];
+    const t = docTotals(lines, picks);
+    expect(t.contractPrice).toBe("535000.00");
+    expect(t.supplierCost).toBe("450000.00");
+    expect(t.withholdingTotal).toBe("21250.00");
+    // Margin = 535000 − 450000 = 85000 (15.89%) — WH must not reduce it.
+    expect(t.netMargin).toBe("85000.00");
+    expect(t.netMarginPct).toBe("15.89");
+    // Cash we receive after withholding = 535000 − 21250.
+    expect(t.netReceived).toBe("513750.00");
+    // Old wrong math would have been 513750 − 450000 = 63750.
+    expect(t.netMargin).not.toBe("63750.00");
+  });
+
+  it("customer type No saves explicit none []", () => {
+    expect(resolveCustomerSavedPick("NONE", ["GOODS_1", "GOV_PT_3"])).toEqual([]);
+    expect(resolveCustomerSavedPick("NONE", null)).toEqual([]);
+    expect(resolveCustomerSavedPick("GOVERNMENT", ["GOODS_1"])).toEqual(["GOODS_1"]);
+    expect(resolveCustomerSavedPick("GOVERNMENT", null)).toBeNull();
+    expect(resolveCustomerSavedPick("TOP_WITHHOLDING_AGENT", [])).toEqual([]);
   });
 });

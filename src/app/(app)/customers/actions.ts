@@ -7,6 +7,7 @@ import { runAction } from "@/lib/actions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { saveCustomer, setCustomerActive } from "@/lib/services/companies";
 import { listWithholdingRates } from "@/lib/services/withholding";
+import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema } from "@/lib/validation/companies";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -29,11 +30,13 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     const user = await requireActionPermission("edit_data");
     const { settings } = await getSettingsSnapshot();
     const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
-    const pick = parsePickFromForm(form);
+    const type = str(form, "withholdingType") || undefined;
+    // "No" always saves explicit none []; Yes shows the pick boxes.
+    const pick = resolveCustomerSavedPick(type, parsePickFromForm(form));
     const parsed = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),
-      withholdingType: str(form, "withholdingType") || undefined,
+      withholdingType: type,
       defaultWithholding: pick,
       defaultTerms: str(form, "defaultTerms"),
       notes: str(form, "notes"),

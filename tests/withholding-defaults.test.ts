@@ -48,7 +48,7 @@ describe("lineWithholdingFromPicks", () => {
     const picks = [snap("GOODS_1"), snap("GOV_PT_3")];
     expect(lineWithholdingFromPicks(picks, "GOODS")).toMatchObject({
       rate: "0.0400",
-      atc: null,
+      atc: "WI158", // kind-specific ATC kept when combining with whole-total
       code: null,
       label: null,
     });
@@ -72,7 +72,7 @@ describe("customerWithholdingHint", () => {
     expect(customerWithholdingHint([])).toBe(WITHHOLDING_HINT_NONE);
     expect(customerWithholdingHint([snap("GOODS_1")])).toBe("Withholding: Goods 1% (WI158)");
     expect(customerWithholdingHint([snap("GOODS_1"), snap("GOV_PT_3")])).toBe(
-      "Withholding: Goods 1% (WI158) + Government percentage tax 3% (code to confirm)",
+      "Withholding: Goods 1% (WI158) + Government 3% (code to confirm)",
     );
   });
 });

@@ -119,7 +119,7 @@ function Row({ label, value, strong, sub }: { label: ReactNode; value: string; s
   );
 }
 
-/** Totals box: contract price, withholding (itemised), net received; then supplier cost and net margin for cost users. */
+/** Totals box: contract price, withholding (itemised), cash after WH; then supplier cost and margin (WH is not a cost). */
 export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCosts: boolean }) {
   return (
     <div className="totals-box" aria-label="Totals">
@@ -140,16 +140,16 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
           <Row label="Total withholding" value={`−${formatPeso(totals.withholdingTotal)}`} />
         </>
       )}
-      <Row label="Net received" value={formatPeso(totals.netReceived)} strong />
+      <Row label="Cash we receive after withholding" value={formatPeso(totals.netReceived)} strong />
       {showCosts && totals.supplierCost !== undefined && (
         <>
           <div className="totals-sep" />
           <Row label="Supplier cost" value={`−${formatPeso(totals.supplierCost)}`} />
           <div className={`totals-row strong${Number(totals.netMargin) < 0 ? " neg" : ""}`}>
             <span>
-              Margin after customer withholding
+              Margin
               <div className="small faint" style={{ fontWeight: 400 }}>
-                Net received minus supplier cost
+                Contract price minus supplier cost
               </div>
             </span>
             <span className="num">

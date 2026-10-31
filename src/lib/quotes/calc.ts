@@ -294,7 +294,9 @@ export function docTotals(lines: LineForDocTotals[], picks?: readonly Withholdin
   }
 
   const netReceived = contract - withheld;
-  const netMargin = netReceived - supplier;
+  // Margin is contract − supplier. Withholding is a tax credit (cash timing), not a cost —
+  // it must never shrink margin or make a profitable deal look like a loss.
+  const netMargin = contract - supplier;
   const pct = contract === 0n ? 0n : divRound(netMargin * 10_000n, contract);
 
   return {

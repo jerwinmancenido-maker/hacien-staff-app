@@ -1763,6 +1763,30 @@ tr.inactive .cell-primary .sub {
   background: var(--green-bg);
   color: var(--green);
 }
+/* Quote withholding not-set: grey banner, black left bar (phone + desktop). */
+.alert.wh-not-set {
+  background: #f3f4f6;
+  color: #111827;
+  border-left: 4px solid #111827;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.wh-collapsed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wh-collapsed-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+.quote-wh-pct-suffix {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin-right: 2px;
+}
 
 /* ---------- Detail layout ---------- */
 

@@ -12,16 +12,16 @@ import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from 
 import { formatAddress } from "@/lib/addresses/format";
 import { PlusIcon } from "./Icons";
 
+/** Brand: black/white/blue; WH and type chips stay grey/neutral. Red only for overdue. */
 const TONE: Record<WithholdingType, ChipTone> = {
-  GOVERNMENT: "green",
-  TOP_WITHHOLDING_AGENT: "amber",
+  GOVERNMENT: "grey",
+  TOP_WITHHOLDING_AGENT: "grey",
   NONE: "grey",
 };
 
-function pickTone(pick: string[] | null): ChipTone {
-  if (pick == null) return "grey";
-  if (pick.length === 0) return "grey";
-  return "amber";
+function pickTone(_pick: string[] | null): ChipTone {
+  void _pick;
+  return "grey";
 }
 
 export async function CustomerOverview({
@@ -77,9 +77,9 @@ export async function CustomerOverview({
                 </Chip>
               )}
               {!customer.active ? (
-                <Chip tone="red">Inactive</Chip>
+                <Chip tone="grey">Inactive</Chip>
               ) : (
-                <Chip tone="green">Active</Chip>
+                <Chip tone="grey">Active</Chip>
               )}
               {ar?.anyOverdue && <OverdueBadge label={ar.overdueLabel ?? "Overdue"} />}
             </div>
