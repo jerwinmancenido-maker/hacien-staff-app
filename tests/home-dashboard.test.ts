@@ -92,7 +92,6 @@ describe("home visibility / feature flags", () => {
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsPayables)).toBe(true);
     expect(canShowMoneyFigure("owedByCustomers", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("collectedThisMonth", staff, flagsOff)).toBe(true);
-    expect(canShowMoneyFigure("billedThisMonth", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsOff)).toBe(false);
   });
 

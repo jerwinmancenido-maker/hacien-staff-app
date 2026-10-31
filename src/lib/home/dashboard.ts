@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, listBillings, sumBillingsAmount, sumCollectionsReceived } from "../billing/views";
+import { arAgingSummary, listBillings, sumCollectionsReceived } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -20,7 +20,6 @@ import { listTaxCalendar } from "../services/tax-calendar";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { listRecentHomeActivity, type HomeActivityItem } from "./activity";
 import {
-  billedThisMonthHref,
   billingsOverdueHref,
   billsOverPoHref,
   collectedThisMonthHref,
@@ -37,6 +36,8 @@ import {
   taxCalendarHref,
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
+import { loadHomeSales } from "./sales-data";
+import type { HomeSales } from "./sales";
 import {
   canShowActionRow,
   canShowMoneyFigure,
@@ -92,6 +93,8 @@ export type HomeDashboard = {
   empty: boolean;
   gettingStarted: { addCustomerHref: string; makeQuoteHref: string } | null;
   actions: HomeActionRow[];
+  /** Sales chart + figures; null when the viewer lacks billing access. */
+  sales: HomeSales | null;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
   nonVat: HomeNonVat;
@@ -136,11 +139,15 @@ export async function loadHomeDashboard(
   const customerCount = await db.customer.count({ where: { active: true } });
   if (isHomeEmpty(customerCount)) {
     const { settings } = await getSettingsSnapshot();
-    const meter = await getNonVatMeter(settings.taxYear, now);
+    const [meter, sales] = await Promise.all([
+      getNonVatMeter(settings.taxYear, now),
+      loadHomeSales(user, { now }),
+    ]);
     return {
       empty: true,
       gettingStarted: { addCustomerHref: newCustomerHref(), makeQuoteHref: newQuoteHref() },
       actions: [],
+      sales,
       money: [],
       tax: null,
       nonVat: {
@@ -172,8 +179,8 @@ export async function loadHomeDashboard(
     customersNoWh,
     ar,
     collected,
-    billed,
     nonVatSnap,
+    sales,
     recent,
   ] = await Promise.all([
     listQuotesView({ needsApproval: true, now }, user),
@@ -185,8 +192,8 @@ export async function loadHomeDashboard(
     listCustomers({ withholding: "NONE" }),
     arAgingSummary(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
-    sumBillingsAmount({ fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
+    loadHomeSales(user, { now }),
     listRecentHomeActivity(5),
   ]);
 
@@ -232,9 +239,7 @@ export async function loadHomeDashboard(
   if (canShowMoneyFigure("collectedThisMonth", user, features)) {
     money.push(moneyRow("collectedThisMonth", "Collected this month", collectedThisMonthHref(now), collected));
   }
-  if (canShowMoneyFigure("billedThisMonth", user, features)) {
-    money.push(moneyRow("billedThisMonth", "Billed this month", billedThisMonthHref(now), billed));
-  }
+  // "Billed this month" lives under Sales (billing access only), not Money.
   if (canShowMoneyFigure("supplierBillsDueSoon", user, features)) {
     const dueSoon = await listSupplierBillsDueSoon(7, now);
     const dueTotal = sumPesoAmounts(dueSoon.map((b) => b.balance));
@@ -266,6 +271,7 @@ export async function loadHomeDashboard(
     empty: false,
     gettingStarted: null,
     actions,
+    sales,
     money,
     tax,
     nonVat: {

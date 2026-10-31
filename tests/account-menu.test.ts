@@ -60,4 +60,14 @@ describe("account menu wiring", () => {
     expect(menuSrc).toMatch(/ArrowDown/);
     expect(menuSrc).toMatch(/ArrowUp/);
   });
+
+  it("outside-click close returns focus to the avatar trigger, same as Escape", () => {
+    // Document mousedown outside the menu must both close and restore focus.
+    const pointer = menuSrc.match(/function onDocPointer[\s\S]*?\n    \}/);
+    expect(pointer?.[0]).toMatch(/setOpen\(false\)/);
+    expect(pointer?.[0]).toMatch(/triggerRef\.current\?\.focus/);
+    const escape = menuSrc.match(/function onDocKey[\s\S]*?\n    \}/);
+    expect(escape?.[0]).toMatch(/Escape/);
+    expect(escape?.[0]).toMatch(/triggerRef\.current\?\.focus/);
+  });
 });

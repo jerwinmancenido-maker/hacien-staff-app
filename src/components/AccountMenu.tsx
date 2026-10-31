@@ -39,7 +39,9 @@ export function AccountMenu({
 
     function onDocPointer(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        // Same as Escape: close and return focus to the avatar trigger.
         setOpen(false);
+        triggerRef.current?.focus();
       }
     }
     function onDocKey(e: globalThis.KeyboardEvent) {

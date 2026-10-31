@@ -4239,6 +4239,115 @@ button.contact-card-add {
   white-space: nowrap;
 }
 
+/* ---------- Home Sales (chart + rows) ---------- */
+
+.home-sales-chart {
+  margin: 4px 0 8px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.home-sales-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+.home-sales-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.home-sales-axis {
+  fill: var(--text-2);
+  font-size: 9px;
+  font-family: inherit;
+}
+.home-sales-xlabel,
+.home-sales-xyear {
+  fill: var(--text-2);
+  font-size: 9px;
+  font-family: inherit;
+}
+.home-sales-xyear {
+  font-size: 8px;
+}
+.home-sales-bar {
+  fill: #111;
+  cursor: pointer;
+  outline: none;
+}
+.home-sales-bar.is-current {
+  fill: var(--blue);
+}
+.home-sales-bar.is-active,
+.home-sales-bar:focus {
+  opacity: 0.85;
+}
+.home-sales-tip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 1.25rem;
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.home-sales-tip-placeholder {
+  visibility: hidden;
+}
+.home-sales-tip-amount {
+  font-weight: 600;
+}
+.home-sales-empty {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.home-sales-empty-copy {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.home-sales-rows .home-sales-stat {
+  cursor: default;
+}
+.home-sales-rows .home-sales-stat:hover {
+  background: transparent;
+}
+.home-sales-change.tone-up {
+  color: var(--green);
+}
+.home-sales-change.tone-down {
+  color: var(--red);
+}
+.home-sales-change.tone-flat,
+.home-sales-change.tone-none {
+  color: var(--text);
+}
+.home-sales-top-block {
+  margin-top: 4px;
+}
+.home-sales-top-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding: 10px 0 2px;
+}
+.home-sales-top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-sales-top-list li + li .home-money-row {
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
 /* Mobile: every Home section row uses the same layout — label left, value
  * right on one line (label may wrap). Matches Needs action / Money / tax /
  * activity; Non-VAT figures stay a single flush row with pct on the right. */
@@ -4275,6 +4384,10 @@ button.contact-card-add {
   }
   .home-nonvat-pct {
     margin-left: auto;
+  }
+  .home-sales-chart {
+    margin-left: -4px;
+    margin-right: -4px;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   HomeNeedsAction,
   HomeNonVat,
   HomeRecentActivity,
+  HomeSalesSection,
   HomeTaxDeadline,
 } from "@/components/home/HomeSections";
 
@@ -38,6 +39,7 @@ export default async function HomePage() {
       ) : (
         <div className="home-dashboard">
           <HomeNeedsAction rows={dash.actions} />
+          {dash.sales ? <HomeSalesSection sales={dash.sales} /> : null}
           <HomeMoney rows={dash.money} />
           {dash.tax ? <HomeTaxDeadline tax={dash.tax} /> : null}
           <HomeNonVat meter={dash.nonVat} />

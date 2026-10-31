@@ -4,10 +4,12 @@ import Link from "next/link";
 import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import type { HomeDashboard } from "@/lib/home/dashboard";
+import type { HomeSales } from "@/lib/home/sales";
 import { nonVatBarFillClass } from "@/lib/home/nonVatBar";
 import { homeNonVatHelperLine, homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import type { NonVatLevel } from "@/lib/services/non-vat";
 import { EmptyState } from "@/components/ui";
+import { HomeSalesChart } from "@/components/home/HomeSalesChart";
 
 export function HomeGettingStarted({
   addCustomerHref,
@@ -48,6 +50,88 @@ export function HomeNeedsAction({ rows }: { rows: HomeDashboard["actions"] }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+export function HomeSalesSection({ sales }: { sales: HomeSales }) {
+  return (
+    <section className="home-section home-sales">
+      <div className="home-section-head">
+        <h2>Sales</h2>
+        <div className="right">
+          <Link className="btn-link small" href={sales.href}>
+            Billing →
+          </Link>
+        </div>
+      </div>
+
+      <HomeSalesChart sales={sales} />
+
+      {sales.empty ? (
+        <div className="home-sales-empty">
+          <p className="home-sales-empty-copy">
+            No sales billed yet. Billings you issue will show here.
+          </p>
+          <Link className="btn" href={sales.href}>
+            Go to Billing
+          </Link>
+        </div>
+      ) : (
+        <ul className="home-money-list home-sales-rows">
+          <li>
+            <div className="home-money-row home-sales-stat">
+              <span className="home-money-label">Billed this month</span>
+              <span className="home-money-amounts">
+                <span className="num strong">{formatPeso(sales.thisMonth)}</span>
+              </span>
+            </div>
+          </li>
+          <li>
+            <div className="home-money-row home-sales-stat">
+              <span className="home-money-label">Billed last month</span>
+              <span className="home-money-amounts">
+                <span className="num strong">{formatPeso(sales.lastMonth)}</span>
+              </span>
+            </div>
+          </li>
+          <li>
+            <div className="home-money-row home-sales-stat">
+              <span className="home-money-label">Change vs last month</span>
+              <span className="home-money-amounts">
+                <span className={`num strong home-sales-change tone-${sales.change.tone}`}>
+                  {sales.change.label}
+                </span>
+              </span>
+            </div>
+          </li>
+          <li>
+            <div className="home-money-row home-sales-stat">
+              <span className="home-money-label">Billed this year</span>
+              <span className="home-money-amounts">
+                <span className="num strong">{formatPeso(sales.thisYear)}</span>
+              </span>
+            </div>
+          </li>
+          {sales.topCustomers.length > 0 ? (
+            <li className="home-sales-top-block">
+              <div className="home-sales-top-label">Top customers this year</div>
+              <ul className="home-sales-top-list">
+                {sales.topCustomers.map((c) => (
+                  <li key={c.customerId}>
+                    <Link className="home-money-row" href={c.href}>
+                      <span className="home-money-label">{c.name}</span>
+                      <span className="home-money-amounts">
+                        <span className="num strong">{formatPeso(c.amount)}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ) : null}
+        </ul>
+      )}
     </section>
   );
 }
