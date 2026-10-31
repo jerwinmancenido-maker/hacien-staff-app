@@ -50,11 +50,6 @@ export function collectedThisMonthHref(now: Date = new Date()): string {
   return `/billing/collections?status=POSTED&from=${fromYmd}&to=${toYmd}`;
 }
 
-export function billedThisMonthHref(now: Date = new Date()): string {
-  const { fromYmd, toYmd } = currentMonthPeriod(now);
-  return `/billing/billings?from=${fromYmd}&to=${toYmd}`;
-}
-
 export function supplierBillsDueSoonHref(now: Date = new Date()): string {
   const today = isoDate(manilaToday(now));
   const until = isoDate(addDays(manilaToday(now), 7));

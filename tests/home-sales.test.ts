@@ -238,13 +238,31 @@ describe("home concept A layout wiring", () => {
     expect(page).toMatch(/HomeRecentActivity/);
     expect(page).not.toMatch(/HomeMoney/);
     expect(page).not.toMatch(/HomeNonVat/);
+    expect(sections).not.toMatch(/export function HomeMoney/);
     expect(dash).not.toMatch(/moneyRow\("billedThisMonth"/);
-    expect(sections).toMatch(/Billed this month/);
+    expect(sections).toMatch(/kpis\.billedThisMonth\.label/);
     expect(sections).toMatch(/Sales billed/);
+    expect(sections).toMatch(/Nothing needs action/);
     expect(sections).toMatch(/home-chip-overdue/);
     expect(css).toMatch(/#f8fafc/i);
     expect(css).toMatch(/#e5e7eb/i);
     expect(css).toMatch(/home-sales-line/);
+  });
+
+  it("keeps a compact Home: short labels, ~150px chart, 12px gaps, empty NA line", () => {
+    expect(dash).toMatch(/Quotes to approve/);
+    expect(dash).toMatch(/SOs needing a PO/);
+    expect(dash).toMatch(/Customers missing WHT type/);
+    expect(dash).toMatch(/Billed \(\$\{mon\}\)/);
+    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*12px/s);
+    expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*14px/s);
+    expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*150px/s);
+    expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
+    expect(css).toMatch(/\.home-tax\s*\{[^}]*min-height:\s*72px/s);
+    const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/const VB_H = 150/);
+    const hrefs = readFileSync(path.join(root, "src/lib/home/hrefs.ts"), "utf8");
+    expect(hrefs).not.toMatch(/billedThisMonthHref/);
   });
 
   it("keeps KPI cards equal height, left-aligned, and whole-peso amounts", () => {

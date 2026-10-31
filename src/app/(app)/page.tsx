@@ -35,7 +35,6 @@ export default async function HomePage() {
   const dash = await loadHomeDashboard(user);
   const first = user.name.split(" ")[0];
   const showSales = !!dash.sales && !!dash.kpis;
-  const hasMid = showSales || dash.actions.length > 0;
   const hasBot = !!dash.tax || dash.recent.length > 0;
 
   const actions =
@@ -73,12 +72,10 @@ export default async function HomePage() {
         <div className={`home-dashboard${showSales ? " has-sales" : " is-staff"}`}>
           {showSales && dash.kpis ? <HomeKpiCards kpis={dash.kpis} /> : null}
 
-          {hasMid ? (
-            <div className={`home-mid${showSales ? "" : " home-mid-full"}`}>
-              {showSales && dash.sales ? <HomeSalesSection sales={dash.sales} /> : null}
-              <HomeNeedsAction rows={dash.actions} openCount={dash.openActionCount} />
-            </div>
-          ) : null}
+          <div className={`home-mid${showSales ? "" : " home-mid-full"}`}>
+            {showSales && dash.sales ? <HomeSalesSection sales={dash.sales} /> : null}
+            <HomeNeedsAction rows={dash.actions} openCount={dash.openActionCount} />
+          </div>
 
           {hasBot ? (
             <div className={`home-bot${!dash.tax || dash.recent.length === 0 ? " home-bot-full" : ""}`}>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { currentMonthPeriod } from "@/lib/books/period";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
-import { activitySummary, documentHref } from "@/lib/home/activity";
+import { activitySummary, documentHref, formatHomeActivityWhen } from "@/lib/home/activity";
 import { homeMonthBounds, homeOwedSplit, homeSumAmounts, homeTodayPlusDaysYmd } from "@/lib/home/dashboard";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
@@ -191,6 +191,15 @@ describe("home activity helpers", () => {
     expect(documentHref("SupplierBill", "b1", { purchaseOrderId: "po1" })).toBe("/purchase-orders/po1?tab=bills");
     expect(documentHref("SupplierBill", "b1")).toBeNull();
   });
+
+  it("formats compact Manila activity times (time today; date + time otherwise)", () => {
+    // 2026-10-31 09:49 UTC = 5:49 PM PHT
+    const at = new Date("2026-10-31T09:49:00.000Z");
+    const sameDay = new Date("2026-10-31T02:00:00.000Z"); // still Oct 31 PHT
+    const nextDay = new Date("2026-11-01T02:00:00.000Z"); // Nov 1 PHT
+    expect(formatHomeActivityWhen(at, sameDay)).toBe("5:49 PM");
+    expect(formatHomeActivityWhen(at, nextDay)).toBe("Oct 31, 5:49 PM");
+  });
 });
 
 describe("home concept A staff / empty wiring", () => {
@@ -199,7 +208,10 @@ describe("home concept A staff / empty wiring", () => {
     expect(page).toMatch(/showSales/);
     expect(page).toMatch(/is-staff/);
     expect(page).toMatch(/HomeKpiCards/);
+    expect(page).toMatch(/HomeNeedsAction/);
     expect(page).not.toMatch(/HomeMoney/);
     expect(page).not.toMatch(/HomeNonVat/);
+    // Needs action always renders (short empty line when all counts are 0).
+    expect(page).not.toMatch(/hasMid/);
   });
 });

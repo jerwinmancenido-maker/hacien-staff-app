@@ -71,8 +71,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
     <div className="home-kps">
       <div className="card home-kp">
         <div className="home-kl">
-          <CoinIcon size={15} />
-          Billed this month
+          <CoinIcon size={14} />
+          {kpis.billedThisMonth.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisMonth.amount)}</div>
         <div className="home-ks">
@@ -83,8 +83,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
 
       <div className="card home-kp">
         <div className="home-kl">
-          <InboxIcon size={15} />
-          Owed by customers
+          <InboxIcon size={14} />
+          {kpis.owedByCustomers.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.owedByCustomers.amount)}</div>
         <div className="home-ks">
@@ -97,8 +97,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
 
       <div className="card home-kp">
         <div className="home-kl">
-          <CartIcon size={15} />
-          Collected this month
+          <CartIcon size={14} />
+          {kpis.collectedThisMonth.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</div>
         <div className="home-ks">{kpis.collectedThisMonth.caption}</div>
@@ -106,8 +106,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
 
       <div className="card home-kp">
         <div className="home-kl">
-          <FileIcon size={15} />
-          Billed this year
+          <FileIcon size={14} />
+          {kpis.billedThisYear.label}
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisYear.amount)}</div>
         <div className="home-ks home-ks-bar">
@@ -126,19 +126,19 @@ function actionIcon(kind: HomeDashboard["actions"][number]["kind"]) {
   switch (kind) {
     case "quotesNeedsApproval":
     case "quotesNoReply":
-      return <FileIcon size={16} />;
+      return <FileIcon size={15} />;
     case "salesOrdersNeedsPo":
-      return <CartIcon size={16} />;
+      return <CartIcon size={15} />;
     case "posAwaitingReceipt":
-      return <InboxIcon size={16} />;
+      return <InboxIcon size={15} />;
     case "billsOverPo":
-      return <AlertTriangleIcon size={16} />;
+      return <AlertTriangleIcon size={15} />;
     case "billingsOverdue":
-      return <AlertTriangleIcon size={16} />;
+      return <AlertTriangleIcon size={15} />;
     case "customersNoWithholding":
-      return <UsersIcon size={16} />;
+      return <UsersIcon size={15} />;
     default:
-      return <FileIcon size={16} />;
+      return <FileIcon size={15} />;
   }
 }
 
@@ -149,30 +149,33 @@ export function HomeNeedsAction({
   rows: HomeDashboard["actions"];
   openCount: number;
 }) {
-  if (rows.length === 0) return null;
   return (
     <div className="card home-na-card">
       <div className="home-ct">
         <h3>Needs action</h3>
         <span className="home-chip home-chip-overdue">{formatHomeActionCount(openCount)} open</span>
       </div>
-      <ul className="home-na">
-        {rows.map((r) => {
-          const overdue = r.kind === "billingsOverdue";
-          return (
-            <li key={r.kind}>
-              <Link className="home-na-row" href={r.href}>
-                <span className={`home-na-i${overdue ? " is-overdue" : ""}`}>{actionIcon(r.kind)}</span>
-                <span className="home-na-t">{r.label}</span>
-                <span className={`home-na-c num${overdue ? " is-overdue" : ""}`}>
-                  {formatHomeActionCount(r.count)}
-                </span>
-                <ChevronRightIcon size={14} />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {rows.length === 0 ? (
+        <p className="home-na-empty muted small">Nothing needs action</p>
+      ) : (
+        <ul className="home-na">
+          {rows.map((r) => {
+            const overdue = r.kind === "billingsOverdue";
+            return (
+              <li key={r.kind}>
+                <Link className="home-na-row" href={r.href}>
+                  <span className={`home-na-i${overdue ? " is-overdue" : ""}`}>{actionIcon(r.kind)}</span>
+                  <span className="home-na-t">{r.label}</span>
+                  <span className={`home-na-c num${overdue ? " is-overdue" : ""}`}>
+                    {formatHomeActionCount(r.count)}
+                  </span>
+                  <ChevronRightIcon size={14} />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -184,7 +187,7 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
         <div>
           <h3>Sales billed</h3>
           <div className="home-sales-sub muted">
-            Last 12 months{sales.rangeLabel ? ` · ${sales.rangeLabel}` : ""}
+            {sales.rangeLabel || "Last 12 months"}
           </div>
         </div>
         <Link className="home-lk" href={sales.href}>
@@ -219,8 +222,7 @@ export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]
       <div className="home-tax-body">
         <div className="home-tax-kicker muted">Next tax deadline</div>
         <div className="home-tax-form">{tax.form}</div>
-        <div className="muted small">{tax.description}</div>
-        <div className="muted small">{tax.dueDetail}</div>
+        <div className="muted small home-tax-due">{tax.dueDetail}</div>
         {tax.overdueUnfiledCount > 0 ? (
           <div className="home-tax-overdue small">
             {tax.overdueUnfiledCount} overdue {tax.overdueUnfiledCount === 1 ? "item" : "items"} not marked filed
@@ -234,16 +236,16 @@ export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]
 function activityIcon(entityType: string) {
   switch (entityType) {
     case "Quote":
-      return <FileIcon size={14} />;
+      return <FileIcon size={13} />;
     case "SalesOrder":
-      return <CartIcon size={14} />;
+      return <CartIcon size={13} />;
     case "Billing":
     case "Collection":
-      return <CoinIcon size={14} />;
+      return <CoinIcon size={13} />;
     case "Customer":
-      return <UsersIcon size={14} />;
+      return <UsersIcon size={13} />;
     default:
-      return <FileIcon size={14} />;
+      return <FileIcon size={13} />;
   }
 }
 
@@ -270,9 +272,11 @@ export function HomeRecentActivity({
               <span className="home-ri">{activityIcon(r.entityType)}</span>
               <div className="home-ra-main">
                 <div className="home-ra-summary">{r.summary}</div>
-                {r.detail ? <div className="muted small">{r.detail}</div> : null}
+                <div className="home-ra-meta">
+                  {r.detail ? <span className="muted small home-ra-detail">{r.detail}</span> : null}
+                  <span className="home-ra-when muted small">{r.atLabel}</span>
+                </div>
               </div>
-              <span className="home-ra-when muted small">{r.atLabel}</span>
             </>
           );
           return r.href ? (
@@ -287,33 +291,6 @@ export function HomeRecentActivity({
         })}
       </div>
     </div>
-  );
-}
-
-/** @deprecated Money folded into KPI cards (concept A). Kept for any leftover imports. */
-export function HomeMoney({ rows }: { rows: HomeDashboard["money"] }) {
-  if (rows.length === 0) return null;
-  return (
-    <section className="home-section">
-      <div className="home-section-head">
-        <h2>Money</h2>
-      </div>
-      <ul className="home-money-list">
-        {rows.map((r) => (
-          <li key={r.kind}>
-            <Link className="home-money-row" href={r.href}>
-              <span className="home-money-label">{r.label}</span>
-              <span className="home-money-amounts">
-                <span className="num strong">{formatPeso(r.amount)}</span>
-                {r.showOverdueRed && r.overdueAmount && Number(r.overdueAmount) > 0 ? (
-                  <span className="home-money-overdue num">{formatPeso(r.overdueAmount)} overdue</span>
-                ) : null}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 

@@ -1,7 +1,7 @@
 // Recent document activity for the Home dashboard (read-only audit rows).
 
 import { db } from "../db";
-import { formatDateTime } from "../format";
+import { TIME_ZONE } from "../format";
 
 const DOC_ENTITY_TYPES = [
   "Quote",
@@ -110,6 +110,35 @@ export function activitySummary(action: string, entityType: string, who: string 
   const what = ENTITY_LABELS[entityType] ?? entityType.toLowerCase();
   const actor = who?.trim() || "Someone";
   return `${actor} ${verb} a ${what}`;
+}
+
+const manilaDayKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const manilaTimeShort = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const manilaDateShort = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  month: "short",
+  day: "numeric",
+});
+
+/**
+ * Compact Home activity timestamp in Asia/Manila.
+ * Today → "5:49 PM"; other days → "Oct 30, 5:49 PM".
+ */
+export function formatHomeActivityWhen(at: Date, now: Date = new Date()): string {
+  const time = manilaTimeShort.format(at);
+  if (manilaDayKey.format(at) === manilaDayKey.format(now)) return time;
+  return `${manilaDateShort.format(at)}, ${time}`;
 }
 
 /** Join doc number and counterparty for the activity subtitle. */
@@ -278,7 +307,7 @@ export async function listRecentHomeActivity(
     return {
       id: r.id,
       at: r.at,
-      atLabel: formatDateTime(r.at),
+      atLabel: formatHomeActivityWhen(r.at),
       summary: activitySummary(r.action, r.entityType, r.user?.name ?? null),
       detail: activityDetail(docNumber, party),
       href: documentHref(r.entityType, r.entityId, extras),

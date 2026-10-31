@@ -3,14 +3,30 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   ALLOWED_LOCAL_DB_HOSTS,
+  TEST_LOOKING_DB_NAME_RE,
   assertLocalSeedShotsOrExit,
   checkLocalSeedShots,
   parseDatabaseUrlHost,
+  parseDatabaseUrlName,
 } from "../scripts/lib/assert-local-db.mjs";
 
 describe("assert-local-db allowed hosts", () => {
   it("lists only loopback hosts (this repo has no compose MySQL service name)", () => {
     expect([...ALLOWED_LOCAL_DB_HOSTS]).toEqual(["localhost", "127.0.0.1"]);
+  });
+});
+
+describe("TEST_LOOKING_DB_NAME_RE", () => {
+  it("matches throwaway-looking names", () => {
+    for (const name of ["hacien_test", "shots_db", "local", "hacien_dev", "DEV_sandbox", "my-shots"]) {
+      expect(TEST_LOOKING_DB_NAME_RE.test(name), name).toBe(true);
+    }
+  });
+
+  it("rejects production-looking names", () => {
+    for (const name of ["hacien", "production", "staging", "prod_db", "app"]) {
+      expect(TEST_LOOKING_DB_NAME_RE.test(name), name).toBe(false);
+    }
   });
 });
 
@@ -30,13 +46,28 @@ describe("parseDatabaseUrlHost", () => {
   });
 });
 
+describe("parseDatabaseUrlName", () => {
+  it("reads the database name from the path", () => {
+    expect(parseDatabaseUrlName("mysql://user:s3cret@localhost:3306/hacien_dev")).toBe("hacien_dev");
+    expect(parseDatabaseUrlName("mysql://u:p@127.0.0.1:3306/hacien_test")).toBe("hacien_test");
+    expect(parseDatabaseUrlName("mysql://u:p@127.0.0.1:3306/shots")).toBe("shots");
+  });
+
+  it("returns null when the name is missing", () => {
+    expect(parseDatabaseUrlName(undefined)).toBeNull();
+    expect(parseDatabaseUrlName("")).toBeNull();
+    expect(parseDatabaseUrlName("mysql://u:p@127.0.0.1:3306/")).toBeNull();
+    expect(parseDatabaseUrlName("not-a-url")).toBeNull();
+  });
+});
+
 describe("checkLocalSeedShots", () => {
   const localUrl = "mysql://hacien:secret@127.0.0.1:3306/hacien_dev";
 
   it("refuses a remote host", () => {
     const r = checkLocalSeedShots({
       ALLOW_SEED_SHOTS: "1",
-      DATABASE_URL: "mysql://u:p@db.production.example.com:3306/hacien",
+      DATABASE_URL: "mysql://u:p@db.production.example.com:3306/hacien_dev",
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("expected refusal");
@@ -87,17 +118,51 @@ describe("checkLocalSeedShots", () => {
     expect(r.error).not.toMatch(/:::bad/);
   });
 
-  it("allows localhost with ALLOW_SEED_SHOTS=1", () => {
+  it("refuses a local host whose database name is not test-looking", () => {
+    const r = checkLocalSeedShots({
+      ALLOW_SEED_SHOTS: "1",
+      DATABASE_URL: "mysql://u:p@127.0.0.1:3306/hacien",
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected refusal");
+    expect(r.host).toBe("127.0.0.1");
+    expect(r.dbName).toBe("hacien");
+    expect(r.error).toMatch(/hacien/);
+    expect(r.error).toMatch(/test, shots, local, or dev/i);
+    expect(r.error).not.toMatch(/:p@|PASSWORD/i);
+  });
+
+  it("refuses a missing database name on a local host", () => {
+    const r = checkLocalSeedShots({
+      ALLOW_SEED_SHOTS: "1",
+      DATABASE_URL: "mysql://u:p@localhost:3306/",
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected refusal");
+    expect(r.error).toMatch(/database name is missing/i);
+  });
+
+  it("allows localhost with a test-looking DB name and ALLOW_SEED_SHOTS=1", () => {
     const r = checkLocalSeedShots({
       ALLOW_SEED_SHOTS: "1",
       DATABASE_URL: "mysql://hacien:secret@localhost:3306/hacien_dev",
     });
-    expect(r).toEqual({ ok: true, host: "localhost" });
+    expect(r).toEqual({ ok: true, host: "localhost", dbName: "hacien_dev" });
   });
 
-  it("allows 127.0.0.1 with ALLOW_SEED_SHOTS=1", () => {
+  it("allows 127.0.0.1 with a test-looking DB name and ALLOW_SEED_SHOTS=1", () => {
     const r = checkLocalSeedShots({ ALLOW_SEED_SHOTS: "1", DATABASE_URL: localUrl });
-    expect(r).toEqual({ ok: true, host: "127.0.0.1" });
+    expect(r).toEqual({ ok: true, host: "127.0.0.1", dbName: "hacien_dev" });
+  });
+
+  it("allows each throwaway name token (test, shots, local, dev)", () => {
+    for (const name of ["hacien_test", "home_shots", "local_copy", "mydev"]) {
+      const r = checkLocalSeedShots({
+        ALLOW_SEED_SHOTS: "1",
+        DATABASE_URL: `mysql://u:p@127.0.0.1:3306/${name}`,
+      });
+      expect(r, name).toEqual({ ok: true, host: "127.0.0.1", dbName: name });
+    }
   });
 });
 

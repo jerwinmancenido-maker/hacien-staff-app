@@ -112,12 +112,15 @@ export type HomeKpiChange = {
 
 export type HomeKpis = {
   billedThisMonth: {
+    /** e.g. "Billed (Oct)" — month from Manila now. */
+    label: string;
     amount: string;
     change: HomeKpiChange;
     vsCaption: string;
     href: string;
   };
   owedByCustomers: {
+    label: string;
     amount: string;
     overdueChip: { label: string; tone: "overdue" } | null;
     billingCount: number;
@@ -125,11 +128,15 @@ export type HomeKpis = {
     href: string;
   };
   collectedThisMonth: {
+    /** e.g. "Collected (Oct)". */
+    label: string;
     amount: string;
     caption: string;
     href: string;
   };
   billedThisYear: {
+    /** e.g. "Billed (2026)". */
+    label: string;
     amount: string;
     barPct: number;
     pctLabel: string;
@@ -163,13 +170,13 @@ export type HomeDashboard = {
 };
 
 const ACTION_LABELS: Record<HomeActionKind, string> = {
-  quotesNeedsApproval: "Quotes waiting for approval",
-  quotesNoReply: "Quotes sent with no reply after 7 days",
-  salesOrdersNeedsPo: "Sales orders with lines that have no PO yet",
-  posAwaitingReceipt: "POs waiting to be received",
-  billsOverPo: "Supplier bills higher than their PO",
+  quotesNeedsApproval: "Quotes to approve",
+  quotesNoReply: "Quotes with no reply",
+  salesOrdersNeedsPo: "SOs needing a PO",
+  posAwaitingReceipt: "POs to receive",
+  billsOverPo: "Bills over PO",
   billingsOverdue: "Billings past due",
-  customersNoWithholding: "Customers with no withholding type set",
+  customersNoWithholding: "Customers missing WHT type",
 };
 
 const BADGE_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
@@ -238,6 +245,7 @@ function buildKpis(opts: {
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
   const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
+  const year = Number(manilaMonthKey(now).slice(0, 4));
   const collectedCaption =
     !Number.isFinite(collectedNum) || collectedNum <= 0
       ? `No payments recorded in ${mon}`
@@ -249,12 +257,14 @@ function buildKpis(opts: {
 
   return {
     billedThisMonth: {
+      label: `Billed (${mon})`,
       amount: sales.thisMonth,
       change: sales.change,
       vsCaption: salesVsLastMonthCaption(sales.lastMonth, lastKey),
       href: sales.href,
     },
     owedByCustomers: {
+      label: "Owed",
       amount: owedAmount,
       overdueChip: owedOverdueChip(overdueCount, openCount),
       billingCount,
@@ -262,11 +272,13 @@ function buildKpis(opts: {
       href: owedByCustomersHref(),
     },
     collectedThisMonth: {
+      label: `Collected (${mon})`,
       amount: collected,
       caption: collectedCaption,
       href: collectedThisMonthHref(now),
     },
     billedThisYear: {
+      label: `Billed (${year})`,
       amount: sales.thisYear,
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,

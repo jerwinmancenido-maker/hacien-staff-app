@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Concept A Home screenshots: data / empty / staff × 1280 / 360.
+ * Captures at REAL content height (no fixed tall canvas / empty tail).
+ * Logs measured page height in px for each shot.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -73,6 +75,45 @@ async function setViewport(cdp, w, h) {
   });
 }
 
+async function measurePageHeight(cdp) {
+  const r = await cdp.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      // Content-only height from the page column — never use .sidebar / .main
+      // wrappers (they stretch to the provisional tall viewport).
+      const root = document.querySelector('main.content, main, .content');
+      let bottom = 0;
+      const bump = (el) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        bottom = Math.max(bottom, r.bottom + window.scrollY);
+      };
+      bump(document.querySelector('.page-header'));
+      bump(document.querySelector('.home-dashboard'));
+      bump(document.querySelector('.home-getting-started'));
+      bump(root);
+      if (root) {
+        for (const el of root.querySelectorAll('.card, .home-dashboard, .page-header, p, section, ul, div')) {
+          bump(el);
+        }
+      }
+      // Small pad under the last card; clamp away from the tall viewport.
+      const pad = 16;
+      const measured = Math.ceil(bottom + pad);
+      const vh = window.innerHeight || 0;
+      // If somehow we only saw the stretched shell, fall back to home-dashboard.
+      const dash = document.querySelector('.home-dashboard, .home-getting-started');
+      if (dash) {
+        const dr = dash.getBoundingClientRect();
+        const dashBottom = Math.ceil(dr.bottom + window.scrollY + pad);
+        if (measured >= vh - 8) return Math.max(400, dashBottom);
+      }
+      return Math.max(400, measured);
+    })()`,
+  });
+  return Number(r.result?.value) || 800;
+}
+
 async function shot(cdp, name, clip) {
   const params = { format: "png", fromSurface: true };
   if (clip) params.clip = { ...clip, scale: 1 };
@@ -123,14 +164,25 @@ async function goHome(cdp, w, h) {
   await sleep(500);
 }
 
-async function shotHome(cdp, name, w, h, readyExpr) {
-  await goHome(cdp, w, h);
+async function shotHome(cdp, name, w, readyExpr) {
+  // Lay out at a tall provisional height so content is not clipped while measuring.
+  await goHome(cdp, w, 2400);
   if (readyExpr) await waitFor(cdp, readyExpr);
   await cdp.send("Runtime.evaluate", {
     expression: `window.scrollTo(0, 0); document.querySelector('.page-header, .home-dashboard')?.scrollIntoView({ block: 'start' });`,
   });
   await sleep(350);
-  await shot(cdp, name);
+  let height = await measurePageHeight(cdp);
+  await setViewport(cdp, w, height);
+  await sleep(200);
+  height = await measurePageHeight(cdp);
+  await setViewport(cdp, w, height);
+  await sleep(150);
+  await cdp.send("Runtime.evaluate", { expression: `window.scrollTo(0, 0);` });
+  await sleep(100);
+  await shot(cdp, name, { x: 0, y: 0, width: w, height, scale: 1 });
+  console.log("pageHeight", name, `${w}x${height}`);
+  return height;
 }
 
 async function main() {
@@ -149,7 +201,7 @@ async function main() {
       "--disable-gpu",
       "--no-sandbox",
       "--disable-dev-shm-usage",
-      "--window-size=1280,1600",
+      "--window-size=1280,2400",
       "about:blank",
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
@@ -175,24 +227,55 @@ async function main() {
   await cdp.send("Network.enable");
 
   const mode = process.argv[2] || "data";
+  const heights = {};
 
   if (mode === "staff") {
     await login(cdp, staffEmail);
-    await shotHome(cdp, "home-a-staff-1280.png", 1280, 1400, `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`);
-    await shotHome(cdp, "home-a-staff-360.png", 360, 1800, `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`);
+    heights["home-a-staff-1280.png"] = await shotHome(
+      cdp,
+      "home-a-staff-1280.png",
+      1280,
+      `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`,
+    );
+    heights["home-a-staff-360.png"] = await shotHome(
+      cdp,
+      "home-a-staff-360.png",
+      360,
+      `!!document.querySelector('.home-dashboard.is-staff, .home-na-card')`,
+    );
   } else if (mode === "empty") {
     await login(cdp, adminEmail);
-    await shotHome(cdp, "home-a-empty-1280.png", 1280, 1400, `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`);
-    await shotHome(cdp, "home-a-empty-360.png", 360, 1800, `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`);
+    heights["home-a-empty-1280.png"] = await shotHome(
+      cdp,
+      "home-a-empty-1280.png",
+      1280,
+      `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`,
+    );
+    heights["home-a-empty-360.png"] = await shotHome(
+      cdp,
+      "home-a-empty-360.png",
+      360,
+      `!!document.querySelector('.home-sales.is-empty, .home-sales-empty, .home-sales')`,
+    );
   } else {
     await login(cdp, adminEmail);
-    await shotHome(cdp, "home-a-data-1280.png", 1280, 1600, `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`);
-    await shotHome(cdp, "home-a-data-360.png", 360, 2000, `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`);
+    heights["home-a-data-1280.png"] = await shotHome(
+      cdp,
+      "home-a-data-1280.png",
+      1280,
+      `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`,
+    );
+    heights["home-a-data-360.png"] = await shotHome(
+      cdp,
+      "home-a-data-360.png",
+      360,
+      `!!document.querySelector('.home-sales') && !!document.querySelector('.home-kps')`,
+    );
   }
 
   cdp.close();
   chrome.kill("SIGKILL");
-  console.log("shots done:", mode);
+  console.log("shots done:", mode, JSON.stringify(heights));
 }
 
 main().catch((e) => {

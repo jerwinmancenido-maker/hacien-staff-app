@@ -16,10 +16,13 @@ Throwaway **local** DB only — no live data.
 
 Mutating seed scripts refuse to run unless:
 
-1. `DATABASE_URL` host is `localhost` or `127.0.0.1` (this repo has no compose MySQL service name), and
-2. `ALLOW_SEED_SHOTS=1` is set.
+1. `DATABASE_URL` host is `localhost` or `127.0.0.1` (this repo has no compose MySQL service name),
+2. the database name looks like a throwaway test DB (contains `test`, `shots`, `local`, or `dev`), and
+3. `ALLOW_SEED_SHOTS=1` is set.
 
 Guard: `scripts/lib/assert-local-db.mjs`.
+
+Screenshots are captured at real content height (no fixed tall canvas).
 
 ```bash
 # Concept A (current)
