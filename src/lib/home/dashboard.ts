@@ -82,6 +82,9 @@ export type HomeNonVat = {
   barPct: number;
   level: string;
   warning: string | null;
+  /** From Settings → Tax year (defaults 70 / 90). */
+  warnFirstPct: number;
+  warnSecondPct: number;
   href: string;
 };
 
@@ -148,6 +151,8 @@ export async function loadHomeDashboard(
         barPct: meter.barPct,
         level: meter.level,
         warning: NON_VAT_MESSAGES[meter.level],
+        warnFirstPct: meter.warnFirstPct,
+        warnSecondPct: meter.warnSecondPct,
         href: nonVatHref(),
       },
       recent: [],
@@ -269,6 +274,8 @@ export async function loadHomeDashboard(
       barPct: nonVatSnap.barPct,
       level: nonVatSnap.level,
       warning: NON_VAT_MESSAGES[nonVatSnap.level],
+      warnFirstPct: nonVatSnap.warnFirstPct,
+      warnSecondPct: nonVatSnap.warnSecondPct,
       href: nonVatHref(),
     },
     recent,

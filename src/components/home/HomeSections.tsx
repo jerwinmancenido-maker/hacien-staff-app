@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { formatPeso } from "@/lib/format";
 import type { HomeDashboard } from "@/lib/home/dashboard";
+import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
 import { EmptyState } from "@/components/ui";
 
 export function HomeGettingStarted({
@@ -109,10 +110,11 @@ export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]
 }
 
 export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
+  const helper = homeNonVatHelperLine(meter.warnFirstPct, meter.warnSecondPct);
   return (
     <div className={`card home-section home-nonvat level-${meter.level}`}>
       <div className="card-head">
-        <h2>Non-VAT limit · {meter.year}</h2>
+        <h2>{HOME_NON_VAT_TITLE}</h2>
         <div className="right">
           <Link className="btn-link small" href={meter.href}>
             Billing →
@@ -138,6 +140,7 @@ export function HomeNonVat({ meter }: { meter: HomeDashboard["nonVat"] }) {
             style={{ width: `${meter.barPct}%` }}
           />
         </div>
+        <p className="home-nonvat-helper faint small">{helper}</p>
         {meter.warning ? <div className="home-nonvat-warn small">{meter.warning}</div> : null}
       </Link>
     </div>

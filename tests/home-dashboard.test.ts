@@ -4,6 +4,7 @@ import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { activitySummary, documentHref } from "@/lib/home/activity";
 import { homeMonthBounds, homeOwedSplit, homeSumAmounts, homeTodayPlusDaysYmd } from "@/lib/home/dashboard";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
+import { HOME_NON_VAT_TITLE, homeNonVatHelperLine } from "@/lib/home/nonVatCopy";
 import {
   canShowActionRow,
   canShowMoneyFigure,
@@ -109,6 +110,16 @@ describe("home getting-started hrefs", () => {
     const { newCustomerHref, newQuoteHref } = await import("@/lib/home/hrefs");
     expect(newCustomerHref()).toBe("/customers/new");
     expect(newQuoteHref()).toBe("/quotes/new");
+  });
+});
+
+describe("home Non-VAT card copy", () => {
+  it("uses the agreed title and settings-driven warn percents in the helper", () => {
+    expect(HOME_NON_VAT_TITLE).toBe("Non-VAT sales limit (₱3M)");
+    expect(homeNonVatHelperLine(70, 90)).toBe(
+      "Estimate based on invoices in this app for this year. Your accountant's books are the official count. Warns at 70% and 90%.",
+    );
+    expect(homeNonVatHelperLine(50, 80)).toContain("Warns at 50% and 80%.");
   });
 });
 

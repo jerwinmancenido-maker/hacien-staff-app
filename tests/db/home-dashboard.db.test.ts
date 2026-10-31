@@ -649,6 +649,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     );
 
     const batched = await listQuotesView({ needsApproval: true }, admin);
+    // Same candidate window as listQuotesView (status DRAFT, take 500, same order).
     const drafts = await db.quote.findMany({
       where: { status: "DRAFT" },
       select: {
@@ -657,6 +658,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
         contractPrice: true,
         netMarginPct: true,
       },
+      orderBy: [{ date: "desc" }, { number: "desc" }],
+      take: 500,
     });
     const expectedIds: string[] = [];
     const fallback = await getSettingsSnapshot();

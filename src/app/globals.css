@@ -3540,6 +3540,10 @@ button.contact-card-add {
   margin-left: auto;
   font-weight: 600;
 }
+.home-nonvat-helper {
+  margin: 0;
+  line-height: 1.35;
+}
 .home-nonvat-warn {
   color: var(--red);
   font-weight: 600;
