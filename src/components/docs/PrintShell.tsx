@@ -15,12 +15,7 @@ export function PrintShell({
   missing: string[];
   canManageSettings?: boolean;
 }) {
-  const warning =
-    missing.length > 0
-      ? missing.includes("TIN") && missing.length === 1
-        ? "Add your TIN so it prints on documents."
-        : `Add your ${missing.join(" and ")} so ${missing.length > 1 ? "they" : "it"} print${missing.length > 1 ? "" : "s"} on documents.`
-      : null;
+  const hasMissing = missing.length > 0;
 
   return (
     <div className={`print-shell print-shell-${doc.paperSize.toLowerCase()}`}>
@@ -31,12 +26,16 @@ export function PrintShell({
         <span className="small muted">
           Choose &quot;Save as PDF&quot; in the print dialog. Paper: {doc.paperSize}.
         </span>
-        <PrintButton />
+        <PrintButton missing={missing} />
       </div>
-      {warning && (
+      {hasMissing && (
         <div className="alert warn print-toolbar-alert no-print" role="status">
-          <b>{warning}</b>{" "}
-          {canManageSettings ? <Link href="/settings?tab=print">Open Print &amp; company details</Link> : "Ask an admin to fill in Print & company details."}
+          <b>TIN and address are missing. Print anyway?</b>{" "}
+          {canManageSettings ? (
+            <Link href="/settings?tab=print">Settings → Print &amp; company</Link>
+          ) : (
+            "Ask an admin to fill in Print & company details."
+          )}
         </div>
       )}
       <ProfessionalPrintDocument doc={doc} />

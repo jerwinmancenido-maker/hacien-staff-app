@@ -35,6 +35,7 @@ export type RecordListProps = {
   items: RecordItem[];
   emptyTitle?: string;
   emptyLine?: string;
+  emptyAction?: ReactNode;
   sortColumns?: SortColumn[];
   defaultSortKey?: string;
   defaultSortDir?: 1 | -1;
@@ -48,12 +49,48 @@ function subscribeStorage(callback: () => void) {
   return () => window.removeEventListener("storage", callback);
 }
 
+function RowShell({
+  item,
+  className,
+  children,
+  onActivate,
+}: {
+  item: RecordItem;
+  className: string;
+  children: ReactNode;
+  onActivate: (e: MouseEvent | KeyboardEvent) => void;
+}) {
+  if (!item.href) {
+    return (
+      <div role="listitem" className={className}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div
+      role="listitem"
+      tabIndex={0}
+      className={className}
+      onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onActivate(e);
+      }}
+    >
+      {/* Real href so middle-click / open-in-new-tab work; interactive controls sit above it. */}
+      <a href={item.href} className="row-stretched-link" tabIndex={-1} aria-hidden />
+      {children}
+    </div>
+  );
+}
+
 export function RecordList({
   listKey,
   label,
   items,
   emptyTitle = "All clear here",
   emptyLine = "Nothing here yet.",
+  emptyAction,
   sortColumns,
   defaultSortKey,
   defaultSortDir = 1,
@@ -62,14 +99,12 @@ export function RecordList({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 1. View mode handling (URL param > local state > localStorage > default "a")
+  // View mode: URL param > local state > localStorage > default "a"
   const urlView = searchParams.get("view")?.toLowerCase();
   const validUrlView = urlView === "a" || urlView === "b" || urlView === "c" ? urlView : null;
 
   const [localMode, setLocalMode] = useState<ViewMode | null>(null);
-  const [userDismissed, setUserDismissed] = useState(false);
 
-  // Read stored view from localStorage safely
   const storedView = useSyncExternalStore(
     subscribeStorage,
     () => {
@@ -83,20 +118,6 @@ export function RecordList({
     () => null
   );
 
-  // Read banner dismissal from localStorage safely
-  const isDismissedInStorage = useSyncExternalStore(
-    subscribeStorage,
-    () => {
-      try {
-        return Boolean(localStorage.getItem("hacien_dismiss_list_preview"));
-      } catch {
-        return true;
-      }
-    },
-    () => true // On server, don't flash
-  );
-
-  const bannerDismissed = userDismissed || isDismissedInStorage;
   const viewMode: ViewMode = validUrlView ?? localMode ?? storedView ?? "a";
 
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey ?? null);
@@ -109,20 +130,10 @@ export function RecordList({
     } catch {
       // ignore
     }
-    // Update URL query param ?view= without reload
     const params = new URLSearchParams(window.location.search);
     params.set("view", mode);
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState(null, "", newUrl);
-  }
-
-  function dismissBanner() {
-    setUserDismissed(true);
-    try {
-      localStorage.setItem("hacien_dismiss_list_preview", "1");
-    } catch {
-      // ignore
-    }
   }
 
   function toggleSort(key: string) {
@@ -137,10 +148,12 @@ export function RecordList({
   function handleRowClick(item: RecordItem, e: MouseEvent | KeyboardEvent) {
     if (!item.href) return;
     if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+    // Left-click / Enter: same-tab navigation (stretched <a> still enables open-in-new-tab).
+    if ("button" in e && e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
     router.push(item.href);
   }
 
-  // Sorted items
   const sortedItems = useMemo(() => {
     if (!sortKey) return items;
     return [...items].sort((a, b) => {
@@ -153,30 +166,6 @@ export function RecordList({
 
   return (
     <div className={`record-list-wrap ${className}`} aria-label={label}>
-      {/* Dismissible Preview Banner */}
-      {!bannerDismissed && (
-        <div className="list-preview-banner" role="status">
-          <div className="banner-content">
-            <span className="banner-icon" aria-hidden>
-              💡
-            </span>
-            <span className="banner-text">
-              <strong>Preview: pick a list style</strong> — Compare <strong>Card rows (A)</strong>,{" "}
-              <strong>Compact list (B)</strong>, and <strong>Tile grid (C)</strong> using the toggle on the right.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="banner-dismiss-btn"
-            onClick={dismissBanner}
-            aria-label="Dismiss banner"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* List controls header: sort options (if provided) & Segmented View Switcher */}
       <div className="record-list-controls">
         {sortColumns && sortColumns.length > 0 ? (
           <div className="record-list-sort">
@@ -243,25 +232,18 @@ export function RecordList({
 
       {sortedItems.length === 0 ? (
         <div className="card">
-          <EmptyState title={emptyTitle} line={emptyLine} />
+          <EmptyState title={emptyTitle} line={emptyLine} action={emptyAction} />
         </div>
       ) : (
         <>
-          {/* Style A: Card rows */}
           {viewMode === "a" && (
             <div className="record-list-cards" role="list">
               {sortedItems.map((item) => (
-                <div
+                <RowShell
                   key={item.id}
-                  role="listitem"
-                  tabIndex={item.href ? 0 : undefined}
-                  className={`record-card-row${item.href ? " clickable" : ""}${
-                    item.inactive ? " inactive" : ""
-                  }`}
-                  onClick={(e) => handleRowClick(item, e)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRowClick(item, e);
-                  }}
+                  item={item}
+                  className={`record-card-row${item.href ? " clickable" : ""}${item.inactive ? " inactive" : ""}`}
+                  onActivate={(e) => handleRowClick(item, e)}
                 >
                   <div className="card-row-avatar">
                     <Avatar name={item.avatarName ?? (typeof item.title === "string" ? item.title : "•")} />
@@ -288,31 +270,24 @@ export function RecordList({
                     </div>
                   )}
                   {item.menuItems && item.menuItems.length > 0 && (
-                    <div className="card-row-menu">
+                    <div className="card-row-menu" data-no-row-click>
                       <RowMenu items={item.menuItems} />
                     </div>
                   )}
-                </div>
+                </RowShell>
               ))}
             </div>
           )}
 
-          {/* Style B: Compact list */}
           {viewMode === "b" && (
             <div className="record-compact-wrap">
               <div className="record-compact-list" role="list">
                 {sortedItems.map((item) => (
-                  <div
+                  <RowShell
                     key={item.id}
-                    role="listitem"
-                    tabIndex={item.href ? 0 : undefined}
-                    className={`record-compact-row${item.href ? " clickable" : ""}${
-                      item.inactive ? " inactive" : ""
-                    }`}
-                    onClick={(e) => handleRowClick(item, e)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRowClick(item, e);
-                    }}
+                    item={item}
+                    className={`record-compact-row${item.href ? " clickable" : ""}${item.inactive ? " inactive" : ""}`}
+                    onActivate={(e) => handleRowClick(item, e)}
                   >
                     <div className="compact-avatar">
                       <Avatar name={item.avatarName ?? (typeof item.title === "string" ? item.title : "•")} small />
@@ -330,37 +305,26 @@ export function RecordList({
                         ))}
                       </div>
                     )}
-                    {item.amount && (
-                      <div className="compact-amount num">
-                        {item.amount.value}
-                      </div>
-                    )}
+                    {item.amount && <div className="compact-amount num">{item.amount.value}</div>}
                     {item.menuItems && item.menuItems.length > 0 && (
-                      <div className="compact-menu">
+                      <div className="compact-menu" data-no-row-click>
                         <RowMenu items={item.menuItems} />
                       </div>
                     )}
-                  </div>
+                  </RowShell>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Style C: Tile grid */}
           {viewMode === "c" && (
             <div className="record-tile-grid" role="list">
               {sortedItems.map((item) => (
-                <div
+                <RowShell
                   key={item.id}
-                  role="listitem"
-                  tabIndex={item.href ? 0 : undefined}
-                  className={`record-tile-card${item.href ? " clickable" : ""}${
-                    item.inactive ? " inactive" : ""
-                  }`}
-                  onClick={(e) => handleRowClick(item, e)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRowClick(item, e);
-                  }}
+                  item={item}
+                  className={`record-tile-card${item.href ? " clickable" : ""}${item.inactive ? " inactive" : ""}`}
+                  onActivate={(e) => handleRowClick(item, e)}
                 >
                   <div className="tile-head">
                     <div className="tile-identity">
@@ -371,7 +335,9 @@ export function RecordList({
                       </div>
                     </div>
                     {item.menuItems && item.menuItems.length > 0 && (
-                      <RowMenu items={item.menuItems} />
+                      <div data-no-row-click>
+                        <RowMenu items={item.menuItems} />
+                      </div>
                     )}
                   </div>
 
@@ -404,7 +370,7 @@ export function RecordList({
                       </span>
                     </div>
                   )}
-                </div>
+                </RowShell>
               ))}
             </div>
           )}

@@ -61,7 +61,21 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       </div>
       {quotes.length === 0 ? (
         <div className="card">
-          {filtered ? <EmptyState title="No matches" line="Try another number or customer, or clear the filter." /> : <EmptyState title="All clear here" line="No quotes yet." />}
+          {filtered ? (
+            <EmptyState title="No matches" line="Try another number or customer, or clear the filter." />
+          ) : (
+            <EmptyState
+              title="All clear here"
+              line="No quotes yet. Price a job for a customer to start."
+              action={
+                can(user, "edit_data") && (
+                  <Link className="btn btn-secondary" href="/quotes/new">
+                    New quote
+                  </Link>
+                )
+              }
+            />
+          )}
         </div>
       ) : (
         <DataTable

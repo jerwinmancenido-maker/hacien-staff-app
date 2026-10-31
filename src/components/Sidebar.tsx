@@ -161,6 +161,12 @@ const CRUMB_LABELS: Record<string, string> = {
   disbursements: "Cash disbursements",
   purchases: "Purchases",
   journal: "General journal",
+  tax: "Tax",
+  calendar: "Calendar",
+  income: "Income",
+  "sales-summary": "Sales summary",
+  "2307-received": "2307 received",
+  "ewt-withheld": "EWT withheld",
   new: "New",
   edit: "Edit",
 };
