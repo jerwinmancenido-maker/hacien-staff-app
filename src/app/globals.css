@@ -2,6 +2,11 @@
    Monochrome: black, white, warm greys. Muted status colors only for chips. */
 
 :root {
+  /* Brand accent (same names/values as brand-06 / PR 23) so the branches merge cleanly. */
+  --blue: #2563eb;
+  --blue-dark: #1d4ed8;
+  --blue-tint: #eff6ff;
+
   --bg: #f4f4f2;
   --card: #ffffff;
   --border: #e9e9e6;
@@ -242,7 +247,8 @@ a.tracker-card:hover {
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--text);
+  /* Non-VAT sidebar meter: brand accent below warn % (level-first/second override). */
+  background: var(--blue);
   border-radius: 999px;
 }
 
@@ -2603,9 +2609,23 @@ button.contact-card-add {
   margin-right: 4px;
   vertical-align: middle;
 }
-.aging-bar-fill.amber { background: var(--amber, #b45309); }
-.aging-bar-fill.red { background: var(--red); }
-.aging-bar-fill:not(.empty) { height: 100%; background: #4ade80; border-radius: inherit; }
+.aging-bar-fill:not(.empty) {
+  height: 100%;
+  border-radius: inherit;
+  background: #4ade80;
+}
+/* Home Non-VAT card: accent below warn %; amber/red win once warn thresholds hit. */
+.home-nonvat .aging-bar-fill:not(.empty) {
+  background: var(--blue);
+}
+.aging-bar-fill.amber,
+.home-nonvat .aging-bar-fill.amber {
+  background: var(--amber);
+}
+.aging-bar-fill.red,
+.home-nonvat .aging-bar-fill.red {
+  background: var(--red);
+}
 .statement-doc .print-doc-title h1 { font-size: 1.35rem; margin: 0; }
 .statement-aging { margin-top: 1.5rem; page-break-inside: avoid; }
 .print-placeholder { color: var(--red); font-weight: 600; }
@@ -3476,7 +3496,153 @@ button.contact-card-add {
   }
 }
 
-/* 1701Q worksheet: Invoiced main / Collected reference */
+/* ---------- Home dashboard ---------- */
+
+.home-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-dashboard > .card {
+  margin-top: 0;
+}
+.home-getting-started-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.home-action-list,
+.home-money-list,
+.home-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-action-row,
+.home-money-row,
+.home-activity-row,
+.home-tax-link,
+.home-nonvat-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 10px;
+  margin: 0 -10px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.home-action-row:hover,
+.home-money-row:hover,
+.home-activity-row:hover,
+.home-tax-link:hover,
+.home-nonvat-link:hover {
+  background: #f7f7f5;
+}
+.home-action-list li + li .home-action-row,
+.home-money-list li + li .home-money-row,
+.home-activity-list li + li .home-activity-row {
+  border-top: 1px solid #f3f3f0;
+  border-radius: 0;
+}
+.home-action-label,
+.home-money-label,
+.home-activity-summary {
+  font-size: 14px;
+}
+.home-action-count {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+.home-money-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.home-money-overdue {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+}
+.home-tax-main {
+  min-width: 0;
+}
+.home-tax-due {
+  text-align: right;
+}
+.home-tax-due .label {
+  color: var(--text-2);
+  font-size: 11px;
+}
+.home-tax-overdue {
+  margin-top: 10px;
+}
+.home-tax-overdue a {
+  color: var(--red);
+  font-weight: 600;
+  text-decoration: none;
+}
+.home-tax-overdue a:hover {
+  text-decoration: underline;
+}
+.home-nonvat-link {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.home-nonvat-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-nonvat-pct {
+  margin-left: auto;
+  font-weight: 600;
+}
+.home-nonvat-helper {
+  margin: 0;
+  line-height: 1.35;
+}
+.home-nonvat-warn {
+  color: var(--red);
+  font-weight: 600;
+}
+.home-activity-row {
+  align-items: flex-start;
+}
+.home-activity-when {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .home-action-row,
+  .home-money-row,
+  .home-activity-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .home-money-amounts,
+  .home-tax-due {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .home-nonvat-pct {
+    margin-left: 0;
+  }
+}
+
+/* 1701Q worksheet: Invoiced main / Collected reference (PR 19) */
 .tax-income-worksheet th.tax-income-main,
 .tax-income-worksheet td.tax-income-main {
   min-width: 7.5rem;

@@ -9,7 +9,7 @@ import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { day, PoStatusChip } from "@/components/purchasing/PoParts";
 
-type Search = { q?: string; status?: string };
+type Search = { q?: string; status?: string; billedOver?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -21,9 +21,10 @@ function href(s: Search, patch: Partial<Search>) {
 export default async function PurchaseOrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await requireCostPage("view");
   const s = await searchParams;
+  const billedOver = s.billedOver === "1";
   const status = PO_STATUSES.includes(s.status as PoStatus) ? (s.status as PoStatus) : undefined;
-  const pos = await listPurchaseOrdersView({ q: s.q, status }, user);
-  const filtered = !!(s.q || status);
+  const pos = await listPurchaseOrdersView({ q: s.q, status, billedOver: billedOver || undefined }, user);
+  const filtered = !!(s.q || status || billedOver);
 
   return (
     <>
@@ -47,14 +48,27 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           <input id="q" name="q" defaultValue={s.q} placeholder="Search PO no., supplier or SO no." />
           {status && <input type="hidden" name="status" value={status} />}
         </form>
-        <Link className={`filter-chip${!status ? " active" : ""}`} href={href(s, { status: undefined })}>
+        <Link
+          className={`filter-chip${!status && !billedOver ? " active" : ""}`}
+          href={href(s, { status: undefined, billedOver: undefined })}
+        >
           All
         </Link>
         {PO_STATUSES.map((t) => (
-          <Link key={t} className={`filter-chip${status === t ? " active" : ""}`} href={href(s, { status: t })}>
+          <Link
+            key={t}
+            className={`filter-chip${status === t && !billedOver ? " active" : ""}`}
+            href={href(s, { status: t, billedOver: undefined })}
+          >
             {PO_STATUS_LABELS[t]}
           </Link>
         ))}
+        <Link
+          className={`filter-chip${billedOver ? " active" : ""}`}
+          href={href(s, { status: undefined, billedOver: "1" })}
+        >
+          Bill higher than PO
+        </Link>
       </div>
       {pos.length === 0 ? (
         <div className="card">
