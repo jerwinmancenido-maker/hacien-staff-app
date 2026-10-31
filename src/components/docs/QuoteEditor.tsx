@@ -29,6 +29,7 @@ import {
   isUnverifiedGovAtc,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
+import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
@@ -139,11 +140,6 @@ function customerTypeLabel(type: string): string {
   return type.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function customerWithholdingHint(type: string): string {
-  if (type === "GOVERNMENT" || type === "TOP_WITHHOLDING_AGENT") return "Goods 1% (WI158) · Services 2% (WI160)";
-  if (type === "NONE") return "No withholding";
-  return "Used on every line for this customer. You can change it per line.";
-}
 
 function createdToEditorCustomer(c: CreatedQuoteCustomer): EditorCustomer {
   return {
@@ -437,7 +433,9 @@ export function QuoteEditor({
               </select>
               {customer && (
                 <div className="hint">
-                  {customerTypeLabel(customer.withholdingType)} · {customerWithholdingHint(customer.withholdingType)}
+                  {[customerTypeLabel(customer.withholdingType), customerWithholdingHint(customer.withholdingType)]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               )}
               {e.customerId && <div className="error">{e.customerId}</div>}

@@ -8,12 +8,7 @@ import {
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
 } from "@/lib/withholding/display";
-
-function typeHint(type: string): string {
-  if (type === "GOVERNMENT" || type === "TOP_WITHHOLDING_AGENT") return "Goods 1% (WI158) · Services 2% (WI160)";
-  if (type === "NONE") return "No withholding";
-  return "Used on every line for this customer. You can change it per line.";
-}
+import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import {
   createCustomerForQuoteAction,
   type CreatedQuoteCustomer,
@@ -44,6 +39,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
   const [state, setState] = useState<CreateCustomerForQuoteState>({});
   const [pending, startTransition] = useTransition();
   const e = state.fieldErrors ?? {};
+  const typeHintText = customerWithholdingHint(v.withholdingType);
 
   function close() {
     if (pending) return;
@@ -142,7 +138,7 @@ export function AddCustomerDialog({ open, onClose, onSaved }: Props) {
                   </option>
                 ))}
               </select>
-              <div className="hint">{typeHint(v.withholdingType)}</div>
+              {typeHintText ? <div className="hint">{typeHintText}</div> : null}
               {e.withholdingType && <div className="error">{e.withholdingType}</div>}
             </div>
           </div>
