@@ -6,14 +6,16 @@
  *   node scripts/home-a-seed-shots.mjs empty
  *   node scripts/home-a-seed-shots.mjs restore
  *
- * `empty` parks all non-void billings' invoice dates in year 1990 so the
- * 12-month chart is empty (reversible via `restore` / `fill`).
+ * `empty` voids every non-VOID billing (reversible). Parking invoice dates alone
+ * emptied the Sales chart / "Billed this month" but left AR open — Owed still
+ * showed balances — so empty must remove billings from AR entirely.
  */
 import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
 const TAG = "home-sales-07-shot";
-const PARK_NOTE = "home-a-parked-for-empty-shot";
+const EMPTY_VOID_REASON = "home-a-empty-shot";
+const EMPTY_PREFIX = "EMPTYVOID|";
 
 function manilaYmd(d = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -32,8 +34,38 @@ function shiftMonth(ymd, delta) {
   return `${yy}-${String(mm).padStart(2, "0")}`;
 }
 
+async function restoreEmptyVoids() {
+  const voided = await db.billing.findMany({
+    where: {
+      OR: [{ voidReason: EMPTY_VOID_REASON }, { notes: { startsWith: EMPTY_PREFIX } }],
+    },
+  });
+  for (const b of voided) {
+    const notes = String(b.notes || "");
+    let prevStatus = "OPEN";
+    let prevNotes = null;
+    if (notes.startsWith(EMPTY_PREFIX)) {
+      const parts = notes.slice(EMPTY_PREFIX.length).split("|");
+      prevStatus = parts[0] || "OPEN";
+      const rest = parts.slice(1).join("|");
+      prevNotes = rest === "" || rest === "null" ? null : rest;
+    }
+    await db.billing.update({
+      where: { id: b.id },
+      data: {
+        status: prevStatus === "VOID" ? "OPEN" : prevStatus,
+        voidedAt: null,
+        voidReason: null,
+        notes: prevNotes,
+      },
+    });
+  }
+  console.log("restore: un-voided", voided.length, "empty-shot billings");
+  return voided.length;
+}
+
+/** Legacy PARK| invoice-date parking from earlier empty seed — restore if present. */
 async function restoreParked() {
-  // notes stored as "PARK|<iso>|<original notes or empty>"
   const parked = await db.billing.findMany({
     where: { notes: { startsWith: "PARK|" } },
   });
@@ -50,29 +82,37 @@ async function restoreParked() {
       },
     });
   }
-  console.log("restore: unparked", parked.length, "billings");
+  if (parked.length) console.log("restore: unparked", parked.length, "legacy parked billings");
   return parked.length;
 }
 
-async function parkAllForEmpty() {
+async function emptyAllBillings() {
+  await restoreEmptyVoids();
   await restoreParked();
+  const admin = await db.user.findFirst({ where: { email: "jerwin@example.com" } });
+  if (!admin) throw new Error("Seed jerwin@example.com first");
+
   const open = await db.billing.findMany({
     where: { status: { not: "VOID" } },
-    select: { id: true, invoiceDate: true, notes: true },
+    select: { id: true, status: true, notes: true },
   });
   for (const b of open) {
     await db.billing.update({
       where: { id: b.id },
       data: {
-        invoiceDate: new Date("1990-01-15T00:00:00.000Z"),
-        notes: `PARK|${b.invoiceDate.toISOString()}|${b.notes ?? "null"}`,
+        status: "VOID",
+        voidedAt: new Date(),
+        voidReason: EMPTY_VOID_REASON,
+        notes: `${EMPTY_PREFIX}${b.status}|${b.notes ?? "null"}`,
+        updatedById: admin.id,
       },
     });
   }
-  console.log("empty: parked", open.length, "billings outside the chart window");
+  console.log("empty: voided", open.length, "billings (Owed / overdue / chart all clear)");
 }
 
 async function fill() {
+  await restoreEmptyVoids();
   await restoreParked();
 
   const admin = await db.user.findFirst({ where: { email: "jerwin@example.com" } });
@@ -140,14 +180,16 @@ async function fill() {
     });
   }
 
-  console.log("fill: created 12-month shot billings for", so.customer.name, `(${PARK_NOTE} unused)`);
+  console.log("fill: created 12-month shot billings for", so.customer.name);
 }
 
 async function main() {
   const mode = process.argv[2] || "fill";
-  if (mode === "empty") await parkAllForEmpty();
-  else if (mode === "restore") await restoreParked();
-  else await fill();
+  if (mode === "empty") await emptyAllBillings();
+  else if (mode === "restore") {
+    await restoreEmptyVoids();
+    await restoreParked();
+  } else await fill();
   await db.$disconnect();
 }
 

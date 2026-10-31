@@ -4229,13 +4229,20 @@ button.contact-card-add {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .home-mid-full {
   grid-template-columns: 1fr;
 }
 .home-dashboard.is-staff .home-mid {
   grid-template-columns: 1fr;
+}
+/* Defeat `.card + .card { margin-top }` so Sales billed + Needs action share one top. */
+.home-mid > .card {
+  margin-top: 0;
+  height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
 }
 
 .home-ct {
@@ -4278,8 +4285,16 @@ button.contact-card-add {
   position: relative;
   padding: 8px 18px 0 52px;
 }
+.home-sales-chart.is-empty {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
 .home-sales-chart.is-empty .home-sales-chw {
-  padding-left: 10px;
+  padding: 4px 18px 0 10px;
+}
+.home-sales-chart.is-empty .home-sales-svg {
+  height: 28px;
+  max-height: 28px;
 }
 .home-sales-yl {
   position: absolute;
@@ -4356,7 +4371,7 @@ button.contact-card-add {
   color: #8a8a8a;
 }
 .home-sales-chart.is-empty .home-sales-ml {
-  padding-left: 10px;
+  padding: 4px 18px 8px 10px;
 }
 .home-sales-ml span {
   width: 30px;
@@ -4368,7 +4383,7 @@ button.contact-card-add {
   font-weight: 800;
 }
 .home-sales-empty {
-  padding: 4px 18px 18px;
+  padding: 0 18px 16px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -4437,13 +4452,20 @@ button.contact-card-add {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .home-bot-full {
   grid-template-columns: 1fr;
 }
 .home-dashboard.is-staff .home-bot {
   /* keep tax + activity side by side when both present */
+}
+/* Defeat `.card + .card { margin-top }` so tax + Recent activity share one top. */
+.home-bot > .card {
+  margin-top: 0;
+  height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
 }
 
 .home-tax {

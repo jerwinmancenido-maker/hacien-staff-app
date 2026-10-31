@@ -12,6 +12,8 @@ const PAD_R_PX = 18;
 const PAD_B_PX = 0;
 /** Fixed viewBox height; width expands so the chart fills the row. */
 const VB_H = 220;
+/** Short empty-state plot; flat line near the top so little blank sits above it. */
+const VB_H_EMPTY = 28;
 
 function buildSmoothPath(points: { x: number; y: number }[]): string {
   if (points.length === 0) return "";
@@ -54,15 +56,19 @@ export function SalesChart({
   const showAxis = !empty && axisTicks.length > 0;
   const chartMax = showAxis ? Math.max(0, ...axisTicks) : 1;
   const safeMax = chartMax > 0 ? chartMax : 1;
+  const vbH = empty ? VB_H_EMPTY : VB_H;
+  const padTPx = empty ? 6 : PAD_T_PX;
 
   const padL = (showAxis ? PAD_L_PX : PAD_L_EMPTY_PX) / scale;
-  const padR = PAD_R_PX / scale;
-  const padT = PAD_T_PX / scale;
+  const padR = (empty ? 10 : PAD_R_PX) / scale;
+  const padT = padTPx / scale;
   const padB = PAD_B_PX / scale;
   const innerW = Math.max(1, vbW - padL - padR);
-  const innerH = Math.max(1, VB_H - padT - padB);
+  const innerH = Math.max(1, vbH - padT - padB);
   const n = Math.max(1, months.length);
   const slot = innerW / Math.max(1, n - 1 || 1);
+  /** Empty: flat line just under the top padding (not at the SVG bottom). */
+  const emptyLineY = padT + 2 / scale;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
@@ -71,25 +77,25 @@ export function SalesChart({
       const w = svg.clientWidth;
       const h = svg.clientHeight;
       if (w <= 0 || h <= 0) return;
-      setVbW(VB_H * (w / h));
-      setScale(h / VB_H);
+      setVbW(vbH * (w / h));
+      setScale(h / vbH);
     };
     sync();
     const ro = new ResizeObserver(sync);
     ro.observe(svg);
     return () => ro.disconnect();
-  }, []);
+  }, [vbH]);
 
   const points = useMemo(() => {
     return months.map((m, i) => {
       const value = Number(m.amount);
       const x = n === 1 ? padL + innerW / 2 : padL + slot * i;
       const y = empty
-        ? padT + innerH
+        ? emptyLineY
         : padT + innerH * (1 - Math.max(0, value) / safeMax);
       return { x, y, value, month: m, i };
     });
-  }, [months, n, padL, padT, innerW, innerH, slot, empty, safeMax]);
+  }, [months, n, padL, padT, innerW, innerH, slot, empty, safeMax, emptyLineY]);
 
   const linePath = buildSmoothPath(points.map((p) => ({ x: p.x, y: p.y })));
   const areaPath =
@@ -117,7 +123,7 @@ export function SalesChart({
         <svg
           ref={svgRef}
           className="home-sales-svg"
-          viewBox={`0 0 ${vbW} ${VB_H}`}
+          viewBox={`0 0 ${vbW} ${vbH}`}
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="Billed sales for the last 12 months"
@@ -147,8 +153,8 @@ export function SalesChart({
               <line
                 x1={0}
                 x2={vbW}
-                y1={padT + innerH}
-                y2={padT + innerH}
+                y1={emptyLineY}
+                y2={emptyLineY}
                 className="home-sales-grid"
               />
             )}

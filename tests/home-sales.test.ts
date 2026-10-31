@@ -259,6 +259,20 @@ describe("home concept A layout wiring", () => {
     expect(chartSrc).toMatch(/formatPesoWhole\(current\.month\.amount\)/);
   });
 
+  it("aligns mid/bot card rows at desktop and shortens the empty chart plot", () => {
+    expect(css).toMatch(/\.home-mid\s*\{[^}]*align-items:\s*stretch/s);
+    expect(css).toMatch(/\.home-bot\s*\{[^}]*align-items:\s*stretch/s);
+    expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*margin-top:\s*0/s);
+    expect(css).toMatch(/\.home-bot\s*>\s*\.card[^}]*margin-top:\s*0/s);
+    expect(css).toMatch(/\.home-sales-chart\.is-empty\s+\.home-sales-svg[^}]*height:\s*28px/s);
+    const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/VB_H_EMPTY/);
+    const seed = readFileSync(path.join(root, "scripts/home-a-seed-shots.mjs"), "utf8");
+    // Empty seed voids billings (fixture), not just parks invoice dates — so Owed is ₱0.
+    expect(seed).toMatch(/EMPTY_VOID_REASON|emptyAllBillings/);
+    expect(seed).toMatch(/status:\s*"VOID"/);
+  });
+
   it("staff layout omits sales KPIs/chart and stays full-width without holes", () => {
     expect(page).toMatch(/is-staff/);
     expect(page).toMatch(/home-mid-full|is-staff/);
