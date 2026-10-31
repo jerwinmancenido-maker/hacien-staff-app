@@ -33,6 +33,17 @@ export function formatPesoLimit(amount: number | string | { toString(): string }
   return formatPeso(amount);
 }
 
+/**
+ * Always whole pesos (no centavos), e.g. ₱274,000. Used on Home KPI cards and
+ * the Sales chart tooltip; elsewhere keep {@link formatPeso} with cents.
+ */
+export function formatPesoWhole(amount: number | string | { toString(): string }): string {
+  const n = typeof amount === "number" ? amount : Number(amount.toString());
+  if (!Number.isFinite(n)) return "₱0";
+  const sign = n < 0 ? "-" : "";
+  return `${sign}₱${pesoWholeFormatter.format(Math.round(Math.abs(n)))}`;
+}
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: TIME_ZONE,
   year: "numeric",

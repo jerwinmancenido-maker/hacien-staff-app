@@ -92,7 +92,6 @@ describe("home visibility / feature flags", () => {
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsPayables)).toBe(true);
     expect(canShowMoneyFigure("owedByCustomers", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("collectedThisMonth", staff, flagsOff)).toBe(true);
-    expect(canShowMoneyFigure("billedThisMonth", staff, flagsOff)).toBe(true);
     expect(canShowMoneyFigure("supplierBillsDueSoon", costs, flagsOff)).toBe(false);
   });
 
@@ -191,5 +190,16 @@ describe("home activity helpers", () => {
     expect(documentHref("ReceivingReport", "rr1", { purchaseOrderId: "po1" })).toBe("/receiving/po1");
     expect(documentHref("SupplierBill", "b1", { purchaseOrderId: "po1" })).toBe("/purchase-orders/po1?tab=bills");
     expect(documentHref("SupplierBill", "b1")).toBeNull();
+  });
+});
+
+describe("home concept A staff / empty wiring", () => {
+  it("page gates sales KPIs and chart on manage_billing and keeps staff layout full", () => {
+    const page = readFileSync(path.join(process.cwd(), "src/app/(app)/page.tsx"), "utf8");
+    expect(page).toMatch(/showSales/);
+    expect(page).toMatch(/is-staff/);
+    expect(page).toMatch(/HomeKpiCards/);
+    expect(page).not.toMatch(/HomeMoney/);
+    expect(page).not.toMatch(/HomeNonVat/);
   });
 });

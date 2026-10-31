@@ -4,7 +4,7 @@ import { contactSchema, customerSchema, missingBankDetails, supplierSchema } fro
 import { CANT_DEACTIVATE_MAIN, deactivateContactError, makeMainError, makeMainPlan, newContactIsMain } from "@/lib/contacts";
 import { auditDiff } from "@/lib/audit";
 import { isRateLimited, MAX_FAILED_LOGINS } from "@/lib/auth/rate-limit";
-import { formatDate, formatPeso, formatPesoLimit } from "@/lib/format";
+import { formatDate, formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
 import { itemSchema } from "@/lib/validation/quotes";
 import {
   WITHHOLDING_PERCENT_NON_NUMERIC_ERROR,
@@ -139,6 +139,17 @@ describe("formatting", () => {
     expect(formatPesoLimit(0)).toBe("₱0");
     expect(formatPesoLimit(1234.56)).toBe("₱1,234.56");
     expect(formatPesoLimit(-50)).toBe("-₱50");
+  });
+
+  it("rounds Home KPI / chart tip amounts to whole pesos", () => {
+    expect(formatPesoWhole(274_000)).toBe("₱274,000");
+    expect(formatPesoWhole("274000.00")).toBe("₱274,000");
+    expect(formatPesoWhole(274_000.4)).toBe("₱274,000");
+    expect(formatPesoWhole(274_000.5)).toBe("₱274,001");
+    expect(formatPesoWhole(0)).toBe("₱0");
+    expect(formatPesoWhole(-50.25)).toBe("-₱50");
+    // Exact cents stay on formatPeso elsewhere (sidebar meter, lists).
+    expect(formatPeso(274_000)).toBe("₱274,000.00");
   });
 
   it("shows dates in Asia/Manila", () => {
