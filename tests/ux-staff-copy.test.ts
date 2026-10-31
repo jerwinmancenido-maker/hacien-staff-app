@@ -111,8 +111,11 @@ describe("print missing-fields warning names only what is missing", () => {
         canManageSettings: true,
       }),
     );
-    const m = html.match(/role="status"><b>([^<]*)<\/b>/);
-    return { html, alert: m?.[1] ?? "" };
+    // Grey notice box (tax-cal-notice) — same wording as Settings, no yellow alert.
+    const m =
+      html.match(/tax-cal-notice-line">([^<]+)/) ||
+      html.match(/role="status"><b>([^<]*)<\/b>/);
+    return { html, alert: (m?.[1] ?? "").trim() };
   }
 
   it("TIN only", () => {
