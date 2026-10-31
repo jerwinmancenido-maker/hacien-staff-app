@@ -167,10 +167,11 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
-      ...(q.subject ? [{ label: "Subject / project", value: q.subject }] : []),
       ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
       ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ],
+    // Full-width above items — not in the narrow right meta column.
+    subject: q.subject?.trim() ? q.subject : null,
     items: q.items.map((i) => {
       const { description, detail } = splitDescription(i.description);
       return itemRow({

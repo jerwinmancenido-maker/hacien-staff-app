@@ -3527,6 +3527,15 @@ button.contact-card-add {
   text-align: right;
   font-weight: 600;
 }
+.pp-subject {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: var(--pp-ink);
+}
 .pp-party-grid {
   position: relative;
   z-index: 1;
@@ -5213,12 +5222,11 @@ button.contact-card-add {
   line-height: 1.35;
   field-sizing: content;
   min-height: 2.5em;
-}
-.quote-wh-cell {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--card);
+  font: inherit;
 }
 .quote-wh-tip {
   flex: none;
@@ -5234,6 +5242,182 @@ button.contact-card-add {
   font-weight: 700;
   line-height: 1;
   cursor: help;
+}
+
+/* Desktop mockup rows (≥640): Item | Qty | Unit | Unit price | Line total + chips + cost strip */
+.quote-items-desktop {
+  display: block;
+}
+.quote-lh,
+.quote-lr {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 56px 56px 96px 96px 48px;
+  gap: 8px;
+  align-items: start;
+}
+.quote-lh {
+  padding: 7px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  border-bottom: 1px solid #f1f2f4;
+}
+.quote-lh .num,
+.quote-lr .num {
+  text-align: right;
+}
+.quote-ln {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f2f4;
+}
+.quote-ln-no {
+  color: var(--text-3);
+  font-weight: 700;
+  padding-top: 8px;
+}
+.quote-ln-dsc {
+  min-width: 0;
+}
+.quote-ln-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  margin-top: 5px;
+}
+.quote-tg {
+  appearance: none;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: #fff;
+  height: 22px;
+  line-height: 18px;
+  max-width: 100%;
+}
+.quote-tg-wh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border-color: #dbeafe;
+  color: #1d4ed8;
+  height: auto;
+  min-height: 22px;
+  padding: 2px 8px;
+}
+.quote-tg-wh-label {
+  white-space: nowrap;
+}
+.quote-tg-atc {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.quote-tg-wh .w-wh {
+  width: 2.75rem;
+  max-width: 2.75rem;
+  text-align: right;
+  padding: 1px 4px;
+  font-size: 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.quote-tg-wh .w-atc {
+  width: 3.5rem;
+  max-width: 3.5rem;
+  padding: 1px 4px;
+  font-size: 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.quote-ln-qty input,
+.quote-ln-unit input,
+.quote-ln-price input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 6px;
+  background: var(--card);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.quote-ln-qty input,
+.quote-ln-price input {
+  text-align: right;
+}
+.quote-ln-total {
+  padding-top: 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.quote-ln .line-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding-top: 4px;
+}
+.quote-cost {
+  margin: 8px 0 0 28px;
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.quote-cost-warn {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.quote-cost-k {
+  font-weight: 800;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.quote-cost-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.quote-cost-field select,
+.quote-cost-field input {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  max-width: 160px;
+  box-sizing: border-box;
+}
+.quote-cost-field input {
+  width: 6.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.quote-cost-field.neg,
+.quote-cost-field.neg b {
+  color: var(--red);
 }
 .quote-items-mobile {
   display: none;

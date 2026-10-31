@@ -87,6 +87,11 @@ export type ProfessionalPrintModel = {
   company: PrintCompanyBlock;
   party: PrintPartyBlock;
   meta: PrintMetaRow[];
+  /**
+   * Optional full-width subject line above the items table (quotes).
+   * Kept out of the narrow right meta column so long subjects don't wrap badly.
+   */
+  subject?: string | null;
   /** Line items table; omit for pure ledger statements. */
   items?: PrintLineItem[];
   /** Unit price column header (e.g. "Unit price" vs "Unit cost"). */

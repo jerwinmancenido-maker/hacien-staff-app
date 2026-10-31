@@ -16,6 +16,25 @@ function html(doc: Parameters<typeof ProfessionalPrintDocument>[0]["doc"]) {
 }
 
 describe("quote phase 1 — notes split and print", () => {
+  it("prints Subject as a full-width line above items, not in the right meta column", () => {
+    const subject = "Supply of laptops, printers and setup for the ICT office";
+    const markup = html({
+      ...quotePrintFixture(),
+      subject,
+      meta: [
+        { label: "Valid until", value: "Nov 30, 2026" },
+        { label: "Customer PO / RFQ no.", value: "RFQ-2026-118" },
+        { label: "Prepared by", value: "Jerwin" },
+      ],
+    });
+    expect(markup).toContain('class="pp-subject"');
+    expect(markup).toContain("Subject:");
+    expect(markup).toContain(subject);
+    // Subject must not appear as a meta row label.
+    expect(markup).not.toMatch(/<th>Subject \/ project<\/th>/);
+    expect(markup).toContain("Customer PO / RFQ no.");
+  });
+
   it("prints customer notes with a Notes label", () => {
     const markup = html({ ...quotePrintFixture(), notes: CUSTOMER_NOTE });
     expect(markup).toContain("Notes:");

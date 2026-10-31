@@ -26,7 +26,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <PageHeader title={`Edit ${quote.number}`} subtitle={`Rev ${quote.revision} · ${quote.customer.name}`} />
+      <PageHeader title={`Edit ${quote.number}`} subtitle={quote.customer.name} />
       <QuoteEditor
         isNew={false}
         quoteId={id}
