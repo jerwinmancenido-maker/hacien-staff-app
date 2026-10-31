@@ -3105,6 +3105,12 @@ button.contact-card-add {
   white-space: nowrap;
   font-size: 12px;
 }
+.tax-cal-done-date {
+  /* Keep YYYY-MM-DD whole; note text may wrap after the date. */
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 .tax-cal-done .btn {
   height: 28px;
   padding: 0 8px;
@@ -3249,34 +3255,37 @@ button.contact-card-add {
   table.list.tax-cal-table td.tax-cal-due {
     padding-left: 12px;
   }
-  /* Percentages sum to 100% of the card content box (~660px at 1024). */
+  /* Percentages sum to 100% of the card content box (~660px at 1024).
+   * Description ~20% so titles wrap to ≤3 lines at 768/1024; take from
+   * Form/Period/Due/Status/Applies/Done without splitting ISO dates,
+   * clipping chips, or introducing H-scroll. */
   .tax-cal-table th:nth-child(1),
   .tax-cal-table td.tax-cal-form {
-    width: 11%;
+    width: 10%;
   }
   .tax-cal-table th:nth-child(2),
   .tax-cal-table td.tax-cal-desc {
-    width: 10%; /* give width to Due + Status */
+    width: 20%;
   }
   .tax-cal-table th:nth-child(3),
   .tax-cal-table td.tax-cal-period {
-    width: 10%;
+    width: 9%;
   }
   .tax-cal-table th:nth-child(4),
   .tax-cal-table td.tax-cal-due {
-    width: 18%; /* nowrap ISO / "date to confirm" */
+    width: 16%; /* nowrap ISO / "date to confirm" */
   }
   .tax-cal-table th:nth-child(5),
   .tax-cal-table td.tax-cal-status {
-    width: 14%; /* room for Due in 7 days / Marked done without clip */
+    width: 12%; /* Due in 7 days / Marked done — wrap at spaces, never clip */
   }
   .tax-cal-table th:nth-child(6),
   .tax-cal-table td.tax-cal-applies {
-    width: 21%; /* room for nowrap "Unverified: ask RDO" */
+    width: 18%; /* room for nowrap "Unverified: ask RDO" */
   }
   .tax-cal-table th:nth-child(8),
   .tax-cal-table td.tax-cal-done {
-    width: 16%;
+    width: 15%;
   }
   .tax-cal-table td.tax-cal-status .chip {
     padding: 3px 5px;
