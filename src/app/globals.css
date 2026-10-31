@@ -4708,11 +4708,15 @@ button.contact-card-add {
   padding: 2px 4px 6px;
 }
 .home-pipeline-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  /* Label on row 1, full money caption wraps under it; chevron spans both. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  row-gap: 1px;
+  align-items: start;
   min-height: 36px;
-  padding: 4px 8px;
+  padding: 6px 8px;
   color: inherit;
   text-decoration: none;
   min-width: 0;
@@ -4721,21 +4725,28 @@ button.contact-card-add {
   border-top: 1px solid #f1f2f4;
 }
 .home-pipeline-row-label {
-  flex: none;
+  grid-column: 1;
+  grid-row: 1;
   font-size: 12.5px;
   font-weight: 600;
-  white-space: nowrap;
+  min-width: 0;
 }
 .home-pipeline-row-caption {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
+  grid-column: 1;
+  grid-row: 2;
   font-size: 11.5px;
   color: #525252;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.home-pipeline-row > :last-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  flex: none;
 }
 .home-pipeline-phone {
   display: none;
@@ -4832,9 +4843,10 @@ button.contact-card-add {
   white-space: nowrap;
 }
 .home-tax-due {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.3;
 }
 .home-tax-overdue {
   margin-top: 4px;
@@ -5081,25 +5093,38 @@ button.contact-card-add {
     gap: 8px;
     width: 100%;
     min-width: 0;
+    align-items: stretch; /* equal tile height like KPI row */
   }
   .home-pipeline-phone .home-pipeline-tile {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    align-items: stretch;
+    align-self: stretch;
     padding: 10px 12px;
-    min-height: 40px;
+    min-height: 0;
+    height: auto;
     text-decoration: none;
     color: inherit;
     min-width: 0;
+    box-sizing: border-box;
+  }
+  .home-pipeline-phone .home-kl {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 1.2em;
   }
   .home-pipeline-phone .home-pipeline-caption {
     font-size: 13px;
     font-weight: 800;
     margin: 2px 0 0;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
   }
   .home-dashboard .home-kp,
   .home-kp {
