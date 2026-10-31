@@ -8,6 +8,7 @@ const env = vi.hoisted(() => {
   return { hasDb: !!url };
 });
 
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isOverdue } from "@/lib/billing/dates";
 import { billingBalance } from "@/lib/billing/status";
@@ -326,7 +327,12 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     );
 
     await db.customer.create({
-      data: { name: `None WH ${tag()}`, withholdingType: "NONE", address: "x" },
+      data: {
+        name: `Not-set WH ${tag()}`,
+        withholdingType: "GOVERNMENT",
+        address: "x",
+        defaultWithholding: Prisma.DbNull,
+      },
     });
 
     const dash = await loadHomeDashboard(admin);
@@ -338,7 +344,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const receiving = await listReceivingView({ history: false }, admin);
     const billedOver = await listPurchaseOrdersView({ billedOver: true }, admin);
     const overdueList = await listBillings({ status: "OVERDUE" });
-    const noWh = await listCustomers({ withholding: "NONE" });
+    const noWh = await listCustomers({ withholdingPick: "NOT_SET" });
 
     if (byKind.quotesNeedsApproval !== undefined) expect(byKind.quotesNeedsApproval).toBe(needsApproval.length);
     if (byKind.quotesNoReply !== undefined) expect(byKind.quotesNoReply).toBe(noReply.length);
@@ -374,6 +380,58 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     expect(owedMoney.amount).toBe(ar.totalReceivable);
     expect(owedMoney.overdueAmount).toBe(ar.overdue);
     expect(dueSoonMoney.amount).toBe(homeSumAmounts(dueSoon.map((b) => b.balance)));
+  });
+
+  it("Withholding not set counts null picks only ([] and codes do not)", async () => {
+    process.env.PAYABLES_ENABLED = "false";
+    process.env.CASH_ENABLED = "false";
+    process.env.BOOKS_ENABLED = "false";
+
+    const beforeList = await listCustomers({ withholdingPick: "NOT_SET" });
+    const beforeDash = await loadHomeDashboard(admin);
+    const beforeRow = beforeDash.actions.find((a) => a.kind === "customersNoWithholding");
+    const beforeCount = beforeRow?.count ?? 0;
+    expect(beforeCount).toBe(beforeList.length);
+
+    const t = tag();
+    const notSet = await db.customer.create({
+      data: {
+        name: `Pick null ${t}`,
+        withholdingType: "GOVERNMENT",
+        address: "x",
+        defaultWithholding: Prisma.DbNull,
+      },
+    });
+    const explicitNone = await db.customer.create({
+      data: {
+        name: `Pick none ${t}`,
+        withholdingType: "NONE",
+        address: "x",
+        defaultWithholding: [],
+      },
+    });
+    const withPick = await db.customer.create({
+      data: {
+        name: `Pick codes ${t}`,
+        withholdingType: "TOP_WITHHOLDING_AGENT",
+        address: "x",
+        defaultWithholding: ["GOODS_1"],
+      },
+    });
+
+    const afterList = await listCustomers({ withholdingPick: "NOT_SET" });
+    const afterIds = new Set(afterList.map((c) => c.id));
+    expect(afterIds.has(notSet.id)).toBe(true);
+    expect(afterIds.has(explicitNone.id)).toBe(false);
+    expect(afterIds.has(withPick.id)).toBe(false);
+    expect(afterList.length).toBe(beforeList.length + 1);
+
+    const afterDash = await loadHomeDashboard(admin);
+    const afterRow = afterDash.actions.find((a) => a.kind === "customersNoWithholding");
+    expect(afterRow).toBeTruthy();
+    expect(afterRow!.label).toBe("Withholding not set");
+    expect(afterRow!.href).toBe("/customers?wh=NOT_SET");
+    expect(afterRow!.count).toBe(beforeCount + 1);
   });
 
   it("loads for a no-costs user without throwing", async () => {

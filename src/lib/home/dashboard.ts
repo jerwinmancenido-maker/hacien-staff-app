@@ -169,8 +169,11 @@ const ACTION_LABELS: Record<HomeActionKind, string> = {
   posAwaitingReceipt: "POs waiting to be received",
   billsOverPo: "Supplier bills higher than their PO",
   billingsOverdue: "Billings past due",
-  customersNoWithholding: "Customers with no withholding type set",
+  customersNoWithholding: "Withholding not set",
 };
+
+/** Exported for staff-copy / inventory tests. */
+export const HOME_WITHHOLDING_NOT_SET_LABEL = ACTION_LABELS.customersNoWithholding;
 
 const BADGE_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
 
@@ -373,7 +376,7 @@ export async function loadHomeDashboard(
     listReceivingView({ history: false }, user),
     // OVERDUE filters before take:200 — same page Home links to.
     listBillings({ status: "OVERDUE" }),
-    listCustomers({ withholding: "NONE" }),
+    listCustomers({ withholdingPick: "NOT_SET" }),
     arAgingSummary(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),

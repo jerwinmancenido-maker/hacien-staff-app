@@ -33,8 +33,9 @@ export function billingsOverdueHref(): string {
   return "/billing/billings?status=OVERDUE";
 }
 
+/** Customers whose withholding pick is still null (not set). */
 export function customersNoWithholdingHref(): string {
-  return "/customers?wh=NONE";
+  return "/customers?wh=NOT_SET";
 }
 
 export function owedByCustomersHref(): string {

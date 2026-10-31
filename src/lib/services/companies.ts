@@ -18,7 +18,14 @@ export class CompanyRuleError extends Error {
 // Customers
 // ---------------------------------------------------------------------------
 
-export type CustomerFilter = { q?: string; withholding?: WithholdingType; showInactive?: boolean; onlyIds?: string[] };
+export type CustomerFilter = {
+  q?: string;
+  withholding?: WithholdingType;
+  /** Customers whose saved pick is still null (not set). Distinct from type NONE / pick []. */
+  withholdingPick?: "NOT_SET";
+  showInactive?: boolean;
+  onlyIds?: string[];
+};
 
 /** The default billing / office address, for list rows. */
 const mainAddress = {
@@ -32,6 +39,8 @@ export function listCustomers(f: CustomerFilter) {
       ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
       ...(f.showInactive ? {} : { active: true }),
       ...(f.withholding ? { withholdingType: f.withholding } : {}),
+      // JSON null only — empty [] (explicit none) and picked codes do not match.
+      ...(f.withholdingPick === "NOT_SET" ? { defaultWithholding: { equals: Prisma.DbNull } } : {}),
       ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
     },
     include: mainAddress,
