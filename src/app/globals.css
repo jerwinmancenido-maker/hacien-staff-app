@@ -2431,16 +2431,29 @@ td.has-error input {
   vertical-align: top;
 }
 
-/* A4 printable area: 18mm margins (brand kit). No @top/@bottom boxes so Chrome
-   does not draw date/title/URL chrome. Page numbers live in .pp-foot.
+/* A4 printable area: 18mm margins (brand kit). Browser date/title/URL chrome is
+   off via the print dialog / --no-pdf-header-footer — not via empty @top/@bottom.
+   Page numbers use @page margin boxes (counter(pages) resolves there). An
+   in-flow .pp-page-num::after with counter(pages) paints "Page 0 of 0" in
+   headless Chrome --print-to-pdf, so that ::after stays empty.
    See docs/screenshots/print-docs/PAGE-NUMBERS.md. */
 @page {
   size: A4;
   margin: 18mm;
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
 }
 @page letter {
   size: letter;
   margin: 0.7in;
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
 }
 @media print {
   html,
@@ -2489,8 +2502,9 @@ td.has-error input {
   .pp-items thead {
     display: table-header-group;
   }
+  /* Never paint in-flow "Page 0 of 0" when the engine can't count pages. */
   .pp-page-num::after {
-    content: "Page " counter(page) " of " counter(pages);
+    content: none;
   }
 }
 .detail-grid + .card {
