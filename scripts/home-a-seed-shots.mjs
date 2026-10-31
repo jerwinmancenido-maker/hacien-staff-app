@@ -141,7 +141,8 @@ async function fill() {
   const today = manilaYmd();
   const cur = today.slice(0, 7);
   const amounts = [120000, 95000, 140000, 80000, 110000, 160000, 90000, 130000, 175000, 100000, 145000, 274000];
-  let invoiceNo = 890_000 + Math.floor(Math.random() * 10_000);
+  // Unique across re-seeds (voided rows keep their numbers).
+  let invoiceNo = 8_000_000 + (Date.now() % 1_000_000);
 
   const latest = await db.settingsVersion.findFirst({ orderBy: { version: "desc" } });
   if (latest) {
@@ -161,14 +162,45 @@ async function fill() {
     }
   }
 
+  // Prior months: mid-month (15). Current month: today (so MTD / “so far”
+  // chart tip are non-zero on day 1). Also seed prior month on the same
+  // day-of-month so Billed chip can show Up/Down vs “by Oct 1” etc.
+  const dayOfMonth = Number(today.slice(8, 10));
+  const priorKey = shiftMonth(cur, -1);
   for (let i = 0; i < 12; i++) {
     const key = shiftMonth(cur, -(11 - i));
-    const ymd = `${key}-15`;
+    const isCurrent = key === cur;
+    const ymd = isCurrent ? today : `${key}-15`;
     const amount = amounts[i];
     invoiceNo += 1;
     await db.billing.create({
       data: {
         number: `BL-SHOT-${TAG}-${invoiceNo}`,
+        salesOrderId: so.id,
+        customerId: so.customerId,
+        invoiceNo,
+        invoiceDate: new Date(`${ymd}T00:00:00.000Z`),
+        dueDate: new Date(`${ymd}T00:00:00.000Z`),
+        amount,
+        withholdingExpected: 0,
+        netExpected: amount,
+        status: "OPEN",
+        notes: TAG,
+        createdById: admin.id,
+        updatedById: admin.id,
+      },
+    });
+  }
+  // Same calendar day last month (for MTD chip compare on day 1 / mid-month).
+  {
+    const lastDay = new Date(Date.UTC(Number(priorKey.slice(0, 4)), Number(priorKey.slice(5, 7)), 0)).getUTCDate();
+    const capped = Math.min(dayOfMonth, lastDay);
+    const ymd = `${priorKey}-${String(capped).padStart(2, "0")}`;
+    const amount = 145_000;
+    invoiceNo += 1;
+    await db.billing.create({
+      data: {
+        number: `BL-SD-${invoiceNo}`,
         salesOrderId: so.id,
         customerId: so.customerId,
         invoiceNo,
