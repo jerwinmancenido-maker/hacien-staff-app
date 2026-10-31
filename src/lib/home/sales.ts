@@ -132,6 +132,11 @@ export function salesAxisTicks(maxAmount: number): number[] {
   return mid > 0 && mid < nice ? [mid, nice] : [nice];
 }
 
+/** Empty Sales chart: no ₱ axis labels / gridlines (month labels + zero bars only). */
+export function salesChartAxisTicks(empty: boolean, ticks: readonly number[]): number[] {
+  return empty ? [] : [...ticks];
+}
+
 export type SalesCustomerTotal = {
   customerId: string;
   name: string;

@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { SalesChart } from "@/components/home/SalesChart";
-import { salesAxisTicks, type HomeSales } from "@/lib/home/sales";
+import { salesAxisTicks, salesChartAxisTicks, type HomeSales } from "@/lib/home/sales";
 
 function subscribeNarrow(onStoreChange: () => void) {
   const mq = window.matchMedia("(max-width: 640px)");
@@ -24,8 +24,17 @@ export function HomeSalesChart({ sales }: { sales: HomeSales }) {
 
   const months = narrow ? sales.monthsNarrow : sales.months;
   const max = Math.max(0, ...months.map((m) => Number(m.amount)));
-  const axisTicks = narrow ? salesAxisTicks(max) : sales.axisTicks;
-  const windowKey = months.map((m) => m.key).join(",");
+  const rawTicks = narrow ? salesAxisTicks(max) : sales.axisTicks;
+  const axisTicks = salesChartAxisTicks(sales.empty, rawTicks);
+  const windowKey = `${months.map((m) => m.key).join(",")}:${sales.empty ? "e" : "f"}`;
 
-  return <SalesChart key={windowKey} months={months} axisTicks={axisTicks} />;
+  return (
+    <SalesChart
+      key={windowKey}
+      months={months}
+      axisTicks={axisTicks}
+      empty={sales.empty}
+      narrow={narrow}
+    />
+  );
 }

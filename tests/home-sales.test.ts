@@ -10,6 +10,7 @@ import {
   niceSalesMax,
   SALES_AXIS_EMPTY_MAX,
   salesAxisTicks,
+  salesChartAxisTicks,
   salesChangeVsLastMonth,
   salesMonthLabel,
   shiftMonthKey,
@@ -120,6 +121,20 @@ describe("home sales axis + empty", () => {
   it("treats all-zero months as empty", () => {
     expect(isSalesEmpty([{ amount: "0.00" }, { amount: "0" }])).toBe(true);
     expect(isSalesEmpty([{ amount: "0.00" }, { amount: "1.00" }])).toBe(false);
+  });
+
+  it("empty state renders no axis amount labels (no ₱1K / ₱500 grid)", () => {
+    const ticks = salesAxisTicks(0);
+    expect(ticks.length).toBeGreaterThan(0);
+    expect(salesChartAxisTicks(true, ticks)).toEqual([]);
+    expect(salesChartAxisTicks(false, ticks)).toEqual(ticks);
+
+    const chartSrc = readFileSync(path.join(process.cwd(), "src/components/home/SalesChart.tsx"), "utf8");
+    const homeChartSrc = readFileSync(path.join(process.cwd(), "src/components/home/HomeSalesChart.tsx"), "utf8");
+    expect(homeChartSrc).toMatch(/salesChartAxisTicks\(sales\.empty/);
+    expect(homeChartSrc).toMatch(/empty=\{sales\.empty\}/);
+    expect(chartSrc).toMatch(/showAxis/);
+    expect(chartSrc).toMatch(/home-sales-axis/);
   });
 });
 
