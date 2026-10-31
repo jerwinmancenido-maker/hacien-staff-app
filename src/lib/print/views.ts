@@ -179,8 +179,11 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
+      ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
       ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ],
+    // Full-width above items — not in the narrow right meta column.
+    subject: q.subject?.trim() ? q.subject : null,
     items: q.items.map((i) => {
       const { description, detail } = splitDescription(i.description);
       return itemRow({
@@ -202,6 +205,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     totalInWords: amountInWords(total),
     terms: q.terms || letter.print.quoteTerms || null,
     validity: day(ymd(q.validUntil)),
+    // Customer notes only — Quote.internalNotes must never be passed here.
     notes: q.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,

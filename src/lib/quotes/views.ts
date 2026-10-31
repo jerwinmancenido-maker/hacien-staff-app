@@ -198,6 +198,9 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     validUntil: ymd(q.validUntil)!,
     terms: q.terms,
     notes: q.notes,
+    internalNotes: q.internalNotes,
+    subject: q.subject,
+    buyerPoNo: q.buyerPoNo,
     voidReason: q.voidReason,
     customer: q.customer,
     contact: q.contact,
@@ -281,7 +284,11 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     });
   }
 
-  return mapped.map(({ settingsVersionId: _s, netMarginPctStored: _n, ...rest }) => rest) as ({
+  return mapped.map(({ settingsVersionId: _settingsVersionId, netMarginPctStored: _netMarginPctStored, ...rest }) => {
+    void _settingsVersionId;
+    void _netMarginPctStored;
+    return rest;
+  }) as ({
     id: string;
     number: string;
     revision: number;
@@ -441,7 +448,9 @@ export type PrintDoc = {
   items: PrintItem[];
   contractPrice: string;
   terms: string | null;
+  /** Customer notes only — internal notes must never appear on print models. */
   notes: string | null;
+  subject: string | null;
 };
 
 const printItem = (i: ItemRow): PrintItem => ({ description: i.description, qty: money(i.qty), unit: i.unit, unitPrice: money(i.unitPrice), total: money(i.total) });
@@ -464,7 +473,7 @@ export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
     status: q.status,
     date: ymd(q.date)!,
     validUntil: ymd(q.validUntil),
-    buyerPoNo: null,
+    buyerPoNo: q.buyerPoNo,
     buyerPoDate: null,
     deliveryAddress: null,
     company: await companyFor(q.settingsVersionId),
@@ -473,7 +482,9 @@ export async function getQuotePrint(id: string): Promise<PrintDoc | null> {
     items: q.items.map(printItem),
     contractPrice: money(q.contractPrice),
     terms: q.terms,
+    // Customer notes only — internalNotes must never appear here.
     notes: q.notes,
+    subject: q.subject,
   };
 }
 
@@ -499,6 +510,7 @@ export async function getSalesOrderPrint(id: string): Promise<PrintDoc | null> {
     contractPrice: money(so.contractPrice),
     terms: so.terms,
     notes: so.notes,
+    subject: null,
   };
 }
 

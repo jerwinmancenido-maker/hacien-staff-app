@@ -95,7 +95,20 @@ export const quoteInputSchema = z
       .transform((v) => v || undefined)
       .pipe(dateOnly("Valid until").optional()),
     terms: optionalText(100),
+    /** Customer notes — print on the quote. Existing data maps here. */
     notes: optionalText(5000),
+    /** Staff-only. Never prints. Never on customer-facing pages. Omitted → null. */
+    internalNotes: optionalText(5000)
+      .optional()
+      .transform((v) => v ?? null),
+    /** Subject / project — prints when set. Omitted → null. */
+    subject: optionalText(500)
+      .optional()
+      .transform((v) => v ?? null),
+    /** Customer PO / RFQ no. — prints when set. Omitted → null. */
+    buyerPoNo: optionalText(64)
+      .optional()
+      .transform((v) => v ?? null),
     /**
      * Withholding rate codes for the document snapshot. Omitted → derive from
      * the customer's withholding type + line kinds (not Customer.defaultWithholding).
@@ -106,7 +119,12 @@ export const quoteInputSchema = z
     items,
   })
   .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
-export type QuoteInput = z.infer<typeof quoteInputSchema>;
+/** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
+export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo"> & {
+  internalNotes?: string | null;
+  subject?: string | null;
+  buyerPoNo?: string | null;
+};
 
 export const convertInputSchema = z.object({
   buyerPoNo: optionalText(64),

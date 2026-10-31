@@ -183,6 +183,13 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
 
       <PartyBoxes party={doc.party} kind={doc.kind} />
 
+      {doc.subject?.trim() ? (
+        <p className="pp-subject">
+          <span className="pp-label-inline">Subject: </span>
+          {doc.subject.trim()}
+        </p>
+      ) : null}
+
       {doc.items && (
         <table className="pp-items">
           <thead>
@@ -309,7 +316,12 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
                 <span className="pp-pre">{doc.warrantyNotes}</span>
               </div>
             )}
-            {doc.notes && <div className="pp-pre">{doc.notes}</div>}
+            {doc.notes && (
+              <div>
+                <span className="pp-label-inline">Notes: </span>
+                <span className="pp-pre">{doc.notes}</span>
+              </div>
+            )}
           </section>
         )}
 
