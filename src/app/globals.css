@@ -1428,68 +1428,154 @@ tr.inactive .cell-primary .sub {
   background: transparent;
 }
 
-/* Withholding: wrap Label/Note; never force page or wrap sideways scroll */
+/* Withholding: Code/Label/Applies full text; Note narrow + wraps; rows ≤48px.
+ * Beat later .edit-table table.list td padding/align with equal-or-higher specificity. */
 .withholding-settings-table {
   overflow-x: visible;
   max-height: none;
 }
+.edit-table.withholding-settings-table table.list,
+.withholding-settings-table.edit-table table.list,
 .withholding-settings-table table.list {
   min-width: 0 !important;
   width: 100%;
   table-layout: fixed;
 }
+.edit-table.withholding-settings-table table.list th,
+.edit-table.withholding-settings-table table.list td,
+.withholding-settings-table table.list th,
+.withholding-settings-table table.list td {
+  white-space: normal;
+  vertical-align: middle;
+  padding: 3px 4px;
+  overflow: visible;
+}
+/* ~901px table at 1280: Code/ATC wide enough for SERVICES_2 / WI158; Note narrow. */
+.edit-table.withholding-settings-table table.list th.col-code,
+.edit-table.withholding-settings-table table.list td.col-code,
+.withholding-settings-table table.list th.col-code,
+.withholding-settings-table table.list td.col-code {
+  width: 11.5%;
+}
+.edit-table.withholding-settings-table table.list th.col-label,
+.edit-table.withholding-settings-table table.list td.col-label,
 .withholding-settings-table table.list th.col-label,
 .withholding-settings-table table.list td.col-label {
-  width: 22%;
+  width: 31%;
 }
+.edit-table.withholding-settings-table table.list th.col-applies,
+.edit-table.withholding-settings-table table.list td.col-applies,
+.withholding-settings-table table.list th.col-applies,
+.withholding-settings-table table.list td.col-applies {
+  width: 27%;
+}
+.edit-table.withholding-settings-table table.list th.col-atc,
+.edit-table.withholding-settings-table table.list td.col-atc,
+.withholding-settings-table table.list th.col-atc,
+.withholding-settings-table table.list td.col-atc {
+  width: 8%;
+}
+.edit-table.withholding-settings-table table.list th.col-rate,
+.edit-table.withholding-settings-table table.list td.col-rate,
+.withholding-settings-table table.list th.col-rate,
+.withholding-settings-table table.list td.col-rate {
+  width: 5.5%;
+}
+.edit-table.withholding-settings-table table.list th.col-active,
+.edit-table.withholding-settings-table table.list td.col-active,
+.withholding-settings-table table.list th.col-active,
+.withholding-settings-table table.list td.col-active {
+  width: 5%;
+  text-align: center;
+}
+.edit-table.withholding-settings-table table.list th.col-note,
+.edit-table.withholding-settings-table table.list td.col-note,
 .withholding-settings-table table.list th.col-note,
-.withholding-settings-table table.list td.col-note,
-.withholding-settings-table table.list th:last-child,
 .withholding-settings-table table.list td.col-note {
-  width: 28%;
+  width: 12%;
+  vertical-align: middle;
 }
-.withholding-label-input {
-  width: 100% !important;
-  min-width: 0;
-  white-space: normal;
+.edit-table.withholding-settings-table table.list thead th {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
-.withholding-note-input {
+.withholding-settings-table table.list tbody tr {
+  height: 48px;
+}
+.edit-table.withholding-settings-table table.list input,
+.edit-table.withholding-settings-table table.list select,
+.edit-table.withholding-settings-table table.list textarea,
+.withholding-settings-table table.list input,
+.withholding-settings-table table.list select,
+.withholding-settings-table table.list textarea {
+  box-sizing: border-box;
+  max-width: none !important;
+  min-width: 0 !important;
   width: 100% !important;
-  min-width: 0;
-  min-height: 40px;
-  height: auto;
-  padding: 8px 10px;
+}
+.withholding-code-input,
+.withholding-label-input,
+.withholding-applies-select,
+.withholding-atc-input,
+.withholding-rate-input {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--card);
-  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+}
+.withholding-code-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  padding: 0 4px;
+}
+.withholding-applies-select {
+  padding-right: 18px;
+  font-size: 12px;
+}
+.withholding-rate-input {
+  text-align: right;
+  padding-right: 4px;
+}
+.withholding-active-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 34px;
+  margin: 0 auto;
+  width: auto;
+}
+.withholding-active-check input {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+.edit-table.withholding-settings-table .withholding-note-input,
+.withholding-note-input {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 34px;
+  height: 34px;
+  max-height: 40px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  resize: none !important;
+  overflow-x: hidden;
+  overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  line-height: 1.35;
-  font: inherit;
-}
-.withholding-settings-table table.list td,
-.withholding-settings-table table.list th {
-  white-space: normal;
-  vertical-align: top;
-}
-.withholding-settings-table table.list input,
-.withholding-settings-table table.list select {
-  max-width: 100%;
-}
-.withholding-code-input {
-  width: 100% !important;
-  max-width: 110px;
-}
-.withholding-atc-input {
-  width: 100% !important;
-  max-width: 72px;
-}
-.withholding-rate-input {
-  width: 100% !important;
-  max-width: 64px;
-  text-align: right;
+  line-height: 1.15;
+  font-size: 11.5px;
+  font-family: inherit;
 }
 
 /* Tax calendar: special due-day hints span Due day + empty Due month (1 line at 1280) */
@@ -3068,6 +3154,17 @@ pre.json {
   .withholding-settings-table {
     overflow-x: visible;
   }
+  .edit-table.withholding-settings-table table.list,
+  .withholding-settings-table.edit-table table.list,
+  .withholding-settings-table table.list {
+    table-layout: auto;
+  }
+  .edit-table.withholding-settings-table table.list,
+  .edit-table.withholding-settings-table table.list thead,
+  .edit-table.withholding-settings-table table.list tbody,
+  .edit-table.withholding-settings-table table.list tr,
+  .edit-table.withholding-settings-table table.list th,
+  .edit-table.withholding-settings-table table.list td,
   .withholding-settings-table table.list,
   .withholding-settings-table table.list thead,
   .withholding-settings-table table.list tbody,
@@ -3075,11 +3172,13 @@ pre.json {
   .withholding-settings-table table.list th,
   .withholding-settings-table table.list td {
     display: block;
-    width: 100%;
+    width: 100% !important;
+    max-width: none !important;
   }
+  .edit-table.withholding-settings-table table.list thead,
   .withholding-settings-table table.list thead {
     position: absolute;
-    width: 1px;
+    width: 1px !important;
     height: 1px;
     padding: 0;
     margin: -1px;
@@ -3088,12 +3187,57 @@ pre.json {
     white-space: nowrap;
     border: 0;
   }
-  .withholding-settings-table table.list tr {
-    padding: 12px 0;
+  /* Card grid: Code|ATC and Rate|Active side-by-side; rest full width. */
+  .edit-table.withholding-settings-table table.list tbody tr,
+  .withholding-settings-table table.list tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 4px;
+    height: auto;
+    padding: 10px 0;
     border-bottom: 1px solid var(--border);
   }
+  .edit-table.withholding-settings-table table.list td,
   .withholding-settings-table table.list td {
-    padding: 4px 0;
+    padding: 0 !important;
+    min-width: 0;
+  }
+  .edit-table.withholding-settings-table table.list td.col-code,
+  .withholding-settings-table table.list td.col-code {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .edit-table.withholding-settings-table table.list td.col-atc,
+  .withholding-settings-table table.list td.col-atc {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .edit-table.withholding-settings-table table.list td.col-label,
+  .withholding-settings-table table.list td.col-label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .edit-table.withholding-settings-table table.list td.col-applies,
+  .withholding-settings-table table.list td.col-applies {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .edit-table.withholding-settings-table table.list td.col-rate,
+  .withholding-settings-table table.list td.col-rate {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .edit-table.withholding-settings-table table.list td.col-active,
+  .withholding-settings-table table.list td.col-active {
+    grid-column: 2;
+    grid-row: 4;
+    text-align: left;
+  }
+  .edit-table.withholding-settings-table table.list td.col-note,
+  .withholding-settings-table table.list td.col-note {
+    grid-column: 1 / -1;
+    grid-row: 5;
   }
   .withholding-settings-table table.list td::before {
     content: attr(data-label);
@@ -3104,6 +3248,27 @@ pre.json {
     text-transform: uppercase;
     color: var(--text-3);
     margin-bottom: 2px;
+  }
+  .edit-table.withholding-settings-table table.list input,
+  .edit-table.withholding-settings-table table.list select,
+  .edit-table.withholding-settings-table table.list textarea,
+  .withholding-settings-table table.list input,
+  .withholding-settings-table table.list select,
+  .withholding-settings-table table.list textarea {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .withholding-active-check {
+    justify-content: flex-start;
+    margin: 0;
+    min-height: 34px;
+  }
+  .edit-table.withholding-settings-table .withholding-note-input,
+  .withholding-note-input {
+    height: 34px;
+    min-height: 34px;
+    max-height: 40px;
   }
   .print-company-layout {
     grid-template-columns: 1fr;
@@ -3256,6 +3421,19 @@ pre.json {
   height: auto;
   padding: 6px 6px;
   vertical-align: top;
+}
+/* Withholding keeps compact cells; restate after generic edit-table td rules. */
+.edit-table.withholding-settings-table table.list th,
+.edit-table.withholding-settings-table table.list td {
+  padding: 3px 4px;
+  vertical-align: middle;
+}
+.edit-table.withholding-settings-table .withholding-note-input {
+  min-width: 0 !important;
+  resize: none !important;
+}
+.edit-table.withholding-settings-table select.withholding-applies-select {
+  max-width: none !important;
 }
 /*
  * Quote/SO item editors: WH%/ATC stacked; Description sticky. Money cols fit

@@ -70,19 +70,19 @@ export function WithholdingForm({
           <table className="list">
             <thead>
               <tr>
-                <th>Code</th>
+                <th className="col-code">Code</th>
                 <th className="col-label">Label</th>
-                <th>Applies to</th>
-                <th>ATC</th>
-                <th className="num">Rate %</th>
-                <th>Active</th>
-                <th>Note</th>
+                <th className="col-applies">Applies to</th>
+                <th className="col-atc">ATC</th>
+                <th className="col-rate num">Rate %</th>
+                <th className="col-active">Active</th>
+                <th className="col-note">Note</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id ?? `new-${i}`}>
-                  <td data-label="Code">
+                  <td className="col-code" data-label="Code">
                     <input
                       aria-label="Code"
                       value={r.code}
@@ -104,8 +104,13 @@ export function WithholdingForm({
                       className="withholding-label-input"
                     />
                   </td>
-                  <td data-label="Applies to">
-                    <select aria-label="Applies to" value={r.lineKind} onChange={(ev) => set(i, { lineKind: ev.target.value })}>
+                  <td className="col-applies" data-label="Applies to">
+                    <select
+                      aria-label="Applies to"
+                      className="withholding-applies-select"
+                      value={r.lineKind}
+                      onChange={(ev) => set(i, { lineKind: ev.target.value })}
+                    >
                       {WITHHOLDING_LINE_KINDS.map((k) => (
                         <option key={k} value={k}>
                           {LINE_KIND_LABELS[k]}
@@ -113,14 +118,33 @@ export function WithholdingForm({
                       ))}
                     </select>
                   </td>
-                  <td data-label="ATC">
-                    <input aria-label="ATC code" value={r.atcCode} onChange={(ev) => set(i, { atcCode: ev.target.value })} placeholder="—" className="withholding-atc-input" />
+                  <td className="col-atc" data-label="ATC">
+                    <input
+                      aria-label="ATC code"
+                      value={r.atcCode}
+                      onChange={(ev) => set(i, { atcCode: ev.target.value })}
+                      placeholder="—"
+                      className="withholding-atc-input"
+                    />
                   </td>
-                  <td className="num" data-label="Rate %">
-                    <input aria-label="Rate percent" value={r.ratePct} inputMode="decimal" onChange={(ev) => set(i, { ratePct: ev.target.value })} className="withholding-rate-input" />
+                  <td className="col-rate num" data-label="Rate %">
+                    <input
+                      aria-label="Rate percent"
+                      value={r.ratePct}
+                      inputMode="decimal"
+                      onChange={(ev) => set(i, { ratePct: ev.target.value })}
+                      className="withholding-rate-input"
+                    />
                   </td>
-                  <td data-label="Active">
-                    <input aria-label="Active" type="checkbox" checked={r.active} onChange={(ev) => set(i, { active: ev.target.checked })} />
+                  <td className="col-active" data-label="Active">
+                    <label className="check withholding-active-check">
+                      <input
+                        aria-label="Active"
+                        type="checkbox"
+                        checked={r.active}
+                        onChange={(ev) => set(i, { active: ev.target.checked })}
+                      />
+                    </label>
                   </td>
                   <td className="col-note" data-label="Note">
                     <textarea
