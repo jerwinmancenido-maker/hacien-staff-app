@@ -23,11 +23,9 @@ import { customerArSnapshot, listBillings, listCollections } from "@/lib/billing
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
+import { resolveCompanyTab } from "@/lib/company-tabs";
 import { CustomerForm } from "../CustomerForm";
 import { saveCustomerAction, setCustomerActiveAction } from "../actions";
-
-const TABS = ["overview", "details", "contacts", "documents", "transactions", "balances"] as const;
-type Tab = (typeof TABS)[number];
 
 export default async function CustomerPage({
   params,
@@ -39,9 +37,7 @@ export default async function CustomerPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const search = await searchParams;
-  // "history" was the old name of the Transactions tab.
-  const rawTab = search.tab === "history" ? "transactions" : search.tab;
-  const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+  const tab = resolveCompanyTab(search.tab);
   const customer = await getCustomer(id);
   if (!customer) notFound();
   const { settings } = await getSettingsSnapshot();
@@ -143,6 +139,13 @@ export default async function CustomerPage({
           { key: "overview", label: "Overview", href: `/customers/${id}` },
           { key: "details", label: "Details", href: `/customers/${id}?tab=details` },
           {
+            key: "addresses",
+            label: "Addresses",
+            count: addresses.filter((a) => !a.archivedAt).length,
+            dot: addresses.some((a) => !a.archivedAt && a.needsReview) ? "amber" : undefined,
+            href: `/customers/${id}?tab=addresses`,
+          },
+          {
             key: "contacts",
             label: "Contacts",
             count: contacts.filter((c) => c.active).length,
@@ -176,18 +179,19 @@ export default async function CustomerPage({
       )}
 
       {tab === "details" && (
-        <div className="details-stack">
-          <div className="card">
-            <CustomerForm
-              customer={record}
-              terms={settings.lists.paymentTerms}
-              rates={rates}
-              action={saveCustomerAction.bind(null, id)}
-              canEdit={canEdit}
-            />
-          </div>
-          <AddressCards addresses={addresses} ownerKind="customer" ownerId={id} canEdit={canEdit} />
+        <div className="card">
+          <CustomerForm
+            customer={record}
+            terms={settings.lists.paymentTerms}
+            rates={rates}
+            action={saveCustomerAction.bind(null, id)}
+            canEdit={canEdit}
+          />
         </div>
+      )}
+
+      {tab === "addresses" && (
+        <AddressCards addresses={addresses} ownerKind="customer" ownerId={id} canEdit={canEdit} />
       )}
 
       {tab === "contacts" && (

@@ -74,7 +74,13 @@ export async function SupplierOverview({
               </div>
               <div>
                 <div className="meta-label">Address</div>
-                <div className="meta-val">{mainAddress ? formatAddress(mainAddress) : <span className="faint">—</span>}</div>
+                <div className="meta-val">
+                  {mainAddress ? (
+                    <Link href={`${basePath}?tab=addresses`}>{formatAddress(mainAddress)}</Link>
+                  ) : (
+                    <span className="faint">—</span>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="meta-label">Tax rule note</div>
@@ -160,19 +166,14 @@ export async function SupplierOverview({
           <div className="value num">{formatPeso(0)}</div>
           <div className="foot">Unpaid supplier bills</div>
         </div>
-        <div className="card stat">
-          <div className="label">Open POs</div>
-          <div className="value num faint">—</div>
-          <div className="foot faint">Needs backend</div>
-        </div>
-        <OpenDocsCards stats={docStats} basePath={basePath} showTotals={false} />
+        <OpenDocsCards stats={docStats} basePath={basePath} showTotals={false} showQuotesAndSos={false} />
         <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />
         <div className="card stat">
           <div className="label">Last activity</div>
           <div className="value" style={{ fontSize: 16, marginTop: 10 }}>
             {lastActivityDate ? formatDateTime(lastActivityDate) : "—"}
           </div>
-          <div className="foot">Records, quotes and SOs</div>
+          <div className="foot">Records and purchase documents</div>
         </div>
       </div>
 
