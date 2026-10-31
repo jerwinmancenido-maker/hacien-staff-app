@@ -6,7 +6,10 @@ import {
   formatSalesAxisPeso,
   isSalesEmpty,
   lastNMonthKeys,
+  manilaDayOfMonth,
   manilaMonthKey,
+  monthKeyLastDay,
+  mtdVsSameDaysChip,
   niceSalesMax,
   owedOverdueChip,
   SALES_AXIS_EMPTY_MAX,
@@ -16,12 +19,21 @@ import {
   salesMonthLabel,
   salesMonthsRangeLabel,
   salesVsLastMonthCaption,
+  sameDaysEndYmd,
   shiftMonthKey,
   topSalesCustomers,
 } from "@/lib/home/sales";
-import { canShowHomeActivity, filterHomeActivity, activityDetail } from "@/lib/home/activity";
+import {
+  HOME_RECENT_DESKTOP_ROWS,
+  HOME_RECENT_PHONE_ROWS,
+  canShowHomeActivity,
+  filterHomeActivity,
+  activityDetail,
+} from "@/lib/home/activity";
 import { newBillingHref, newQuoteHref, auditLogHref } from "@/lib/home/hrefs";
 import { roleFlags, can, type PermissionUser } from "@/lib/permissions";
+import { renderToStaticMarkup } from "react-dom/server";
+import { HomeRecentActivity } from "@/components/home/HomeSections";
 
 function user(roles: ("ADMIN" | "APPROVER" | "STAFF" | "VIEWER")[], costs = false): PermissionUser {
   return { ...roleFlags(roles), active: true, canSeeCosts: costs };
@@ -122,6 +134,84 @@ describe("home sales change vs last month (Up/Down/Same chip)", () => {
     expect(sections).toMatch(/home-chip-down/);
     expect(css).toMatch(/\.home-chip-up/);
     expect(css).toMatch(/\.home-chip-down/);
+  });
+});
+
+describe("home MTD vs same days of last month (fixed clock)", () => {
+  // 2026-11-15 04:00 UTC = Nov 15 12:00 PHT — mid-month fixed clock.
+  const midMonth = new Date("2026-11-15T04:00:00.000Z");
+  // 2026-10-31 16:00 UTC = Nov 1 00:00 PHT — day 1 of the month.
+  const dayOne = new Date("2026-10-31T16:00:00.000Z");
+
+  it("hides the chip entirely when both MTD and same-days prior are ₱0 (never Down 100%)", () => {
+    expect(mtdVsSameDaysChip(0, 0, "2026-10", 15)).toBeNull();
+    expect(mtdVsSameDaysChip("0.00", "0.00", "2026-10", 15)).toBeNull();
+    expect(mtdVsSameDaysChip(0, 0, "2026-10", 1)).toBeNull();
+  });
+
+  it("shows Up N% with vs ₱X by prior day when MTD is higher", () => {
+    const chip = mtdVsSameDaysChip(200_000, 100_000, "2026-10", manilaDayOfMonth(midMonth));
+    expect(chip).not.toBeNull();
+    expect(chip!.change).toEqual({ label: "Up 100%", tone: "up" });
+    expect(chip!.vsCaption).toBe("vs ₱100,000 by Oct 15");
+  });
+
+  it("shows Down N% with vs ₱X by prior day when MTD is lower", () => {
+    const chip = mtdVsSameDaysChip(50_000, 100_000, "2026-10", manilaDayOfMonth(midMonth));
+    expect(chip).not.toBeNull();
+    expect(chip!.change).toEqual({ label: "Down 50%", tone: "down" });
+    expect(chip!.vsCaption).toBe("vs ₱100,000 by Oct 15");
+  });
+
+  it("on day 1 of the month compares against the 1st of last month only", () => {
+    expect(manilaDayOfMonth(dayOne)).toBe(1);
+    expect(manilaMonthKey(dayOne)).toBe("2026-11");
+    expect(sameDaysEndYmd("2026-10", 1)).toBe("2026-10-01");
+    const chip = mtdVsSameDaysChip(0, 0, "2026-10", manilaDayOfMonth(dayOne));
+    expect(chip).toBeNull();
+    const withPrior = mtdVsSameDaysChip(10_000, 0, "2026-10", 1);
+    expect(withPrior).not.toBeNull();
+    expect(withPrior!.vsCaption).toBe("vs ₱0 by Oct 1");
+    expect(withPrior!.change.tone).toBe("none"); // prior 0 → no % chip
+  });
+
+  it("caps same-days end to the prior month’s last day (31 → Feb 28/29, Apr 30)", () => {
+    expect(monthKeyLastDay("2026-02")).toBe(28);
+    expect(monthKeyLastDay("2024-02")).toBe(29);
+    expect(monthKeyLastDay("2026-04")).toBe(30);
+    expect(monthKeyLastDay("2026-01")).toBe(31);
+
+    expect(sameDaysEndYmd("2026-02", 31)).toBe("2026-02-28");
+    expect(sameDaysEndYmd("2024-02", 31)).toBe("2024-02-29");
+    expect(sameDaysEndYmd("2026-04", 31)).toBe("2026-04-30");
+    expect(sameDaysEndYmd("2026-01", 31)).toBe("2026-01-31");
+
+    // Day 31 of March → compare into Feb 2026 caps to Feb 28 in the chip caption.
+    const chip = mtdVsSameDaysChip(100_000, 80_000, "2026-02", 31);
+    expect(chip).not.toBeNull();
+    expect(chip!.vsCaption).toBe("vs ₱80,000 by Feb 28");
+  });
+});
+
+describe("home sales chart partial current month", () => {
+  it("marks the current-month point as partial (hollow + dashed + so far)", () => {
+    const salesTs = readFileSync(path.join(process.cwd(), "src/lib/home/sales.ts"), "utf8");
+    expect(salesTs).toMatch(/isPartial:\s*boolean/);
+
+    const dataSrc = readFileSync(path.join(process.cwd(), "src/lib/home/sales-data.ts"), "utf8");
+    expect(dataSrc).toMatch(/isPartial:\s*isCurrent/);
+
+    const chartSrc = readFileSync(path.join(process.cwd(), "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/data-partial=\{currentIsPartial \? "1"/);
+    expect(chartSrc).toMatch(/home-sales-current-dot-partial/);
+    expect(chartSrc).toMatch(/home-sales-line-partial/);
+    expect(chartSrc).toMatch(/so far/);
+    expect(chartSrc).toMatch(/buildSmoothSegment/);
+
+    const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+    expect(css).toMatch(/\.home-sales-line-partial\s*\{[^}]*stroke-dasharray/s);
+    expect(css).toMatch(/\.home-sales-current-dot-partial\s*\{[^}]*fill:\s*#fff/s);
+    expect(css).toMatch(/\.home-sales-current-dot-partial\s*\{[^}]*stroke:\s*var\(--blue\)/s);
   });
 });
 
@@ -238,13 +328,164 @@ describe("home concept A layout wiring", () => {
     expect(page).toMatch(/HomeRecentActivity/);
     expect(page).not.toMatch(/HomeMoney/);
     expect(page).not.toMatch(/HomeNonVat/);
+    expect(sections).not.toMatch(/export function HomeMoney/);
     expect(dash).not.toMatch(/moneyRow\("billedThisMonth"/);
-    expect(sections).toMatch(/Billed this month/);
+    expect(sections).toMatch(/kpis\.billedThisMonth\.label/);
     expect(sections).toMatch(/Sales billed/);
+    expect(sections).toMatch(/Nothing needs action/);
     expect(sections).toMatch(/home-chip-overdue/);
     expect(css).toMatch(/#f8fafc/i);
     expect(css).toMatch(/#e5e7eb/i);
     expect(css).toMatch(/home-sales-line/);
+  });
+
+  it("keeps a compact Home: short labels, ~114px chart, 12px gaps, empty NA line", () => {
+    expect(dash).toMatch(/Quotes to approve/);
+    expect(dash).toMatch(/SOs needing a PO/);
+    expect(dash).toMatch(/No WHT type set/);
+    expect(dash).toMatch(/No payments yet/);
+    expect(dash).not.toMatch(/Customers missing WHT type/);
+    expect(dash).not.toMatch(/No payments recorded in/);
+    expect(dash).toMatch(/Billed \(\$\{mon\}\)/);
+    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*10px/s);
+    expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*14px/s);
+    expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*114px/s);
+    expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
+    expect(css).toMatch(/\.home-tax-full\s*\{[^}]*min-height:\s*0/s);
+    const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
+    expect(chartSrc).toMatch(/const VB_H = 114/);
+    const hrefs = readFileSync(path.join(root, "src/lib/home/hrefs.ts"), "utf8");
+    expect(hrefs).not.toMatch(/billedThisMonthHref/);
+  });
+
+  it("compacts Home on phone only (desktop markup/CSS base unchanged)", () => {
+    // Phone-only hiding hooks in markup
+    expect(sections).toMatch(/home-desktop-only/);
+    expect(sections).toMatch(/home-phone-only/);
+    expect(sections).toMatch(/home-ks-vs/);
+    expect(sections).toMatch(/home-tax-strip/);
+    expect(sections).toMatch(/home-ra-row-extra/);
+    expect(sections).toMatch(/stripLabel/);
+    // Recent: fetch HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra
+    expect(dash).toMatch(/listRecentHomeActivity\(HOME_RECENT_DESKTOP_ROWS/);
+    // Phone media block: smaller cards (pad 10–12), 18px KPI, 13px titles, 40px taps, no Y-axis, 2 activity rows
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s*\{[^}]*padding:\s*10px\s+12px\s+0/s);
+    // Sales billed + Needs action match KPI 12px padding; chart has no empty band
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-sales\s*>\s*\.home-ct[\s\S]*padding:\s*12px\s+12px\s+0/s,
+    );
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-na-card\s*>\s*\.home-ct[\s\S]*padding:\s*12px\s+12px\s+0/s,
+    );
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-na\s*\{[^}]*padding:\s*0\s+12px\s+12px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-chart\s*\{[^}]*margin:\s*0/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s+h3\s*\{[^}]*font-size:\s*13px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kv\s*\{[^}]*font-size:\s*18px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-svg\s*\{[^}]*height:\s*110px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-sales-yl\s*\{[^}]*display:\s*none/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-na-row\s*\{[^}]*min-height:\s*40px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-tax-strip[\s\S]*min-height:\s*48px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*border-radius:\s*10px/s);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*box-shadow:\s*0\s+1px\s+1px/s);
+    expect(sections).toMatch(/phoneLimitLabel/);
+    // Phone keeps the doc line (e.g. SO-2026-0001 · Sample Corp) with time on the same row
+    expect(sections).toMatch(/home-ra-detail/);
+    expect(sections).toMatch(/r\.detail/);
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-ra-detail\s*\{[^}]*text-overflow:\s*ellipsis/s,
+    );
+    expect(css).not.toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-ra-detail\s*\{[^}]*display:\s*none/s,
+    );
+    expect(page).toMatch(/home-page-header/);
+  });
+
+  it("fetches exactly HOME_RECENT_DESKTOP_ROWS; phone hides rows past HOME_RECENT_PHONE_ROWS", () => {
+    expect(HOME_RECENT_DESKTOP_ROWS).toBe(3);
+    expect(HOME_RECENT_PHONE_ROWS).toBe(2);
+    expect(dash).toMatch(/listRecentHomeActivity\(HOME_RECENT_DESKTOP_ROWS/);
+    expect(sections).toMatch(/HOME_RECENT_PHONE_ROWS/);
+    expect(sections).toMatch(/i\s*>=\s*HOME_RECENT_PHONE_ROWS\s*\?\s*["'] home-ra-row-extra["']/);
+    expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+    // Desktop base must NOT hide .home-ra-row-extra
+    const phoneBlock = css.split(/@media\s*\(\s*max-width:\s*640px\s*\)/)[0] ?? css;
+    expect(phoneBlock).not.toMatch(/\.home-ra-row-extra\s*\{[^}]*display:\s*none/s);
+  });
+
+  it("shows exactly desktop/phone Recent row counts in markup classes", () => {
+    const rows = Array.from({ length: HOME_RECENT_DESKTOP_ROWS }, (_, i) => ({
+      id: `a${i}`,
+      atLabel: "1:00 PM",
+      summary: `Row ${i + 1}`,
+      detail: `QT-2026-000${i}`,
+      href: "/quotes",
+      entityType: "Quote",
+    }));
+    const html = renderToStaticMarkup(
+      HomeRecentActivity({ rows: rows as never, auditHref: "/audit" }),
+    );
+    const extras = (html.match(/home-ra-row-extra/g) || []).length;
+    // Count row roots only (class contains home-ra-row, not merely as a substring of -extra alone).
+    const all = (html.match(/class="home-ra-row(?: home-ra-row-extra)?"/g) || []).length;
+    expect(all).toBe(HOME_RECENT_DESKTOP_ROWS);
+    expect(extras).toBe(HOME_RECENT_DESKTOP_ROWS - HOME_RECENT_PHONE_ROWS);
+    // Phone visible = total − extras; desktop visible = total (extras not CSS-hidden on desktop).
+    expect(HOME_RECENT_DESKTOP_ROWS - extras).toBe(HOME_RECENT_PHONE_ROWS);
+  });
+
+  it("shows View all → /audit only when view_audit is allowed", () => {
+    expect(can(user(["ADMIN"]), "view_audit")).toBe(true);
+    expect(can(user(["APPROVER"]), "view_audit")).toBe(false);
+    expect(can(user(["STAFF"]), "view_audit")).toBe(false);
+    expect(can(user(["VIEWER"]), "view_audit")).toBe(false);
+    expect(dash).toMatch(/can\(user,\s*["']view_audit["']\)/);
+    expect(auditLogHref()).toBe("/audit");
+
+    const sample = [
+      {
+        id: "x1",
+        atLabel: "1:00 PM",
+        summary: "Jerwin created a quote",
+        detail: "QT-2026-0001",
+        href: "/quotes/1",
+        entityType: "Quote",
+      },
+    ];
+    const withLink = renderToStaticMarkup(
+      HomeRecentActivity({ rows: sample as never, auditHref: auditLogHref() }),
+    );
+    expect(withLink).toMatch(/>View all</);
+    expect(withLink).toMatch(/href="\/audit"/);
+
+    const noLink = renderToStaticMarkup(
+      HomeRecentActivity({ rows: sample as never, auditHref: null }),
+    );
+    expect(noLink).not.toMatch(/View all/);
+    expect(noLink).not.toMatch(/href="\/audit"/);
+  });
+
+  it("prevents sideways overflow on narrow Home (min-width 0 + truncate)", () => {
+    expect(css).toMatch(/\.home-dashboard\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-dashboard\s+\.card\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-bot\s*>\s*\.card[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-tax-body\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.home-ra-summary\s*\{[^}]*text-overflow:\s*ellipsis/s);
+    // Due date wraps fully (no money/date ellipsis); sideways overflow guarded by min-width 0 + shots.
+    expect(css).toMatch(/\.home-tax-due\s*\{[^}]*white-space:\s*normal/s);
+    expect(css).toMatch(/\.home-pipeline-row-caption\s*\{[^}]*white-space:\s*normal/s);
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-pipeline-phone\s*\{[^}]*align-items:\s*stretch/s,
+    );
+    expect(css).toMatch(
+      /@media \(max-width:\s*640px\)[\s\S]*\.home-pipeline-phone[\s\S]*margin-top:\s*0/s,
+    );
+    const shots = readFileSync(path.join(root, "scripts/home-a-shots.mjs"), "utf8");
+    expect(shots).toMatch(/scrollWidth/);
+    expect(shots).toMatch(/assertNoHorizontalScroll/);
   });
 
   it("keeps KPI cards equal height, left-aligned, and whole-peso amounts", () => {
@@ -260,8 +501,9 @@ describe("home concept A layout wiring", () => {
   });
 
   it("aligns mid/bot card rows at desktop and shortens the empty chart plot", () => {
-    expect(css).toMatch(/\.home-mid\s*\{[^}]*align-items:\s*stretch/s);
-    expect(css).toMatch(/\.home-bot\s*\{[^}]*align-items:\s*stretch/s);
+    // Mid/bot use start so Needs action / tax do not stretch to the tall neighbor.
+    expect(css).toMatch(/\.home-mid\s*\{[^}]*align-items:\s*start/s);
+    expect(css).toMatch(/\.home-bot\s*\{[^}]*align-items:\s*start/s);
     expect(css).toMatch(/\.home-mid\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-bot\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-sales-chart\.is-empty\s+\.home-sales-svg[^}]*height:\s*28px/s);

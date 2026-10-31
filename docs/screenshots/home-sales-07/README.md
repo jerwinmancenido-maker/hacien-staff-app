@@ -2,7 +2,7 @@
 
 | File | What it shows |
 | --- | --- |
-| `home-a-data-1280.png` / `home-a-data-360.png` | Concept A Home with sample billed sales |
+| `home-a-data-1280.png` / `home-a-data-360.png` / `home-a-data-320.png` | Concept A Home with sample billed sales (320 checks no sideways scroll) |
 | `home-a-empty-1280.png` / `home-a-empty-360.png` | Empty sales: flat line, copy, Go to Billing; Owed ₱0 |
 | `home-a-staff-1280.png` / `home-a-staff-360.png` | Staff without `manage_billing` (no KPIs/chart) |
 | `home-sales-data-1280.png` / `home-sales-data-360.png` | Earlier bar-chart Home (superseded by concept A) |
@@ -16,10 +16,13 @@ Throwaway **local** DB only — no live data.
 
 Mutating seed scripts refuse to run unless:
 
-1. `DATABASE_URL` host is `localhost` or `127.0.0.1` (this repo has no compose MySQL service name), and
-2. `ALLOW_SEED_SHOTS=1` is set.
+1. `DATABASE_URL` host is `localhost` or `127.0.0.1` (this repo has no compose MySQL service name),
+2. the database name looks like a throwaway test DB (contains `test`, `shots`, `local`, or `dev`), and
+3. `ALLOW_SEED_SHOTS=1` is set.
 
 Guard: `scripts/lib/assert-local-db.mjs`.
+
+Screenshots are captured at real content height (no fixed tall canvas).
 
 ```bash
 # Concept A (current)

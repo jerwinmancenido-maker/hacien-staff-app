@@ -45,14 +45,17 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  className,
 }: {
   greeting?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** Optional extra class (e.g. home-page-header for phone-only tightening). */
+  className?: string;
 }) {
   return (
-    <div className="page-header">
+    <div className={["page-header", className].filter(Boolean).join(" ")}>
       <div>
         {greeting && <div className="greeting">{greeting}</div>}
         <h1>{title}</h1>

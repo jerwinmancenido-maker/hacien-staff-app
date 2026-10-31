@@ -12,16 +12,77 @@ export const tag = () => randomBytes(4).toString("hex");
 
 const taken = new Set<number>();
 
-/** A year (and the year after it) with no number series yet, so its counters start at 0001. */
+const FRESH_YEAR_RANGES: Array<[number, number]> = [
+  [2027, 2199],
+  [2200, 9998],
+];
+
+async function occupiedYears(lo: number, hi: number): Promise<Set<number>> {
+  const rows = await db.documentSeries.findMany({
+    where: { year: { gte: lo, lte: hi } },
+    select: { year: true },
+    distinct: ["year"],
+  });
+  return new Set(rows.map((r) => r.year));
+}
+
+/** True when docs or invoice dates already touch this calendar year. */
+async function yearHasDocuments(year: number): Promise<boolean> {
+  const needle = `-${year}-`;
+  const dayStart = new Date(Date.UTC(year, 0, 1));
+  const nextDayStart = new Date(Date.UTC(year + 1, 0, 1));
+  const [q, so, blByNumber, blByDate] = await Promise.all([
+    db.quote.count({ where: { number: { contains: needle } } }),
+    db.salesOrder.count({ where: { number: { contains: needle } } }),
+    db.billing.count({ where: { number: { contains: needle } } }),
+    // Gross-sales tests key off invoiceDate, not doc number year.
+    db.billing.count({
+      where: { invoiceDate: { gte: dayStart, lt: nextDayStart }, status: { not: "VOID" } },
+    }),
+  ]);
+  return q + so + blByNumber + blByDate > 0;
+}
+
+/** A year with no number series yet, so its counters start at 0001. */
 export async function freshYear(): Promise<number> {
-  for (;;) {
-    const y = 2200 + Math.floor(Math.random() * 7000);
-    if (taken.has(y) || taken.has(y + 1)) continue;
-    const used = await db.documentSeries.count({ where: { year: { in: [y, y + 1] } } });
-    if (used) continue;
-    taken.add(y).add(y + 1);
-    return y;
+  // Prefer modern/future years so Asia/Manila UTC+8 stays stable (pre-1970 TZDB
+  // offsets break PHT boundary tests). Keep years ≤9998 for MySQL DATE.
+  // Shared hacien_test is checkerboarded — require only one free year (not a
+  // consecutive pair). Scan linearly per range (one distinct-year query) instead
+  // of random COUNT loops that hang when the pool is dense.
+  for (let round = 0; round < 2; round++) {
+    for (const [lo, hi] of FRESH_YEAR_RANGES) {
+      const occupied = await occupiedYears(lo, hi);
+      for (let y = lo; y <= hi; y++) {
+        if (taken.has(y) || occupied.has(y)) continue;
+        taken.add(y);
+        return y;
+      }
+    }
+    taken.clear();
   }
+  throw new Error("freshYear: no free year in 2027–9998");
+}
+
+/**
+ * Two consecutive calendar years with no non-void billings by invoiceDate.
+ * Tax-year boundary tests key off invoice dates, not DocumentSeries emptiness
+ * (series may already exist on a checkerboarded shared DB).
+ */
+export async function freshYearPair(): Promise<{ base: number; next: number }> {
+  for (let round = 0; round < 2; round++) {
+    for (const [lo, hi] of FRESH_YEAR_RANGES) {
+      for (let y = lo; y < hi && y + 1 <= 9998; y++) {
+        if (taken.has(y) || taken.has(y + 1)) continue;
+        if (await yearHasDocuments(y)) continue;
+        if (await yearHasDocuments(y + 1)) continue;
+        taken.add(y).add(y + 1);
+        return { base: y, next: y + 1 };
+      }
+    }
+    taken.clear();
+  }
+  throw new Error("freshYearPair: no consecutive billing-free years in 2027–9998");
 }
 
 export async function makeUser(kind: "costs" | "staff" | "viewer"): Promise<DocActor> {

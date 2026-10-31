@@ -199,6 +199,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const mar = sales!.months.find((m) => m.key === `${taxYear}-03`);
     expect(Number(mar!.amount)).toBeGreaterThanOrEqual(777);
     expect(mar!.isCurrent).toBe(true);
+    expect(mar!.isPartial).toBe(true);
   });
 
   it("year total equals the Non-VAT meter; change % when last month is 0", async () => {
@@ -282,7 +283,9 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const now = new Date();
     const dash = await loadHomeDashboard(admin, { now });
     expect(dash.kpis).not.toBeNull();
-    expect(dash.kpis!.billedThisMonth.vsCaption).toMatch(/^vs ₱.+ in [A-Z][a-z]{2}$/);
+    // Same-days MTD: "vs ₱X by Oct 15", or empty when both MTD and prior same-days are ₱0.
+    const vs = dash.kpis!.billedThisMonth.vsCaption;
+    expect(vs === "" || /^vs ₱[\d,]+ by [A-Z][a-z]{2} \d{1,2}$/.test(vs)).toBe(true);
     expect(dash.kpis!.owedByCustomers.billingCountLabel).toMatch(/\d[\d,]* billings?$/);
     if (dash.kpis!.owedByCustomers.overdueChip) {
       expect(dash.kpis!.owedByCustomers.overdueChip.tone).toBe("overdue");
@@ -290,3 +293,4 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     }
   });
 });
+

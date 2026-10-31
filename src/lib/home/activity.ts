@@ -1,7 +1,17 @@
 // Recent document activity for the Home dashboard (read-only audit rows).
 
 import { db } from "../db";
-import { formatDateTime } from "../format";
+import { TIME_ZONE } from "../format";
+
+/**
+ * Desktop Home Recent activity row budget (fits ≤800px @ 1280 with Pipeline).
+ * We fetch exactly this many — phone still shows {@link HOME_RECENT_PHONE_ROWS}
+ * via `.home-ra-row-extra` CSS hide for indexes ≥ that count.
+ */
+export const HOME_RECENT_DESKTOP_ROWS = 3;
+
+/** Phone Home Recent activity visible rows (CSS hides `.home-ra-row-extra`). */
+export const HOME_RECENT_PHONE_ROWS = 2;
 
 const DOC_ENTITY_TYPES = [
   "Quote",
@@ -112,6 +122,35 @@ export function activitySummary(action: string, entityType: string, who: string 
   return `${actor} ${verb} a ${what}`;
 }
 
+const manilaDayKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const manilaTimeShort = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const manilaDateShort = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  month: "short",
+  day: "numeric",
+});
+
+/**
+ * Compact Home activity timestamp in Asia/Manila.
+ * Today → "5:49 PM"; other days → "Oct 30, 5:49 PM".
+ */
+export function formatHomeActivityWhen(at: Date, now: Date = new Date()): string {
+  const time = manilaTimeShort.format(at);
+  if (manilaDayKey.format(at) === manilaDayKey.format(now)) return time;
+  return `${manilaDateShort.format(at)}, ${time}`;
+}
+
 /** Join doc number and counterparty for the activity subtitle. */
 export function activityDetail(docNumber: string | null | undefined, party: string | null | undefined): string | null {
   const num = docNumber?.trim() || null;
@@ -131,7 +170,7 @@ function jsonField(value: unknown, key: string): string | null {
 }
 
 export async function listRecentHomeActivity(
-  limit = 5,
+  limit = HOME_RECENT_DESKTOP_ROWS,
   opts: { withCosts?: boolean } = {},
 ): Promise<HomeActivityItem[]> {
   const withCosts = opts.withCosts !== false;
@@ -278,7 +317,7 @@ export async function listRecentHomeActivity(
     return {
       id: r.id,
       at: r.at,
-      atLabel: formatDateTime(r.at),
+      atLabel: formatHomeActivityWhen(r.at),
       summary: activitySummary(r.action, r.entityType, r.user?.name ?? null),
       detail: activityDetail(docNumber, party),
       href: documentHref(r.entityType, r.entityId, extras),
