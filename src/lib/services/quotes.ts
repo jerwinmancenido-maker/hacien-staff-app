@@ -255,14 +255,54 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.quoteItem.create({ data: { ...itemData(item), quoteId: id } });
       }
+      const withholdingKeyOf = (rows: readonly WithholdingSnapshot[]) =>
+        [...rows]
+          .map((w) => `${w.code}:${w.rate}`)
+          .sort()
+          .join("|");
       const beforeItems = before.items
         .filter((i) => !i.removedAt)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((i) => ({ qty: money(i.qty), unitPrice: money(i.unitPrice), total: money(i.total) }));
-      const afterItems = items.map((i) => ({ qty: i.qty, unitPrice: i.unitPrice, total: i.total }));
+        .map((i) => ({
+          id: i.id,
+          qty: money(i.qty),
+          unitPrice: money(i.unitPrice),
+          total: money(i.total),
+          supplierUnitCost: money(i.supplierUnitCost),
+          supplierTotal: money(i.supplierTotal),
+          withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+          withholdingAtc: i.withholdingAtc ?? null,
+        }));
+      const afterItems = items.map((i) => ({
+        id: i.id,
+        qty: i.qty,
+        unitPrice: i.unitPrice,
+        total: i.total,
+        supplierUnitCost: i.supplierUnitCost,
+        supplierTotal: i.supplierTotal,
+        withholdingRate: i.withholdingRate,
+        withholdingAtc: i.withholdingAtc,
+      }));
       const moneyChanged = quoteMoneyFieldsChanged(
-        { contractPrice: money(before.contractPrice), items: beforeItems },
-        { contractPrice: money(moneyTotals.contractPrice), items: afterItems },
+        {
+          contractPrice: money(before.contractPrice),
+          withholdingTotal: money(before.withholdingTotal),
+          netReceived: money(before.netReceived),
+          supplierCost: money(before.supplierCost),
+          netMargin: money(before.netMargin),
+          netMarginPct: money(before.netMarginPct),
+          withholdingKey: withholdingKeyOf(snapshotList(before.withholding)),
+          items: beforeItems,
+        },
+        {
+          contractPrice: money(moneyTotals.contractPrice),
+          withholdingTotal: money(moneyTotals.withholdingTotal),
+          netReceived: money(moneyTotals.netReceived),
+          supplierCost: money(moneyTotals.supplierCost),
+          netMargin: money(moneyTotals.netMargin),
+          netMarginPct: money(moneyTotals.netMarginPct),
+          withholdingKey: withholdingKeyOf(Array.isArray(withholding) ? withholding : snapshotList(withholding)),
+          items: afterItems,
+        },
       );
       const resetApproval =
         moneyChanged && (before.approvalStatus === "APPROVED" || before.approvalStatus === "REJECTED");

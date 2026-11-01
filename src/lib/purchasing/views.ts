@@ -10,7 +10,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { canApprove, canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot } from "../settings";
+import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
@@ -175,7 +175,9 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
   );
   const lineDesc = new Map(items.map((i) => [i.id, i.description]));
   const subtotal = money(po.subtotal);
-  const snap = await getSettingsSnapshot();
+  // Pin the PO's settings version so raising the live limit does not unlock old drafts.
+  const snap =
+    (await getSettingsVersion(po.settingsVersionId)) ?? (await getSettingsSnapshot());
   const needsApproval = poNeedsApproval(subtotal, snap.settings.approval.poTotalAbove);
   const selfErr = canPo(po.status, "approve") ? approverError(viewer, po.createdById) : null;
   const canApproveThis = canApprove(viewer) && canPo(po.status, "approve") && selfErr === null;

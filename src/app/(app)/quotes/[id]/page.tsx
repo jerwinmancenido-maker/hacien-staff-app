@@ -58,7 +58,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             {q.status !== "VOID" && (
               <QuoteWorkflowApprovalChip status={q.approvalStatus} label={q.approvalLabel} />
             )}
-            {q.status !== "VOID" && <ApprovalChip approval={q.approval} />}
+            {q.status !== "VOID" && (
+              <ApprovalChip approval={q.approval} workflowApproved={q.approvalStatus === "APPROVED"} />
+            )}
           </>
         }
         subtitle={`${q.customer.name}${q.contact ? ` · ${q.contact.name}` : ""} · Valid until ${day(q.validUntil)}`}
@@ -115,9 +117,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           {WITHHOLDING_NOT_SET_NOTICE}
         </div>
       )}
-      {q.approval.needed && q.approval.reasons && q.status !== "VOID" && (
+      {q.approvalStatus !== "APPROVED" && q.approval.needed && q.approval.reasons && q.status !== "VOID" && (
         <div className="alert warn" role="status">
-          Needs approval: {q.approval.reasons.join(" · ")}.
+          Low margin / over threshold: {q.approval.reasons.join(" · ")}.
         </div>
       )}
       <div className="detail-grid">

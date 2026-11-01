@@ -9,7 +9,7 @@ import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { manilaToday } from "../format";
 import { assertCan, canSeeCosts, ForbiddenError, type Permission, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot } from "../settings";
+import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, lineAmounts, toScaled } from "../quotes/calc";
@@ -360,34 +360,53 @@ export async function approvePurchaseOrder(id: string, actor: PoActor) {
   return after;
 }
 
-/** Approved → Sent, or Draft → Sent when subtotal ≤ Settings PO limit (logged, no approval step). */
+/**
+ * Approved → Sent, or Draft → Sent when subtotal ≤ the PO's pinned Settings
+ * `poTotalAbove` (new-documents-only: raising the live limit does not unlock
+ * existing over-limit drafts). Skip-approval audit is written in the same txn.
+ */
 export async function markPurchaseOrderSent(id: string, actor: PoActor) {
-  const snap = await getSettingsSnapshot();
-  const limit = snap.settings.approval.poTotalAbove;
-  const { before, after } = await transition(
-    id,
-    actor,
-    "edit_data",
-    (po) => poMarkSentError(po.status, poNeedsApproval(money(po.subtotal), limit)),
-    () => ({ status: "SENT", sentAt: new Date() }),
-  );
-  // Under/at the limit: Draft → Sent skips approval but is still logged.
-  if (before.status === "DRAFT" && !poNeedsApproval(money(before.subtotal), limit)) {
-    await writeAudit(db, {
+  assertPoAccess(actor, "edit_data");
+  return db.$transaction(async (tx) => {
+    const before = await lockPurchaseOrder(tx, id);
+    const snap =
+      (await getSettingsVersion(before.settingsVersionId)) ?? (await getSettingsSnapshot());
+    const limit = snap.settings.approval.poTotalAbove;
+    const needs = poNeedsApproval(money(before.subtotal), limit);
+    const err = poMarkSentError(before.status, needs);
+    if (err) throw new DocRuleError(err);
+    const after = await tx.purchaseOrder.update({
+      where: { id },
+      data: { status: "SENT", sentAt: new Date(), updatedBy: { connect: { id: actor.id } } },
+    });
+    await writeAudit(tx, {
       userId: actor.id,
       entityType: "PurchaseOrder",
       entityId: id,
       action: "update",
-      before: { approval: "not required" },
-      after: {
-        approval: "skipped (at or below limit)",
-        subtotal: money(before.subtotal),
-        poTotalAbove: Number(limit).toFixed(2),
-      },
+      before: { status: before.status },
+      after: { status: after.status },
       diff: false,
     });
-  }
-  return after;
+    // Under/at the pinned limit: Draft → Sent skips approval; log reason + numbers
+    // in the same transaction as the status change.
+    if (before.status === "DRAFT" && !needs) {
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "PurchaseOrder",
+        entityId: id,
+        action: "update",
+        before: { approval: "not required" },
+        after: {
+          approval: "skipped (at or below limit)",
+          subtotal: money(before.subtotal),
+          poTotalAbove: Number(limit).toFixed(2),
+        },
+        diff: false,
+      });
+    }
+    return after;
+  });
 }
 
 /** Received → Closed, or short-close a partially received PO (reason required). */
@@ -452,8 +471,10 @@ export async function buildPoEmailDraft(id: string, actor: PoActor): Promise<Ema
   assertPoAccess(actor);
   const po = await db.purchaseOrder.findUnique({ where: { id }, include: { supplier: { include: { contacts: true } }, supplierContact: true } });
   if (!po) throw new DocRuleError("Purchase order not found.");
-  const snap = await getSettingsSnapshot();
-  const needs = poNeedsApproval(money(po.subtotal), snap.settings.approval.poTotalAbove);
+  // Approval gate uses the PO's pinned settings version (new documents only).
+  const pinned =
+    (await getSettingsVersion(po.settingsVersionId)) ?? (await getSettingsSnapshot());
+  const needs = poNeedsApproval(money(po.subtotal), pinned.settings.approval.poTotalAbove);
   const err =
     po.status === "VOID"
       ? "A void PO can't be emailed."
@@ -464,6 +485,8 @@ export async function buildPoEmailDraft(id: string, actor: PoActor): Promise<Ema
   const main = po.supplier.contacts.find((c) => c.isMain && c.active);
   const contact = po.supplierContact?.email ? po.supplierContact : main;
   const total = Number(po.subtotal).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Letterhead name follows current Company settings (same as print).
+  const { settings } = await getSettingsSnapshot();
   const draft: EmailDraft = {
     to: contact?.email ?? null,
     toName: contact?.name ?? null,
@@ -479,7 +502,7 @@ export async function buildPoEmailDraft(id: string, actor: PoActor): Promise<Ema
       "",
       "Kindly confirm receipt of this order. Thank you.",
       "",
-      snap.settings.company.name,
+      settings.company.name,
     ]
       .filter((l, i, a) => !(l === "" && a[i - 1] === ""))
       .join("\n"),

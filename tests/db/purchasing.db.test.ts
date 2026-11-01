@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { ForbiddenError } from "@/lib/permissions";
-import { getSettingsSnapshot } from "@/lib/settings";
+import { getSettingsSnapshot, saveSettings } from "@/lib/settings";
 import { DocRuleError } from "@/lib/documents/common";
 import { formatDocNumber } from "@/lib/documents/series";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
@@ -235,6 +235,18 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       );
       expect(atLimit.subtotal.toFixed(2)).toBe("100000.00");
       expect((await markPurchaseOrderSent(atLimit.id, admin)).status).toBe("SENT");
+      // Skip-approval audit (reason + subtotal + applied limit) lands with the SENT status change.
+      const skipAudits = await db.auditLog.findMany({
+        where: { entityType: "PurchaseOrder", entityId: atLimit.id, action: "update" },
+        orderBy: { at: "asc" },
+      });
+      const skip = skipAudits.find((a) => (a.after as { approval?: string } | null)?.approval?.includes("skipped"));
+      expect(skip?.after).toMatchObject({
+        approval: "skipped (at or below limit)",
+        subtotal: "100000.00",
+        poTotalAbove: "100000.00",
+      });
+      expect(skipAudits.some((a) => (a.after as { status?: string } | null)?.status === "SENT")).toBe(true);
 
       const over = await createStandalonePurchaseOrder(
         {
@@ -248,6 +260,47 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(approvePurchaseOrder(over.id, admin)).rejects.toThrow(/other than the creator/);
       expect((await approvePurchaseOrder(over.id, approver)).status).toBe("APPROVED");
       expect((await markPurchaseOrderSent(over.id, admin)).status).toBe("SENT");
+    });
+
+    it("raising the live PO limit does not unlock an existing over-limit draft (pinned settings version)", async () => {
+      const year = await freshYear();
+      const supplier = await makeSupplier();
+      const over = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Pinned over", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000.01" }],
+        },
+        admin,
+      );
+      const pinnedVersion = over.settingsVersionId;
+      await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
+
+      const snap = await getSettingsSnapshot();
+      const raised = await saveSettings({
+        key: "approval",
+        value: { ...snap.settings.approval, poTotalAbove: 200_000 },
+        userId: admin.id,
+        baseVersionId: snap.versionId,
+      });
+      expect(raised.ok && raised.changed).toBe(true);
+
+      try {
+        // Live limit is higher, but this PO still uses the version it was created under.
+        expect(over.settingsVersionId).toBe(pinnedVersion);
+        const view = (await getPurchaseOrderView(over.id, { ...admin, isAdmin: true }))!;
+        expect(view.approval.needsApproval).toBe(true);
+        expect(view.approval.canMarkSentFromDraft).toBe(false);
+        await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
+      } finally {
+        // Restore default so later suites keep the 100000 boundary.
+        const latest = await getSettingsSnapshot();
+        await saveSettings({
+          key: "approval",
+          value: { ...latest.settings.approval, poTotalAbove: 100_000 },
+          userId: admin.id,
+          baseVersionId: latest.versionId,
+        });
+      }
     });
 
     it("editing an approved PO returns it to Draft, clears approval and bumps the revision", async () => {

@@ -808,8 +808,9 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     await approveQuote(approved.id, admin);
 
     const batched = await listQuotesView({ needsApproval: true }, admin);
+    // Waiting list is open quotes only (DRAFT/SENT) — WON/LOST/VOID stay out.
     const expected = await db.quote.findMany({
-      where: { approvalStatus: "PENDING", status: { not: "VOID" } },
+      where: { approvalStatus: "PENDING", status: { in: ["DRAFT", "SENT"] } },
       select: { id: true },
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 500,

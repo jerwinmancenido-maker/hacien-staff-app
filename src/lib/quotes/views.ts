@@ -267,7 +267,8 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
 
   const where: Prisma.QuoteWhereInput = {
     ...(needsApproval
-      ? { approvalStatus: "PENDING" satisfies QuoteApprovalStatus, status: { not: "VOID" } }
+      ? // Open quotes only — WON/LOST/VOID stay out of the Waiting list.
+        { approvalStatus: "PENDING" satisfies QuoteApprovalStatus, status: { in: ["DRAFT", "SENT"] } }
       : openOnly && !noReplyAfterDays
         ? { status: { in: ["DRAFT", "SENT"] } }
         : status

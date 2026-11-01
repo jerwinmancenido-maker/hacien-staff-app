@@ -10,11 +10,11 @@
 // When withholding is not set on a draft, Mark as sent asks
 // "No withholding on this quote?" — Yes, none / Pick rates.
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
-import { ConvertDialog, EmailDialog, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
+import { ConvertDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   WITHHOLDING_NONE_CONFIRM_PICK,
@@ -68,10 +68,15 @@ export function QuoteActions({
   const router = useRouter();
   const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | "reject" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const rejectReasonRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [okMessage, setOkMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (dialog === "reject") rejectReasonRef.current?.focus();
+  }, [dialog]);
 
   const run = (fn: () => Promise<FormState & { draft?: EmailDraftView }>) =>
     startTransition(async () => {
@@ -200,37 +205,40 @@ export function QuoteActions({
         }}
       />
       {dialog === "reject" && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setDialog(null)}>
-          <div className="modal" role="dialog" aria-labelledby="reject-quote-title" onClick={(e) => e.stopPropagation()}>
-            <h2 id="reject-quote-title">Reject {number}?</h2>
-            <p className="muted">Staff will see your reason. A reason is required.</p>
-            <label className="field">
-              <span>Reason</span>
-              <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} required />
-            </label>
-            <div className="modal-actions">
-              <button type="button" className="btn secondary" onClick={() => setDialog(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn danger"
-                disabled={pending || !rejectReason.trim()}
-                onClick={() => {
-                  const why = rejectReason.trim();
-                  if (!why) {
-                    setMessage("Give a reason for rejecting this quote.");
-                    return;
-                  }
-                  setDialog(null);
-                  run(() => actions.reject!(id, why));
-                }}
-              >
-                Reject
-              </button>
-            </div>
+        <Modal title={`Reject ${number}?`} onClose={() => setDialog(null)} labelId="reject-quote-title">
+          <p className="muted">Staff will see your reason. A reason is required.</p>
+          <label className="field">
+            <span>Reason</span>
+            <textarea
+              ref={rejectReasonRef}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              required
+            />
+          </label>
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setDialog(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              disabled={pending || !rejectReason.trim()}
+              onClick={() => {
+                const why = rejectReason.trim();
+                if (!why) {
+                  setMessage("Give a reason for rejecting this quote.");
+                  return;
+                }
+                setDialog(null);
+                run(() => actions.reject!(id, why));
+              }}
+            >
+              Reject
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
       {draft && <EmailDialog draft={draft} onClose={() => setDraft(null)} />}
     </>

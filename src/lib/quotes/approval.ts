@@ -29,19 +29,65 @@ export function quoteNotApprovedError(approvalStatus: QuoteApprovalStatus): stri
   return "This quote is waiting for approval. An Approver or Admin must approve it before sending or converting.";
 }
 
-/** True when price, qty, or document/line totals changed (resets approval). */
-export function quoteMoneyFieldsChanged(
-  before: { contractPrice: string; items: readonly { qty: string; unitPrice: string; total: string }[] },
-  after: { contractPrice: string; items: readonly { qty: string; unitPrice: string; total: string }[] },
-): boolean {
-  if (toScaled(before.contractPrice, 2) !== toScaled(after.contractPrice, 2)) return true;
+/** Line money fields compared when deciding whether an edit clears approval. */
+export type QuoteMoneyLine = {
+  id: string | null;
+  qty: string;
+  unitPrice: string;
+  total: string;
+  supplierUnitCost: string;
+  supplierTotal: string;
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+};
+
+export type QuoteMoneySnapshot = {
+  contractPrice: string;
+  withholdingTotal: string;
+  netReceived: string;
+  supplierCost: string;
+  netMargin: string;
+  netMarginPct: string;
+  /** Stable fingerprint of document withholding (codes + rates). */
+  withholdingKey: string;
+  items: readonly QuoteMoneyLine[];
+};
+
+function scaledEq(a: string, b: string, dp = 2): boolean {
+  return toScaled(a, dp) === toScaled(b, dp);
+}
+
+/**
+ * True when price, qty, costs, withholding, or document/line totals changed
+ * (resets APPROVED/REJECTED → PENDING). Match existing lines by id so reordering
+ * alone does not clear approval; new or removed lines still count.
+ */
+export function quoteMoneyFieldsChanged(before: QuoteMoneySnapshot, after: QuoteMoneySnapshot): boolean {
+  if (!scaledEq(before.contractPrice, after.contractPrice)) return true;
+  if (!scaledEq(before.withholdingTotal, after.withholdingTotal)) return true;
+  if (!scaledEq(before.netReceived, after.netReceived)) return true;
+  if (!scaledEq(before.supplierCost, after.supplierCost)) return true;
+  if (!scaledEq(before.netMargin, after.netMargin)) return true;
+  if (!scaledEq(before.netMarginPct, after.netMarginPct)) return true;
+  if (before.withholdingKey !== after.withholdingKey) return true;
+
+  const beforeById = new Map(before.items.filter((i) => i.id).map((i) => [i.id!, i]));
+  const afterById = new Map(after.items.filter((i) => i.id).map((i) => [i.id!, i]));
+  if (beforeById.size !== afterById.size) return true;
+  // New lines (null id) always count as a money change.
+  if (after.items.some((i) => !i.id)) return true;
   if (before.items.length !== after.items.length) return true;
-  for (let i = 0; i < before.items.length; i++) {
-    const a = before.items[i]!;
-    const b = after.items[i]!;
-    if (toScaled(a.qty, 2) !== toScaled(b.qty, 2)) return true;
-    if (toScaled(a.unitPrice, 2) !== toScaled(b.unitPrice, 2)) return true;
-    if (toScaled(a.total, 2) !== toScaled(b.total, 2)) return true;
+
+  for (const [id, a] of beforeById) {
+    const b = afterById.get(id);
+    if (!b) return true;
+    if (!scaledEq(a.qty, b.qty)) return true;
+    if (!scaledEq(a.unitPrice, b.unitPrice)) return true;
+    if (!scaledEq(a.total, b.total)) return true;
+    if (!scaledEq(a.supplierUnitCost, b.supplierUnitCost)) return true;
+    if (!scaledEq(a.supplierTotal, b.supplierTotal)) return true;
+    if ((a.withholdingRate ?? "") !== (b.withholdingRate ?? "")) return true;
+    if ((a.withholdingAtc ?? "") !== (b.withholdingAtc ?? "")) return true;
   }
   return false;
 }
