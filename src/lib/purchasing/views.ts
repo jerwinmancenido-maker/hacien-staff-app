@@ -176,9 +176,9 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
   const lineDesc = new Map(items.map((i) => [i.id, i.description]));
   const subtotal = money(po.subtotal);
   // Pin the PO's settings version so raising the live limit does not unlock old drafts.
-  const snap =
-    (await getSettingsVersion(po.settingsVersionId)) ?? (await getSettingsSnapshot());
-  const needsApproval = poNeedsApproval(subtotal, snap.settings.approval.poTotalAbove);
+  // Missing/unresolvable pin → needs approval (fail closed; do not use latest Settings).
+  const snap = await getSettingsVersion(po.settingsVersionId);
+  const needsApproval = !snap || poNeedsApproval(subtotal, snap.settings.approval.poTotalAbove);
   const selfErr = canPo(po.status, "approve") ? approverError(viewer, po.createdById) : null;
   const canApproveThis = canApprove(viewer) && canPo(po.status, "approve") && selfErr === null;
   const blockedReason = canPo(po.status, "approve") ? selfErr : null;

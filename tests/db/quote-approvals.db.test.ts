@@ -245,6 +245,26 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     expect(afterWh.approvedById).toBeNull();
   });
 
+  it("supplier-cost-only edit on REJECTED resets to PENDING", async () => {
+    const customer = await makeCustomer();
+    const year = await freshYear();
+    const q = await createQuote(quoteInput(customer.id, year), admin);
+    await rejectQuote(q.id, "Margin too thin", approver);
+    const rejected = await db.quote.findUniqueOrThrow({
+      where: { id: q.id },
+      include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+    });
+    expect(rejected.approvalStatus).toBe("REJECTED");
+    const costEdit = inputFromQuote(rejected);
+    costEdit.items = costEdit.items.map((i, idx) =>
+      idx === 0 ? { ...i, supplierUnitCost: "47000.00" } : i,
+    );
+    const after = await updateQuote(q.id, costEdit, admin);
+    expect(after.approvalStatus).toBe("PENDING");
+    expect(after.rejectReason).toBeNull();
+    expect(after.rejectedById).toBeNull();
+  });
+
   it("reordering lines by id keeps APPROVED", async () => {
     const customer = await makeCustomer();
     const year = await freshYear();

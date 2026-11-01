@@ -20,6 +20,7 @@ import { formatDocNumber } from "@/lib/documents/series";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import {
   approvePurchaseOrder,
+  buildPoEmailDraft,
   closePurchaseOrder,
   createPurchaseOrdersFromSalesOrder,
   createStandalonePurchaseOrder,
@@ -260,6 +261,29 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(approvePurchaseOrder(over.id, admin)).rejects.toThrow(/other than the creator/);
       expect((await approvePurchaseOrder(over.id, approver)).status).toBe("APPROVED");
       expect((await markPurchaseOrderSent(over.id, admin)).status).toBe("SENT");
+    });
+
+    it("missing/unresolvable settings pin fails closed (needs approval; mark-sent and email blocked)", async () => {
+      const year = await freshYear();
+      const supplier = await makeSupplier();
+      // Under the live limit — would skip approval if we fell back to latest Settings.
+      const under = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Under live limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "5000" }],
+        },
+        admin,
+      );
+      expect(under.subtotal.toFixed(2)).toBe("5000.00");
+      await db.purchaseOrder.update({
+        where: { id: under.id },
+        data: { settingsVersionId: `missing-settings-pin-${tag()}` },
+      });
+      const view = (await getPurchaseOrderView(under.id, { ...admin, isAdmin: true }))!;
+      expect(view.approval.needsApproval).toBe(true);
+      expect(view.approval.canMarkSentFromDraft).toBe(false);
+      await expect(markPurchaseOrderSent(under.id, admin)).rejects.toThrow(/Approve the PO/);
+      await expect(buildPoEmailDraft(under.id, admin)).rejects.toThrow(/Approve the PO/);
     });
 
     it("raising the live PO limit does not unlock an existing over-limit draft (pinned settings version)", async () => {

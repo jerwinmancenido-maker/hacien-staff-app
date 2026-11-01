@@ -369,10 +369,10 @@ export async function markPurchaseOrderSent(id: string, actor: PoActor) {
   assertPoAccess(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockPurchaseOrder(tx, id);
-    const snap =
-      (await getSettingsVersion(before.settingsVersionId)) ?? (await getSettingsSnapshot());
-    const limit = snap.settings.approval.poTotalAbove;
-    const needs = poNeedsApproval(money(before.subtotal), limit);
+    // Missing/unresolvable pin → needs approval (fail closed; do not use latest Settings).
+    const snap = await getSettingsVersion(before.settingsVersionId);
+    const needs =
+      !snap || poNeedsApproval(money(before.subtotal), snap.settings.approval.poTotalAbove);
     const err = poMarkSentError(before.status, needs);
     if (err) throw new DocRuleError(err);
     const after = await tx.purchaseOrder.update({
@@ -390,7 +390,7 @@ export async function markPurchaseOrderSent(id: string, actor: PoActor) {
     });
     // Under/at the pinned limit: Draft → Sent skips approval; log reason + numbers
     // in the same transaction as the status change.
-    if (before.status === "DRAFT" && !needs) {
+    if (before.status === "DRAFT" && snap && !needs) {
       await writeAudit(tx, {
         userId: actor.id,
         entityType: "PurchaseOrder",
@@ -400,7 +400,7 @@ export async function markPurchaseOrderSent(id: string, actor: PoActor) {
         after: {
           approval: "skipped (at or below limit)",
           subtotal: money(before.subtotal),
-          poTotalAbove: Number(limit).toFixed(2),
+          poTotalAbove: Number(snap.settings.approval.poTotalAbove).toFixed(2),
         },
         diff: false,
       });
@@ -472,9 +472,9 @@ export async function buildPoEmailDraft(id: string, actor: PoActor): Promise<Ema
   const po = await db.purchaseOrder.findUnique({ where: { id }, include: { supplier: { include: { contacts: true } }, supplierContact: true } });
   if (!po) throw new DocRuleError("Purchase order not found.");
   // Approval gate uses the PO's pinned settings version (new documents only).
-  const pinned =
-    (await getSettingsVersion(po.settingsVersionId)) ?? (await getSettingsSnapshot());
-  const needs = poNeedsApproval(money(po.subtotal), pinned.settings.approval.poTotalAbove);
+  // Missing/unresolvable pin → needs approval (fail closed; do not use latest Settings).
+  const pinned = await getSettingsVersion(po.settingsVersionId);
+  const needs = !pinned || poNeedsApproval(money(po.subtotal), pinned.settings.approval.poTotalAbove);
   const err =
     po.status === "VOID"
       ? "A void PO can't be emailed."
