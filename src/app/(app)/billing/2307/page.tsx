@@ -83,7 +83,7 @@ export default async function Withholding2307Page({
                     <td>
                       {r.collection ? <Link href={`/billing/collections/${r.collection.id}`}>{r.collection.number}</Link> : "—"}
                     </td>
-                    <td>{r.atcCode ?? "—"}</td>
+                    <td className="col-atc">{r.atcCode ?? "—"}</td>
                     <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td>

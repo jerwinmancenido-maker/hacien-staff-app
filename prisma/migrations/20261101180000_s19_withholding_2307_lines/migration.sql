@@ -42,6 +42,17 @@ SET @sql_fk := IF(@fk = 0,
   'SELECT 1');
 PREPARE stmt_fk FROM @sql_fk; EXECUTE stmt_fk; DEALLOCATE PREPARE stmt_fk;
 
+-- One row per ATC on a parent (re-runnable). MySQL allows multiple NULLs in unique keys.
+SET @uq := (
+  SELECT COUNT(1) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Withholding2307Line'
+    AND INDEX_NAME = 'Withholding2307Line_withholding2307Id_atcCode_key'
+);
+SET @sql_uq := IF(@uq = 0,
+  'CREATE UNIQUE INDEX `Withholding2307Line_withholding2307Id_atcCode_key` ON `Withholding2307Line`(`withholding2307Id`, `atcCode`)',
+  'SELECT 1');
+PREPARE stmt_uq FROM @sql_uq; EXECUTE stmt_uq; DEALLOCATE PREPARE stmt_uq;
+
 -- Backfill: parents with amount > 0 and no child lines yet → one line from parent columns.
 INSERT INTO `Withholding2307Line` (`id`, `withholding2307Id`, `rate`, `atcCode`, `amount`, `createdAt`, `updatedAt`)
 SELECT

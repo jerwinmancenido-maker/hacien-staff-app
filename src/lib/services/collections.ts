@@ -114,7 +114,11 @@ export async function withholdingCodesFromSo(
   return [...fromLines.values()];
 }
 
-/** Split a total across code rates; last line gets the remainder so cents match. */
+/**
+ * Split a withholding total across ATC codes by rate weight (equal-base assumption).
+ * Server collection save does **not** auto-call this when the SO has multiple codes —
+ * the form must post per-ATC amounts (bases may differ, so rate-weight is unsafe).
+ */
 export function splitWithholdingAcrossCodes(
   total: string,
   codes: readonly { rate: string; atcCode: string | null }[],
@@ -125,7 +129,6 @@ export function splitWithholdingAcrossCodes(
   const weights = codes.map((c) => toScaled(c.rate, 4));
   const weightSum = weights.reduce((a, w) => a + w, 0n);
   if (weightSum <= 0n) {
-    // Equal split when rates missing.
     const n = BigInt(codes.length);
     const each = totalScaled / n;
     let used = 0n;
@@ -316,11 +319,14 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             const fallback = soCodes[0] ?? { rate: "0.0000", atcCode: null };
             const rate = a.withholdingRate || fallback.rate;
             const atc = a.atcCode !== undefined && a.atcCode !== null ? a.atcCode : fallback.atcCode;
-            let lines = resolveCodeLines(wh, a.codes as WithholdingCodeLine[] | undefined, rate, atc);
-            // Prefill multi-code from SO when the form sent only a total.
+            // Multi-code SO: require per-ATC amounts (rate-weight auto-split is wrong when bases differ).
             if ((!a.codes || a.codes.length === 0) && soCodes.length > 1) {
-              lines = splitWithholdingAcrossCodes(wh, soCodes);
+              throw new DocRuleError(
+                "Enter a withholding amount for each ATC code on this billing.",
+                "allocations",
+              );
             }
+            const lines = resolveCodeLines(wh, a.codes as WithholdingCodeLine[] | undefined, rate, atc);
             // Line amounts must equal the validated withholding allocation (fail closed).
             if (lines.length) {
               const lineSum = lines.reduce((sum, l) => sum + toScaled(money(l.amount), 2), 0n);

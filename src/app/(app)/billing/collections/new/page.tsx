@@ -7,10 +7,11 @@ import { money } from "@/lib/documents/common";
 import { billingToday } from "@/lib/billing/dates";
 import { billingBalance } from "@/lib/billing/status";
 import { isoDate } from "@/lib/format";
-import { fromScaled, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { isCashEnabled } from "@/lib/cash/features";
 import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
+import { withholdingCodesFromSo } from "@/lib/services/collections";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionForm, type OpenBillingRow } from "@/components/billing/CollectionForm";
 import { PageHeader } from "@/components/ui";
@@ -52,59 +53,35 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
     where: { customerId, status: { in: ["OPEN", "PARTIALLY_PAID"] } },
     include: {
       allocations: { where: { collection: { status: "POSTED" } } },
-      salesOrder: {
-        select: {
-          withholding: true,
-          items: {
-            where: { removedAt: null },
-            select: { withholdingRate: true, withholdingAtc: true },
-          },
-        },
-      },
     },
     orderBy: [{ dueDate: "asc" }, { invoiceDate: "asc" }],
   });
 
-  const openBillings: OpenBillingRow[] = billings
-    .map((b) => {
-      const cash = b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
-      const wh = b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
-      const balance = billingBalance(money(b.amount), {
-        cashApplied: fromScaled(cash, 2),
-        withholdingApplied: fromScaled(wh, 2),
-      });
-      const snap = (b.salesOrder.withholding ?? []) as WithholdingSnapshot[];
-      const fromSnap = snap
-        .filter((s) => Number(s.rate) > 0)
-        .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
-      const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
-      let stackedNullAtc = false;
-      for (const item of b.salesOrder.items) {
-        if (item.withholdingRate == null || Number(item.withholdingRate) <= 0) continue;
-        const atc = item.withholdingAtc?.trim() || null;
-        if (!atc) {
-          stackedNullAtc = true;
-          continue;
-        }
-        const rate = Number(item.withholdingRate).toFixed(4);
-        if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
-      }
-      // Explicit line ATCs when none are stacked-null; else snapshot (keeps stacked codes).
-      const defaultCodes =
-        fromLines.size > 0 && !stackedNullAtc ? [...fromLines.values()] : fromSnap.length > 0 ? fromSnap : [...fromLines.values()];
-      return {
-        id: b.id,
-        invoiceNo: b.invoiceNo,
-        number: b.number,
-        dueDate: b.dueDate.toISOString().slice(0, 10),
-        amount: money(b.amount),
-        balance,
-        defaultRate: defaultCodes[0]?.rate ?? snap[0]?.rate ?? "0.0000",
-        defaultAtc: defaultCodes[0]?.atcCode ?? snap[0]?.atcCode ?? null,
-        defaultCodes,
-      };
-    })
-    .filter((b) => toScaled(b.balance, 2) > 0n);
+  const openBillings: OpenBillingRow[] = (
+    await Promise.all(
+      billings.map(async (b) => {
+        const cash = b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+        const wh = b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
+        const balance = billingBalance(money(b.amount), {
+          cashApplied: fromScaled(cash, 2),
+          withholdingApplied: fromScaled(wh, 2),
+        });
+        if (toScaled(balance, 2) <= 0n) return null;
+        const defaultCodes = await withholdingCodesFromSo(db, b.salesOrderId);
+        return {
+          id: b.id,
+          invoiceNo: b.invoiceNo,
+          number: b.number,
+          dueDate: b.dueDate.toISOString().slice(0, 10),
+          amount: money(b.amount),
+          balance,
+          defaultRate: defaultCodes[0]?.rate ?? "0.0000",
+          defaultAtc: defaultCodes[0]?.atcCode ?? null,
+          defaultCodes,
+        };
+      }),
+    )
+  ).filter((b): b is OpenBillingRow => b != null);
 
   const today = billingToday();
   const cashOn = await isCashEnabled();

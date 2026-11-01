@@ -1101,6 +1101,7 @@ model Withholding2307Line {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
+  @@unique([withholding2307Id, atcCode])
   @@index([withholding2307Id])
   @@index([atcCode])
 }

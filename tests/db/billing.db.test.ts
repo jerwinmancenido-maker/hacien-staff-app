@@ -1273,4 +1273,77 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(money(parent.amount)).toBe("50.00");
     expect(parent.lines.map((l) => l.atcCode)).toEqual(["WI640"]);
   });
+
+  it("S-19 refuses auto-split when SO has multiple codes and codes are omitted", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    await db.salesOrderItem.create({
+      data: {
+        salesOrderId: so.id,
+        sortOrder: 2,
+        description: "Services line",
+        kind: "SERVICES",
+        qty: "1",
+        unit: "lot",
+        unitPrice: "0",
+        supplierUnitCost: "0",
+        total: "0",
+        supplierTotal: "0",
+        margin: "0",
+        withholdingRate: "0.0200",
+        withholdingAtc: "WI157",
+      },
+    });
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [
+          { code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" },
+          { code: "GOV_SERVICES_2", label: "Gov services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI157" },
+        ],
+      },
+    });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "5000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-MULTI-REQUIRE-CODES",
+          amountReceived: "4700.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "4700.00",
+              withholdingApplied: "300.00",
+              // codes omitted on purpose
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/Enter a withholding amount for each ATC code/);
+  });
 });

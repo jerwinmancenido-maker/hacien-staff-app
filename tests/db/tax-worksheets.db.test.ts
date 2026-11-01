@@ -38,7 +38,8 @@ import {
 } from "@/lib/services/tax-worksheets";
 import { TAX_BASIS_UNVERIFIED_NOTE } from "@/lib/tax/constants";
 import { NON_VAT_THRESHOLD_PESOS } from "@/lib/tax/constants";
-import { build1701qWorksheet } from "@/lib/tax/math";
+import { build1701qWorksheet, incomeBaseFromTax } from "@/lib/tax/math";
+import { customer2307ToSawtCsv } from "@/lib/tax/csv";
 import { manilaYmdFromInstant } from "@/lib/books/period";
 import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
@@ -531,5 +532,110 @@ describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
     expect(may?.href).toContain(`/books/sales?from=${year}-05-01`);
     expect(toScaled(summary.yearTotal, 2)).toBeGreaterThanOrEqual(toScaled("1000.00", 2));
     expect(money).toBeTruthy();
+  });
+
+  it("S-19 multi-code 2307 worksheet/export/print invert income per ATC line (not parent first-rate)", async () => {
+    // Proof: ₱100 @ WI640 1% + ₱200 @ WI157 2% → income ₱10,000 + ₱10,000 = ₱20,000
+    // (parent-first-rate would wrongly give ₱300 / 1% = ₱30,000).
+    await ensureWideBooklet();
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, "20000");
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    await db.salesOrderItem.create({
+      data: {
+        salesOrderId: so.id,
+        sortOrder: 2,
+        description: "Fake services",
+        kind: "SERVICES",
+        qty: "1",
+        unit: "lot",
+        unitPrice: "0",
+        supplierUnitCost: "0",
+        total: "0",
+        supplierTotal: "0",
+        margin: "0",
+        withholdingRate: "0.0200",
+        withholdingAtc: "WI157",
+      },
+    });
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [
+          { code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" },
+          { code: "GOV_SERVICES_2", label: "Gov services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI157" },
+        ],
+      },
+    });
+
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "20000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 0, 20)),
+        dueDate: new Date(Date.UTC(year, 1, 20)),
+        notes: null,
+      },
+      admin,
+    );
+    await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 1, 5)),
+        method: "BANK_TRANSFER",
+        reference: "REF-MULTI-WS",
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-MULTI-WS",
+        amountReceived: "19700.00",
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: "19700.00",
+            withholdingApplied: "300.00",
+            codes: [
+              { rate: "0.0100", atcCode: "WI640", amount: "100.00" },
+              { rate: "0.0200", atcCode: "WI157", amount: "200.00" },
+            ],
+          },
+        ],
+      },
+      admin,
+    );
+
+    expect(incomeBaseFromTax("100.00", "0.0100")).toBe("10000.00");
+    expect(incomeBaseFromTax("200.00", "0.0200")).toBe("10000.00");
+
+    const sheet = await getCustomer2307Worksheet(admin, year, 1);
+    const forCust = sheet.rows.filter((r) => r.customerId === customer.id);
+    expect(forCust).toHaveLength(2);
+    expect(forCust.map((r) => ({ atc: r.atc, tax: r.taxWithheld, income: r.incomeAmount })).sort((a, b) => a.atc.localeCompare(b.atc))).toEqual([
+      { atc: "WI157", tax: "200.00", income: "10000.00" },
+      { atc: "WI640", tax: "100.00", income: "10000.00" },
+    ]);
+    const custIncome = forCust.reduce((a, r) => a + Number(r.incomeAmount), 0);
+    const custTax = forCust.reduce((a, r) => a + Number(r.taxWithheld), 0);
+    expect(custIncome).toBe(20000);
+    expect(custTax).toBe(300);
+    // Parent-first-rate bug would yield 30000 for this certificate alone.
+    expect(custIncome).not.toBe(30000);
+    expect(sheet.pendingCount + sheet.receivedCount).toBeGreaterThanOrEqual(1);
+
+    // Export (same rows the print page uses) — SAWT CSV carries both ATCs and bases.
+    const csv = customer2307ToSawtCsv(forCust, { year, quarter: 1 });
+    expect(csv).toContain("WI640");
+    expect(csv).toContain("WI157");
+    expect(csv).toContain("10000.00");
+    expect(csv).toContain("100.00");
+    expect(csv).toContain("200.00");
+    expect(csv).not.toMatch(/30000\.00/);
   });
 });

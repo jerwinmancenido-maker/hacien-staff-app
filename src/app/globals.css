@@ -887,6 +887,14 @@ table.list td {
   border-top: 1px solid var(--divider);
   vertical-align: middle;
 }
+/* 2307 list ATC on narrow phones — wrap instead of blowing the table. */
+@media (max-width: 480px) {
+  table.list td.col-atc {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 5.5rem;
+  }
+}
 table.list tbody tr:first-child td {
   border-top: none;
 }

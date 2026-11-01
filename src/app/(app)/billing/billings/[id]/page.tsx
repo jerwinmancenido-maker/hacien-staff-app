@@ -130,7 +130,21 @@ export default async function BillingDetailPage({
                 {b.withholdings.map((w) => (
                   <li key={w.id}>
                     <Link href="/billing/2307">{formatPeso(w.amount)}</Link> · {w.status}
-                    {w.atcCode ? ` · ATC ${w.atcCode}` : ""}
+                    {w.lines.length > 0 ? (
+                      <ul className="plain-list" style={{ marginTop: 4 }}>
+                        {w.lines.map((l) => (
+                          <li key={l.id} className="small">
+                            {formatPeso(l.amount)}
+                            {l.atcCode ? ` · ATC ${l.atcCode}` : ""}
+                            {l.rate ? ` · ${(Number(l.rate) * 100).toFixed(0)}%` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : w.atcCode ? (
+                      ` · ATC ${w.atcCode}`
+                    ) : (
+                      ""
+                    )}
                   </li>
                 ))}
               </ul>

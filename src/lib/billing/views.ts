@@ -151,7 +151,12 @@ export async function getBillingView(id: string) {
         include: { collection: { select: { id: true, number: true, date: true, method: true, receiptNo: true, status: true } } },
       },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "desc" } },
-      withholdings: { orderBy: { createdAt: "desc" } },
+      withholdings: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          lines: { where: { amount: { gt: 0 } }, orderBy: [{ atcCode: "asc" }, { createdAt: "asc" }] },
+        },
+      },
     },
   });
   if (!b) return null;
@@ -199,6 +204,12 @@ export async function getBillingView(id: string) {
       atcCode: w.atcCode,
       status: w.status as Withholding2307Status,
       receivedAt: ymd(w.receivedAt),
+      lines: w.lines.map((l) => ({
+        id: l.id,
+        amount: money(l.amount),
+        rate: String(l.rate),
+        atcCode: l.atcCode,
+      })),
     })),
   };
 }
