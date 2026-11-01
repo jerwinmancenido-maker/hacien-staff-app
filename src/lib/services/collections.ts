@@ -85,7 +85,10 @@ export async function withholdingCodesFromSo(
     where: { id: salesOrderId },
     select: {
       withholding: true,
-      items: { select: { withholdingRate: true, withholdingAtc: true } },
+      items: {
+        where: { removedAt: null },
+        select: { withholdingRate: true, withholdingAtc: true },
+      },
     },
   });
   if (!so) return [];

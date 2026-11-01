@@ -18,7 +18,14 @@ import { DocRuleError, money } from "@/lib/documents/common";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling, soBillingSummary } from "@/lib/services/billings";
-import { applyCustomerCredit, customerCreditBalance, mark2307Received, recordCollection, voidCollection } from "@/lib/services/collections";
+import {
+  applyCustomerCredit,
+  customerCreditBalance,
+  mark2307Received,
+  recordCollection,
+  voidCollection,
+  withholdingCodesFromSo,
+} from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
 import { arAgingSummary, countPending2307Expected, getStatement, list2307 } from "@/lib/billing/views";
 import { getBillingPrintModel } from "@/lib/print/views";
@@ -1182,5 +1189,88 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
         approver,
       ),
     ).rejects.toThrow(/Only an Admin can override withholding rates/);
+  });
+
+  it("S-19 prefill ignores removed SO lines (even when snapshot still lists their ATCs)", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    const removed = await db.salesOrderItem.create({
+      data: {
+        salesOrderId: so.id,
+        sortOrder: 2,
+        description: "Removed services line",
+        kind: "SERVICES",
+        qty: "1",
+        unit: "lot",
+        unitPrice: "0",
+        supplierUnitCost: "0",
+        total: "0",
+        supplierTotal: "0",
+        margin: "0",
+        withholdingRate: "0.0200",
+        withholdingAtc: "WI157",
+        removedAt: new Date(),
+      },
+    });
+    expect(removed.removedAt).toBeInstanceOf(Date);
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [
+          { code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" },
+          { code: "GOV_SERVICES_2", label: "Gov services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI157" },
+        ],
+      },
+    });
+
+    const codes = await db.$transaction((tx) => withholdingCodesFromSo(tx, so.id));
+    expect(codes.map((c) => c.atcCode)).toEqual(["WI640"]);
+
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "5000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    // No explicit codes — auto-split must not pull the removed line's ATC.
+    const col = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: "REF-REMOVED-LINE",
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-REMOVED-LINE",
+        amountReceived: "4950.00",
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: "4950.00",
+            withholdingApplied: "50.00",
+          },
+        ],
+      },
+      admin,
+    );
+    const parent = await db.withholding2307.findFirstOrThrow({
+      where: { collectionId: col.id },
+      include: { lines: true },
+    });
+    expect(money(parent.amount)).toBe("50.00");
+    expect(parent.lines.map((l) => l.atcCode)).toEqual(["WI640"]);
   });
 });
