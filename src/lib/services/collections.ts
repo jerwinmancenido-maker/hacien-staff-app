@@ -70,10 +70,12 @@ async function billingsForAlloc(tx: Tx, customerId: string, excludeCollectionId?
 export type WithholdingCodeLine = { rate: string; atcCode: string | null; amount: string };
 
 /**
- * Prefill ATC codes for a 2307. Prefer the SO withholding snapshot (one row per
- * picked code, including stacked GOV_PT picks with their own ATC). Line ATCs
- * alone miss stacked picks that store a combined rate with null ATC — only use
- * lines when the snapshot is empty.
+ * Prefill ATC codes for a 2307.
+ * - Prefer distinct ATCs from SO lines when every withholding line has an ATC
+ *   (avoids splitting a goods-only total onto unused snapshot services codes).
+ * - If any withholding line has a rate but null ATC (stacked picks), use the
+ *   document withholding snapshot so stacked codes are not dropped.
+ * - If lines yield nothing, fall back to the snapshot.
  */
 export async function withholdingCodesFromSo(
   tx: Tx,
@@ -91,16 +93,21 @@ export async function withholdingCodesFromSo(
   const fromSnap = snap
     .filter((s) => toScaled(s.rate, 4) > 0n)
     .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
-  if (fromSnap.length > 0) return fromSnap;
 
   const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+  let stackedNullAtc = false;
   for (const item of so.items) {
-    const atc = item.withholdingAtc?.trim() || null;
-    if (!atc) continue;
     const rate = item.withholdingRate != null ? Number(item.withholdingRate).toFixed(4) : "0.0000";
     if (toScaled(rate, 4) <= 0n) continue;
+    const atc = item.withholdingAtc?.trim() || null;
+    if (!atc) {
+      stackedNullAtc = true;
+      continue;
+    }
     if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
   }
+  if (fromLines.size > 0 && !stackedNullAtc) return [...fromLines.values()];
+  if (fromSnap.length > 0) return fromSnap;
   return [...fromLines.values()];
 }
 

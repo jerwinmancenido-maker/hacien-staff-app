@@ -71,22 +71,24 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
         withholdingApplied: fromScaled(wh, 2),
       });
       const snap = (b.salesOrder.withholding ?? []) as WithholdingSnapshot[];
-      // Prefer SO snapshot (per-pick ATC, including stacked). Lines alone miss null-ATC stacks.
       const fromSnap = snap
         .filter((s) => Number(s.rate) > 0)
         .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
-      let defaultCodes = fromSnap;
-      if (defaultCodes.length === 0) {
-        const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
-        for (const item of b.salesOrder.items) {
-          const atc = item.withholdingAtc?.trim() || null;
-          if (!atc || item.withholdingRate == null) continue;
-          const rate = Number(item.withholdingRate).toFixed(4);
-          if (Number(rate) <= 0) continue;
-          if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
+      const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+      let stackedNullAtc = false;
+      for (const item of b.salesOrder.items) {
+        if (item.withholdingRate == null || Number(item.withholdingRate) <= 0) continue;
+        const atc = item.withholdingAtc?.trim() || null;
+        if (!atc) {
+          stackedNullAtc = true;
+          continue;
         }
-        defaultCodes = [...fromLines.values()];
+        const rate = Number(item.withholdingRate).toFixed(4);
+        if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
       }
+      // Explicit line ATCs when none are stacked-null; else snapshot (keeps stacked codes).
+      const defaultCodes =
+        fromLines.size > 0 && !stackedNullAtc ? [...fromLines.values()] : fromSnap.length > 0 ? fromSnap : [...fromLines.values()];
       return {
         id: b.id,
         invoiceNo: b.invoiceNo,
