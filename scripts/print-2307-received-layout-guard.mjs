@@ -3,10 +3,14 @@
  * 2307-received print layout guard (DOM via Chrome CDP).
  *
  * At 390px on /print/books/tax/2307-received:
+ * - every Income / Tax Withheld money text box stays inside its own cell
+ *   (text must not run past the cell edge — catches table-layout:fixed
+ *   ignoring min-width)
  * - every Income cell and Tax Withheld cell in the same row have
- *   non-overlapping bounding boxes (gap >= 0)
+ *   non-overlapping text bounding boxes (gap >= 0)
  * - Status (2307) cells are fully in-viewport and unclipped
  * - TAX WITHHELD and 2307 header boxes do not overlap
+ * - CUSTOMER header and customer names wrap on spaces only (no mid-word split)
  *
  * Requires a running app on BASE_URL (default http://localhost:3000) and
  * google-chrome-stable. Seed user: jerwin@example.com / SEED_PASSWORD.
@@ -164,12 +168,30 @@ async function measure(cdp) {
         return { left, right, top, bottom, width: right - left, height: bottom - top, text: (el.innerText || '').trim().slice(0, 40) };
       }
 
+      const moneyCellOverflow = [];
       const incomeTaxOverlaps = [];
       const rows = [...table.querySelectorAll('tbody tr, tfoot tr')];
       for (const row of rows) {
         const income = row.querySelector('td.col-income');
         const tax = row.querySelector('td.col-tax');
         if (!income || !tax) continue;
+        for (const el of [income, tax]) {
+          const text = (el.innerText || '').trim();
+          if (!text) continue;
+          const cell = el.getBoundingClientRect();
+          const tb = contentBox(el);
+          // Text past its own cell edge (into the gutter / next column).
+          if (tb.right > cell.right + 0.5 || tb.left < cell.left - 0.5) {
+            moneyCellOverflow.push({
+              role: el.classList.contains('col-income') ? 'income' : 'tax',
+              text: tb.text,
+              textWidth: +(tb.width).toFixed(2),
+              cellWidth: +cell.width.toFixed(2),
+              overrunRight: +(tb.right - cell.right).toFixed(2),
+              overrunLeft: +(cell.left - tb.left).toFixed(2),
+            });
+          }
+        }
         const ib = contentBox(income);
         const tb = contentBox(tax);
         if (overlaps(ib, tb) || ib.right > tb.left + 0.5) {
@@ -227,14 +249,51 @@ async function measure(cdp) {
       });
       const tinTooTall = tinLines.filter((t) => t.lines > 2);
 
+      // Mid-word splits: CUSTOMER must stay one word; names wrap on spaces only.
+      function wordSpansLines(el, word, fromIdx) {
+        const tn = el.firstChild;
+        if (!tn || tn.nodeType !== 3) return false;
+        const wr = document.createRange();
+        wr.setStart(tn, fromIdx);
+        wr.setEnd(tn, fromIdx + word.length);
+        const tops = new Set(
+          [...wr.getClientRects()]
+            .filter((r) => r.width > 0 && r.height > 0)
+            .map((r) => Math.round(r.top)),
+        );
+        return tops.size > 1;
+      }
+      const midWordIssues = [];
+      for (const el of table.querySelectorAll('th.col-customer, td.col-customer')) {
+        const raw = (el.innerText || '').replace(/\\s+/g, ' ').trim();
+        if (!raw) continue;
+        let searchFrom = 0;
+        for (const word of raw.split(' ').filter(Boolean)) {
+          const idx = raw.indexOf(word, searchFrom);
+          if (idx < 0) continue;
+          searchFrom = idx + word.length;
+          if (wordSpansLines(el, word, idx)) {
+            midWordIssues.push({
+              where: el.tagName.toLowerCase() + '.col-customer',
+              text: raw,
+              word,
+              reason: word === raw ? 'single-word-wrapped' : 'word-spans-lines',
+            });
+            break;
+          }
+        }
+      }
+
       return {
         ok: true,
         vw,
         rowCount: rows.length,
+        moneyCellOverflow,
         incomeTaxOverlaps,
         headerOverlaps,
         statusIssues,
         tinTooTall,
+        midWordIssues,
         tinSample: tinLines.slice(0, 3),
         thTaxText: thTax ? (thTax.innerText || '').trim() : null,
         thStatusText: thStatus ? (thStatus.innerText || '').trim() : null,
@@ -292,6 +351,10 @@ async function main() {
     console.error("FAIL: measure failed", m);
     failed = true;
   }
+  if (m?.moneyCellOverflow?.length) {
+    console.error("FAIL: money text past own cell edge:", JSON.stringify(m.moneyCellOverflow));
+    failed = true;
+  }
   if (m?.incomeTaxOverlaps?.length) {
     console.error("FAIL: Income/Tax Withheld boxes overlap:", JSON.stringify(m.incomeTaxOverlaps));
     failed = true;
@@ -306,6 +369,10 @@ async function main() {
   }
   if (m?.tinTooTall?.length) {
     console.error("FAIL: TIN wraps more than 2 lines:", JSON.stringify(m.tinTooTall));
+    failed = true;
+  }
+  if (m?.midWordIssues?.length) {
+    console.error("FAIL: mid-word wraps:", JSON.stringify(m.midWordIssues));
     failed = true;
   }
 

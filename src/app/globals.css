@@ -4298,52 +4298,63 @@ button.contact-card-add {
   .books-register-table:has(th.col-status) td {
     padding: 3px 3px;
   }
-  /* Customer + TIN yield space to money + Status. */
+  /*
+   * table-layout:fixed ignores min-width — set explicit rem widths so
+   * Income/Tax fit ₱22,500.00 / ₱325.00. Customer + TIN yield the space.
+   * Wrap headers/names on spaces only (no mid-word break-word).
+   */
   .books-register-table:has(th.col-status) th.col-customer,
   .books-register-table:has(th.col-status) td.col-customer {
-    width: 14%;
-    overflow-wrap: break-word;
+    width: 3.5rem;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
   }
   .books-register-table:has(th.col-status) th.col-tin,
   .books-register-table:has(th.col-status) td.col-tin {
-    width: 15%;
+    width: 3.5rem;
     font-size: 7.5pt;
     line-height: 1.2;
-    overflow-wrap: break-word;
+    overflow-wrap: normal;
     word-break: normal;
     hyphens: none;
   }
   .books-register-table:has(th.col-status) th.col-atc,
   .books-register-table:has(th.col-status) td.col-atc {
-    width: 11%;
+    width: 2.5rem;
   }
-  /* Money: right-aligned, nowrap, min-width + gap — never touch/clip. */
   .books-register-table:has(th.col-status) th.col-income,
-  .books-register-table:has(th.col-status) td.col-income,
-  .books-register-table:has(th.col-status) th.col-tax,
-  .books-register-table:has(th.col-status) td.col-tax {
-    width: 18%;
-    min-width: 4.85rem;
+  .books-register-table:has(th.col-status) td.col-income {
+    width: 5.5rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
-    padding-left: 5px;
-    padding-right: 5px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .books-register-table:has(th.col-status) th.col-tax,
+  .books-register-table:has(th.col-status) td.col-tax {
+    width: 4.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-left: 4px;
+    padding-right: 4px;
   }
   .books-register-table:has(th.col-status) td.col-income,
   .books-register-table:has(th.col-status) td.col-tax {
     white-space: nowrap;
   }
-  /* TAX WITHHELD may wrap 2 lines; 2307 stays its own header cell. */
+  /* TAX WITHHELD may wrap on the space; 2307 stays its own header cell. */
   .books-register-table:has(th.col-status) th.col-income,
   .books-register-table:has(th.col-status) th.col-tax {
     white-space: normal;
-    overflow-wrap: break-word;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
     line-height: 1.15;
   }
   .books-register-table th.col-status,
   .books-register-table td.col-status {
-    width: 18%;
-    min-width: 3.6rem;
+    width: 3.75rem;
     white-space: nowrap;
   }
 }
