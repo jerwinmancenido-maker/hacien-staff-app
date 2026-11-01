@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG NODE_VERSION=22.14.0
 
 # policy-rc.d exit 101: skip service starts during apt (no systemd in image builds).
+# sudo + NOPASSWD: start.sh runs as ubuntu and needs root for mysqld / /etc / /opt.
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
     && chmod +x /usr/sbin/policy-rc.d \
     && apt-get update \
@@ -13,11 +14,14 @@ RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
         ca-certificates \
         curl \
         git \
+        sudo \
         xz-utils \
         mysql-server \
         mysql-client \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/sbin/policy-rc.d \
+    && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu \
+    && chmod 0440 /etc/sudoers.d/ubuntu \
     && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
        | tar -xJ -C /usr/local --strip-components=1 --no-same-owner \
     && mkdir -p /var/run/mysqld /opt/hacien \
