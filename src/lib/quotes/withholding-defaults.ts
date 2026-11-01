@@ -15,8 +15,9 @@
 //   percentage tax 3% → goods lines at 4%).
 //
 // Document totals = sum of per-line (line total × line rate), rounded per line
-// (src/lib/quotes/calc.ts). Customer type (GOVERNMENT / TWA / NONE) is a label
-// only — it never chooses a rate.
+// (src/lib/quotes/calc.ts). Customer type does not choose a line rate.
+// A new customer form may pre-tick a suggested pick (defaultWithholdingPickFor).
+// Existing customers, quotes, SOs and billings keep the pick already saved.
 //
 // ATC codes below are Confirmed from BIR Form 2307 Appendix ATC list
 // (https://bangsamoro.gov.ph/wp-content/uploads/2024/12/Appendix-26-BIR-Form-2307.pdf).
@@ -315,6 +316,25 @@ export function lineWithholdingChipsFromPicks(
       chipLabel,
     };
   });
+}
+
+/**
+ * Staff hint beside Government percentage tax 3% (WB080).
+ * Choice only — never included in defaultWithholdingPickFor.
+ */
+export const GOV_PT_3_HINT = "Only if the agency says so; not usual on the 8% option";
+
+/**
+ * Suggested checkbox pick when staff set the type on a brand-new customer.
+ * Does not read or write a saved row. GOV_PT_3 is never included.
+ * NONE → explicit none ([]). Top withholding agent, blank, and unknown → not set (null).
+ */
+export function defaultWithholdingPickFor(customerType: string | null | undefined): string[] | null {
+  if (customerType === "GOVERNMENT") {
+    return [WITHHOLDING_DEFAULT_CODES.GOV_GOODS_1, WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_2];
+  }
+  if (customerType === "NONE") return [];
+  return null;
 }
 
 /** Snapshot fields to persist on a new / re-applied line from the pick list. */

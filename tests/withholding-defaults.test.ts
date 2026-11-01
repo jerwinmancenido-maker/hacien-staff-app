@@ -1,7 +1,13 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import type { Customer } from "@prisma/client";
+import { CustomerForm } from "@/app/(app)/customers/CustomerForm";
+import { WithholdingPickField } from "@/components/WithholdingPickField";
+import { docTotals, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import {
   ATC_LABELS,
+  GOV_PT_3_HINT,
   WITHHOLDING_DEFAULT_CATALOG,
   WITHHOLDING_DEFAULT_ROWS,
   WITHHOLDING_HINT_NONE,
@@ -9,12 +15,15 @@ import {
   WITHHOLDING_NOT_SET_NOTICE,
   customerWithholdingHint,
   defaultWithholdingFor,
+  defaultWithholdingPickFor,
   isWithholdingNone,
   isWithholdingNotSet,
   lineWithholdingChipsFromPicks,
   lineWithholdingFromPicks,
+  lineWithholdingSnapshotFromPicks,
   needsWithholdingTypeWarning,
 } from "@/lib/quotes/withholding-defaults";
+import type { FormState } from "@/lib/validation/forms";
 
 const ZERO = { rate: "0.0000", atc: null, code: null, label: null, lineKind: null };
 
@@ -155,6 +164,129 @@ describe("customerWithholdingHint", () => {
     expect(customerWithholdingHint([snap("GOV_GOODS_1"), snap("GOV_PT_3")])).toBe(
       "Withholding: Government goods 1% (WI640) + Government percentage tax 3% (WB080)",
     );
+  });
+});
+
+const activeRates: WithholdingSnapshot[] = WITHHOLDING_DEFAULT_CATALOG.filter((r) => r.active && r.code !== "GOV_VAT_5").map(
+  (r) => ({ code: r.code, label: r.label, lineKind: r.lineKind, rate: r.rate, atcCode: r.atcCode }),
+);
+
+function checkboxTag(html: string, code: string): string {
+  const tag = html.match(new RegExp(`<input\\b(?=[^>]*\\bvalue="${code}")[^>]*>`));
+  expect(tag, code).not.toBeNull();
+  return tag![0];
+}
+
+function isChecked(tag: string): boolean {
+  return /\bchecked\b/.test(tag);
+}
+
+const noopAction = async (): Promise<FormState> => ({ ok: true });
+
+describe("defaultWithholdingPickFor (new customer only)", () => {
+  it("government pre-ticks goods 1% and services 2%, never the 3%", () => {
+    expect(defaultWithholdingPickFor("GOVERNMENT")).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(defaultWithholdingPickFor("GOVERNMENT")).not.toContain("GOV_PT_3");
+    expect(GOV_PT_3_HINT).toBe("Only if the agency says so; not usual on the 8% option");
+  });
+
+  it("top withholding agent pre-ticks nothing; none is an explicit empty pick", () => {
+    expect(defaultWithholdingPickFor("TOP_WITHHOLDING_AGENT")).toBeNull();
+    expect(defaultWithholdingPickFor("")).toBeNull();
+    expect(defaultWithholdingPickFor(null)).toBeNull();
+    expect(defaultWithholdingPickFor(undefined)).toBeNull();
+    expect(defaultWithholdingPickFor("mystery")).toBeNull();
+    expect(defaultWithholdingPickFor("NONE")).toEqual([]);
+  });
+
+  it("quote lines and totals for a goods/services mix use centavo half-up and skip the 3%", () => {
+    const codes = defaultWithholdingPickFor("GOVERNMENT");
+    expect(codes).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    const picks = codes!.map((code) => snap(code as keyof typeof WITHHOLDING_DEFAULT_ROWS));
+    const goods = lineWithholdingSnapshotFromPicks(picks, "GOODS");
+    const services = lineWithholdingSnapshotFromPicks(picks, "SERVICES");
+    expect(goods).toEqual({ withholdingRate: "0.0100", withholdingAtc: "WI640", withholdingOverride: false });
+    expect(services).toEqual({ withholdingRate: "0.0200", withholdingAtc: "WI157", withholdingOverride: false });
+    expect(lineWithholdingChipsFromPicks(picks, "GOODS").map((c) => c.chipLabel)).toEqual(["WHT 1% WI640"]);
+    expect(lineWithholdingChipsFromPicks(picks, "SERVICES").map((c) => c.chipLabel)).toEqual(["WHT 2% WI157"]);
+
+    // 100.50 × 1% = 1.005 → 1.01; 1.25 × 2% = 0.025 → 0.03. No WB080 row.
+    const lines = [
+      { kind: "GOODS" as const, qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: goods.withholdingRate, withholdingAtc: goods.withholdingAtc },
+      { kind: "SERVICES" as const, qty: "1", unitPrice: "1.25", supplierUnitCost: "0", withholdingRate: services.withholdingRate, withholdingAtc: services.withholdingAtc },
+    ];
+    const fromLines = docTotals(lines);
+    const fromPicks = docTotals(lines, picks);
+    expect(fromLines.withholdingTotal).toBe("1.04");
+    expect(fromLines.netReceived).toBe("100.71");
+    expect(fromLines.contractPrice).toBe("101.75");
+    expect(fromLines.withholding.map((w) => w.atcCode)).toEqual(["WI640", "WI157"]);
+    expect(fromLines.withholding.map((w) => w.amount)).toEqual(["1.01", "0.03"]);
+    expect(fromPicks.withholdingTotal).toBe("1.04");
+    expect(fromPicks.withholding.map((w) => w.code)).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(JSON.stringify(fromPicks)).not.toContain("GOV_PT_3");
+    expect(JSON.stringify(fromPicks)).not.toContain("WB080");
+  });
+});
+
+describe("government withholding checkboxes", () => {
+  it("new-customer default ticks 1% and 2% and leaves 3% unticked with its hint", () => {
+    const html = renderToStaticMarkup(
+      createElement(WithholdingPickField, {
+        rates: activeRates,
+        value: defaultWithholdingPickFor("GOVERNMENT"),
+        onChange: () => {},
+      }),
+    );
+    expect(isChecked(checkboxTag(html, "GOV_GOODS_1"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_SERVICES_2"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_PT_3"))).toBe(false);
+    expect(html).toContain(GOV_PT_3_HINT);
+    expect(html).toContain("Government goods 1% (WI640)");
+    expect(html).toContain("Government services 2% (WI157)");
+  });
+
+  it("top withholding agent and none pre-tick nothing", () => {
+    const twa = renderToStaticMarkup(
+      createElement(WithholdingPickField, {
+        rates: activeRates,
+        value: defaultWithholdingPickFor("TOP_WITHHOLDING_AGENT"),
+        onChange: () => {},
+      }),
+    );
+    expect(isChecked(checkboxTag(twa, "GOV_GOODS_1"))).toBe(false);
+    expect(isChecked(checkboxTag(twa, "GOV_SERVICES_2"))).toBe(false);
+    expect(isChecked(checkboxTag(twa, "GOV_PT_3"))).toBe(false);
+    expect(twa).toContain(GOV_PT_3_HINT);
+
+    const none = defaultWithholdingPickFor("NONE");
+    expect(none).toEqual([]);
+  });
+
+  it("an existing government customer keeps the saved pick (3% only), not the new default", () => {
+    const customer = {
+      name: "Sample Agency",
+      tin: null,
+      withholdingType: "GOVERNMENT",
+      defaultWithholding: ["GOV_PT_3"],
+      defaultTerms: null,
+      notes: null,
+    } as Customer;
+    const html = renderToStaticMarkup(
+      createElement(CustomerForm, {
+        customer,
+        terms: ["Net 30"],
+        rates: activeRates,
+        action: noopAction,
+        canEdit: true,
+        canEditWithholding: true,
+      }),
+    );
+    expect(isChecked(checkboxTag(html, "GOV_PT_3"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_GOODS_1"))).toBe(false);
+    expect(isChecked(checkboxTag(html, "GOV_SERVICES_2"))).toBe(false);
+    expect(html).toContain(GOV_PT_3_HINT);
+    expect(html).toContain("Yes, Government office");
   });
 });
 

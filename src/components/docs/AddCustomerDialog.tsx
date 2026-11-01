@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
+import { defaultWithholdingPickFor } from "@/lib/quotes/withholding-defaults";
 import {
   WITHHOLDING_TYPE_FORM_LABELS,
   WITHHOLDING_TYPE_FORM_ORDER,
@@ -52,8 +53,8 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
 
   function onTypeChange(next: string) {
     setV({ ...v, withholdingType: next });
-    if (next === "NONE") setPick([]);
-    else if (pick != null && pick.length === 0) setPick(null);
+    const suggested = defaultWithholdingPickFor(next);
+    setPick(suggested == null ? null : [...suggested]);
   }
 
   function close() {

@@ -6,7 +6,7 @@ import type { Customer } from "@prisma/client";
 import { Field } from "@/components/Field";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
-import { parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
+import { defaultWithholdingPickFor, parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
 import {
   WITHHOLDING_TYPE_FIELD_LABEL,
   WITHHOLDING_TYPE_FORM_LABELS,
@@ -59,9 +59,15 @@ export function CustomerForm({
 
   function onTypeChange(next: string) {
     setWithholding(next);
-    if (next === "NONE") setPick([]);
-    else if (!typeIsYes(next)) setPick(null);
-    else if (pick != null && pick.length === 0) setPick(null);
+    // Existing customers keep the saved pick. The suggestion is for a new record only.
+    if (customer) {
+      if (next === "NONE") setPick([]);
+      else if (!typeIsYes(next)) setPick(null);
+      else if (pick != null && pick.length === 0) setPick(null);
+      return;
+    }
+    const suggested = defaultWithholdingPickFor(next);
+    setPick(suggested == null ? null : [...suggested]);
   }
 
   return (

@@ -7,6 +7,8 @@
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import {
+  GOV_PT_3_HINT,
+  WITHHOLDING_DEFAULT_CODES,
   WITHHOLDING_PICK_FIELD_HINT,
   WITHHOLDING_PICK_FIELD_LABEL,
   WITHHOLDING_PICK_NONE_LABEL,
@@ -90,6 +92,11 @@ export function WithholdingPickField({
                 <span>
                   {r.label}
                   {atc ? ` (${atc})` : ""} · {ratePctLabel(r.rate)} · {LINE_KIND_LABEL[r.lineKind] ?? r.lineKind}
+                  {r.code === WITHHOLDING_DEFAULT_CODES.GOV_PT_3 ? (
+                    <span className="hint" style={{ display: "block" }}>
+                      {GOV_PT_3_HINT}
+                    </span>
+                  ) : null}
                 </span>
               </label>
             );
