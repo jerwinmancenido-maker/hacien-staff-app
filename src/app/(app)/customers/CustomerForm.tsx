@@ -95,7 +95,7 @@ export function CustomerForm({
           >
             <select
               id="withholdingType"
-              name="withholdingType"
+              name={withholdingLocked ? undefined : "withholdingType"}
               value={withholding}
               onChange={(ev) => onTypeChange(ev.target.value)}
               disabled={withholdingLocked}
@@ -107,6 +107,8 @@ export function CustomerForm({
                 </option>
               ))}
             </select>
+            {/* Disabled selects are omitted from FormData — post the locked value explicitly. */}
+            {withholdingLocked ? <input type="hidden" name="withholdingType" value={withholding} /> : null}
             {withholdingLocked ? <div className="hint">Only an Admin can change withholding on an existing customer.</div> : null}
           </Field>
           {showPick ? (

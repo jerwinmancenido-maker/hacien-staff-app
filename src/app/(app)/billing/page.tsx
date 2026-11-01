@@ -45,7 +45,7 @@ export default async function BillingHomePage() {
           <div className="value num">{formatPeso(summary.overdue)}</div>
           <div className="foot">Past due + {summary.graceDays} day grace</div>
         </Link>
-        <Link className="card stat stat-link" href="/billing/2307?status=PENDING">
+        <Link className="card stat stat-link" href="/billing/2307">
           <div className="label">2307 pending</div>
           <div className="value num">{summary.pending2307Count}</div>
           <div className="foot">

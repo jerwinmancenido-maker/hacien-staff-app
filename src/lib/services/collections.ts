@@ -69,7 +69,12 @@ async function billingsForAlloc(tx: Tx, customerId: string, excludeCollectionId?
 
 export type WithholdingCodeLine = { rate: string; atcCode: string | null; amount: string };
 
-/** Prefill ATC codes from SO lines (distinct ATC); fall back to document withholding snapshot. */
+/**
+ * Prefill ATC codes for a 2307. Prefer the SO withholding snapshot (one row per
+ * picked code, including stacked GOV_PT picks with their own ATC). Line ATCs
+ * alone miss stacked picks that store a combined rate with null ATC — only use
+ * lines when the snapshot is empty.
+ */
 export async function withholdingCodesFromSo(
   tx: Tx,
   salesOrderId: string,
@@ -82,6 +87,12 @@ export async function withholdingCodesFromSo(
     },
   });
   if (!so) return [];
+  const snap = (so.withholding ?? []) as WithholdingSnapshot[];
+  const fromSnap = snap
+    .filter((s) => toScaled(s.rate, 4) > 0n)
+    .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
+  if (fromSnap.length > 0) return fromSnap;
+
   const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
   for (const item of so.items) {
     const atc = item.withholdingAtc?.trim() || null;
@@ -90,11 +101,7 @@ export async function withholdingCodesFromSo(
     if (toScaled(rate, 4) <= 0n) continue;
     if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
   }
-  if (fromLines.size > 0) return [...fromLines.values()];
-  const snap = (so.withholding ?? []) as WithholdingSnapshot[];
-  return snap
-    .filter((s) => toScaled(s.rate, 4) > 0n)
-    .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
+  return [...fromLines.values()];
 }
 
 /** Split a total across code rates; last line gets the remainder so cents match. */
@@ -304,12 +311,29 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             if ((!a.codes || a.codes.length === 0) && soCodes.length > 1) {
               lines = splitWithholdingAcrossCodes(wh, soCodes);
             }
+            // Line amounts must equal the validated withholding allocation (fail closed).
+            if (lines.length) {
+              const lineSum = lines.reduce((sum, l) => sum + toScaled(money(l.amount), 2), 0n);
+              if (lineSum !== toScaled(wh, 2)) {
+                throw new DocRuleError(
+                  "2307 code amounts must add up to the withholding total for this billing.",
+                  "allocations",
+                );
+              }
+            }
             // Staff may record standard SO codes; custom rates need Admin.
+            // Fail closed when the SO has no standard codes — any posted codes need Admin.
             if (!actor.isAdmin && lines.length) {
+              if (!soCodes.length) {
+                throw new DocRuleError(
+                  "Only an Admin can set withholding rates when the sales order has none.",
+                  "allocations",
+                );
+              }
               const standard = new Set(soCodes.map((c) => `${c.atcCode ?? ""}:${c.rate}`));
               for (const line of lines) {
                 const key = `${line.atcCode ?? ""}:${line.rate}`;
-                if (soCodes.length && !standard.has(key)) {
+                if (!standard.has(key)) {
                   throw new DocRuleError(
                     "Only an Admin can override withholding rates on a 2307. Use the rates from the sales order.",
                     "allocations",

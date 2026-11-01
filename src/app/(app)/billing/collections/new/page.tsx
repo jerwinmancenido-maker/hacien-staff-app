@@ -71,21 +71,22 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
         withholdingApplied: fromScaled(wh, 2),
       });
       const snap = (b.salesOrder.withholding ?? []) as WithholdingSnapshot[];
-      // Prefill from SO lines (distinct ATC); fall back to document snapshot.
-      const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
-      for (const item of b.salesOrder.items) {
-        const atc = item.withholdingAtc?.trim() || null;
-        if (!atc || item.withholdingRate == null) continue;
-        const rate = Number(item.withholdingRate).toFixed(4);
-        if (Number(rate) <= 0) continue;
-        if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
+      // Prefer SO snapshot (per-pick ATC, including stacked). Lines alone miss null-ATC stacks.
+      const fromSnap = snap
+        .filter((s) => Number(s.rate) > 0)
+        .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
+      let defaultCodes = fromSnap;
+      if (defaultCodes.length === 0) {
+        const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+        for (const item of b.salesOrder.items) {
+          const atc = item.withholdingAtc?.trim() || null;
+          if (!atc || item.withholdingRate == null) continue;
+          const rate = Number(item.withholdingRate).toFixed(4);
+          if (Number(rate) <= 0) continue;
+          if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
+        }
+        defaultCodes = [...fromLines.values()];
       }
-      const defaultCodes =
-        fromLines.size > 0
-          ? [...fromLines.values()]
-          : snap
-              .filter((s) => Number(s.rate) > 0)
-              .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
       return {
         id: b.id,
         invoiceNo: b.invoiceNo,

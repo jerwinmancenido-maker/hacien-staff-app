@@ -1045,6 +1045,97 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     ).resolves.toMatchObject({ withholdingType: "NONE" });
   });
 
+  it("S-19 non-Admin cannot post 2307 codes when the SO has none", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    await db.salesOrder.update({ where: { id: so.id }, data: { withholding: [] } });
+    await db.salesOrderItem.updateMany({
+      where: { salesOrderId: so.id },
+      data: { withholdingRate: null, withholdingAtc: null },
+    });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-EMPTY-SO-CODES",
+          amountReceived: "900.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "900.00",
+              withholdingApplied: "50.00",
+              codes: [{ rate: "0.0100", atcCode: "WI640", amount: "50.00" }],
+            },
+          ],
+        },
+        approver,
+      ),
+    ).rejects.toThrow(/Only an Admin can set withholding rates when the sales order has none/);
+  });
+
+  it("S-19 rejects 2307 code amounts that do not sum to withholding total", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [{ code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" }],
+      },
+    });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-SUM-MISMATCH",
+          amountReceived: "900.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "900.00",
+              withholdingApplied: "50.00",
+              codes: [{ rate: "0.0100", atcCode: "WI640", amount: "40.00" }],
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/must add up to the withholding total/);
+  });
+
   it("S-19 non-Admin with billing access cannot override 2307 rates off the SO standard", async () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year);
