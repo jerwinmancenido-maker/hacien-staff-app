@@ -110,7 +110,7 @@ export async function createCustomerForQuoteAction(
       return { fieldErrors: zodFieldErrors(parsedContact.error), message: "Fix the fields marked below." };
     }
 
-    const created = await saveCustomer(null, parsedCustomer.data, user.id);
+    const created = await saveCustomer(null, parsedCustomer.data, { id: user.id, isAdmin: user.isAdmin });
 
     const addressTrim = address.trim();
     if (addressTrim) {

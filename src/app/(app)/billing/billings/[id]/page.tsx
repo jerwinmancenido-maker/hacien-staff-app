@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
+import { ratePctLabel } from "@/lib/quotes/calc";
 import { getBillingView } from "@/lib/billing/views";
 import { Activity } from "@/components/Activity";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
@@ -130,7 +131,21 @@ export default async function BillingDetailPage({
                 {b.withholdings.map((w) => (
                   <li key={w.id}>
                     <Link href="/billing/2307">{formatPeso(w.amount)}</Link> · {w.status}
-                    {w.atcCode ? ` · ATC ${w.atcCode}` : ""}
+                    {w.lines.length > 0 ? (
+                      <ul className="plain-list" style={{ marginTop: 4 }}>
+                        {w.lines.map((l) => (
+                          <li key={l.id} className="small">
+                            {formatPeso(l.amount)}
+                            {l.atcCode ? ` · ATC ${l.atcCode}` : ""}
+                            {l.rate ? ` · ${ratePctLabel(Number(l.rate).toFixed(4))}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : w.atcCode ? (
+                      ` · ATC ${w.atcCode}`
+                    ) : (
+                      ""
+                    )}
                   </li>
                 ))}
               </ul>

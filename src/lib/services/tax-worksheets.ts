@@ -249,30 +249,53 @@ export async function getCustomer2307Worksheet(
     include: {
       customer: { select: { id: true, name: true, tin: true } },
       collection: { select: { id: true, number: true, date: true } },
+      // Multi-code: parent.amount is the sum; parent.rate/atcCode are first-line only —
+      // invert income base per line so WI640 ₱100 + WI157 ₱200 → ₱10k + ₱10k, not ₱30k.
+      lines: { where: { amount: { gt: 0 } }, orderBy: [{ atcCode: "asc" }, { createdAt: "asc" }] },
     },
     orderBy: [{ createdAt: "asc" }],
   });
 
-  const mapped: Customer2307WorksheetRow[] = rows.map((w) => {
-    const tax = money(w.amount);
-    const rate = Number(w.rate).toFixed(4);
-    const incomeAmount = incomeBaseFromTax(tax, rate);
+  const mapped: Customer2307WorksheetRow[] = rows.flatMap((w) => {
     const status = w.status === "RECEIVED" ? "Received" : "Pending";
-    return {
-      id: w.id,
+    const href = w.collection ? `/billing/collections/${w.collection.id}` : `/billing/2307`;
+    const shared = {
       customerId: w.customer.id,
       tin: w.customer.tin ?? "",
       name: w.customer.name,
-      atc: w.atcCode ?? "",
-      incomeAmount,
-      taxWithheld: tax,
       status,
       collectionId: w.collection?.id ?? null,
       collectionNumber: w.collection?.number ?? null,
       collectionDate: w.collection ? dateYmd(w.collection.date) : null,
-      rate,
-      href: w.collection ? `/billing/collections/${w.collection.id}` : `/billing/2307`,
+      href,
     };
+    if (w.lines.length > 0) {
+      return w.lines.map((line) => {
+        const tax = money(line.amount);
+        const rate = Number(line.rate).toFixed(4);
+        return {
+          ...shared,
+          id: line.id,
+          atc: line.atcCode ?? "",
+          incomeAmount: incomeBaseFromTax(tax, rate),
+          taxWithheld: tax,
+          rate,
+        };
+      });
+    }
+    // Legacy parent with no lines yet.
+    const tax = money(w.amount);
+    const rate = Number(w.rate).toFixed(4);
+    return [
+      {
+        ...shared,
+        id: w.id,
+        atc: w.atcCode ?? "",
+        incomeAmount: incomeBaseFromTax(tax, rate),
+        taxWithheld: tax,
+        rate,
+      },
+    ];
   });
 
   return {
@@ -280,8 +303,9 @@ export async function getCustomer2307Worksheet(
     rows: mapped,
     totalIncome: sumPesos(mapped.map((r) => r.incomeAmount)),
     totalTax: sumPesos(mapped.map((r) => r.taxWithheld)),
-    pendingCount: mapped.filter((r) => r.status === "Pending").length,
-    receivedCount: mapped.filter((r) => r.status === "Received").length,
+    // Certificate counts (not per-ATC line rows).
+    pendingCount: rows.filter((w) => w.status !== "RECEIVED").length,
+    receivedCount: rows.filter((w) => w.status === "RECEIVED").length,
   };
 }
 

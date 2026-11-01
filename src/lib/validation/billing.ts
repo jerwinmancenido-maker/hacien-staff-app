@@ -42,6 +42,24 @@ export const billingInputSchema = z.object({
 
 export type BillingInput = z.infer<typeof billingInputSchema>;
 
+/** One ATC code amount on a collection allocation (2307 line). */
+export const withholdingCodeRowSchema = z.object({
+  rate: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,4})?$/, "Enter a rate fraction like 0.0100.")
+    .transform((v) => Number(v).toFixed(4)),
+  atcCode: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((v) => (v ? v.toUpperCase() : null))
+    .nullable(),
+  amount: moneyStr,
+});
+
+export type WithholdingCodeRowInput = z.infer<typeof withholdingCodeRowSchema>;
+
 export const allocationRowSchema = z.object({
   billingId: z.string().min(1),
   cashApplied: optionalMoney,
@@ -60,6 +78,8 @@ export const allocationRowSchema = z.object({
     .transform((v) => v || null)
     .nullable()
     .optional(),
+  /** Per-ATC 2307 lines. When set, amounts should sum to withholdingApplied. */
+  codes: z.array(withholdingCodeRowSchema).optional(),
 });
 
 export const collectionInputSchema = z
@@ -198,13 +218,38 @@ export function parseBillingForm(form: FormData): { ok: true; data: BillingInput
 
 export function parseCollectionForm(form: FormData): { ok: true; data: CollectionInput } | { ok: false; fieldErrors: Record<string, string>; values: Record<string, string> } {
   const allocationBillingIds = form.getAll("allocBillingId").map(String);
-  const allocations = allocationBillingIds.map((billingId, i) => ({
-    billingId,
-    cashApplied: String(form.getAll("allocCash")[i] ?? "0"),
-    withholdingApplied: String(form.getAll("allocWithholding")[i] ?? "0"),
-    withholdingRate: String(form.getAll("allocRate")[i] ?? "") || null,
-    atcCode: String(form.getAll("allocAtc")[i] ?? "") || null,
-  })).filter((a) => a.billingId && (Number(a.cashApplied) > 0 || Number(a.withholdingApplied) > 0));
+  const codeBillingIds = form.getAll("allocCodeBillingId").map(String);
+  const codeRates = form.getAll("allocCodeRate").map(String);
+  const codeAtcs = form.getAll("allocCodeAtc").map(String);
+  const codeAmounts = form.getAll("allocCodeAmount").map(String);
+  const codesByBilling = new Map<string, { rate: string; atcCode: string | null; amount: string }[]>();
+  for (let i = 0; i < codeBillingIds.length; i++) {
+    const billingId = codeBillingIds[i]!;
+    const amount = (codeAmounts[i] ?? "").trim();
+    if (!billingId || !amount || Number(amount) <= 0) continue;
+    const list = codesByBilling.get(billingId) ?? [];
+    list.push({
+      rate: (codeRates[i] ?? "").trim() || "0.0000",
+      atcCode: (codeAtcs[i] ?? "").trim() || null,
+      amount,
+    });
+    codesByBilling.set(billingId, list);
+  }
+
+  const allocations = allocationBillingIds
+    .map((billingId, i) => {
+      const codes = codesByBilling.get(billingId);
+      const withholdingApplied = String(form.getAll("allocWithholding")[i] ?? "0");
+      return {
+        billingId,
+        cashApplied: String(form.getAll("allocCash")[i] ?? "0"),
+        withholdingApplied,
+        withholdingRate: String(form.getAll("allocRate")[i] ?? "") || null,
+        atcCode: String(form.getAll("allocAtc")[i] ?? "") || null,
+        ...(codes?.length ? { codes } : {}),
+      };
+    })
+    .filter((a) => a.billingId && (Number(a.cashApplied) > 0 || Number(a.withholdingApplied) > 0));
 
   const values: Record<string, string> = {
     customerId: String(form.get("customerId") ?? ""),

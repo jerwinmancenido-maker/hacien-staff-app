@@ -29,7 +29,15 @@ describe("TIN", () => {
 });
 
 describe("customer validation", () => {
-  const base = { name: "TESDA", tin: "", address: "", withholdingType: "GOVERNMENT", defaultTerms: "", notes: "" };
+  const base = {
+    name: "TESDA",
+    tin: "",
+    address: "",
+    withholdingType: "GOVERNMENT" as const,
+    defaultWithholding: [] as string[],
+    defaultTerms: "",
+    notes: "",
+  };
 
   it("requires name and withholding type", () => {
     const r = customerSchema(TERMS).safeParse({ ...base, name: " ", withholdingType: undefined });
@@ -44,10 +52,11 @@ describe("customer validation", () => {
     expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "Net 30" }).success).toBe(true);
   });
 
-  it("accepts defaultWithholding null / [] / [codes] from the allowed list", () => {
+  it("rejects blank (null) withholding; accepts [] / [codes] from the allowed list", () => {
     const schema = customerSchema(TERMS, ["GOODS_1", "GOV_PT_3"]);
-    expect(schema.parse(base).defaultWithholding).toBeNull();
-    expect(schema.parse({ ...base, defaultWithholding: null }).defaultWithholding).toBeNull();
+    // S-19: never silently save "not set" as No — null is rejected.
+    expect(schema.safeParse({ name: "TESDA", tin: "", withholdingType: "GOVERNMENT", defaultTerms: "", notes: "" }).success).toBe(false);
+    expect(schema.safeParse({ ...base, defaultWithholding: null }).success).toBe(false);
     expect(schema.parse({ ...base, defaultWithholding: [] }).defaultWithholding).toEqual([]);
     expect(schema.parse({ ...base, defaultWithholding: ["GOODS_1", "GOV_PT_3", "GOODS_1"] }).defaultWithholding).toEqual([
       "GOODS_1",

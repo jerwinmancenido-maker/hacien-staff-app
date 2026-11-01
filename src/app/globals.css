@@ -887,6 +887,14 @@ table.list td {
   border-top: 1px solid var(--divider);
   vertical-align: middle;
 }
+/* 2307 list ATC on narrow phones — wrap instead of blowing the table. */
+@media (max-width: 480px) {
+  table.list td.col-atc {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 5.5rem;
+  }
+}
 table.list tbody tr:first-child td {
   border-top: none;
 }
@@ -4258,6 +4266,97 @@ button.contact-card-add {
 .books-register-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/*
+ * 2307 worksheet print only (table has .col-status). Fixed layout so the
+ * Status width is real at ~390px — max-width alone is ignored under
+ * table-layout:auto, and .print-shell overflow-x:hidden would clip it.
+ * Narrow money/TIN/header rules are screen-only under 640px; 1280 + @media
+ * print stay on the base widths above.
+ */
+.books-register-table:has(th.col-status) {
+  table-layout: fixed;
+}
+.books-register-table th.col-status,
+.books-register-table td.col-status {
+  width: 5.75rem;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+  hyphens: none;
+}
+@media (max-width: 640px) {
+  /* Don't clip Status on this print; other books prints keep overflow-x:hidden. */
+  .print-shell:has(.books-register-table th.col-status),
+  .print-shell-a4:has(.books-register-table th.col-status) {
+    overflow-x: visible;
+  }
+  .books-register-table:has(th.col-status) {
+    font-size: 9.5pt;
+  }
+  .books-register-table:has(th.col-status) th,
+  .books-register-table:has(th.col-status) td {
+    padding: 3px 3px;
+  }
+  /*
+   * table-layout:fixed ignores min-width — set explicit rem widths so
+   * Income/Tax fit ₱22,500.00 / ₱325.00. Customer + TIN yield the space.
+   * Wrap headers/names on spaces only (no mid-word break-word).
+   */
+  .books-register-table:has(th.col-status) th.col-customer,
+  .books-register-table:has(th.col-status) td.col-customer {
+    width: 3.5rem;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+  }
+  .books-register-table:has(th.col-status) th.col-tin,
+  .books-register-table:has(th.col-status) td.col-tin {
+    width: 3.5rem;
+    font-size: 7.5pt;
+    line-height: 1.2;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+  }
+  .books-register-table:has(th.col-status) th.col-atc,
+  .books-register-table:has(th.col-status) td.col-atc {
+    width: 2.5rem;
+  }
+  .books-register-table:has(th.col-status) th.col-income,
+  .books-register-table:has(th.col-status) td.col-income {
+    width: 5.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .books-register-table:has(th.col-status) th.col-tax,
+  .books-register-table:has(th.col-status) td.col-tax {
+    width: 4.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .books-register-table:has(th.col-status) td.col-income,
+  .books-register-table:has(th.col-status) td.col-tax {
+    white-space: nowrap;
+  }
+  /* TAX WITHHELD may wrap on the space; 2307 stays its own header cell. */
+  .books-register-table:has(th.col-status) th.col-income,
+  .books-register-table:has(th.col-status) th.col-tax {
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+    line-height: 1.15;
+  }
+  .books-register-table th.col-status,
+  .books-register-table td.col-status {
+    width: 3.75rem;
+    white-space: nowrap;
+  }
 }
 .books-register-table tfoot .books-page-total td {
   font-weight: 600;

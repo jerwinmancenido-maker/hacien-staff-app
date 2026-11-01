@@ -76,7 +76,21 @@ function defaultWithholdingData(
   return pick;
 }
 
-export async function saveCustomer(id: string | null, input: CustomerInput, actorId: string) {
+function withholdingPickEqual(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown) => {
+    if (v == null) return null;
+    if (!Array.isArray(v)) return null;
+    return [...v].filter((x): x is string => typeof x === "string").sort().join("\0");
+  };
+  return norm(a) === norm(b);
+}
+
+export type CustomerSaveActor = { id: string; isAdmin?: boolean };
+
+export async function saveCustomer(id: string | null, input: CustomerInput, actor: CustomerSaveActor | string) {
+  const actorId = typeof actor === "string" ? actor : actor.id;
+  // Fail closed: string actor id alone is not Admin (callers must pass isAdmin).
+  const isAdmin = typeof actor === "string" ? false : !!actor.isAdmin;
   await assertTinFree(customerTinOwner, input.tin, id);
   const data = {
     name: input.name,
@@ -94,6 +108,12 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
+      const typeChanged = before.withholdingType !== input.withholdingType;
+      const pickChanged = !withholdingPickEqual(before.defaultWithholding, input.defaultWithholding);
+      // S-19: changing an existing customer's withholding is Admin only (fail closed).
+      if ((typeChanged || pickChanged) && !isAdmin) {
+        throw new CompanyRuleError("Only an Admin can change an existing customer's withholding.", "defaultWithholding");
+      }
       const after = await tx.customer.update({ where: { id }, data });
       await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: id, action: "update", before, after });
       return after;

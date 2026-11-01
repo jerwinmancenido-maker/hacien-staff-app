@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, listBillings, sumCollectionsReceived } from "../billing/views";
+import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -29,6 +29,7 @@ import {
   billsOverPoHref,
   collectedThisMonthHref,
   customersNoWithholdingHref,
+  pending2307Href,
   newBillingHref,
   newCustomerHref,
   newQuoteHref,
@@ -204,6 +205,7 @@ const ACTION_LABELS: Record<HomeActionKind, string> = {
   billsOverPo: "Bills over PO",
   billingsOverdue: "Billings past due",
   customersNoWithholding: "Withholding not set",
+  pending2307: "2307 pending",
 };
 
 /** Exported for staff-copy / inventory tests. */
@@ -490,6 +492,7 @@ export async function loadHomeDashboard(
     billingsOverdue,
     customersNoWh,
     ar,
+    pending2307Count,
     collected,
     collectedPriorSameDays,
     nonVatSnap,
@@ -505,6 +508,7 @@ export async function loadHomeDashboard(
     listBillings({ status: "OVERDUE" }),
     listCustomers({ withholdingPick: "NOT_SET" }),
     arAgingSummary(),
+    countPending2307Expected(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     sumCollectionsReceived({
       status: "POSTED",
@@ -535,6 +539,7 @@ export async function loadHomeDashboard(
     billsOverPo: { count: billsOverPoCount, href: billsOverPoHref() },
     billingsOverdue: { count: billingsOverdue.length, href: billingsOverdueHref() },
     customersNoWithholding: { count: customersNoWh.length, href: customersNoWithholdingHref() },
+    pending2307: { count: pending2307Count, href: pending2307Href() },
   };
 
   const actions: HomeActionRow[] = (Object.keys(ACTION_LABELS) as HomeActionKind[])

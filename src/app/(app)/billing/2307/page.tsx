@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
-import { list2307 } from "@/lib/billing/views";
+import { ratePctLabel } from "@/lib/quotes/calc";
+import { countPending2307Expected, list2307 } from "@/lib/billing/views";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { Mark2307Form } from "@/components/billing/Mark2307Form";
 import { Chip, PageHeader } from "@/components/ui";
@@ -18,13 +19,19 @@ export default async function Withholding2307Page({
   const user = await requirePagePermission("view");
   const sp = await searchParams;
   const status = (sp.status === "PENDING" || sp.status === "RECEIVED" ? sp.status : "ALL") as Withholding2307Status | "ALL";
-  const rows = await list2307({ status, customerId: sp.customerId });
+  const [rows, pendingCount] = await Promise.all([list2307({ status, customerId: sp.customerId }), countPending2307Expected()]);
   const canManage = can(user, "manage_billing");
 
   return (
     <>
-      <PageHeader title="BIR 2307" subtitle="Creditable tax withheld. Pending until the certificate is received." />
+      <PageHeader
+        title="BIR 2307"
+        subtitle={`Creditable tax withheld. Pending until the certificate is received. ${pendingCount} billing${pendingCount === 1 ? "" : "s"} still need a 2307.`}
+      />
       <BillingNav active="2307" />
+      <p className="faint small" style={{ marginBottom: 12 }}>
+        2307 pending: <strong>{pendingCount}</strong>
+      </p>
       <form className="toolbar txn-filters" method="get" action="/billing/2307" style={{ marginBottom: 16 }}>
         <select className="input" name="status" defaultValue={status}>
           <option value="ALL">All</option>
@@ -60,7 +67,7 @@ export default async function Withholding2307Page({
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={`${r.parentId}-${r.id}`}>
                     <td>
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
@@ -76,22 +83,23 @@ export default async function Withholding2307Page({
                     <td>
                       {r.collection ? <Link href={`/billing/collections/${r.collection.id}`}>{r.collection.number}</Link> : "—"}
                     </td>
-                    <td>{r.atcCode ?? "—"}</td>
-                    <td className="num">{(Number(r.rate) * 100).toFixed(2)}%</td>
+                    <td className="col-atc">{r.atcCode ?? "—"}</td>
+                    <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td>
                       <Chip tone={r.status === "RECEIVED" ? "green" : "amber"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
                     </td>
                     <td>{day(r.receivedAt)}</td>
                     <td>
-                      {r.status === "PENDING" && canManage && <Mark2307Form id={r.id} />}
-                      {r.attachments.map((a) => (
-                        <div key={a.id}>
-                          <a className="btn-link small" href={a.href}>
-                            {a.fileName}
-                          </a>
-                        </div>
-                      ))}
+                      {r.status === "PENDING" && canManage && r.markId && <Mark2307Form id={r.markId} />}
+                      {r.markId &&
+                        r.attachments.map((a) => (
+                          <div key={a.id}>
+                            <a className="btn-link small" href={a.href}>
+                              {a.fileName}
+                            </a>
+                          </div>
+                        ))}
                     </td>
                   </tr>
                 ))

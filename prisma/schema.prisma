@@ -1057,6 +1057,8 @@ model CollectionAllocation {
 // BIR Form 2307 (Certificate of Creditable Tax Withheld at Source). Created when
 // a collection applies withholding to a billing; PENDING until marked received
 // with date + attachment (PDF/JPG/PNG).
+// Per-ATC amounts live in Withholding2307Line (one row per ATC code). Parent
+// rate/atcCode/amount stay populated for legacy reads (amount = sum of lines).
 model Withholding2307 {
   id           String                @id @default(cuid())
   billingId    String?
@@ -1066,6 +1068,7 @@ model Withholding2307 {
   customerId   String
   customer     Customer              @relation(fields: [customerId], references: [id])
   // Fraction, e.g. 0.0100 = 1%. Prefill from SO withholding snapshot; editable.
+  // Legacy / single-code mirror: first line's rate when multi-code.
   rate         Decimal               @db.Decimal(5, 4)
   atcCode      String?               @db.VarChar(20)
   amount       Decimal               @db.Decimal(15, 2)
@@ -1078,11 +1081,29 @@ model Withholding2307 {
   updatedAt    DateTime              @updatedAt
 
   attachments DocumentAttachment[]
+  lines       Withholding2307Line[]
 
   @@index([customerId])
   @@index([billingId])
   @@index([collectionId])
   @@index([status])
+}
+
+// One ATC code on a 2307 (e.g. WI640 1% and WI157 2% on the same collection).
+model Withholding2307Line {
+  id                String         @id @default(cuid())
+  withholding2307Id String
+  withholding2307   Withholding2307 @relation(fields: [withholding2307Id], references: [id], onDelete: Cascade)
+  // Fraction, e.g. 0.0100 = 1%.
+  rate              Decimal        @db.Decimal(5, 4)
+  atcCode           String?        @db.VarChar(20)
+  amount            Decimal        @db.Decimal(15, 2)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([withholding2307Id, atcCode])
+  @@index([withholding2307Id])
+  @@index([atcCode])
 }
 
 // ---------------------------------------------------------------------------

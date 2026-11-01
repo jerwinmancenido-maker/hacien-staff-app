@@ -302,13 +302,12 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   if (!b) return null;
   const letter = await letterhead();
   const amount = money(b.amount);
-  const wh = money(b.withholdingExpected);
-  const net = money(b.netExpected);
+  // Customer copy: Subtotal + Total (gross) only — never show EWT / net expected.
+  // withholdingExpected / netExpected stay on the billing record for office use.
   const totals: PrintMoneyLine[] = [
     { label: "Subtotal", amount },
+    { label: "Total", amount, emphasize: true },
   ];
-  if (Number(wh) > 0) totals.push({ label: "Less: EWT (expected)", amount: wh });
-  totals.push({ label: "Total / Net expected", amount: net, emphasize: true });
   const prepared = printablePersonName(b.createdBy.name);
   const footer = baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);
@@ -350,6 +349,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       }),
     ],
     totals,
+    // Words must equal the Total shown (gross), to the centavo.
     totalInWords: amountInWords(amount),
     terms: b.salesOrder.terms,
     notes: b.notes,

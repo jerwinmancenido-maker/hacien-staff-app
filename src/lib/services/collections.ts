@@ -67,13 +67,145 @@ async function billingsForAlloc(tx: Tx, customerId: string, excludeCollectionId?
   }));
 }
 
-/** Default 2307 rate + ATC from the SO withholding snapshot (first rate), editable per payment. */
-async function withholdingDefaults(tx: Tx, salesOrderId: string): Promise<{ rate: string; atcCode: string | null }> {
-  const so = await tx.salesOrder.findUnique({ where: { id: salesOrderId }, select: { withholding: true } });
-  const snap = (so?.withholding ?? []) as WithholdingSnapshot[];
-  if (!snap.length) return { rate: "0.0000", atcCode: null };
-  const first = snap[0]!;
-  return { rate: first.rate, atcCode: first.atcCode };
+export type WithholdingCodeLine = { rate: string; atcCode: string | null; amount: string };
+
+/**
+ * Prefill ATC codes for a 2307.
+ * - Prefer distinct ATCs from SO lines when every withholding line has an ATC
+ *   (avoids splitting a goods-only total onto unused snapshot services codes).
+ * - If any withholding line has a rate but null ATC (stacked picks), use the
+ *   document withholding snapshot so stacked codes are not dropped.
+ * - If lines yield nothing, fall back to the snapshot.
+ */
+export async function withholdingCodesFromSo(
+  tx: Tx,
+  salesOrderId: string,
+): Promise<{ rate: string; atcCode: string | null }[]> {
+  const so = await tx.salesOrder.findUnique({
+    where: { id: salesOrderId },
+    select: {
+      withholding: true,
+      items: {
+        where: { removedAt: null },
+        select: { withholdingRate: true, withholdingAtc: true },
+      },
+    },
+  });
+  if (!so) return [];
+  const snap = (so.withholding ?? []) as WithholdingSnapshot[];
+  const fromSnap = snap
+    .filter((s) => toScaled(s.rate, 4) > 0n)
+    .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
+
+  const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+  let stackedNullAtc = false;
+  for (const item of so.items) {
+    const rate = item.withholdingRate != null ? Number(item.withholdingRate).toFixed(4) : "0.0000";
+    if (toScaled(rate, 4) <= 0n) continue;
+    const atc = item.withholdingAtc?.trim() || null;
+    if (!atc) {
+      stackedNullAtc = true;
+      continue;
+    }
+    if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
+  }
+  if (fromLines.size > 0 && !stackedNullAtc) return [...fromLines.values()];
+  if (fromSnap.length > 0) return fromSnap;
+  return [...fromLines.values()];
+}
+
+/**
+ * Split a withholding total across ATC codes by rate weight (equal-base assumption).
+ * Server collection save does **not** auto-call this when the SO has multiple codes —
+ * the form must post per-ATC amounts (bases may differ, so rate-weight is unsafe).
+ */
+export function splitWithholdingAcrossCodes(
+  total: string,
+  codes: readonly { rate: string; atcCode: string | null }[],
+): WithholdingCodeLine[] {
+  if (!codes.length) return [];
+  const totalScaled = toScaled(money(total), 2);
+  if (totalScaled <= 0n) return codes.map((c) => ({ ...c, amount: "0.00" }));
+  const weights = codes.map((c) => toScaled(c.rate, 4));
+  const weightSum = weights.reduce((a, w) => a + w, 0n);
+  if (weightSum <= 0n) {
+    const n = BigInt(codes.length);
+    const each = totalScaled / n;
+    let used = 0n;
+    return codes.map((c, i) => {
+      const amt = i === codes.length - 1 ? totalScaled - used : each;
+      used += amt;
+      return { rate: c.rate, atcCode: c.atcCode, amount: fromScaled(amt, 2) };
+    });
+  }
+  let used = 0n;
+  return codes.map((c, i) => {
+    const amt = i === codes.length - 1 ? totalScaled - used : (totalScaled * weights[i]!) / weightSum;
+    used += amt;
+    return { rate: c.rate, atcCode: c.atcCode, amount: fromScaled(amt, 2) };
+  });
+}
+
+function resolveCodeLines(
+  whAmount: string,
+  codes: WithholdingCodeLine[] | undefined,
+  fallbackRate: string,
+  fallbackAtc: string | null,
+): WithholdingCodeLine[] {
+  if (codes?.length) return codes.filter((c) => toScaled(money(c.amount), 2) > 0n);
+  if (toScaled(money(whAmount), 2) <= 0n) return [];
+  return [{ rate: fallbackRate, atcCode: fallbackAtc, amount: money(whAmount) }];
+}
+
+/** Fail closed before any 2307 write — blank or duplicate ATC collapses in replace2307Lines. */
+export function assertDistinctAtcCodes(lines: readonly WithholdingCodeLine[]) {
+  if (!lines.length) return;
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const atc = line.atcCode?.trim() ?? "";
+    if (!atc) {
+      throw new DocRuleError(
+        "Each 2307 line needs an ATC code. Blank ATC codes are not allowed.",
+        "allocations",
+      );
+    }
+    const key = atc.toUpperCase();
+    if (seen.has(key)) {
+      throw new DocRuleError(
+        `Duplicate ATC code ${atc}. Enter each ATC only once.`,
+        "allocations",
+      );
+    }
+    seen.add(key);
+  }
+}
+
+/** Replace per-ATC lines without hard deletes (zero old rows; upsert by ATC). */
+async function replace2307Lines(tx: Tx, withholding2307Id: string, lines: WithholdingCodeLine[]) {
+  // Guard every caller — blank/duplicate ATC would collapse on upsert-by-ATC.
+  assertDistinctAtcCodes(lines);
+  // Soft-clear existing amounts — records are never deleted.
+  await tx.withholding2307Line.updateMany({ where: { withholding2307Id }, data: { amount: "0.00" } });
+  for (const line of lines) {
+    const existing = await tx.withholding2307Line.findFirst({
+      where: { withholding2307Id, atcCode: line.atcCode ?? null },
+    });
+    if (existing) {
+      await tx.withholding2307Line.update({
+        where: { id: existing.id },
+        data: { rate: line.rate, amount: money(line.amount) },
+      });
+    } else {
+      await tx.withholding2307Line.create({
+        data: {
+          withholding2307Id,
+          rate: line.rate,
+          atcCode: line.atcCode,
+          amount: money(line.amount),
+        },
+      });
+    }
+  }
 }
 
 async function upsert2307(
@@ -85,15 +217,35 @@ async function upsert2307(
     amount: string;
     rate: string;
     atcCode: string | null;
+    lines: WithholdingCodeLine[];
+    /** True when the caller posted a codes[] array (even if all amounts were ≤ 0). */
+    codesWereProvided?: boolean;
   },
 ) {
-  if (toScaled(args.amount, 2) <= 0n) {
+  // Codes posted but every amount ≤ 0 → resolveCodeLines yields []; do not save a parent with no lines.
+  if (args.codesWereProvided && args.lines.length === 0) {
+    throw new DocRuleError(
+      "2307 code amounts must be greater than zero.",
+      "allocations",
+    );
+  }
+  const lineSum = args.lines.reduce((a, l) => a + toScaled(money(l.amount), 2), 0n);
+  const amount = args.lines.length ? fromScaled(lineSum, 2) : money(args.amount);
+  const first = args.lines[0];
+  const rate = first?.rate ?? args.rate;
+  const atcCode = first?.atcCode ?? args.atcCode;
+
+  if (toScaled(amount, 2) <= 0n) {
     // Clear any prior pending row for this collection+billing if withholding was removed.
     const existing = await tx.withholding2307.findFirst({
       where: { billingId: args.billingId, collectionId: args.collectionId, status: "PENDING" },
     });
     if (existing) {
-      await tx.withholding2307.update({ where: { id: existing.id }, data: { amount: "0.00", notes: "Cleared — withholding no longer applied." } });
+      await replace2307Lines(tx, existing.id, []);
+      await tx.withholding2307.update({
+        where: { id: existing.id },
+        data: { amount: "0.00", notes: "Cleared — withholding no longer applied." },
+      });
     }
     return null;
   }
@@ -105,22 +257,26 @@ async function upsert2307(
       // Keep received rows; create a new pending delta only if amount grew — for simplicity update notes.
       return existing;
     }
-    return tx.withholding2307.update({
+    const updated = await tx.withholding2307.update({
       where: { id: existing.id },
-      data: { amount: args.amount, rate: args.rate, atcCode: args.atcCode },
+      data: { amount, rate, atcCode },
     });
+    await replace2307Lines(tx, existing.id, args.lines);
+    return updated;
   }
-  return tx.withholding2307.create({
+  const created = await tx.withholding2307.create({
     data: {
       billingId: args.billingId,
       collectionId: args.collectionId,
       customerId: args.customerId,
-      rate: args.rate,
-      atcCode: args.atcCode,
-      amount: args.amount,
+      rate,
+      atcCode,
+      amount,
       status: "PENDING",
     },
   });
+  await replace2307Lines(tx, created.id, args.lines);
+  return created;
 }
 
 export async function recordCollection(input: CollectionInput, actor: CollectionActor, files: readonly UploadFile[] = []) {
@@ -193,9 +349,49 @@ export async function recordCollection(input: CollectionInput, actor: Collection
           touched.add(a.billingId);
           if (toScaled(wh, 2) > 0n) {
             const billing = open.find((b) => b.id === a.billingId)!;
-            const defaults = await withholdingDefaults(tx, billing.salesOrderId);
-            const rate = a.withholdingRate || defaults.rate;
-            const atc = a.atcCode !== undefined && a.atcCode !== null ? a.atcCode : defaults.atcCode;
+            const soCodes = await withholdingCodesFromSo(tx, billing.salesOrderId);
+            const fallback = soCodes[0] ?? { rate: "0.0000", atcCode: null };
+            const rate = a.withholdingRate || fallback.rate;
+            const atc = a.atcCode !== undefined && a.atcCode !== null ? a.atcCode : fallback.atcCode;
+            // Multi-code SO: require per-ATC amounts (rate-weight auto-split is wrong when bases differ).
+            if ((!a.codes || a.codes.length === 0) && soCodes.length > 1) {
+              throw new DocRuleError(
+                "Enter a withholding amount for each ATC code on this billing.",
+                "allocations",
+              );
+            }
+            const codes = a.codes as WithholdingCodeLine[] | undefined;
+            const lines = resolveCodeLines(wh, codes, rate, atc);
+            // Line amounts must equal the validated withholding allocation (fail closed).
+            if (lines.length) {
+              const lineSum = lines.reduce((sum, l) => sum + toScaled(money(l.amount), 2), 0n);
+              if (lineSum !== toScaled(wh, 2)) {
+                throw new DocRuleError(
+                  "2307 code amounts must add up to the withholding total for this billing.",
+                  "allocations",
+                );
+              }
+            }
+            // Staff may record standard SO codes; custom rates need Admin.
+            // Fail closed when the SO has no standard codes — any posted codes need Admin.
+            if (!actor.isAdmin && lines.length) {
+              if (!soCodes.length) {
+                throw new DocRuleError(
+                  "Only an Admin can set withholding rates when the sales order has none.",
+                  "allocations",
+                );
+              }
+              const standard = new Set(soCodes.map((c) => `${c.atcCode ?? ""}:${c.rate}`));
+              for (const line of lines) {
+                const key = `${line.atcCode ?? ""}:${line.rate}`;
+                if (!standard.has(key)) {
+                  throw new DocRuleError(
+                    "Only an Admin can override withholding rates on a 2307. Use the rates from the sales order.",
+                    "allocations",
+                  );
+                }
+              }
+            }
             await upsert2307(tx, {
               billingId: a.billingId,
               collectionId: collection.id,
@@ -203,6 +399,8 @@ export async function recordCollection(input: CollectionInput, actor: Collection
               amount: wh,
               rate,
               atcCode: atc,
+              lines,
+              codesWereProvided: !!(codes && codes.length > 0),
             });
           }
         }
@@ -382,6 +580,7 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
       // when withholding is removed — amount 0.00, status stays PENDING).
       for (const w of before.withholdings) {
         if (w.status === "PENDING") {
+          await replace2307Lines(tx, w.id, []);
           await tx.withholding2307.update({
             where: { id: w.id },
             data: {

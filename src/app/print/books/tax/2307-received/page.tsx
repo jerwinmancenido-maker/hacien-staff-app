@@ -59,23 +59,23 @@ export default async function PrintCustomer2307Page({
           <table className="books-register-table">
             <thead>
               <tr>
-                <th>Customer</th>
-                <th>TIN</th>
-                <th>ATC</th>
-                <th className="num">Income</th>
-                <th className="num">Tax withheld</th>
-                <th>2307</th>
+                <th className="col-customer">Customer</th>
+                <th className="col-tin">TIN</th>
+                <th className="col-atc">ATC</th>
+                <th className="num col-income">Income</th>
+                <th className="num col-tax">Tax withheld</th>
+                <th className="col-status">2307</th>
               </tr>
             </thead>
             <tbody>
               {sheet.rows.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.name}</td>
-                  <td>{r.tin || "—"}</td>
-                  <td>{r.atc || "—"}</td>
-                  <td className="num">{formatPeso(r.incomeAmount)}</td>
-                  <td className="num">{formatPeso(r.taxWithheld)}</td>
-                  <td>{r.status}</td>
+                  <td className="col-customer">{r.name}</td>
+                  <td className="col-tin">{r.tin || "—"}</td>
+                  <td className="col-atc">{r.atc || "—"}</td>
+                  <td className="num col-income">{formatPeso(r.incomeAmount)}</td>
+                  <td className="num col-tax">{formatPeso(r.taxWithheld)}</td>
+                  <td className="col-status">{r.status}</td>
                 </tr>
               ))}
             </tbody>
@@ -84,13 +84,13 @@ export default async function PrintCustomer2307Page({
                 <td colSpan={3}>
                   <b>Totals</b>
                 </td>
-                <td className="num">
+                <td className="num col-income">
                   <b>{formatPeso(sheet.totalIncome)}</b>
                 </td>
-                <td className="num">
+                <td className="num col-tax">
                   <b>{formatPeso(sheet.totalTax)}</b>
                 </td>
-                <td></td>
+                <td className="col-status"></td>
               </tr>
             </tfoot>
           </table>

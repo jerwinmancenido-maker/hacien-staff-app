@@ -84,8 +84,8 @@ const CUSTOMERS: {
       { kind: "DELIVERY", label: "Training center", street: "Sample Training Center, 45 Sample Rd.", barangay: "Bagumbayan", cityMunicipality: "Quezon City", province: "Metro Manila", zip: "1110" },
     ],
     withholdingType: "GOVERNMENT",
-    // Government goods 1% + Government percentage tax 3% → goods lines at 4%.
-    defaultWithholding: ["GOV_GOODS_1", "GOV_PT_3"],
+    // S-19: no GOV_PT_3 / WB080 auto-default — staff may still pick it by hand in Settings.
+    defaultWithholding: ["GOV_GOODS_1"],
     defaultTerms: "Net 30",
     contacts: [
       { name: "Ana Cruz", role: "Procurement", email: "ana.cruz@example.com", phone: "0917 000 0001", isMain: true },
@@ -401,7 +401,7 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
 
   await makeQuote(
     tesda,
-    ["GOODS_1", "GOV_PT_3"],
+    ["GOV_GOODS_1"],
     [
       { description: "Laptop, Core i5, 16GB RAM, 512GB SSD", kind: "GOODS", qty: "10", unit: "pc", supplier: "UNO Computer Supply", supplierUnitCost: "45000", unitPrice: "52000" },
       { description: "Installation, imaging and setup", kind: "SERVICES", qty: "1", unit: "lot", supplier: null, supplierUnitCost: "0", unitPrice: "15000" },

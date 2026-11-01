@@ -166,6 +166,8 @@ function actionIcon(kind: HomeDashboard["actions"][number]["kind"]) {
       return <AlertTriangleIcon size={15} />;
     case "customersNoWithholding":
       return <UsersIcon size={15} />;
+    case "pending2307":
+      return <FileIcon size={15} />;
     default:
       return <FileIcon size={15} />;
   }

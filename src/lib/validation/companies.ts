@@ -54,25 +54,36 @@ function termsField(allowedTerms: readonly string[]) {
  *   [codes] = saved picks
  */
 export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
-  return z.object({
-    name: z.string().trim().min(1, "Name is required.").max(191),
-    tin: tinField,
-    // Label only — does not choose rates.
-    withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
-    defaultWithholding: z
-      .union([
-        z.null(),
-        z
-          .array(z.string().trim().min(1).max(32))
-          .max(20)
-          .refine((codes) => !allowedWithholdingCodes || codes.every((c) => allowedWithholdingCodes.includes(c)), "Pick rates from the list.")
-          .transform((codes) => [...new Set(codes)]),
-      ])
-      .optional()
-      .default(null),
-    defaultTerms: termsField(allowedTerms),
-    notes: optionalText(5000),
-  });
+  return z
+    .object({
+      name: z.string().trim().min(1, "Name is required.").max(191),
+      tin: tinField,
+      // Label only — does not choose rates.
+      withholdingType: z.enum(WITHHOLDING_TYPES, { error: "Pick a withholding type." }),
+      // null / omitted = not set — rejected on save (never silently stored as "No" / []).
+      // [] = explicit none; [codes] = saved picks.
+      defaultWithholding: z
+        .union([
+          z.null(),
+          z
+            .array(z.string().trim().min(1).max(32))
+            .max(20)
+            .refine((codes) => !allowedWithholdingCodes || codes.every((c) => allowedWithholdingCodes.includes(c)), "Pick rates from the list.")
+            .transform((codes) => [...new Set(codes)]),
+        ])
+        .optional(),
+      defaultTerms: termsField(allowedTerms),
+      notes: optionalText(5000),
+    })
+    .superRefine((v, ctx) => {
+      if (v.defaultWithholding == null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["defaultWithholding"],
+          message: "Pick withholding rates, or choose No withholding.",
+        });
+      }
+    });
 }
 export type CustomerInput = z.infer<ReturnType<typeof customerSchema>>;
 
