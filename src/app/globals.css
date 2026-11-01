@@ -4271,6 +4271,8 @@ button.contact-card-add {
  * 2307 worksheet print only (table has .col-status). Fixed layout so the
  * Status width is real at ~390px — max-width alone is ignored under
  * table-layout:auto, and .print-shell overflow-x:hidden would clip it.
+ * Narrow money/TIN/header rules are screen-only under 640px; 1280 + @media
+ * print stay on the base widths above.
  */
 .books-register-table:has(th.col-status) {
   table-layout: fixed;
@@ -4294,11 +4296,55 @@ button.contact-card-add {
   }
   .books-register-table:has(th.col-status) th,
   .books-register-table:has(th.col-status) td {
-    padding: 3px 4px;
+    padding: 3px 3px;
+  }
+  /* Customer + TIN yield space to money + Status. */
+  .books-register-table:has(th.col-status) th.col-customer,
+  .books-register-table:has(th.col-status) td.col-customer {
+    width: 14%;
+    overflow-wrap: break-word;
+  }
+  .books-register-table:has(th.col-status) th.col-tin,
+  .books-register-table:has(th.col-status) td.col-tin {
+    width: 15%;
+    font-size: 7.5pt;
+    line-height: 1.2;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: none;
+  }
+  .books-register-table:has(th.col-status) th.col-atc,
+  .books-register-table:has(th.col-status) td.col-atc {
+    width: 11%;
+  }
+  /* Money: right-aligned, nowrap, min-width + gap — never touch/clip. */
+  .books-register-table:has(th.col-status) th.col-income,
+  .books-register-table:has(th.col-status) td.col-income,
+  .books-register-table:has(th.col-status) th.col-tax,
+  .books-register-table:has(th.col-status) td.col-tax {
+    width: 18%;
+    min-width: 4.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+  .books-register-table:has(th.col-status) td.col-income,
+  .books-register-table:has(th.col-status) td.col-tax {
+    white-space: nowrap;
+  }
+  /* TAX WITHHELD may wrap 2 lines; 2307 stays its own header cell. */
+  .books-register-table:has(th.col-status) th.col-income,
+  .books-register-table:has(th.col-status) th.col-tax {
+    white-space: normal;
+    overflow-wrap: break-word;
+    line-height: 1.15;
   }
   .books-register-table th.col-status,
   .books-register-table td.col-status {
-    width: 22%;
+    width: 18%;
+    min-width: 3.6rem;
+    white-space: nowrap;
   }
 }
 .books-register-table tfoot .books-page-total td {
