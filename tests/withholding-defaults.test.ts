@@ -8,6 +8,7 @@ import { docTotals, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import {
   ATC_LABELS,
   GOV_PT_3_HINT,
+  WITHHOLDING_PICK_FIELD_HINT,
   WITHHOLDING_DEFAULT_CATALOG,
   WITHHOLDING_DEFAULT_ROWS,
   WITHHOLDING_HINT_NONE,
@@ -188,6 +189,8 @@ describe("defaultWithholdingPickFor (new customer only)", () => {
     expect(defaultWithholdingPickFor("GOVERNMENT")).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
     expect(defaultWithholdingPickFor("GOVERNMENT")).not.toContain("GOV_PT_3");
     expect(GOV_PT_3_HINT).toBe("Only if the agency says so; not usual on the 8% option");
+    expect(WITHHOLDING_PICK_FIELD_HINT).toContain("for example Government goods 1% + Government services 2%");
+    expect(WITHHOLDING_PICK_FIELD_HINT).not.toMatch(/3%/);
   });
 
   it("top withholding agent pre-ticks nothing; none is an explicit empty pick", () => {
@@ -242,8 +245,16 @@ describe("government withholding checkboxes", () => {
     expect(isChecked(checkboxTag(html, "GOV_SERVICES_2"))).toBe(true);
     expect(isChecked(checkboxTag(html, "GOV_PT_3"))).toBe(false);
     expect(html).toContain(GOV_PT_3_HINT);
+    expect(html).toContain("for example Government goods 1% + Government services 2%");
+    expect(html).not.toContain("Government percentage tax 3%).");
     expect(html).toContain("Government goods 1% (WI640)");
     expect(html).toContain("Government services 2% (WI157)");
+    const labelAt = html.indexOf('class="wh-pick-row"');
+    const inputAt = html.indexOf("<input", labelAt);
+    const textAt = html.indexOf("Government goods 1%");
+    expect(labelAt).toBeGreaterThan(-1);
+    expect(inputAt).toBeGreaterThan(labelAt);
+    expect(inputAt).toBeLessThan(textAt);
   });
 
   it("top withholding agent and none pre-tick nothing", () => {

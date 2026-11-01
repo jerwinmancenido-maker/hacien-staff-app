@@ -131,7 +131,7 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
             />
             {e.name && <div className="error">{e.name}</div>}
           </div>
-          <div className="quote-drawer-row">
+          <div className="quote-drawer-row quote-drawer-tin-type">
             <div className={`field${e.tin ? " has-error" : ""}`}>
               <label htmlFor="acq-tin">TIN</label>
               <input

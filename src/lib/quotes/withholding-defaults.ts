@@ -463,4 +463,4 @@ export const WITHHOLDING_PICK_FIELD_LABEL = "Withholding";
 
 /** Hint under the multi-select on the customer form. */
 export const WITHHOLDING_PICK_FIELD_HINT =
-  "Tick the rates this agency withholds. You can combine rates (for example Government goods 1% + Government percentage tax 3%).";
+  "Tick the rates this agency withholds. You can combine rates (for example Government goods 1% + Government services 2%).";
