@@ -15,7 +15,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export type Permission =
   | "view" // read master data
   | "edit_data" // create/update customers, suppliers, contacts
-  | "approve" // approve supplier POs (quotes later)
+  | "approve" // approve quotes and supplier POs (S-18)
   | "manage_billing" // record/void billings & collections, mark 2307 received
   | "manage_payables" // record/void supplier payments, mark 2307 issued
   | "manage_cash" // cash accounts, expenses, transfers (Part 7a)
@@ -138,6 +138,20 @@ export class ForbiddenError extends Error {
 /** Server-side check for services: throws ForbiddenError unless the user has the permission. */
 export function assertCan(user: PermissionUser | null | undefined, permission: Permission): void {
   if (!can(user, permission)) throw new ForbiddenError();
+}
+
+// ---------------------------------------------------------------------------
+// Approval checks (S-18). Keep separate so S-20 void/billing edits rebase cleanly.
+// ---------------------------------------------------------------------------
+
+/** Approver or Admin (active) may approve / reject quotes and POs. */
+export function canApprove(user: PermissionUser | null | undefined): boolean {
+  return can(user, "approve");
+}
+
+/** Throws ForbiddenError unless the user may approve documents. */
+export function assertCanApprove(user: PermissionUser | null | undefined): void {
+  assertCan(user, "approve");
 }
 
 // ---------------------------------------------------------------------------

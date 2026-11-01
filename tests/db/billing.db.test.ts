@@ -16,7 +16,7 @@ import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { DocRuleError, money } from "@/lib/documents/common";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
-import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
+import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling, soBillingSummary } from "@/lib/services/billings";
 import { applyCustomerCredit, customerCreditBalance, mark2307Received, recordCollection, voidCollection } from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
@@ -101,6 +101,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       },
       admin,
     );
+    await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddress: "Manila" }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });

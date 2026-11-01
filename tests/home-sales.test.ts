@@ -340,7 +340,7 @@ describe("home concept A layout wiring", () => {
   });
 
   it("keeps a compact Home: short labels, ~114px chart, 12px gaps, empty NA line", () => {
-    expect(dash).toMatch(/Quotes to approve/);
+    expect(dash).toMatch(/Waiting for approval/);
     expect(dash).toMatch(/SOs needing a PO/);
     expect(dash).toMatch(/Withholding not set/);
     expect(dash).toMatch(/No payments yet/);

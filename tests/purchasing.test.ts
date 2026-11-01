@@ -9,6 +9,8 @@ import {
   canPo,
   closeError,
   poActionError,
+  poMarkSentError,
+  poNeedsApproval,
   PO_STATUSES,
   receiptStatus,
   soLineProgress,
@@ -105,10 +107,18 @@ describe("PO status machine", () => {
     expect(afterEdit("DRAFT")).toEqual({ status: "DRAFT", clearsApproval: false });
   });
 
-  it("approver must differ from the creator unless admin", () => {
-    expect(approverError({ id: "u1", isAdmin: false }, "u1")).toMatch(/other than the creator/);
-    expect(approverError({ id: "u1", isAdmin: true }, "u1")).toBeNull();
-    expect(approverError({ id: "u2", isAdmin: false }, "u1")).toBeNull();
+  it("approver must differ from the creator (Admin included)", () => {
+    expect(approverError({ id: "u1" }, "u1")).toMatch(/other than the creator/);
+    expect(approverError({ id: "u2" }, "u1")).toBeNull();
+  });
+
+  it("PO needs approval only when subtotal is strictly above the limit (scaled cents)", () => {
+    expect(poNeedsApproval("100000.00", 100_000)).toBe(false);
+    expect(poNeedsApproval("100000.01", 100_000)).toBe(true);
+    expect(poNeedsApproval("99999.99", "100000")).toBe(false);
+    expect(poMarkSentError("DRAFT", false)).toBeNull();
+    expect(poMarkSentError("DRAFT", true)).toMatch(/Approve/);
+    expect(poMarkSentError("APPROVED", true)).toBeNull();
   });
 
   it("short-close needs a reason; closing a fully received PO doesn't", () => {

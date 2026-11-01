@@ -17,12 +17,11 @@ import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { money } from "@/lib/documents/common";
 import { toScaled } from "@/lib/quotes/calc";
-import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
+import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection, voidCollection } from "@/lib/services/collections";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
 import {
-  approvePurchaseOrder,
   createStandalonePurchaseOrder,
   markPurchaseOrderSent,
 } from "@/lib/services/purchase-orders";
@@ -113,6 +112,7 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
       },
       admin,
     );
+    await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-BK-${tag()}`, deliveryAddress: "Manila" }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
@@ -287,7 +287,6 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
       },
       admin,
     );
-    await approvePurchaseOrder(po.id, admin);
     await markPurchaseOrderSent(po.id, admin);
     const bill = await recordSupplierBill(
       po.id,

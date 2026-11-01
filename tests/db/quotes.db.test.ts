@@ -20,10 +20,11 @@ import { DocRuleError, ymd } from "@/lib/documents/common";
 import { addDays } from "@/lib/format";
 import { LEGACY_WITHHOLDING_REAPPLY_REQUIRED } from "@/lib/quotes/legacy-withholding";
 import {
-  buildQuoteEmailDraft,
-  convertQuoteToSalesOrder,
+  approveQuote,
+  buildQuoteEmailDraft as buildQuoteEmailDraftSvc,
+  convertQuoteToSalesOrder as convertQuoteToSalesOrderSvc,
   createQuote,
-  markQuoteSent,
+  markQuoteSent as markQuoteSentSvc,
   refreshQuoteCompanyDetails,
   updateQuote,
   voidQuote,
@@ -65,6 +66,29 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     soPrefix = settings.numbering.salesOrder.prefix;
     padding = { quote: settings.numbering.quote.padding, so: settings.numbering.salesOrder.padding };
   });
+
+  /** Pre-S-18 tests convert/send freely; S-18 requires approval first (grandfather via helper). */
+  async function ensureApproved(id: string) {
+    const row = await db.quote.findUnique({ where: { id }, select: { approvalStatus: true, status: true } });
+    if (!row || row.status === "VOID") return;
+    if (row.approvalStatus !== "APPROVED") await approveQuote(id, costUser);
+  }
+  async function convertQuoteToSalesOrder(
+    ...args: Parameters<typeof convertQuoteToSalesOrderSvc>
+  ): ReturnType<typeof convertQuoteToSalesOrderSvc> {
+    await ensureApproved(args[0]);
+    return convertQuoteToSalesOrderSvc(...args);
+  }
+  async function markQuoteSent(...args: Parameters<typeof markQuoteSentSvc>): ReturnType<typeof markQuoteSentSvc> {
+    await ensureApproved(args[0]);
+    return markQuoteSentSvc(...args);
+  }
+  async function buildQuoteEmailDraft(
+    ...args: Parameters<typeof buildQuoteEmailDraftSvc>
+  ): ReturnType<typeof buildQuoteEmailDraftSvc> {
+    await ensureApproved(args[0]);
+    return buildQuoteEmailDraftSvc(...args);
+  }
 
   afterAll(async () => {
     await db.$disconnect();

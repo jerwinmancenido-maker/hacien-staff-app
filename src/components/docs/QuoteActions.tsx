@@ -4,14 +4,17 @@
 // Actions ▾ (Edit, Print / Save PDF, Email, Convert to SO, Mark lost, Void).
 // Viewers only get Print. The server re-checks every action.
 //
+// S-18: Mark as sent / Email / Convert stay hidden until workflow-approved.
+// Approver/Admin get Approve / Reject while PENDING.
+//
 // When withholding is not set on a draft, Mark as sent asks
 // "No withholding on this quote?" — Yes, none / Pick rates.
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
-import { ConvertDialog, EmailDialog, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
+import { ConvertDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   WITHHOLDING_NONE_CONFIRM_PICK,
@@ -24,7 +27,9 @@ type Props = {
   id: string;
   number: string;
   status: string;
+  approvalStatus: "PENDING" | "APPROVED" | "REJECTED";
   canEdit: boolean;
+  canApproveWorkflow: boolean;
   /** An open sales order made from this quote, if any. */
   openSalesOrderId: string | null;
   /** Suggested delivery address (default delivery, else billing), editable in the dialog. */
@@ -42,6 +47,8 @@ type Props = {
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
     refreshCompanyDetails?: (id: string) => Promise<FormState>;
+    approve?: (id: string) => Promise<FormState>;
+    reject?: (id: string, reason: string) => Promise<FormState>;
   };
 };
 
@@ -49,7 +56,9 @@ export function QuoteActions({
   id,
   number,
   status,
+  approvalStatus,
   canEdit,
+  canApproveWorkflow,
   openSalesOrderId,
   customerAddress,
   addressOptions,
@@ -57,20 +66,27 @@ export function QuoteActions({
   actions,
 }: Props) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | "reject" | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const rejectReasonRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [okMessage, setOkMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (dialog === "reject") rejectReasonRef.current?.focus();
+  }, [dialog]);
+
   const run = (fn: () => Promise<FormState & { draft?: EmailDraftView }>) =>
     startTransition(async () => {
       const res = await fn();
-      setMessage(res.ok ? null : (res.message ?? "Something went wrong."));
+      setMessage(res.ok ? null : (res.message ?? res.fieldErrors?.reason ?? "Something went wrong."));
       setOkMessage(res.ok ? (res.message ?? null) : null);
       if (res.draft) setDraft(res.draft);
     });
 
+  const approved = approvalStatus === "APPROVED";
   const editable = status === "DRAFT" || status === "SENT";
   /** Sent / WON / LOST / VOID keep a frozen company snapshot. */
   const canRefreshCompany = canEdit && status === "DRAFT" && !!actions.refreshCompanyDetails;
@@ -84,8 +100,8 @@ export function QuoteActions({
       onSelect: () => run(() => actions.refreshCompanyDetails!(id)),
     });
   }
-  if (canEdit && status !== "VOID") items.push({ key: "email", label: "Email", onSelect: () => run(() => actions.email(id)) });
-  if (canEdit && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
+  if (canEdit && approved && status !== "VOID") items.push({ key: "email", label: "Email", onSelect: () => run(() => actions.email(id)) });
+  if (canEdit && approved && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
   if (canEdit && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
@@ -104,13 +120,30 @@ export function QuoteActions({
         Open sales order
       </Link>
     );
-  } else if (canEdit && status === "DRAFT") {
+  } else if (canApproveWorkflow && actions.approve && actions.reject) {
+    primary = (
+      <>
+        <button type="button" className="btn secondary" disabled={pending} onClick={() => setDialog("reject")}>
+          Reject
+        </button>
+        <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.approve!(id))}>
+          Approve
+        </button>
+      </>
+    );
+  } else if (!approved && status !== "VOID" && status !== "WON" && status !== "LOST") {
+    primary = (
+      <span className="small muted" role="status" style={{ alignSelf: "center" }}>
+        Waiting for approval
+      </span>
+    );
+  } else if (canEdit && approved && status === "DRAFT") {
     primary = (
       <button type="button" className="btn" disabled={pending} onClick={onMarkSent}>
         Mark as sent
       </button>
     );
-  } else if (canEdit && status === "SENT") {
+  } else if (canEdit && approved && status === "SENT") {
     primary = (
       <button type="button" className="btn" onClick={() => setDialog("convert")}>
         Convert to SO
@@ -171,6 +204,42 @@ export function QuoteActions({
           run(() => fn(id));
         }}
       />
+      {dialog === "reject" && (
+        <Modal title={`Reject ${number}?`} onClose={() => setDialog(null)} labelId="reject-quote-title">
+          <p className="muted">Staff will see your reason. A reason is required.</p>
+          <label className="field">
+            <span>Reason</span>
+            <textarea
+              ref={rejectReasonRef}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              required
+            />
+          </label>
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setDialog(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              disabled={pending || !rejectReason.trim()}
+              onClick={() => {
+                const why = rejectReason.trim();
+                if (!why) {
+                  setMessage("Give a reason for rejecting this quote.");
+                  return;
+                }
+                setDialog(null);
+                run(() => actions.reject!(id, why));
+              }}
+            >
+              Reject
+            </button>
+          </div>
+        </Modal>
+      )}
       {draft && <EmailDialog draft={draft} onClose={() => setDraft(null)} />}
     </>
   );

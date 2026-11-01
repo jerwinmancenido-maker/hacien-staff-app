@@ -83,12 +83,14 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
             {QUOTE_STATUS_LABELS[t]}
           </Link>
         ))}
-        <Link
-          className={`filter-chip${needsApproval ? " active" : ""}`}
-          href={href(s, { status: undefined, needsApproval: "1", noReply: undefined, open: undefined })}
-        >
-          Needs approval
-        </Link>
+        {can(user, "approve") && (
+          <Link
+            className={`filter-chip${needsApproval ? " active" : ""}`}
+            href={href(s, { status: undefined, needsApproval: "1", noReply: undefined, open: undefined })}
+          >
+            Waiting for approval
+          </Link>
+        )}
         <Link
           className={`filter-chip${noReplyDays ? " active" : ""}`}
           href={href(s, { status: "SENT", needsApproval: undefined, noReply: "7", open: undefined })}

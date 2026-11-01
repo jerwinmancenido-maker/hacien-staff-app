@@ -35,7 +35,7 @@ function memoryStore(): SettingsStore & { rows: SettingsVersionRecord[] } {
 
 describe("settings defaults", () => {
   it("seeds the agreed defaults", () => {
-    expect(DEFAULT_SETTINGS.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000 });
+    expect(DEFAULT_SETTINGS.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000, poTotalAbove: 100000 });
     expect(DEFAULT_SETTINGS.quotes.defaultValidityDays).toBe(30);
     expect(DEFAULT_SETTINGS.taxYear).toMatchObject({
       year: 2026,
@@ -68,7 +68,7 @@ describe("settings versioning", () => {
     const v1 = await getSettingsSnapshot(store);
     const res = await saveSettingsSection(store, {
       key: "approval",
-      value: { marginBelowPct: "20", totalAbove: "750000" },
+      value: { marginBelowPct: "20", totalAbove: "750000", poTotalAbove: "100000" },
       userId: "jerwin",
       baseVersionId: v1.versionId,
     });
@@ -77,8 +77,8 @@ describe("settings versioning", () => {
     expect(res.version.version).toBe(2);
     expect(res.version.createdById).toBe("jerwin");
     expect(res.version.changedKey).toBe("approval");
-    expect(res.version.before).toEqual({ marginBelowPct: 18, totalAbove: 500000 });
-    expect(res.version.after).toEqual({ marginBelowPct: 20, totalAbove: 750000 });
+    expect(res.version.before).toEqual({ marginBelowPct: 18, totalAbove: 500000, poTotalAbove: 100000 });
+    expect(res.version.after).toEqual({ marginBelowPct: 20, totalAbove: 750000, poTotalAbove: 100000 });
     expect(store.rows).toHaveLength(2);
   });
 
@@ -101,7 +101,7 @@ describe("settings versioning", () => {
 
     const old = await getSettingsVersion(store, documentSettingsVersionId);
     expect(old?.version).toBe(1);
-    expect(old?.settings.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000 });
+    expect(old?.settings.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000, poTotalAbove: 100000 });
     // Untouched sections are carried forward into the new version.
     expect(current.settings.numbering).toEqual(old?.settings.numbering);
   });

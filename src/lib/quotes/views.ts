@@ -5,13 +5,13 @@
 // must only pass these view objects to client components, never raw rows.
 // tests/db/quotes.db.test.ts checks the payloads.
 
-import type { Prisma, QuoteStatus, SalesOrderStatus } from "@prisma/client";
+import type { Prisma, QuoteApprovalStatus, QuoteStatus, SalesOrderStatus } from "@prisma/client";
 import { db } from "../db";
-import { canSeeCosts, type PermissionUser } from "../permissions";
+import { canApprove, canSeeCosts, type PermissionUser } from "../permissions";
+import { QUOTE_APPROVAL_LABELS } from "./approval";
 import {
   getSettingsSnapshot,
   getSettingsVersion,
-  getSettingsVersionsMap,
   type SettingsSnapshot,
 } from "../settings";
 import { money, ymd } from "../documents/common";
@@ -183,6 +183,8 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
       salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
       createdBy: { select: { name: true } },
       updatedBy: { select: { name: true } },
+      approvedBy: { select: { name: true } },
+      rejectedBy: { select: { name: true } },
     },
   });
   if (!q) return null;
@@ -197,11 +199,21 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     netMarginPct: money(q.netMarginPct),
   };
   const totals = totalsView(q.items, withholding, stored, withCosts);
+  const approvalStatus = q.approvalStatus;
   return {
     id: q.id,
     number: q.number,
     revision: q.revision,
     status: q.status,
+    approvalStatus,
+    approvalLabel: QUOTE_APPROVAL_LABELS[approvalStatus],
+    approvedBy: q.approvedBy?.name ?? null,
+    approvedAt: q.approvedAt,
+    rejectedBy: q.rejectedBy?.name ?? null,
+    rejectedAt: q.rejectedAt,
+    rejectReason: q.rejectReason,
+    canApproveWorkflow: canApprove(viewer) && q.status !== "VOID" && approvalStatus === "PENDING",
+    isWorkflowApproved: approvalStatus === "APPROVED",
     date: ymd(q.date)!,
     validUntil: ymd(q.validUntil)!,
     terms: q.terms,
@@ -232,7 +244,7 @@ export const QUOTE_STATUSES: QuoteStatus[] = ["DRAFT", "SENT", "WON", "LOST", "V
 export type QuoteListFilter = {
   q?: string;
   status?: QuoteStatus;
-  /** Draft quotes that need approval under their settings version. */
+  /** Quotes with workflow approvalStatus PENDING (non-void). Home Waiting list. */
   needsApproval?: boolean;
   /** Sent quotes whose quote date is on or before Manila today − N days. */
   noReplyAfterDays?: number;
@@ -251,15 +263,17 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     typeof filter.noReplyAfterDays === "number" && filter.noReplyAfterDays > 0 ? filter.noReplyAfterDays : undefined;
 
   let status = filter.status;
-  if (needsApproval) status = "DRAFT";
   if (noReplyAfterDays) status = "SENT";
 
   const where: Prisma.QuoteWhereInput = {
-    ...(openOnly && !needsApproval && !noReplyAfterDays
-      ? { status: { in: ["DRAFT", "SENT"] } }
-      : status
-        ? { status }
-        : {}),
+    ...(needsApproval
+      ? // Open quotes only — WON/LOST/VOID stay out of the Waiting list.
+        { approvalStatus: "PENDING" satisfies QuoteApprovalStatus, status: { in: ["DRAFT", "SENT"] } }
+      : openOnly && !noReplyAfterDays
+        ? { status: { in: ["DRAFT", "SENT"] } }
+        : status
+          ? { status }
+          : {}),
     ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
   };
 
@@ -275,7 +289,7 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     take: 500,
   });
 
-  let mapped = rows.map((r) => {
+  const mapped = rows.map((r) => {
     const row = {
       id: r.id,
       number: r.number,
@@ -283,34 +297,21 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       customerName: r.customer.name,
       contractPrice: money(r.contractPrice),
       status: r.status,
+      approvalStatus: r.approvalStatus,
       date: ymd(r.date)!,
       validUntil: ymd(r.validUntil)!,
-      settingsVersionId: r.settingsVersionId,
-      netMarginPctStored: money(r.netMarginPct),
     };
     return withCosts ? { ...row, netMarginPct: money(r.netMarginPct) } : row;
   });
 
-  if (needsApproval) {
-    const snaps = await getSettingsVersionsMap(mapped.map((r) => r.settingsVersionId));
-    const fallback = await getSettingsSnapshot();
-    mapped = mapped.filter((r) => {
-      const snap = snaps.get(r.settingsVersionId) ?? fallback;
-      return approvalFromSnap(snap, r.contractPrice, r.netMarginPctStored, withCosts).needed;
-    });
-  }
-
-  return mapped.map(({ settingsVersionId: _settingsVersionId, netMarginPctStored: _netMarginPctStored, ...rest }) => {
-    void _settingsVersionId;
-    void _netMarginPctStored;
-    return rest;
-  }) as ({
+  return mapped as ({
     id: string;
     number: string;
     revision: number;
     customerName: string;
     contractPrice: string;
     status: QuoteStatus;
+    approvalStatus: QuoteApprovalStatus;
     date: string;
     validUntil: string;
     netMarginPct?: string;

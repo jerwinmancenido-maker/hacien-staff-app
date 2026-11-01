@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import {
+  approveQuote,
   buildQuoteEmailDraft,
   convertQuoteToSalesOrder,
   createQuote,
@@ -12,6 +13,7 @@ import {
   confirmNoneAndMarkQuoteSent,
   markQuoteSent,
   refreshQuoteCompanyDetails,
+  rejectQuote,
   updateQuote,
   voidQuote,
   type EmailDraft,
@@ -126,4 +128,28 @@ export async function emailDraftAction(id: string): Promise<FormState & { draft?
     return { ok: true };
   });
   return draft ? { ...result, draft } : result;
+}
+
+export async function approveQuoteAction(id: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("approve");
+    await approveQuote(id, user);
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/");
+    return { ok: true, message: "Quote approved." };
+  });
+}
+
+export async function rejectQuoteAction(id: string, reason: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("approve");
+    const why = reason.trim();
+    if (!why) return { fieldErrors: { reason: "Give a reason." }, message: "Give a reason for rejecting this quote." };
+    await rejectQuote(id, why, user);
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/");
+    return { ok: true, message: "Quote rejected." };
+  });
 }

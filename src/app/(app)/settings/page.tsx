@@ -90,6 +90,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               fields={[
                 { name: "marginBelowPct", label: "Needs approval if margin is below", kind: "number", value: s.approval.marginBelowPct, suffix: "%" },
                 { name: "totalAbove", label: "Needs approval if total is above", kind: "number", value: s.approval.totalAbove, prefix: "₱", hint: `Now ${formatPeso(s.approval.totalAbove)}` },
+                {
+                  name: "poTotalAbove",
+                  label: "PO needs Approver/Admin if total is above",
+                  kind: "number",
+                  value: s.approval.poTotalAbove,
+                  prefix: "₱",
+                  hint: `At ${formatPeso(s.approval.poTotalAbove)} or less: no approval step. Strictly above: Approver/Admin (not the creator). Applies to new POs; each PO keeps the limit from when it was created.`,
+                },
               ]}
             />
             <SettingsForm

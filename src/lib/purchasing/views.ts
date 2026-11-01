@@ -9,14 +9,22 @@
 
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
-import { canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot } from "../settings";
+import { canApprove, canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
+import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
 import { qtyMismatch } from "./plan";
 import { remainingQty } from "./receipt";
-import { approverError, canPo, PO_STATUSES, soLineProgress, type PoStatus, type ProgressState } from "./status";
+import {
+  approverError,
+  canPo,
+  poNeedsApproval,
+  PO_STATUSES,
+  soLineProgress,
+  type PoStatus,
+  type ProgressState,
+} from "./status";
 import { planPurchaseOrders } from "./plan";
 import {
   billExceedsPo,
@@ -166,6 +174,14 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     })),
   );
   const lineDesc = new Map(items.map((i) => [i.id, i.description]));
+  const subtotal = money(po.subtotal);
+  // Pin the PO's settings version so raising the live limit does not unlock old drafts.
+  // Missing/unresolvable pin → needs approval (fail closed; do not use latest Settings).
+  const snap = await getSettingsVersion(po.settingsVersionId);
+  const needsApproval = !snap || poNeedsApproval(subtotal, snap.settings.approval.poTotalAbove);
+  const selfErr = canPo(po.status, "approve") ? approverError(viewer, po.createdById) : null;
+  const canApproveThis = canApprove(viewer) && canPo(po.status, "approve") && selfErr === null;
+  const blockedReason = canPo(po.status, "approve") ? selfErr : null;
 
   return {
     id: po.id,
@@ -178,7 +194,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     deliveryAddressText: po.deliveryAddressText,
     supplierAddressText: po.supplierAddressText,
     notes: po.notes,
-    subtotal: money(po.subtotal),
+    subtotal,
     supplier: po.supplier,
     supplierContact: po.supplierContact,
     salesOrder: po.salesOrder,
@@ -226,8 +242,10 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     match,
     postedReceipts: po.receivingReports.filter((r) => r.status === "POSTED").length,
     approval: {
-      canApprove: canPo(po.status, "approve") && approverError(viewer, po.createdById) === null,
-      blockedReason: canPo(po.status, "approve") ? approverError(viewer, po.createdById) : null,
+      canApprove: canApproveThis,
+      blockedReason,
+      needsApproval,
+      canMarkSentFromDraft: po.status === "DRAFT" && !needsApproval,
     },
   };
 }

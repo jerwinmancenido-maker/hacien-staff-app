@@ -378,6 +378,10 @@ async function seedQuotes(db: ReturnType<typeof connect>) {
           date: today,
           validUntil,
           status,
+          // WON seed quotes are grandfathered APPROVED with null approver (no invented history).
+          ...(status === "WON"
+            ? { approvalStatus: "APPROVED" as const, approvedById: null, approvedAt: null }
+            : { approvalStatus: "PENDING" as const }),
           terms: customer.defaultTerms,
           notes: SAMPLE_NOTE,
           settingsVersionId: version!.id,

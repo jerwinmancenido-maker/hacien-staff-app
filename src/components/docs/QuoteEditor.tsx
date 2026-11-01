@@ -79,6 +79,8 @@ export type QuoteEditorProps = {
   markSentAction?: (id: string) => Promise<FormState>;
   /** Sets pick to [] then marks sent. Used when staff confirms "Yes, none". */
   confirmNoneAndMarkSentAction?: (id: string) => Promise<FormState>;
+  /** S-18: only APPROVED quotes may mark as sent from the editor. */
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
 };
 
 type TabId = "items" | "terms" | "notes" | "signoff";
@@ -214,6 +216,7 @@ export function QuoteEditor({
   cancelHref,
   markSentAction,
   confirmNoneAndMarkSentAction,
+  approvalStatus = "PENDING",
 }: QuoteEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
@@ -444,11 +447,11 @@ export function QuoteEditor({
     Boolean(printDefaults.warrantyNotes?.trim());
   const notesCount = (h.notes?.trim() ? 1 : 0) + (h.internalNotes?.trim() ? 1 : 0);
 
-  const canSubmitForApproval = quoteId && status === "DRAFT" && markSentAction;
+  const canMarkSent = quoteId && status === "DRAFT" && approvalStatus === "APPROVED" && markSentAction;
   const busy = pending || sentPending;
 
   function markSentNow() {
-    if (!canSubmitForApproval) return;
+    if (!canMarkSent) return;
     startSentTransition(async () => {
       await markSentAction!(quoteId!);
     });
@@ -465,8 +468,8 @@ export function QuoteEditor({
     });
   }
 
-  function submitForApproval() {
-    if (canSubmitForApproval) {
+  function submitMarkSent() {
+    if (canMarkSent) {
       if (pick == null) {
         setNoneConfirmOpen(true);
         return;
@@ -1142,9 +1145,15 @@ export function QuoteEditor({
             <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0}>
               {pending ? "Saving…" : "Save draft"}
             </button>
-            <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0} onClick={submitForApproval}>
-              {sentPending ? "Submitting…" : "Submit for approval"}
-            </button>
+            {canMarkSent ? (
+              <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0} onClick={submitMarkSent}>
+                {sentPending ? "Sending…" : "Mark as sent"}
+              </button>
+            ) : approvalStatus === "PENDING" || approvalStatus === "REJECTED" ? (
+              <span className="small muted" style={{ alignSelf: "center" }}>
+                {approvalStatus === "REJECTED" ? "Rejected — save edits to wait for approval" : "Waiting for approval"}
+              </span>
+            ) : null}
           </div>
         </div>
       </form>

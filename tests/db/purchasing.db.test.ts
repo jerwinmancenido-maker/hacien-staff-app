@@ -14,12 +14,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { ForbiddenError } from "@/lib/permissions";
-import { getSettingsSnapshot } from "@/lib/settings";
+import { getSettingsSnapshot, saveSettings } from "@/lib/settings";
 import { DocRuleError } from "@/lib/documents/common";
 import { formatDocNumber } from "@/lib/documents/series";
-import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
+import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import {
   approvePurchaseOrder,
+  buildPoEmailDraft,
   closePurchaseOrder,
   createPurchaseOrdersFromSalesOrder,
   createStandalonePurchaseOrder,
@@ -105,6 +106,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       },
       admin,
     );
+    await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-1", deliveryAddress: "TESDA, Taguig" }, admin, { date: new Date(Date.UTC(year, 2, 2)) });
     const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id }, orderBy: { sortOrder: "asc" } });
     return { customer, a, b, so, items };
@@ -187,7 +189,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("status flow and roles", () => {
-    it("Draft → Approved → Sent; approver ≠ creator unless admin; staff can't approve", async () => {
+    it("Draft → Approved → Sent; creator (incl. Admin) can't self-approve; staff can't approve", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
       const [po, po2] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), approver);
@@ -195,9 +197,21 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(approvePurchaseOrder(po!.id, approver)).rejects.toThrow(/other than the creator/);
       await expect(approvePurchaseOrder(po!.id, buyer)).rejects.toBeInstanceOf(ForbiddenError);
       await expect(markPurchaseOrderSent(po!.id, buyer)).rejects.toThrow(/Approve the PO/);
-      // Admins have "approve" and may approve their own.
-      const own = await createStandalonePurchaseOrder(standalone(po!.supplierId, year), admin);
-      expect((await approvePurchaseOrder(own.id, admin)).status).toBe("APPROVED");
+      // Admin creator also cannot approve their own (S-18). Under-limit: mark sent without approval.
+      const ownUnder = await createStandalonePurchaseOrder(standalone(po!.supplierId, year), admin);
+      expect(ownUnder.subtotal.toFixed(2)).toBe("7500.00");
+      await expect(approvePurchaseOrder(ownUnder.id, admin)).rejects.toThrow(/other than the creator/);
+      expect((await markPurchaseOrderSent(ownUnder.id, admin)).status).toBe("SENT");
+      // Over-limit own PO: Admin still blocked from self-approve; second Admin/Approver can.
+      const ownOver = await createStandalonePurchaseOrder(
+        {
+          ...standalone(po!.supplierId, year),
+          items: [{ id: null, description: "Big buy", kind: "GOODS", qty: "1", unit: "lot", unitCost: "150000" }],
+        },
+        admin,
+      );
+      await expect(approvePurchaseOrder(ownOver.id, admin)).rejects.toThrow(/other than the creator/);
+      expect((await approvePurchaseOrder(ownOver.id, approver)).status).toBe("APPROVED");
       const approved = await approvePurchaseOrder(po!.id, admin);
       expect(approved.approvedById).toBe(admin.id);
       expect((await markPurchaseOrderSent(po!.id, buyer)).status).toBe("SENT");
@@ -208,6 +222,109 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const audits = await db.auditLog.findMany({ where: { entityType: "PurchaseOrder", entityId: po!.id }, orderBy: { at: "asc" } });
       expect(audits.map((a) => (a.after as { status?: string }).status ?? null)).toEqual(expect.arrayContaining(["DRAFT", "APPROVED", "SENT"]));
       expect(await db.documentVoid.count({ where: { docType: "PURCHASE_ORDER", docId: po2!.id } })).toBe(1);
+    });
+
+    it("PO limit boundary: 100000.00 needs no approval; 100000.01 does", async () => {
+      const year = await freshYear();
+      const supplier = await makeSupplier();
+      const atLimit = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "At limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000" }],
+        },
+        admin,
+      );
+      expect(atLimit.subtotal.toFixed(2)).toBe("100000.00");
+      expect((await markPurchaseOrderSent(atLimit.id, admin)).status).toBe("SENT");
+      // Skip-approval audit (reason + subtotal + applied limit) lands with the SENT status change.
+      const skipAudits = await db.auditLog.findMany({
+        where: { entityType: "PurchaseOrder", entityId: atLimit.id, action: "update" },
+        orderBy: { at: "asc" },
+      });
+      const skip = skipAudits.find((a) => (a.after as { approval?: string } | null)?.approval?.includes("skipped"));
+      expect(skip?.after).toMatchObject({
+        approval: "skipped (at or below limit)",
+        subtotal: "100000.00",
+        poTotalAbove: "100000.00",
+      });
+      expect(skipAudits.some((a) => (a.after as { status?: string } | null)?.status === "SENT")).toBe(true);
+
+      const over = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Over limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000.01" }],
+        },
+        admin,
+      );
+      expect(over.subtotal.toFixed(2)).toBe("100000.01");
+      await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
+      await expect(approvePurchaseOrder(over.id, admin)).rejects.toThrow(/other than the creator/);
+      expect((await approvePurchaseOrder(over.id, approver)).status).toBe("APPROVED");
+      expect((await markPurchaseOrderSent(over.id, admin)).status).toBe("SENT");
+    });
+
+    it("missing/unresolvable settings pin fails closed (needs approval; mark-sent and email blocked)", async () => {
+      const year = await freshYear();
+      const supplier = await makeSupplier();
+      // Under the live limit — would skip approval if we fell back to latest Settings.
+      const under = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Under live limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "5000" }],
+        },
+        admin,
+      );
+      expect(under.subtotal.toFixed(2)).toBe("5000.00");
+      await db.purchaseOrder.update({
+        where: { id: under.id },
+        data: { settingsVersionId: `missing-settings-pin-${tag()}` },
+      });
+      const view = (await getPurchaseOrderView(under.id, { ...admin, isAdmin: true }))!;
+      expect(view.approval.needsApproval).toBe(true);
+      expect(view.approval.canMarkSentFromDraft).toBe(false);
+      await expect(markPurchaseOrderSent(under.id, admin)).rejects.toThrow(/Approve the PO/);
+      await expect(buildPoEmailDraft(under.id, admin)).rejects.toThrow(/Approve the PO/);
+    });
+
+    it("raising the live PO limit does not unlock an existing over-limit draft (pinned settings version)", async () => {
+      const year = await freshYear();
+      const supplier = await makeSupplier();
+      const over = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Pinned over", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000.01" }],
+        },
+        admin,
+      );
+      const pinnedVersion = over.settingsVersionId;
+      await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
+
+      const snap = await getSettingsSnapshot();
+      const raised = await saveSettings({
+        key: "approval",
+        value: { ...snap.settings.approval, poTotalAbove: 200_000 },
+        userId: admin.id,
+        baseVersionId: snap.versionId,
+      });
+      expect(raised.ok && raised.changed).toBe(true);
+
+      try {
+        // Live limit is higher, but this PO still uses the version it was created under.
+        expect(over.settingsVersionId).toBe(pinnedVersion);
+        const view = (await getPurchaseOrderView(over.id, { ...admin, isAdmin: true }))!;
+        expect(view.approval.needsApproval).toBe(true);
+        expect(view.approval.canMarkSentFromDraft).toBe(false);
+        await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
+      } finally {
+        // Restore default so later suites keep the 100000 boundary.
+        const latest = await getSettingsSnapshot();
+        await saveSettings({
+          key: "approval",
+          value: { ...latest.settings.approval, poTotalAbove: 100_000 },
+          userId: admin.id,
+          baseVersionId: latest.versionId,
+        });
+      }
     });
 
     it("editing an approved PO returns it to Draft, clears approval and bumps the revision", async () => {

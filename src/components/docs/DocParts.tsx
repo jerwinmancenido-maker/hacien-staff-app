@@ -20,13 +20,33 @@ export function SoStatusChip({ status }: { status: string }) {
   return <Chip tone={SO_TONES[status]}>{SO_STATUS_LABELS[status] ?? status}</Chip>;
 }
 
-export function ApprovalChip({ approval }: { approval: { needed: boolean; reasons?: string[] } }) {
-  if (!approval.needed) return null;
+/** Soft margin/total advisory (not the workflow approval chip). Hidden once workflow-approved. */
+export function ApprovalChip({
+  approval,
+  workflowApproved = false,
+}: {
+  approval: { needed: boolean; reasons?: string[] };
+  /** When true (approvalStatus === APPROVED), hide this advisory chip. */
+  workflowApproved?: boolean;
+}) {
+  if (workflowApproved || !approval.needed) return null;
   return (
     <span title={approval.reasons?.join(" · ")}>
-      <Chip tone="amber">Needs approval</Chip>
+      <Chip tone="amber">Low margin / over threshold</Chip>
     </span>
   );
+}
+
+/** S-18 workflow approval (Waiting / Approved / Rejected). */
+export function QuoteWorkflowApprovalChip({
+  status,
+  label,
+}: {
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  label: string;
+}) {
+  const tone: ChipTone = status === "APPROVED" ? "green" : status === "REJECTED" ? "red" : "grey";
+  return <Chip tone={tone}>{label}</Chip>;
 }
 
 export type ItemsTableRow = {
