@@ -4267,13 +4267,39 @@ button.contact-card-add {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-/* 2307 worksheet print — status column must wrap at ~390px, not clip. */
+/*
+ * 2307 worksheet print only (table has .col-status). Fixed layout so the
+ * Status width is real at ~390px — max-width alone is ignored under
+ * table-layout:auto, and .print-shell overflow-x:hidden would clip it.
+ */
+.books-register-table:has(th.col-status) {
+  table-layout: fixed;
+}
 .books-register-table th.col-status,
 .books-register-table td.col-status {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  min-width: 3.5rem;
-  max-width: 5.5rem;
+  width: 5.75rem;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+  hyphens: none;
+}
+@media (max-width: 640px) {
+  /* Don't clip Status on this print; other books prints keep overflow-x:hidden. */
+  .print-shell:has(.books-register-table th.col-status),
+  .print-shell-a4:has(.books-register-table th.col-status) {
+    overflow-x: visible;
+  }
+  .books-register-table:has(th.col-status) {
+    font-size: 9.5pt;
+  }
+  .books-register-table:has(th.col-status) th,
+  .books-register-table:has(th.col-status) td {
+    padding: 3px 4px;
+  }
+  .books-register-table th.col-status,
+  .books-register-table td.col-status {
+    width: 22%;
+  }
 }
 .books-register-table tfoot .books-page-total td {
   font-weight: 600;

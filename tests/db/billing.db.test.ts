@@ -1409,6 +1409,65 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(await db.withholding2307Line.count({ where: { withholding2307: { billingId: billing.id } } })).toBe(0);
   });
 
+  it("S-19 rejects codes[] with every amount ≤ 0 and persists nothing", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [{ code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" }],
+      },
+    });
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const beforeCols = await db.collection.count({ where: { customerId: customer.id } });
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-ZERO-CODES",
+          amountReceived: "950.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "950.00",
+              withholdingApplied: "50.00",
+              codes: [
+                { rate: "0.0100", atcCode: "WI640", amount: "0.00" },
+                { rate: "0.0200", atcCode: "WI157", amount: "0.00" },
+              ],
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/code amounts must be greater than zero/i);
+    expect(await db.collection.count({ where: { customerId: customer.id } })).toBe(beforeCols);
+    expect(await db.withholding2307.count({ where: { billingId: billing.id } })).toBe(0);
+  });
+
   it("S-19 rejects blank ATC codes on 2307 lines and persists nothing", async () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year);

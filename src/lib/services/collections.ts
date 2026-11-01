@@ -182,6 +182,8 @@ export function assertDistinctAtcCodes(lines: readonly WithholdingCodeLine[]) {
 
 /** Replace per-ATC lines without hard deletes (zero old rows; upsert by ATC). */
 async function replace2307Lines(tx: Tx, withholding2307Id: string, lines: WithholdingCodeLine[]) {
+  // Guard every caller — blank/duplicate ATC would collapse on upsert-by-ATC.
+  assertDistinctAtcCodes(lines);
   // Soft-clear existing amounts — records are never deleted.
   await tx.withholding2307Line.updateMany({ where: { withholding2307Id }, data: { amount: "0.00" } });
   for (const line of lines) {
@@ -216,8 +218,17 @@ async function upsert2307(
     rate: string;
     atcCode: string | null;
     lines: WithholdingCodeLine[];
+    /** True when the caller posted a codes[] array (even if all amounts were ≤ 0). */
+    codesWereProvided?: boolean;
   },
 ) {
+  // Codes posted but every amount ≤ 0 → resolveCodeLines yields []; do not save a parent with no lines.
+  if (args.codesWereProvided && args.lines.length === 0) {
+    throw new DocRuleError(
+      "2307 code amounts must be greater than zero.",
+      "allocations",
+    );
+  }
   const lineSum = args.lines.reduce((a, l) => a + toScaled(money(l.amount), 2), 0n);
   const amount = args.lines.length ? fromScaled(lineSum, 2) : money(args.amount);
   const first = args.lines[0];
@@ -349,9 +360,8 @@ export async function recordCollection(input: CollectionInput, actor: Collection
                 "allocations",
               );
             }
-            const lines = resolveCodeLines(wh, a.codes as WithholdingCodeLine[] | undefined, rate, atc);
-            // Blank/duplicate ATC must not reach replace2307Lines (upsert-by-ATC would drop amounts).
-            assertDistinctAtcCodes(lines);
+            const codes = a.codes as WithholdingCodeLine[] | undefined;
+            const lines = resolveCodeLines(wh, codes, rate, atc);
             // Line amounts must equal the validated withholding allocation (fail closed).
             if (lines.length) {
               const lineSum = lines.reduce((sum, l) => sum + toScaled(money(l.amount), 2), 0n);
@@ -390,6 +400,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
               rate,
               atcCode: atc,
               lines,
+              codesWereProvided: !!(codes && codes.length > 0),
             });
           }
         }

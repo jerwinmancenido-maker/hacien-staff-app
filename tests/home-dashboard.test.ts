@@ -116,6 +116,14 @@ describe("home visibility / feature flags", () => {
     expect(canShowActionRow("quotesNeedsApproval", 1, user({ roles: ["ADMIN"], costs: true }))).toBe(true);
   });
 
+  it("hides 2307-pending unless manage_billing (Staff/Viewer hidden, Admin/Approver shown)", () => {
+    expect(canShowActionRow("pending2307", 2, user({ roles: ["STAFF"] }))).toBe(false);
+    expect(canShowActionRow("pending2307", 2, user({ roles: ["VIEWER"] }))).toBe(false);
+    expect(canShowActionRow("pending2307", 2, user({ roles: ["ADMIN"], costs: true }))).toBe(true);
+    expect(canShowActionRow("pending2307", 2, user({ roles: ["APPROVER"] }))).toBe(true);
+    expect(canShowActionRow("pending2307", 0, user({ roles: ["ADMIN"], costs: true }))).toBe(false);
+  });
+
   it("treats zero customers as the empty / getting-started state", () => {
     expect(isHomeEmpty(0)).toBe(true);
     expect(isHomeEmpty(1)).toBe(false);
