@@ -157,6 +157,29 @@ function resolveCodeLines(
   return [{ rate: fallbackRate, atcCode: fallbackAtc, amount: money(whAmount) }];
 }
 
+/** Fail closed before any 2307 write — blank or duplicate ATC collapses in replace2307Lines. */
+export function assertDistinctAtcCodes(lines: readonly WithholdingCodeLine[]) {
+  if (!lines.length) return;
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const atc = line.atcCode?.trim() ?? "";
+    if (!atc) {
+      throw new DocRuleError(
+        "Each 2307 line needs an ATC code. Blank ATC codes are not allowed.",
+        "allocations",
+      );
+    }
+    const key = atc.toUpperCase();
+    if (seen.has(key)) {
+      throw new DocRuleError(
+        `Duplicate ATC code ${atc}. Enter each ATC only once.`,
+        "allocations",
+      );
+    }
+    seen.add(key);
+  }
+}
+
 /** Replace per-ATC lines without hard deletes (zero old rows; upsert by ATC). */
 async function replace2307Lines(tx: Tx, withholding2307Id: string, lines: WithholdingCodeLine[]) {
   // Soft-clear existing amounts — records are never deleted.
@@ -327,6 +350,8 @@ export async function recordCollection(input: CollectionInput, actor: Collection
               );
             }
             const lines = resolveCodeLines(wh, a.codes as WithholdingCodeLine[] | undefined, rate, atc);
+            // Blank/duplicate ATC must not reach replace2307Lines (upsert-by-ATC would drop amounts).
+            assertDistinctAtcCodes(lines);
             // Line amounts must equal the validated withholding allocation (fail closed).
             if (lines.length) {
               const lineSum = lines.reduce((sum, l) => sum + toScaled(money(l.amount), 2), 0n);

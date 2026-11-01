@@ -64,7 +64,7 @@ export default async function PrintCustomer2307Page({
                 <th>ATC</th>
                 <th className="num">Income</th>
                 <th className="num">Tax withheld</th>
-                <th>2307</th>
+                <th className="col-status">2307</th>
               </tr>
             </thead>
             <tbody>
@@ -75,7 +75,7 @@ export default async function PrintCustomer2307Page({
                   <td>{r.atc || "—"}</td>
                   <td className="num">{formatPeso(r.incomeAmount)}</td>
                   <td className="num">{formatPeso(r.taxWithheld)}</td>
-                  <td>{r.status}</td>
+                  <td className="col-status">{r.status}</td>
                 </tr>
               ))}
             </tbody>

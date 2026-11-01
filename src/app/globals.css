@@ -4267,6 +4267,14 @@ button.contact-card-add {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* 2307 worksheet print — status column must wrap at ~390px, not clip. */
+.books-register-table th.col-status,
+.books-register-table td.col-status {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 3.5rem;
+  max-width: 5.5rem;
+}
 .books-register-table tfoot .books-page-total td {
   font-weight: 600;
   background: #fafaf8;

@@ -1346,4 +1346,112 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       ),
     ).rejects.toThrow(/Enter a withholding amount for each ATC code/);
   });
+
+  it("S-19 rejects duplicate ATC lines and persists nothing (no collapsed parent/line)", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [{ code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" }],
+      },
+    });
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const beforeCols = await db.collection.count({ where: { customerId: customer.id } });
+    const beforeWh = await db.withholding2307.count({ where: { billingId: billing.id } });
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-DUP-ATC",
+          amountReceived: "850.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "850.00",
+              withholdingApplied: "150.00",
+              // Same ATC twice — replace2307Lines would keep only ₱50 and understate tax.
+              codes: [
+                { rate: "0.0100", atcCode: "WI640", amount: "100.00" },
+                { rate: "0.0100", atcCode: "WI640", amount: "50.00" },
+              ],
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/Duplicate ATC code/i);
+    expect(await db.collection.count({ where: { customerId: customer.id } })).toBe(beforeCols);
+    expect(await db.withholding2307.count({ where: { billingId: billing.id } })).toBe(beforeWh);
+    expect(await db.withholding2307Line.count({ where: { withholding2307: { billingId: billing.id } } })).toBe(0);
+  });
+
+  it("S-19 rejects blank ATC codes on 2307 lines and persists nothing", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const beforeCols = await db.collection.count({ where: { customerId: customer.id } });
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-BLANK-ATC",
+          amountReceived: "850.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "850.00",
+              withholdingApplied: "150.00",
+              codes: [
+                { rate: "0.0100", atcCode: null, amount: "100.00" },
+                { rate: "0.0200", atcCode: "  ", amount: "50.00" },
+              ],
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/Blank ATC codes are not allowed/i);
+    expect(await db.collection.count({ where: { customerId: customer.id } })).toBe(beforeCols);
+    expect(await db.withholding2307.count({ where: { billingId: billing.id } })).toBe(0);
+  });
 });

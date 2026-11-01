@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { amountInWords } from "@/lib/print/amount-in-words";
-import { splitWithholdingAcrossCodes } from "@/lib/services/collections";
+import { assertDistinctAtcCodes, splitWithholdingAcrossCodes } from "@/lib/services/collections";
+import { DocRuleError } from "@/lib/documents/common";
 import { customerSchema } from "@/lib/validation/companies";
 import { WITHHOLDING_DEFAULT_ROWS, WITHHOLDING_DEFAULT_CODES } from "@/lib/quotes/withholding-defaults";
 
@@ -23,6 +24,29 @@ describe("S-19 multi-code split", () => {
     expect(lines[1]).toMatchObject({ atcCode: "WI157", rate: "0.0200", amount: "200.00" });
     const sum = lines.reduce((a, l) => a + Number(l.amount), 0);
     expect(sum.toFixed(2)).toBe("300.00");
+  });
+});
+
+describe("S-19 distinct ATC codes", () => {
+  it("rejects duplicate and blank ATC before any write", () => {
+    expect(() =>
+      assertDistinctAtcCodes([
+        { rate: "0.0100", atcCode: "WI640", amount: "100.00" },
+        { rate: "0.0100", atcCode: "WI640", amount: "50.00" },
+      ]),
+    ).toThrow(DocRuleError);
+    expect(() =>
+      assertDistinctAtcCodes([
+        { rate: "0.0100", atcCode: null, amount: "100.00" },
+        { rate: "0.0200", atcCode: "", amount: "50.00" },
+      ]),
+    ).toThrow(/Blank ATC/);
+    expect(() =>
+      assertDistinctAtcCodes([
+        { rate: "0.0100", atcCode: "WI640", amount: "100.00" },
+        { rate: "0.0200", atcCode: "WI157", amount: "200.00" },
+      ]),
+    ).not.toThrow();
   });
 });
 
