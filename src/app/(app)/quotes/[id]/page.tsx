@@ -10,15 +10,17 @@ import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { Activity } from "@/components/Activity";
 import { Chip, PageHeader } from "@/components/ui";
-import { ApprovalChip, ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
+import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
 import {
+  approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
   emailDraftAction,
   markQuoteLostAction,
   markQuoteSentAction,
   refreshQuoteCompanyDetailsAction,
+  rejectQuoteAction,
   voidQuoteAction,
 } from "../actions";
 import { WITHHOLDING_INTERNAL_PANEL_LABEL, WITHHOLDING_NOT_SET_NOTICE, isWithholdingNotSet } from "@/lib/quotes/withholding-defaults";
@@ -53,6 +55,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             {q.number}
             <Chip>Rev {q.revision}</Chip>
             <QuoteStatusChip status={q.status} />
+            {q.status !== "VOID" && (
+              <QuoteWorkflowApprovalChip status={q.approvalStatus} label={q.approvalLabel} />
+            )}
             {q.status !== "VOID" && <ApprovalChip approval={q.approval} />}
           </>
         }
@@ -62,7 +67,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             id={q.id}
             number={q.number}
             status={q.status}
+            approvalStatus={q.approvalStatus}
             canEdit={canEdit}
+            canApproveWorkflow={q.canApproveWorkflow}
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={suggestedAddress}
             addressOptions={addressOptions}
@@ -75,6 +82,8 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               convert: convertQuoteAction,
               email: emailDraftAction,
               refreshCompanyDetails: refreshQuoteCompanyDetailsAction,
+              approve: approveQuoteAction,
+              reject: rejectQuoteAction,
             }}
           />
         }
@@ -82,6 +91,23 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       {q.status === "VOID" && (
         <div className="alert error" role="status">
           <b>Void.</b> {q.voidReason} This quote is read-only.
+        </div>
+      )}
+      {q.approvalStatus === "APPROVED" && q.approvedBy && q.approvedAt && (
+        <div className="alert" role="status">
+          Approved by {q.approvedBy} · {formatDateTime(q.approvedAt)}
+        </div>
+      )}
+      {q.approvalStatus === "REJECTED" && (
+        <div className="alert error" role="status">
+          Rejected by {q.rejectedBy ?? "Approver"}
+          {q.rejectedAt ? ` · ${formatDateTime(q.rejectedAt)}` : ""}
+          {q.rejectReason ? `: ${q.rejectReason}` : ""}
+        </div>
+      )}
+      {q.approvalStatus === "PENDING" && q.status !== "VOID" && (
+        <div className="alert warn" role="status">
+          Waiting for approval. Mark as sent, Email and Convert to SO stay unavailable until an Approver or Admin approves.
         </div>
       )}
       {isWithholdingNotSet(q.withholdingPick) && q.status === "DRAFT" && (

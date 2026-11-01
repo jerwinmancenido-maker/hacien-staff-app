@@ -197,7 +197,7 @@ export type HomeDashboard = {
 };
 
 const ACTION_LABELS: Record<HomeActionKind, string> = {
-  quotesNeedsApproval: "Quotes to approve",
+  quotesNeedsApproval: "Waiting for approval",
   quotesNoReply: "Quotes with no reply",
   salesOrdersNeedsPo: "SOs needing a PO",
   posAwaitingReceipt: "POs to receive",

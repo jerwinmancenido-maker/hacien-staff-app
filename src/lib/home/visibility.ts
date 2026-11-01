@@ -41,6 +41,8 @@ export function showTaxDeadline(flags: HomeFeatureFlags, user: PermissionUser): 
 export function canShowActionRow(kind: HomeActionKind, count: number, user: PermissionUser): boolean {
   if (count <= 0) return false;
   if (COST_ACTION_KINDS.includes(kind) && !canSeeCosts(user)) return false;
+  // S-18: Waiting for approval list is Approver/Admin only.
+  if (kind === "quotesNeedsApproval" && !can(user, "approve")) return false;
   return true;
 }
 

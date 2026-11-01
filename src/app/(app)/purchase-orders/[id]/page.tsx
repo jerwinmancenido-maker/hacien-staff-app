@@ -57,7 +57,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             status={po.status}
             canEdit={canEdit}
             canApprove={canApprove}
-            approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" ? "Waiting for an approver." : null}
+            approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" && po.approval.needsApproval ? "Waiting for an approver." : po.approval.blockedReason}
+            canMarkSentFromDraft={canEdit && po.approval.canMarkSentFromDraft}
             postedReceipts={po.postedReceipts}
             actions={{
               approve: approvePurchaseOrderAction,

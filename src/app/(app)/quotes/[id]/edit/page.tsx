@@ -33,6 +33,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         quoteNumber={quote.number}
         revision={quote.revision}
         status={quote.status}
+        approvalStatus={quote.approvalStatus}
         customers={customers}
         rates={rates}
         suppliers={suppliers}

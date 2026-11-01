@@ -14,7 +14,16 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, lineAmounts, toScaled } from "../quotes/calc";
 import { formatAddress } from "../addresses/format";
-import { afterEdit, approverError, closeError, poActionError, voidError, type PoStatus } from "../purchasing/status";
+import {
+  afterEdit,
+  approverError,
+  closeError,
+  poActionError,
+  poMarkSentError,
+  poNeedsApproval,
+  voidError,
+  type PoStatus,
+} from "../purchasing/status";
 import { planPurchaseOrders, type PlannedPoLine } from "../purchasing/plan";
 import type { CreateFromSoInput, PoInput, PoLineInput } from "../validation/purchasing";
 import { defaultAddress } from "./addresses";
@@ -338,7 +347,7 @@ async function transition(
   });
 }
 
-/** Draft → Approved. Needs "approve"; the creator can't approve their own PO unless they're an Admin. */
+/** Draft → Approved. Needs "approve"; creator never approves their own PO (even Admin). */
 export async function approvePurchaseOrder(id: string, actor: PoActor) {
   const { after } = await transition(
     id,
@@ -351,15 +360,33 @@ export async function approvePurchaseOrder(id: string, actor: PoActor) {
   return after;
 }
 
-/** Approved → Sent (after emailing or handing it to the supplier). */
+/** Approved → Sent, or Draft → Sent when subtotal ≤ Settings PO limit (logged, no approval step). */
 export async function markPurchaseOrderSent(id: string, actor: PoActor) {
-  const { after } = await transition(
+  const snap = await getSettingsSnapshot();
+  const limit = snap.settings.approval.poTotalAbove;
+  const { before, after } = await transition(
     id,
     actor,
     "edit_data",
-    (po) => poActionError(po.status, "markSent"),
+    (po) => poMarkSentError(po.status, poNeedsApproval(money(po.subtotal), limit)),
     () => ({ status: "SENT", sentAt: new Date() }),
   );
+  // Under/at the limit: Draft → Sent skips approval but is still logged.
+  if (before.status === "DRAFT" && !poNeedsApproval(money(before.subtotal), limit)) {
+    await writeAudit(db, {
+      userId: actor.id,
+      entityType: "PurchaseOrder",
+      entityId: id,
+      action: "update",
+      before: { approval: "not required" },
+      after: {
+        approval: "skipped (at or below limit)",
+        subtotal: money(before.subtotal),
+        poTotalAbove: Number(limit).toFixed(2),
+      },
+      diff: false,
+    });
+  }
   return after;
 }
 
@@ -425,9 +452,15 @@ export async function buildPoEmailDraft(id: string, actor: PoActor): Promise<Ema
   assertPoAccess(actor);
   const po = await db.purchaseOrder.findUnique({ where: { id }, include: { supplier: { include: { contacts: true } }, supplierContact: true } });
   if (!po) throw new DocRuleError("Purchase order not found.");
-  const err = po.status === "DRAFT" ? "Approve the PO before emailing it." : po.status === "VOID" ? "A void PO can't be emailed." : null;
-  if (err) throw new DocRuleError(err);
   const snap = await getSettingsSnapshot();
+  const needs = poNeedsApproval(money(po.subtotal), snap.settings.approval.poTotalAbove);
+  const err =
+    po.status === "VOID"
+      ? "A void PO can't be emailed."
+      : po.status === "DRAFT" && needs
+        ? "Approve the PO before emailing it."
+        : null;
+  if (err) throw new DocRuleError(err);
   const main = po.supplier.contacts.find((c) => c.isMain && c.active);
   const contact = po.supplierContact?.email ? po.supplierContact : main;
   const total = Number(po.subtotal).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

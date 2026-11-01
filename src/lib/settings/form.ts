@@ -28,7 +28,7 @@ export const NUMBERED_DOCS = [
 export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
   switch (key) {
     case "approval":
-      return { marginBelowPct: get("marginBelowPct"), totalAbove: get("totalAbove") };
+      return { marginBelowPct: get("marginBelowPct"), totalAbove: get("totalAbove"), poTotalAbove: get("poTotalAbove") };
     case "quotes":
       return { defaultValidityDays: get("defaultValidityDays") };
     case "numbering":

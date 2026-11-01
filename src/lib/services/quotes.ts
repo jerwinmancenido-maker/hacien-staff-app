@@ -6,10 +6,15 @@ import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
-import { assertCan, canSeeCosts, type PermissionUser } from "../permissions";
+import { assertCan, assertCanApprove, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
+import {
+  quoteApprovalClearData,
+  quoteMoneyFieldsChanged,
+  quoteNotApprovedError,
+} from "../quotes/approval";
 import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
@@ -33,6 +38,12 @@ export function quoteAudit(q: QuoteWithItems) {
   return {
     number: q.number,
     status: q.status,
+    approvalStatus: q.approvalStatus,
+    approvedById: q.approvedById,
+    approvedAt: q.approvedAt ? q.approvedAt.toISOString() : null,
+    rejectedById: q.rejectedById,
+    rejectedAt: q.rejectedAt ? q.rejectedAt.toISOString() : null,
+    rejectReason: q.rejectReason,
     customerId: q.customerId,
     contactId: q.contactId,
     date: ymd(q.date),
@@ -53,6 +64,11 @@ export function quoteAudit(q: QuoteWithItems) {
     netMarginPct: money(q.netMarginPct),
     items: auditItems(q.items.filter((i) => !i.removedAt)),
   };
+}
+
+function assertQuoteApproved(quote: Pick<Quote, "approvalStatus">) {
+  const err = quoteNotApprovedError(quote.approvalStatus);
+  if (err) throw new DocRuleError(err);
 }
 
 /**
@@ -239,6 +255,18 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.quoteItem.create({ data: { ...itemData(item), quoteId: id } });
       }
+      const beforeItems = before.items
+        .filter((i) => !i.removedAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((i) => ({ qty: money(i.qty), unitPrice: money(i.unitPrice), total: money(i.total) }));
+      const afterItems = items.map((i) => ({ qty: i.qty, unitPrice: i.unitPrice, total: i.total }));
+      const moneyChanged = quoteMoneyFieldsChanged(
+        { contractPrice: money(before.contractPrice), items: beforeItems },
+        { contractPrice: money(moneyTotals.contractPrice), items: afterItems },
+      );
+      const resetApproval =
+        moneyChanged && (before.approvalStatus === "APPROVED" || before.approvalStatus === "REJECTED");
+
       const after = await tx.quote.update({
         where: { id },
         data: {
@@ -254,11 +282,25 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
+          ...(resetApproval ? quoteApprovalClearData() : {}),
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
       });
-      await writeAudit(tx, { userId: actor.id, entityType: "Quote", entityId: id, action: "update", before: quoteAudit(before), after: quoteAudit(after) });
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "Quote",
+        entityId: id,
+        action: "update",
+        before: {
+          ...quoteAudit(before),
+          ...(resetApproval ? { approval: before.approvalStatus === "REJECTED" ? "rejected" : "approved" } : {}),
+        },
+        after: {
+          ...quoteAudit(after),
+          ...(resetApproval ? { approval: "cleared (edited after approval)" } : {}),
+        },
+      });
       return after;
     }, DOC_TX),
   );
@@ -274,6 +316,7 @@ export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): 
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status !== "DRAFT") throw new DocRuleError("Only a draft quote can be marked as sent.");
+    assertQuoteApproved(before);
     const after = await tx.quote.update({
       where: { id },
       data: {
@@ -295,11 +338,12 @@ export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): 
   }, DOC_TX);
 }
 
-async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string) {
+async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string, requireApproved = false) {
   assertCan(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (!from.includes(before.status)) throw new DocRuleError(message);
+    if (requireApproved) assertQuoteApproved(before);
     const after = await tx.quote.update({ where: { id }, data: { status: to, updatedById: actor.id }, include: { items: { where: { removedAt: null } } } });
     await writeAudit(tx, { userId: actor.id, entityType: "Quote", entityId: id, action: "update", before: { status: before.status }, after: { status: after.status } });
     return after;
@@ -307,7 +351,85 @@ async function setStatus(id: string, actor: DocActor, from: readonly Quote["stat
 }
 
 export function markQuoteSent(id: string, actor: DocActor) {
-  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.");
+  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true);
+}
+
+/** Approver/Admin: PENDING → APPROVED. */
+export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWithItems> {
+  assertCanApprove(actor);
+  return db.$transaction(async (tx) => {
+    const before = await lockQuote(tx, id);
+    if (before.status === "VOID") throw new DocRuleError("A void quote can't be approved.");
+    if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved.");
+    const now = new Date();
+    const after = await tx.quote.update({
+      where: { id },
+      data: {
+        approvalStatus: "APPROVED",
+        approvedById: actor.id,
+        approvedAt: now,
+        rejectedById: null,
+        rejectedAt: null,
+        rejectReason: null,
+        updatedById: actor.id,
+      },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { approvalStatus: before.approvalStatus },
+      after: {
+        approvalStatus: after.approvalStatus,
+        approvedBy: "name" in actor && typeof actor.name === "string" ? actor.name : actor.id,
+        approvedAt: now.toISOString(),
+      },
+    });
+    return after;
+  });
+}
+
+/** Approver/Admin: PENDING (or re-review) → REJECTED. Reason required. */
+export async function rejectQuote(id: string, reason: string, actor: DocActor): Promise<QuoteWithItems> {
+  assertCanApprove(actor);
+  const why = reason.trim();
+  if (!why) throw new DocRuleError("Give a reason for rejecting this quote.", "reason");
+  return db.$transaction(async (tx) => {
+    const before = await lockQuote(tx, id);
+    if (before.status === "VOID") throw new DocRuleError("A void quote can't be rejected.");
+    if (before.approvalStatus === "REJECTED") throw new DocRuleError("This quote is already rejected.");
+    if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved. Edit prices to send it back for approval first.");
+    const now = new Date();
+    const after = await tx.quote.update({
+      where: { id },
+      data: {
+        approvalStatus: "REJECTED",
+        rejectedById: actor.id,
+        rejectedAt: now,
+        rejectReason: why,
+        approvedById: null,
+        approvedAt: null,
+        updatedById: actor.id,
+      },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { approvalStatus: before.approvalStatus },
+      after: {
+        approvalStatus: after.approvalStatus,
+        rejectedBy: "name" in actor && typeof actor.name === "string" ? actor.name : actor.id,
+        rejectReason: why,
+        rejectedAt: now.toISOString(),
+      },
+    });
+    return after;
+  });
 }
 
 export function markQuoteLost(id: string, actor: DocActor) {
@@ -407,6 +529,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       if (quote.status !== "DRAFT" && quote.status !== "SENT") {
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
+      assertQuoteApproved(quote);
       const customer = await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });
       const number = await allocateDocNumber(tx, "SALES_ORDER", year, format);
       const so = await tx.salesOrder.create({
@@ -481,6 +604,7 @@ export async function buildQuoteEmailDraft(id: string, actor: DocActor): Promise
   const quote = await db.quote.findUnique({ where: { id }, include: { customer: { include: { contacts: true } }, contact: true } });
   if (!quote) throw new DocRuleError("Quote not found.");
   if (quote.status === "VOID") throw new DocRuleError("A void quote can't be emailed.");
+  assertQuoteApproved(quote);
   const snap = await getSettingsSnapshot();
   const main = quote.customer.contacts.find((c) => c.isMain && c.active);
   const contact = quote.contact?.email ? quote.contact : main;

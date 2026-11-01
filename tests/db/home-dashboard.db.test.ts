@@ -25,18 +25,17 @@ import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { loadHomeDashboard, homeSumAmounts } from "@/lib/home/dashboard";
 import { listSupplierBillsDueSoon } from "@/lib/payables/views";
 import { listPurchaseOrdersView, listReceivingView } from "@/lib/purchasing/views";
-import { approvalReasons, fromScaled, toScaled } from "@/lib/quotes/calc";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { listQuotesView, listSalesOrdersView } from "@/lib/quotes/views";
-import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { recordBilling } from "@/lib/services/billings";
 import { customerCreditBalance, recordCollection } from "@/lib/services/collections";
 import { listCustomers } from "@/lib/services/companies";
 import {
-  approvePurchaseOrder,
   createPurchaseOrdersFromSalesOrder,
   markPurchaseOrderSent,
 } from "@/lib/services/purchase-orders";
-import { convertQuoteToSalesOrder, createQuote, markQuoteSent, type DocActor } from "@/lib/services/quotes";
+import { approveQuote, convertQuoteToSalesOrder, createQuote, markQuoteSent, type DocActor } from "@/lib/services/quotes";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
 import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
@@ -119,6 +118,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       }),
       admin,
     );
+    await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddress: "Manila" }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
@@ -303,6 +303,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       }),
       admin,
     );
+    await approveQuote(stale.id, admin);
     await markQuoteSent(stale.id, admin);
     await db.quote.update({ where: { id: stale.id }, data: { date: addDays(manilaToday(), -10) } });
 
@@ -310,7 +311,6 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const needsPoSo = await openSo(year, "12000", "9000");
 
     const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
-    await approvePurchaseOrder(po!.id, admin);
     await markPurchaseOrderSent(po!.id, admin);
     const poRow = await db.purchaseOrder.findUniqueOrThrow({ where: { id: po!.id } });
     const overAmount = String(Number(money(poRow.subtotal)) + 1500);
@@ -765,12 +765,11 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     expect(ours?.credit).toBe("123.45");
   });
 
-  it("listQuotesView needsApproval batch matches per-quote approvalReasons", async () => {
+  it("listQuotesView needsApproval lists PENDING workflow quotes (non-void)", async () => {
     const year = await freshYear();
     const customer = await makeCustomer(["GOODS_1"]);
     const supplier = await makeSupplier();
-    // Large contract → needs approval under default thresholds.
-    await createQuote(
+    const pending = await createQuote(
       quoteInput(customer.id, year, {
         contactId: customer.contacts[0]!.id,
         items: [
@@ -788,8 +787,7 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       }),
       admin,
     );
-    // Small margin-ok draft should not need approval.
-    await createQuote(
+    const approved = await createQuote(
       quoteInput(customer.id, year, {
         contactId: customer.contacts[0]!.id,
         items: [
@@ -807,30 +805,17 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       }),
       admin,
     );
+    await approveQuote(approved.id, admin);
 
     const batched = await listQuotesView({ needsApproval: true }, admin);
-    // Same candidate window as listQuotesView (status DRAFT, take 500, same order).
-    const drafts = await db.quote.findMany({
-      where: { status: "DRAFT" },
-      select: {
-        id: true,
-        settingsVersionId: true,
-        contractPrice: true,
-        netMarginPct: true,
-      },
+    const expected = await db.quote.findMany({
+      where: { approvalStatus: "PENDING", status: { not: "VOID" } },
+      select: { id: true },
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 500,
     });
-    const expectedIds: string[] = [];
-    const fallback = await getSettingsSnapshot();
-    for (const q of drafts) {
-      const snap = (await getSettingsVersion(q.settingsVersionId)) ?? fallback;
-      const reasons = approvalReasons(
-        { contractPrice: money(q.contractPrice), netMarginPct: money(q.netMarginPct) },
-        snap.settings.approval,
-      );
-      if (reasons.length > 0) expectedIds.push(q.id);
-    }
-    expect(batched.map((r) => r.id).sort()).toEqual(expectedIds.sort());
+    expect(batched.map((r) => r.id).sort()).toEqual(expected.map((r) => r.id).sort());
+    expect(batched.some((r) => r.id === pending.id)).toBe(true);
+    expect(batched.some((r) => r.id === approved.id)).toBe(false);
   });
 });

@@ -87,7 +87,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           className={`filter-chip${needsApproval ? " active" : ""}`}
           href={href(s, { status: undefined, needsApproval: "1", noReply: undefined, open: undefined })}
         >
-          Needs approval
+          Waiting for approval
         </Link>
         <Link
           className={`filter-chip${noReplyDays ? " active" : ""}`}

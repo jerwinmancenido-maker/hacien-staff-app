@@ -29,6 +29,18 @@ export function ApprovalChip({ approval }: { approval: { needed: boolean; reason
   );
 }
 
+/** S-18 workflow approval (Waiting / Approved / Rejected). */
+export function QuoteWorkflowApprovalChip({
+  status,
+  label,
+}: {
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  label: string;
+}) {
+  const tone: ChipTone = status === "APPROVED" ? "green" : status === "REJECTED" ? "red" : "grey";
+  return <Chip tone={tone}>{label}</Chip>;
+}
+
 export type ItemsTableRow = {
   id: string;
   description: string;

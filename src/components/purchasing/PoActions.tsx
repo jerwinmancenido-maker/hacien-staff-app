@@ -18,6 +18,8 @@ type Props = {
   canEdit: boolean;
   canApprove: boolean;
   approveBlockedReason: string | null;
+  /** S-18: Draft under/at the PO limit may mark sent without approval. */
+  canMarkSentFromDraft?: boolean;
   postedReceipts: number;
   actions: {
     approve: (id: string) => Promise<FormState>;
@@ -28,7 +30,17 @@ type Props = {
   };
 };
 
-export function PoActions({ id, number, status, canEdit, canApprove, approveBlockedReason, postedReceipts, actions }: Props) {
+export function PoActions({
+  id,
+  number,
+  status,
+  canEdit,
+  canApprove,
+  approveBlockedReason,
+  canMarkSentFromDraft = false,
+  postedReceipts,
+  actions,
+}: Props) {
   const [dialog, setDialog] = useState<"void" | "close" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -45,14 +57,22 @@ export function PoActions({ id, number, status, canEdit, canApprove, approveBloc
   const items: MenuItem[] = [];
   if (canEdit && editable) items.push({ key: "edit", label: status === "APPROVED" ? "Edit (returns to Draft)" : "Edit", href: `/purchase-orders/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/purchase-orders/${id}`, newTab: true });
-  if (canEdit && status !== "DRAFT" && status !== "VOID") items.push({ key: "email", label: "Email draft", onSelect: () => run(() => actions.email(id)) });
+  if (canEdit && ((status !== "DRAFT" && status !== "VOID") || canMarkSentFromDraft) && status !== "VOID") {
+    items.push({ key: "email", label: "Email draft", onSelect: () => run(() => actions.email(id)) });
+  }
   if (canEdit && receivable) items.push({ key: "receive", label: "Receive items", href: `/receiving/${id}/new` });
   if (canEdit && ["SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"].includes(status)) items.push({ key: "bill", label: "Record supplier bill", href: `/purchase-orders/${id}/bill` });
   if (canEdit && (status === "PARTIALLY_RECEIVED" || status === "RECEIVED")) items.push({ key: "close", label: status === "PARTIALLY_RECEIVED" ? "Short-close" : "Close", onSelect: () => setDialog("close") });
   if (canEdit && ["DRAFT", "APPROVED", "SENT"].includes(status) && postedReceipts === 0) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
   let primary: React.ReactNode = null;
-  if (status === "DRAFT" && (canApprove || approveBlockedReason)) {
+  if (canEdit && status === "DRAFT" && canMarkSentFromDraft) {
+    primary = (
+      <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.markSent(id))}>
+        Mark as sent
+      </button>
+    );
+  } else if (status === "DRAFT" && (canApprove || approveBlockedReason)) {
     primary = (
       <button type="button" className="btn" disabled={pending || !canApprove} title={approveBlockedReason ?? undefined} onClick={() => run(() => actions.approve(id))}>
         Approve PO

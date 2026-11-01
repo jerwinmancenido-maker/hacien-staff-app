@@ -111,7 +111,9 @@ describe("home visibility / feature flags", () => {
     expect(canShowActionRow("billingsOverdue", 2, costs)).toBe(true);
     expect(canShowActionRow("billsOverPo", 3, staff)).toBe(false);
     expect(canShowActionRow("billsOverPo", 3, costs)).toBe(true);
-    expect(canShowActionRow("quotesNeedsApproval", 1, staff)).toBe(true);
+    expect(canShowActionRow("quotesNeedsApproval", 1, staff)).toBe(false);
+    expect(canShowActionRow("quotesNeedsApproval", 1, user({ roles: ["APPROVER"] }))).toBe(true);
+    expect(canShowActionRow("quotesNeedsApproval", 1, user({ roles: ["ADMIN"], costs: true }))).toBe(true);
   });
 
   it("treats zero customers as the empty / getting-started state", () => {

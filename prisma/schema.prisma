@@ -47,6 +47,8 @@ model User {
 
   quotesCreated      Quote[]            @relation("QuoteCreatedBy")
   quotesUpdated      Quote[]            @relation("QuoteUpdatedBy")
+  quotesApproved     Quote[]            @relation("QuoteApprovedBy")
+  quotesRejected     Quote[]            @relation("QuoteRejectedBy")
   salesOrdersCreated SalesOrder[]       @relation("SalesOrderCreatedBy")
   salesOrdersUpdated SalesOrder[]       @relation("SalesOrderUpdatedBy")
   voids              DocumentVoid[]
@@ -461,6 +463,13 @@ enum QuoteStatus {
   VOID
 }
 
+// Workflow approval (orthogonal to QuoteStatus). Send / email / convert need APPROVED.
+enum QuoteApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum SalesOrderStatus {
   OPEN
   VOID
@@ -511,6 +520,16 @@ model Quote {
   // Net margin as % of the contract price, 2 dp.
   netMarginPct     Decimal @default(0) @db.Decimal(7, 2)
 
+  // S-18: Approver/Admin must approve before send / email / convert.
+  approvalStatus QuoteApprovalStatus @default(PENDING)
+  approvedById   String?
+  approvedBy     User?               @relation("QuoteApprovedBy", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+  rejectedById   String?
+  rejectedBy     User?               @relation("QuoteRejectedBy", fields: [rejectedById], references: [id])
+  rejectedAt     DateTime?
+  rejectReason   String?             @db.Text
+
   voidedAt    DateTime?
   voidReason  String?   @db.Text
   createdById String
@@ -525,6 +544,7 @@ model Quote {
 
   @@index([customerId])
   @@index([status])
+  @@index([approvalStatus])
   @@index([date])
 }
 

@@ -82,6 +82,8 @@ export const settingsSections = {
   approval: z.object({
     marginBelowPct: z.coerce.number().min(0, "0 or more.").max(100, "100 or less."),
     totalAbove: z.coerce.number().min(0, "0 or more."),
+    /** PO subtotal strictly above this (₱, 2 dp) needs Approver/Admin sign-off. Default 100000. */
+    poTotalAbove: z.coerce.number().min(0, "0 or more.").default(100_000),
   }),
   quotes: z.object({
     defaultValidityDays: z.coerce.number().int().min(1, "At least 1 day.").max(365, "At most 365 days."),

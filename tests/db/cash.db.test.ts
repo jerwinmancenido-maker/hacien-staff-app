@@ -23,7 +23,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { cashAccountBalance, createCashAccount, updateCashAccount, type CashActor } from "@/lib/services/cash-accounts";
 import { recordCashTransfer, voidCashTransfer } from "@/lib/services/cash-transfers";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
-import { convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
+import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling } from "@/lib/services/billings";
 import { recordCollection, voidCollection } from "@/lib/services/collections";
 import {
@@ -130,6 +130,7 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
       },
       admin,
     );
+    await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-CASH", deliveryAddress: "Manila" }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });

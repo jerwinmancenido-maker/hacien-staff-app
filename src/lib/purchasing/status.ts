@@ -61,10 +61,27 @@ export function afterEdit(status: PoStatus): { status: PoStatus; clearsApproval:
   return status === "APPROVED" ? { status: "DRAFT", clearsApproval: true } : { status, clearsApproval: false };
 }
 
-/** Approver must differ from the creator, unless the approver is an Admin. */
-export function approverError(approver: { id: string; isAdmin: boolean }, createdById: string): string | null {
-  if (approver.id === createdById && !approver.isAdmin) return "Someone other than the creator must approve this PO.";
+/** Creator never approves their own PO — even an Admin (S-18). */
+export function approverError(approver: { id: string }, createdById: string): string | null {
+  if (approver.id === createdById) return "Someone other than the creator must approve this PO.";
   return null;
+}
+
+/**
+ * POs with subtotal strictly above the Settings limit need Approver/Admin sign-off.
+ * Exactly at the limit (e.g. 100000.00) needs no approval step. Compare via scaled
+ * cents — never floats.
+ */
+export function poNeedsApproval(subtotal: string, poTotalAbove: number | string): boolean {
+  return toScaled(subtotal, 2) > toScaled(Number(poTotalAbove).toFixed(2), 2);
+}
+
+/** When under/at the limit, Draft may go straight to Sent (no approval step). */
+export function poMarkSentError(status: PoStatus, needsApproval: boolean): string | null {
+  if (status === "VOID") return "This PO is void.";
+  if (status === "APPROVED") return null;
+  if (status === "DRAFT" && !needsApproval) return null;
+  return poActionError(status, "markSent");
 }
 
 /** Short-closing a partially received PO needs a reason. */
