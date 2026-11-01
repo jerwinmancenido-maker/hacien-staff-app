@@ -78,6 +78,19 @@ Before/after screenshots at **390px** and **1280px**. Brand (HACIEN): black and 
 
 No new dependencies unless the brief says so. Smallest diff that works; no new abstractions. No customer data, secrets, or tokens in code, logs, or PRs.
 
+## Review lessons
+
+- Fail closed: a missing setting, pinned settings version, secret, or role flag means refuse / needs approval — never fall back to latest or permissive.
+- Money documents use their pinned `settingsVersionId`, not the latest settings.
+- Audit/log writes go in the same transaction as the status change they record.
+- Any edit to cost, price, qty, or withholding on an approved quote/PO resets approval.
+- Withholding never appears on customer-facing prints.
+- Seed and screenshot data must agree with the rules (e.g. a WON quote is approved).
+- Remove the old UI when a new one replaces it (no duplicate chips/badges).
+- Tests import the real module, never a copied version of the logic; HIGH RISK money/BIR changes need tests covering the changed logic.
+- Migrations are additive with an explicit backfill; say what the backfill does in the PR.
+- Visual PRs: 390 and 1280 before/after screenshots. Resolve real Bugbot findings before handoff.
+
 ## Repo map
 
 | Path | What |

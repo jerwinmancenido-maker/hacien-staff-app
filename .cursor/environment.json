@@ -1,0 +1,9 @@
+{
+  "name": "HACIEN staff app",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "user": "ubuntu",
+  "install": "npm ci",
+  "start": "bash .cursor/start.sh"
+}
