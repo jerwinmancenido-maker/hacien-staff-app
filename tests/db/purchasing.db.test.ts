@@ -189,7 +189,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("status flow and roles", () => {
-    it("Draft → Approved → Sent; creator (incl. Admin) can't self-approve; staff can't approve", async () => {
+    it("Draft → Approved → Sent; Approver can't self-approve; Admin can; staff can't approve", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
       const [po, po2] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), approver);
@@ -197,12 +197,11 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(approvePurchaseOrder(po!.id, approver)).rejects.toThrow(/other than the creator/);
       await expect(approvePurchaseOrder(po!.id, buyer)).rejects.toBeInstanceOf(ForbiddenError);
       await expect(markPurchaseOrderSent(po!.id, buyer)).rejects.toThrow(/Approve the PO/);
-      // Admin creator also cannot approve their own (S-18). Under-limit: mark sent without approval.
+      // Under-limit: Admin creator may mark sent without an approval step.
       const ownUnder = await createStandalonePurchaseOrder(standalone(po!.supplierId, year), admin);
       expect(ownUnder.subtotal.toFixed(2)).toBe("7500.00");
-      await expect(approvePurchaseOrder(ownUnder.id, admin)).rejects.toThrow(/other than the creator/);
       expect((await markPurchaseOrderSent(ownUnder.id, admin)).status).toBe("SENT");
-      // Over-limit own PO: Admin still blocked from self-approve; second Admin/Approver can.
+      // Over-limit own PO: Admin may self-approve; Approver still cannot.
       const ownOver = await createStandalonePurchaseOrder(
         {
           ...standalone(po!.supplierId, year),
@@ -210,8 +209,18 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         },
         admin,
       );
-      await expect(approvePurchaseOrder(ownOver.id, admin)).rejects.toThrow(/other than the creator/);
-      expect((await approvePurchaseOrder(ownOver.id, approver)).status).toBe("APPROVED");
+      const selfApproved = await approvePurchaseOrder(ownOver.id, admin);
+      expect(selfApproved.status).toBe("APPROVED");
+      expect(selfApproved.approvedById).toBe(admin.id);
+      const approverOwn = await createStandalonePurchaseOrder(
+        {
+          ...standalone(po!.supplierId, year),
+          items: [{ id: null, description: "Approver big buy", kind: "GOODS", qty: "1", unit: "lot", unitCost: "150000" }],
+        },
+        approver,
+      );
+      await expect(approvePurchaseOrder(approverOwn.id, approver)).rejects.toThrow(/other than the creator/);
+      expect((await approvePurchaseOrder(approverOwn.id, admin)).status).toBe("APPROVED");
       const approved = await approvePurchaseOrder(po!.id, admin);
       expect(approved.approvedById).toBe(admin.id);
       expect((await markPurchaseOrderSent(po!.id, buyer)).status).toBe("SENT");
@@ -258,9 +267,19 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       );
       expect(over.subtotal.toFixed(2)).toBe("100000.01");
       await expect(markPurchaseOrderSent(over.id, admin)).rejects.toThrow(/Approve the PO/);
-      await expect(approvePurchaseOrder(over.id, admin)).rejects.toThrow(/other than the creator/);
-      expect((await approvePurchaseOrder(over.id, approver)).status).toBe("APPROVED");
+      // Admin creator may self-approve an over-limit PO; Approver creator may not.
+      expect((await approvePurchaseOrder(over.id, admin)).status).toBe("APPROVED");
       expect((await markPurchaseOrderSent(over.id, admin)).status).toBe("SENT");
+
+      const approverOver = await createStandalonePurchaseOrder(
+        {
+          ...standalone(supplier.id, year),
+          items: [{ id: null, description: "Approver over limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000.01" }],
+        },
+        approver,
+      );
+      await expect(approvePurchaseOrder(approverOver.id, approver)).rejects.toThrow(/other than the creator/);
+      expect((await approvePurchaseOrder(approverOver.id, admin)).status).toBe("APPROVED");
     });
 
     it("missing/unresolvable settings pin fails closed (needs approval; mark-sent and email blocked)", async () => {

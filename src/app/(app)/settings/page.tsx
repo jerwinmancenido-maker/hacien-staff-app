@@ -96,7 +96,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   kind: "number",
                   value: s.approval.poTotalAbove,
                   prefix: "₱",
-                  hint: `At ${formatPeso(s.approval.poTotalAbove)} or less: no approval step. Strictly above: Approver/Admin (not the creator). Applies to new POs; each PO keeps the limit from when it was created.`,
+                  hint: `At ${formatPeso(s.approval.poTotalAbove)} or less: no approval step. Strictly above: Approver/Admin sign-off (Admin may self-approve; Approver may not). Applies to new POs; each PO keeps the limit from when it was created.`,
                 },
               ]}
             />

@@ -107,9 +107,11 @@ describe("PO status machine", () => {
     expect(afterEdit("DRAFT")).toEqual({ status: "DRAFT", clearsApproval: false });
   });
 
-  it("approver must differ from the creator (Admin included)", () => {
+  it("Approver may not self-approve; Admin may", () => {
     expect(approverError({ id: "u1" }, "u1")).toMatch(/other than the creator/);
-    expect(approverError({ id: "u2" }, "u1")).toBeNull();
+    expect(approverError({ id: "u1", isAdmin: false }, "u1")).toMatch(/other than the creator/);
+    expect(approverError({ id: "u1", isAdmin: true }, "u1")).toBeNull();
+    expect(approverError({ id: "u2", isAdmin: false }, "u1")).toBeNull();
   });
 
   it("PO needs approval only when subtotal is strictly above the limit (scaled cents)", () => {
