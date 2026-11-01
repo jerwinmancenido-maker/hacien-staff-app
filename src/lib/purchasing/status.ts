@@ -61,9 +61,9 @@ export function afterEdit(status: PoStatus): { status: PoStatus; clearsApproval:
   return status === "APPROVED" ? { status: "DRAFT", clearsApproval: true } : { status, clearsApproval: false };
 }
 
-/** Creator never approves their own PO — even an Admin (S-18). */
-export function approverError(approver: { id: string }, createdById: string): string | null {
-  if (approver.id === createdById) return "Someone other than the creator must approve this PO.";
+/** Approver (and non-Admin) may not approve their own PO; Admin may self-approve. */
+export function approverError(approver: { id: string; isAdmin?: boolean }, createdById: string): string | null {
+  if (approver.id === createdById && !approver.isAdmin) return "Someone other than the creator must approve this PO.";
   return null;
 }
 

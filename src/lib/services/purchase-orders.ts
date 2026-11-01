@@ -347,7 +347,7 @@ async function transition(
   });
 }
 
-/** Draft → Approved. Needs "approve"; creator never approves their own PO (even Admin). */
+/** Draft → Approved. Needs "approve"; Approver may not self-approve, Admin may. */
 export async function approvePurchaseOrder(id: string, actor: PoActor) {
   const { after } = await transition(
     id,
