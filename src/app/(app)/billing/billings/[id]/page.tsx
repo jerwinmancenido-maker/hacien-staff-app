@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
+import { ratePctLabel } from "@/lib/quotes/calc";
 import { getBillingView } from "@/lib/billing/views";
 import { Activity } from "@/components/Activity";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
@@ -136,7 +137,7 @@ export default async function BillingDetailPage({
                           <li key={l.id} className="small">
                             {formatPeso(l.amount)}
                             {l.atcCode ? ` · ATC ${l.atcCode}` : ""}
-                            {l.rate ? ` · ${(Number(l.rate) * 100).toFixed(0)}%` : ""}
+                            {l.rate ? ` · ${ratePctLabel(Number(l.rate).toFixed(4))}` : ""}
                           </li>
                         ))}
                       </ul>
