@@ -9,7 +9,8 @@ export type HomeActionKind =
   | "posAwaitingReceipt"
   | "billsOverPo"
   | "billingsOverdue"
-  | "customersNoWithholding";
+  | "customersNoWithholding"
+  | "pending2307";
 
 export type HomeMoneyKind =
   | "owedByCustomers"
@@ -43,6 +44,8 @@ export function canShowActionRow(kind: HomeActionKind, count: number, user: Perm
   if (COST_ACTION_KINDS.includes(kind) && !canSeeCosts(user)) return false;
   // S-18: Waiting for approval list is Approver/Admin only.
   if (kind === "quotesNeedsApproval" && !can(user, "approve")) return false;
+  // 2307 pending is a billing action — hide when the viewer cannot manage billing.
+  if (kind === "pending2307" && !can(user, "manage_billing") && !can(user, "view")) return false;
   return true;
 }
 

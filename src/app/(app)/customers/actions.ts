@@ -32,6 +32,7 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
     const type = str(form, "withholdingType") || undefined;
     // "No" always saves explicit none []; Yes shows the pick boxes.
+    // Blank / not-set stays null and is rejected by the schema (never coerced to []).
     const pick = resolveCustomerSavedPick(type, parsePickFromForm(form));
     const parsed = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
       name: str(form, "name"),
@@ -47,7 +48,21 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
         fieldErrors: zodFieldErrors(parsed.error),
       };
     }
-    const saved = await saveCustomer(id, parsed.data, user.id);
+
+    let saved;
+    try {
+      saved = await saveCustomer(id, parsed.data, { id: user.id, isAdmin: user.isAdmin });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save.";
+      if (/Only an Admin can change/i.test(msg)) {
+        return {
+          values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
+          fieldErrors: { defaultWithholding: msg, withholdingType: msg },
+          message: msg,
+        };
+      }
+      throw err;
+    }
     if (!id) createdId = saved.id;
     revalidatePath("/customers");
     revalidatePath(`/customers/${saved.id}`);

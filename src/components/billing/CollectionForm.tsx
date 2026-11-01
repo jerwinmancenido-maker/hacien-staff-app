@@ -6,7 +6,10 @@ import { useFormAction } from "@/components/useFormAction";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { formatPeso } from "@/lib/format";
+import { ratePctLabel } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
+
+export type PrefillCode = { rate: string; atcCode: string | null };
 
 export type OpenBillingRow = {
   id: string;
@@ -17,7 +20,29 @@ export type OpenBillingRow = {
   balance: string;
   defaultRate: string;
   defaultAtc: string | null;
+  /** Prefill from SO lines / snapshot — one entry per ATC. */
+  defaultCodes: PrefillCode[];
 };
+
+type AllocState = {
+  billingId: string;
+  cash: string;
+  withholding: string;
+  rate: string;
+  atc: string;
+  codes: { rate: string; atc: string; amount: string }[];
+};
+
+function codesForBilling(b: OpenBillingRow): AllocState["codes"] {
+  if (b.defaultCodes.length > 0) {
+    return b.defaultCodes.map((c) => ({
+      rate: c.rate,
+      atc: c.atcCode ?? "",
+      amount: "",
+    }));
+  }
+  return [{ rate: b.defaultRate, atc: b.defaultAtc ?? "", amount: "" }];
+}
 
 export function CollectionForm({
   action,
@@ -28,6 +53,7 @@ export function CollectionForm({
   cashAccounts = [],
   cashEnabled = false,
   canEdit,
+  canOverrideRates = false,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   customerId: string;
@@ -38,6 +64,8 @@ export function CollectionForm({
   /** When false (CASH_ENABLED off), hide the deposited-to account selector. */
   cashEnabled?: boolean;
   canEdit: boolean;
+  /** Admin only — Staff cannot type a custom rate/ATC. */
+  canOverrideRates?: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
@@ -45,7 +73,7 @@ export function CollectionForm({
   const [amount, setAmount] = useState(defaults.amountReceived);
 
   const initialAlloc = useMemo(() => {
-    const { rows } = openBillings.reduce<{ left: number; rows: { billingId: string; cash: string; withholding: string; rate: string; atc: string }[] }>(
+    const { rows } = openBillings.reduce<{ left: number; rows: AllocState[] }>(
       (acc, b) => {
         const bal = Number(b.balance);
         const take = acc.left > 0 ? Math.min(bal, acc.left) : 0;
@@ -59,6 +87,7 @@ export function CollectionForm({
               withholding: "",
               rate: b.defaultRate,
               atc: b.defaultAtc ?? "",
+              codes: codesForBilling(b),
             },
           ],
         };
@@ -74,6 +103,18 @@ export function CollectionForm({
 
   const cashSum = allocs.reduce((a, x) => a + (Number(x.cash) || 0), 0);
   const unapplied = Math.max(0, (Number(amount) || 0) - cashSum);
+
+  function setCodeAmount(billingIndex: number, codeIndex: number, value: string) {
+    const next = [...allocs];
+    const row = { ...next[billingIndex]! };
+    const codes = [...row.codes];
+    codes[codeIndex] = { ...codes[codeIndex]!, amount: value };
+    const whTotal = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+    row.codes = codes;
+    row.withholding = whTotal > 0 ? whTotal.toFixed(2) : "";
+    next[billingIndex] = row;
+    setAllocs(next);
+  }
 
   return (
     <form
@@ -178,6 +219,7 @@ export function CollectionForm({
       <p className="faint small">
         Leave cash unallocated to keep it as customer credit (advances / downpayments). Cash applied cannot exceed amount
         received. Unapplied: <strong>{formatPeso(unapplied)}</strong>
+        {!canOverrideRates ? " Rates come from the sales order — only an Admin can override." : ""}
       </p>
       {e.allocations && (
         <div className="alert error" role="alert">
@@ -195,9 +237,8 @@ export function CollectionForm({
                 <th>Due</th>
                 <th className="num">Balance</th>
                 <th className="num">Cash</th>
-                <th className="num">2307</th>
-                <th>Rate</th>
-                <th>ATC</th>
+                <th className="num">2307 total</th>
+                <th>ATC codes</th>
               </tr>
             </thead>
             <tbody>
@@ -205,6 +246,9 @@ export function CollectionForm({
                 <tr key={b.id}>
                   <td>
                     <input type="hidden" name="allocBillingId" value={b.id} />
+                    <input type="hidden" name="allocWithholding" value={allocs[i]?.withholding ?? ""} />
+                    <input type="hidden" name="allocRate" value={allocs[i]?.rate ?? ""} />
+                    <input type="hidden" name="allocAtc" value={allocs[i]?.atc ?? ""} />
                     #{b.invoiceNo}
                     <div className="faint small">{b.number}</div>
                   </td>
@@ -224,46 +268,60 @@ export function CollectionForm({
                       style={{ width: 100 }}
                     />
                   </td>
+                  <td className="num">{allocs[i]?.withholding ? formatPeso(allocs[i]!.withholding) : "—"}</td>
                   <td>
-                    <input
-                      className="input"
-                      name="allocWithholding"
-                      value={allocs[i]?.withholding ?? ""}
-                      onChange={(ev) => {
-                        const next = [...allocs];
-                        next[i] = { ...next[i]!, withholding: ev.target.value };
-                        setAllocs(next);
-                      }}
-                      inputMode="decimal"
-                      style={{ width: 100 }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="input"
-                      name="allocRate"
-                      value={allocs[i]?.rate ?? ""}
-                      onChange={(ev) => {
-                        const next = [...allocs];
-                        next[i] = { ...next[i]!, rate: ev.target.value };
-                        setAllocs(next);
-                      }}
-                      style={{ width: 80 }}
-                      title="Prefill from SO; editable"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="input"
-                      name="allocAtc"
-                      value={allocs[i]?.atc ?? ""}
-                      onChange={(ev) => {
-                        const next = [...allocs];
-                        next[i] = { ...next[i]!, atc: ev.target.value };
-                        setAllocs(next);
-                      }}
-                      style={{ width: 80 }}
-                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {(allocs[i]?.codes ?? []).map((code, ci) => (
+                        <div key={`${b.id}-${ci}`} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          <input type="hidden" name="allocCodeBillingId" value={b.id} />
+                          <input type="hidden" name="allocCodeRate" value={code.rate} />
+                          <input type="hidden" name="allocCodeAtc" value={code.atc} />
+                          <span className="small">
+                            {code.atc || "—"} · {ratePctLabel(Number(code.rate).toFixed(4))}
+                          </span>
+                          {canOverrideRates ? (
+                            <>
+                              <input
+                                className="input"
+                                value={code.rate}
+                                onChange={(ev) => {
+                                  const next = [...allocs];
+                                  const codes = [...next[i]!.codes];
+                                  codes[ci] = { ...codes[ci]!, rate: ev.target.value };
+                                  next[i] = { ...next[i]!, codes, rate: codes[0]?.rate ?? next[i]!.rate };
+                                  setAllocs(next);
+                                }}
+                                style={{ width: 72 }}
+                                title="Rate fraction (Admin)"
+                              />
+                              <input
+                                className="input"
+                                value={code.atc}
+                                onChange={(ev) => {
+                                  const next = [...allocs];
+                                  const codes = [...next[i]!.codes];
+                                  codes[ci] = { ...codes[ci]!, atc: ev.target.value };
+                                  next[i] = { ...next[i]!, codes, atc: codes[0]?.atc ?? next[i]!.atc };
+                                  setAllocs(next);
+                                }}
+                                style={{ width: 72 }}
+                                title="ATC (Admin)"
+                              />
+                            </>
+                          ) : null}
+                          <input
+                            className="input"
+                            name="allocCodeAmount"
+                            value={code.amount}
+                            onChange={(ev) => setCodeAmount(i, ci, ev.target.value)}
+                            inputMode="decimal"
+                            style={{ width: 100 }}
+                            placeholder="Amount"
+                            aria-label={`2307 amount for ${code.atc || "code"}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}

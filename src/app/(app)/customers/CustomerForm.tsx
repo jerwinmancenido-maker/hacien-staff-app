@@ -25,6 +25,7 @@ export function CustomerForm({
   rates,
   action,
   canEdit,
+  canEditWithholding = true,
 }: {
   customer: Customer | null;
   terms: string[];
@@ -32,6 +33,8 @@ export function CustomerForm({
   rates: WithholdingSnapshot[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
+  /** Existing customers: only Admin may change withholding type/rates. */
+  canEditWithholding?: boolean;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const v = (k: keyof Customer) => state.values?.[k] ?? (customer?.[k] as string | null) ?? "";
@@ -48,8 +51,11 @@ export function CustomerForm({
   });
   const e = state.fieldErrors ?? {};
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
-  const blocked = !name.trim() || !withholding;
+  // Blank withholding (type unset, or Yes with rates still null) blocks save — never silent "No".
+  const withholdingBlank = !withholding || (typeIsYes(withholding) && pick == null);
+  const blocked = !name.trim() || withholdingBlank;
   const showPick = typeIsYes(withholding);
+  const withholdingLocked = !canEditWithholding;
 
   function onTypeChange(next: string) {
     setWithholding(next);
@@ -87,7 +93,13 @@ export function CustomerForm({
             }
             full
           >
-            <select id="withholdingType" name="withholdingType" value={withholding} onChange={(ev) => onTypeChange(ev.target.value)}>
+            <select
+              id="withholdingType"
+              name="withholdingType"
+              value={withholding}
+              onChange={(ev) => onTypeChange(ev.target.value)}
+              disabled={withholdingLocked}
+            >
               <option value="">Pick one…</option>
               {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
                 <option key={t} value={t}>
@@ -95,6 +107,7 @@ export function CustomerForm({
                 </option>
               ))}
             </select>
+            {withholdingLocked ? <div className="hint">Only an Admin can change withholding on an existing customer.</div> : null}
           </Field>
           {showPick ? (
             <div className="field full">
@@ -102,7 +115,7 @@ export function CustomerForm({
                 rates={rates}
                 value={pick}
                 onChange={setPick}
-                disabled={!canEdit}
+                disabled={!canEdit || withholdingLocked}
                 error={e.defaultWithholding}
               />
             </div>
@@ -110,6 +123,7 @@ export function CustomerForm({
             // Persist [] when type is No so the server never keeps a stale pick.
             <input type="hidden" name="defaultWithholdingJson" value={withholding === "NONE" ? "[]" : ""} />
           )}
+          {withholdingBlank ? <div className="error">Pick a withholding type and rates (or No withholding) before saving.</div> : null}
           <Field label="Default terms" name="defaultTerms" error={e.defaultTerms}>
             <select id="defaultTerms" name="defaultTerms" defaultValue={v("defaultTerms")}>
               <option value="">None</option>

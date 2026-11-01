@@ -1,7 +1,8 @@
 // Convert a peso amount to English words for print footers.
-// Examples: 20000 → "Twenty thousand pesos only"
-//           20000.50 → "Twenty thousand pesos and 50/100"
-//           0 → "Zero pesos only"
+// Examples: 20000 → "Twenty Thousand Pesos Only"
+//           20000.50 → "Twenty Thousand Pesos and 50/100"
+//           0 → "Zero Pesos Only"
+// Title-case every word except "and" (BIR / receipt style).
 
 const ONES = [
   "",
@@ -61,9 +62,18 @@ function integerWords(n: number): string {
   return parts.join(" ");
 }
 
-function capitalizeFirst(s: string): string {
-  if (!s) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
+/** Title-case words; keep "and" lowercase; capitalize each hyphen segment (Eighty-One). */
+function titleCasePhrase(s: string): string {
+  return s
+    .split(" ")
+    .map((word) => {
+      if (word === "and") return word;
+      return word
+        .split("-")
+        .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1).toLowerCase() : part))
+        .join("-");
+    })
+    .join(" ");
 }
 
 /** Parse money to integer centavos without binary float drift. */
@@ -100,13 +110,14 @@ export function amountInWords(amount: number | string): string {
   const pesos = Math.floor(abs / 100);
   const centavos = abs % 100;
 
-  const pesoPart = `${capitalizeFirst(integerWords(pesos))} peso${pesos === 1 ? "" : "s"}`;
+  const pesoWord = pesos === 1 ? "Peso" : "Pesos";
+  const pesoPart = `${titleCasePhrase(integerWords(pesos))} ${pesoWord}`;
   let phrase: string;
   if (centavos === 0) {
-    phrase = `${pesoPart} only`;
+    phrase = `${pesoPart} Only`;
   } else {
     const frac = String(centavos).padStart(2, "0");
     phrase = `${pesoPart} and ${frac}/100`;
   }
-  return negative ? `Negative ${phrase.charAt(0).toLowerCase()}${phrase.slice(1)}` : phrase;
+  return negative ? `Negative ${phrase}` : phrase;
 }

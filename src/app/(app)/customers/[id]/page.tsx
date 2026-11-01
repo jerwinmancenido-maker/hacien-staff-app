@@ -194,6 +194,7 @@ export default async function CustomerPage({
             rates={rates}
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
+            canEditWithholding={user.isAdmin}
           />
         </div>
       )}

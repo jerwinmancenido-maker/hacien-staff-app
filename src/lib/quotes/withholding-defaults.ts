@@ -145,6 +145,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     active: true,
     sortOrder: 2,
   },
+  // Catalog only (pickable by hand). S-19: never auto-applied as a customer/quote default.
   GOV_PT_3: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_PT_3,
     label: "Government percentage tax 3% (WB080)",

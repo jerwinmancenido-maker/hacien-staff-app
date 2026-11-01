@@ -47,8 +47,11 @@ export default async function BillingHomePage() {
         </Link>
         <Link className="card stat stat-link" href="/billing/2307?status=PENDING">
           <div className="label">2307 pending</div>
-          <div className="value num">{formatPeso(summary.pending2307)}</div>
-          <div className="foot">Awaiting certificate</div>
+          <div className="value num">{summary.pending2307Count}</div>
+          <div className="foot">
+            {summary.pending2307Count === 1 ? "1 billing" : `${summary.pending2307Count} billings`} need a 2307
+            {Number(summary.pending2307) > 0 ? ` · ${formatPeso(summary.pending2307)} recorded pending` : ""}
+          </div>
         </Link>
         <Link className="card stat stat-link" href="/billing/collections">
           <div className="label">Customer credit</div>

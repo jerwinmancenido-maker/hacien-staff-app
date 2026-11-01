@@ -50,6 +50,11 @@ export function customersNoWithholdingHref(): string {
   return "/customers?wh=NOT_SET";
 }
 
+/** Billings that still need a customer 2307 recorded. */
+export function pending2307Href(): string {
+  return "/billing/2307?status=PENDING";
+}
+
 export function owedByCustomersHref(): string {
   return "/billing/aging";
 }

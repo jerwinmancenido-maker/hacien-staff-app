@@ -20,7 +20,10 @@ import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } fr
 import { recordBilling, voidBilling, soBillingSummary } from "@/lib/services/billings";
 import { applyCustomerCredit, customerCreditBalance, mark2307Received, recordCollection, voidCollection } from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
-import { arAgingSummary, getStatement, list2307 } from "@/lib/billing/views";
+import { arAgingSummary, countPending2307Expected, getStatement, list2307 } from "@/lib/billing/views";
+import { getBillingPrintModel } from "@/lib/print/views";
+import { amountInWords } from "@/lib/print/amount-in-words";
+import { saveCustomer } from "@/lib/services/companies";
 import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
@@ -783,7 +786,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(money(wh.amount)).toBe("50.00");
 
     const beforeList = await list2307({ status: "PENDING", customerId: customer.id });
-    expect(beforeList.some((r) => r.id === wh.id)).toBe(true);
+    expect(beforeList.some((r) => r.parentId === wh.id)).toBe(true);
     const beforeSummary = await arAgingSummary();
     expect(toScaled(beforeSummary.pending2307, 2)).toBeGreaterThanOrEqual(toScaled("50.00", 2));
 
@@ -795,7 +798,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(cleared.notes).toMatch(/Voided with collection/);
 
     const afterList = await list2307({ status: "PENDING", customerId: customer.id });
-    expect(afterList.some((r) => r.id === wh.id)).toBe(false);
+    expect(afterList.some((r) => r.parentId === wh.id)).toBe(false);
     const afterSummary = await arAgingSummary();
     // This customer's ₱50 must no longer inflate the pending total.
     expect(toScaled(afterSummary.pending2307, 2)).toBe(toScaled(beforeSummary.pending2307, 2) - toScaled("50.00", 2));
@@ -834,5 +837,259 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const settings = (await getSettingsSnapshot()).settings;
     expect(settings.numbering.billing.prefix).toBe("BL");
     expect(settings.invoiceBooklet.seriesTo).toBe(500);
+  });
+
+  it("S-19 multi-code 2307 saves one line per ATC and list shows both amounts", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "10000.00" });
+    // Point SO lines at WI640 + WI157 so prefill/override checks see both codes.
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    await db.salesOrderItem.create({
+      data: {
+        salesOrderId: so.id,
+        sortOrder: 2,
+        description: "Services line",
+        kind: "SERVICES",
+        qty: "1",
+        unit: "lot",
+        unitPrice: "0",
+        supplierUnitCost: "0",
+        total: "0",
+        supplierTotal: "0",
+        margin: "0",
+        withholdingRate: "0.0200",
+        withholdingAtc: "WI157",
+      },
+    });
+    await db.salesOrder.update({
+      where: { id: so.id },
+      data: {
+        withholding: [
+          { code: "GOV_GOODS_1", label: "Gov goods 1%", lineKind: "GOODS", rate: "0.0100", atcCode: "WI640" },
+          { code: "GOV_SERVICES_2", label: "Gov services 2%", lineKind: "SERVICES", rate: "0.0200", atcCode: "WI157" },
+        ],
+      },
+    });
+
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "5000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+
+    const beforePending = await countPending2307Expected();
+
+    const col = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: "REF-MULTI-2307",
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-MULTI-2307",
+        amountReceived: "4700.00",
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: "4700.00",
+            withholdingApplied: "300.00",
+            codes: [
+              { rate: "0.0100", atcCode: "WI640", amount: "100.00" },
+              { rate: "0.0200", atcCode: "WI157", amount: "200.00" },
+            ],
+          },
+        ],
+      },
+      admin,
+    );
+
+    const parent = await db.withholding2307.findFirstOrThrow({
+      where: { collectionId: col.id },
+      include: { lines: { orderBy: { atcCode: "asc" } } },
+    });
+    expect(money(parent.amount)).toBe("300.00");
+    expect(parent.lines).toHaveLength(2);
+    expect(parent.lines.map((l) => ({ atc: l.atcCode, amount: money(l.amount), rate: Number(l.rate).toFixed(4) }))).toEqual([
+      { atc: "WI157", amount: "200.00", rate: "0.0200" },
+      { atc: "WI640", amount: "100.00", rate: "0.0100" },
+    ]);
+
+    const listed = await list2307({ customerId: customer.id });
+    const forCol = listed.filter((r) => r.parentId === parent.id);
+    expect(forCol).toHaveLength(2);
+    expect(forCol.map((r) => r.atcCode).sort()).toEqual(["WI157", "WI640"]);
+
+    const afterPending = await countPending2307Expected();
+    expect(afterPending).toBe(beforePending - 1);
+  });
+
+  it("S-19 migration backfill keeps parent totals equal to sum of lines", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    // Simulate a legacy single-code parent with no child lines (pre-S-19 row).
+    const legacy = await db.withholding2307.create({
+      data: {
+        billingId: billing.id,
+        customerId: customer.id,
+        rate: "0.0100",
+        atcCode: "WI640",
+        amount: "50.00",
+        status: "PENDING",
+      },
+    });
+    const beforeAmount = money((await db.withholding2307.findUniqueOrThrow({ where: { id: legacy.id } })).amount);
+    expect(await db.withholding2307Line.count({ where: { withholding2307Id: legacy.id } })).toBe(0);
+
+    // Same backfill INSERT as the migration (NOT EXISTS → safe to re-run).
+    const backfill = `
+      INSERT INTO \`Withholding2307Line\` (\`id\`, \`withholding2307Id\`, \`rate\`, \`atcCode\`, \`amount\`, \`createdAt\`, \`updatedAt\`)
+      SELECT REPLACE(UUID(), '-', ''), w.\`id\`, w.\`rate\`, w.\`atcCode\`, w.\`amount\`, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+      FROM \`Withholding2307\` w
+      WHERE w.\`id\` = ?
+        AND w.\`amount\` > 0
+        AND NOT EXISTS (SELECT 1 FROM \`Withholding2307Line\` l WHERE l.\`withholding2307Id\` = w.\`id\`)
+    `;
+    await db.$executeRawUnsafe(backfill, legacy.id);
+    await db.$executeRawUnsafe(backfill, legacy.id); // re-run: must not duplicate
+
+    const lines = await db.withholding2307Line.findMany({ where: { withholding2307Id: legacy.id } });
+    expect(lines).toHaveLength(1);
+    const lineSum = lines.reduce((a, l) => a + toScaled(money(l.amount), 2), 0n);
+    expect(fromScaled(lineSum, 2)).toBe(beforeAmount);
+    expect(money((await db.withholding2307.findUniqueOrThrow({ where: { id: legacy.id } })).amount)).toBe(beforeAmount);
+  });
+
+  it("S-19 billing print shows Subtotal+Total only; words equal Total; no EWT line", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year, { unitPrice: "81500.75" });
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "81500.75",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    // Force expected EWT so old code would have printed Less: EWT.
+    await db.billing.update({
+      where: { id: billing.id },
+      data: { withholdingExpected: "815.00", netExpected: "80685.75" },
+    });
+    const print = await getBillingPrintModel(billing.id);
+    expect(print).not.toBeNull();
+    const totals = print!.doc.totals ?? [];
+    expect(totals.map((t) => t.label)).toEqual(["Subtotal", "Total"]);
+    expect(totals.every((t) => t.amount === "81500.75")).toBe(true);
+    expect(print!.doc.totalInWords).toBe(amountInWords("81500.75"));
+    expect(JSON.stringify(totals)).not.toMatch(/EWT|withholding/i);
+  });
+
+  it("S-19 Staff cannot change existing customer withholding; Admin can", async () => {
+    const customer = await makeCustomer(["GOODS_1"]);
+    await expect(
+      saveCustomer(
+        customer.id,
+        {
+          name: customer.name,
+          tin: customer.tin,
+          withholdingType: "NONE",
+          defaultWithholding: [],
+          defaultTerms: customer.defaultTerms,
+          notes: null,
+        },
+        { id: staff.id, isAdmin: false },
+      ),
+    ).rejects.toThrow(/Only an Admin can change/);
+
+    await expect(
+      saveCustomer(
+        customer.id,
+        {
+          name: customer.name,
+          tin: customer.tin,
+          withholdingType: "NONE",
+          defaultWithholding: [],
+          defaultTerms: customer.defaultTerms,
+          notes: null,
+        },
+        { id: admin.id, isAdmin: true },
+      ),
+    ).resolves.toMatchObject({ withholdingType: "NONE" });
+  });
+
+  it("S-19 non-Admin with billing access cannot override 2307 rates off the SO standard", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id } });
+    if (items[0]) {
+      await db.salesOrderItem.update({
+        where: { id: items[0].id },
+        data: { withholdingRate: "0.0100", withholdingAtc: "WI640" },
+      });
+    }
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "1000.00",
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    // Approver can manage billing but is not Admin — override must fail closed.
+    await expect(
+      recordCollection(
+        {
+          customerId: customer.id,
+          date: new Date(Date.UTC(year, 2, 6)),
+          method: "CASH",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          receiptNo: "OR-STAFF-OVERRIDE",
+          amountReceived: "900.00",
+          notes: null,
+          allocations: [
+            {
+              billingId: billing.id,
+              cashApplied: "900.00",
+              withholdingApplied: "50.00",
+              codes: [{ rate: "0.0500", atcCode: "WB080", amount: "50.00" }],
+            },
+          ],
+        },
+        approver,
+      ),
+    ).rejects.toThrow(/Only an Admin can override withholding rates/);
   });
 });

@@ -52,7 +52,12 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
     where: { customerId, status: { in: ["OPEN", "PARTIALLY_PAID"] } },
     include: {
       allocations: { where: { collection: { status: "POSTED" } } },
-      salesOrder: { select: { withholding: true } },
+      salesOrder: {
+        select: {
+          withholding: true,
+          items: { select: { withholdingRate: true, withholdingAtc: true } },
+        },
+      },
     },
     orderBy: [{ dueDate: "asc" }, { invoiceDate: "asc" }],
   });
@@ -66,6 +71,21 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
         withholdingApplied: fromScaled(wh, 2),
       });
       const snap = (b.salesOrder.withholding ?? []) as WithholdingSnapshot[];
+      // Prefill from SO lines (distinct ATC); fall back to document snapshot.
+      const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+      for (const item of b.salesOrder.items) {
+        const atc = item.withholdingAtc?.trim() || null;
+        if (!atc || item.withholdingRate == null) continue;
+        const rate = Number(item.withholdingRate).toFixed(4);
+        if (Number(rate) <= 0) continue;
+        if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
+      }
+      const defaultCodes =
+        fromLines.size > 0
+          ? [...fromLines.values()]
+          : snap
+              .filter((s) => Number(s.rate) > 0)
+              .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
       return {
         id: b.id,
         invoiceNo: b.invoiceNo,
@@ -73,8 +93,9 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
         dueDate: b.dueDate.toISOString().slice(0, 10),
         amount: money(b.amount),
         balance,
-        defaultRate: snap[0]?.rate ?? "0.0000",
-        defaultAtc: snap[0]?.atcCode ?? null,
+        defaultRate: defaultCodes[0]?.rate ?? snap[0]?.rate ?? "0.0000",
+        defaultAtc: defaultCodes[0]?.atcCode ?? snap[0]?.atcCode ?? null,
+        defaultCodes,
       };
     })
     .filter((b) => toScaled(b.balance, 2) > 0n);
@@ -92,6 +113,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
         <CollectionForm
           action={recordCollectionAction}
           canEdit
+          canOverrideRates={user.isAdmin}
           customerId={customer.id}
           customerName={customer.name}
           openBillings={openBillings}

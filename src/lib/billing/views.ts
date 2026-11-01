@@ -381,6 +381,28 @@ async function customerCreditsGrouped(): Promise<Map<string, { name: string; cre
   return out;
 }
 
+/**
+ * Count of billings that expect a customer 2307 and do not have one recorded yet
+ * (posted collection with amount > 0). Same number on Home and /billing/2307.
+ */
+export async function countPending2307Expected(): Promise<number> {
+  const billings = await db.billing.findMany({
+    where: {
+      status: { not: "VOID" },
+      withholdingExpected: { gt: 0 },
+    },
+    select: {
+      id: true,
+      withholdings: {
+        where: { amount: { gt: 0 }, collection: { status: "POSTED" } },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  return billings.filter((b) => b.withholdings.length === 0).length;
+}
+
 export async function arAgingSummary(): Promise<{
   totalReceivable: string;
   overdue: string;
@@ -388,7 +410,10 @@ export async function arAgingSummary(): Promise<{
   overdueCount: number;
   /** Count of non-void billings with balance > 0 (open AR). */
   openCount: number;
+  /** Peso sum of PENDING 2307 amounts (kept for billing hub; count is separate). */
   pending2307: string;
+  /** Billings expecting a 2307 with none recorded yet. */
+  pending2307Count: number;
   credit: string;
   byCustomer: CustomerAgingRow[];
   graceDays: number;
@@ -425,11 +450,12 @@ export async function arAgingSummary(): Promise<{
     byCustomer.set(b.customerId, bucket);
   }
 
-  const [pending2307, creditsByCustomer] = await Promise.all([
+  const [pending2307, pending2307Count, creditsByCustomer] = await Promise.all([
     db.withholding2307.aggregate({
       where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
       _sum: { amount: true },
     }),
+    countPending2307Expected(),
     customerCreditsGrouped(),
   ]);
 
@@ -465,6 +491,7 @@ export async function arAgingSummary(): Promise<{
     overdueCount,
     openCount,
     pending2307: money(pending2307._sum.amount ?? 0),
+    pending2307Count,
     credit: fromScaled(totalCredit, 2),
     byCustomer: customers,
     graceDays: grace,
@@ -487,22 +514,39 @@ export async function list2307(filters: { status?: Withholding2307Status | "ALL"
       billing: { select: { id: true, number: true, invoiceNo: true } },
       collection: { select: { id: true, number: true, date: true } },
       attachments: { where: { archivedAt: null } },
+      lines: { orderBy: [{ atcCode: "asc" }, { createdAt: "asc" }] },
     },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 200,
   });
-  return rows.map((w) => ({
-    id: w.id,
-    amount: money(w.amount),
-    rate: String(w.rate),
-    atcCode: w.atcCode,
-    status: w.status,
-    receivedAt: ymd(w.receivedAt),
-    customer: w.customer,
-    billing: w.billing,
-    collection: w.collection ? { ...w.collection, date: ymd(w.collection.date)! } : null,
-    attachments: w.attachments.map((a) => ({ id: a.id, fileName: a.fileName, href: `/files/attachments/${a.id}` })),
-  }));
+  // One display row per ATC line (fallback to parent when no lines yet).
+  return rows.flatMap((w) => {
+    const base = {
+      parentId: w.id,
+      status: w.status,
+      receivedAt: ymd(w.receivedAt),
+      customer: w.customer,
+      billing: w.billing,
+      collection: w.collection ? { ...w.collection, date: ymd(w.collection.date)! } : null,
+      attachments: w.attachments.map((a) => ({ id: a.id, fileName: a.fileName, href: `/files/attachments/${a.id}` })),
+    };
+    const activeLines = w.lines.filter((l) => toScaled(money(l.amount), 2) > 0n);
+    const lines =
+      activeLines.length > 0
+        ? activeLines
+        : w.lines.length === 0
+          ? [{ id: w.id, rate: w.rate, atcCode: w.atcCode, amount: w.amount }]
+          : [];
+    return lines.map((line, i) => ({
+      ...base,
+      id: line.id,
+      // Mark-received acts on the parent; first line carries the action control.
+      markId: i === 0 ? w.id : null,
+      amount: money(line.amount),
+      rate: String(line.rate),
+      atcCode: line.atcCode,
+    }));
+  });
 }
 
 export async function getBookletView() {
