@@ -30,7 +30,6 @@ const company: Settings["company"] = {
 const print: Settings["print"] = {
   paperSize: "A4",
   showInputTaxDisclaimer: true,
-  showTermsQr: false,
   showReceivingReportCosts: false,
   quoteTerms: "Net 30",
   deliveryNotes: "Deliver weekdays",
@@ -76,8 +75,8 @@ describe("PrintCompanyForm collapsed sections", () => {
     // Fields from collapsed sections still present for submit.
     expect(html).toContain('name="paperSize"');
     expect(html).toContain('name="showInputTaxDisclaimer"');
-    expect(html).toContain('name="showTermsQr"');
-    expect(html).toContain("Show terms QR on prints");
+    expect(html).not.toContain("showTermsQr");
+    expect(html).not.toContain("Show terms QR on prints");
     expect(html).toContain('name="quoteTerms"');
     expect(html).toContain('name="deliveryNotes"');
     expect(html).toContain('name="warrantyNotes"');
@@ -130,7 +129,6 @@ describe("PrintCompanyForm collapsed sections", () => {
     expect(html).toMatch(/<select[^>]*name="paperSize"[^>]*>[\s\S]*?<option value="A4" selected=""/);
     expect(html).toMatch(/name="showInputTaxDisclaimer"[^>]*value="true"|value="true"[^>]*name="showInputTaxDisclaimer"/);
     expect(html).not.toMatch(/id="showInputTaxDisclaimer"/);
-    expect(html).toMatch(/id="showTermsQr"/);
-    expect(html).not.toMatch(/id="showTermsQr"[^>]*\bchecked\b/);
+    expect(html).not.toContain("showTermsQr");
   });
 });

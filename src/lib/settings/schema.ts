@@ -216,16 +216,11 @@ export const settingsSections = {
       inventory_list: taxCalendarObligationSettings,
     }),
   }),
-  // Print / PDF letterhead, paper size, and payment instructions.
+  // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
-    /**
-     * Kept so older snapshots still parse. The input-tax line is always
-     * printed on the five customer prints; this flag no longer gates it.
-     */
+    /** Stored so older snapshots still parse. The input-tax line is no longer gated by this flag. */
     showInputTaxDisclaimer: z.boolean(),
-    /** When ON, prints include a QR and a link to the policies page. Default OFF. */
-    showTermsQr: z.boolean(),
     /**
      * When ON, receiving-report prints may show unit cost / amount — but only
      * for users with cost-view permission. Default OFF (qty-only).

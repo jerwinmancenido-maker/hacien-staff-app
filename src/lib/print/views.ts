@@ -97,14 +97,14 @@ async function letterhead(settingsVersionId?: string | null) {
 async function baseFooter(
   kind: PrintDocKind,
   letter: Awaited<ReturnType<typeof letterhead>>,
-  opts: { thankYou?: boolean; includePayment?: boolean } = {},
+  opts: { thankYou?: boolean; includePayment?: boolean; qr?: boolean } = {},
 ): Promise<
   Pick<
     ProfessionalPrintModel,
     "taxLines" | "thankYou" | "paymentInstructions" | "contactLine" | "qrSvg" | "termsUrl" | "paperSize"
   >
 > {
-  const showQr = letter.print.showTermsQr === true;
+  const showQr = opts.qr === true;
   return {
     paperSize: letter.paperSize,
     taxLines: taxFooterLines(kind),
@@ -151,7 +151,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
   const prepared = printablePersonName(q.createdBy.name);
-  const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true });
+  const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
   const doc: ProfessionalPrintModel = {
@@ -228,7 +228,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const total = money(so.contractPrice);
   const withholding = snapshotList(so.withholding);
   const prepared = printablePersonName(so.createdBy.name);
-  const footer = await baseFooter("sales_order", letter, { thankYou: true, includePayment: true });
+  const footer = await baseFooter("sales_order", letter, { thankYou: true, includePayment: true, qr: true });
   const meta = [
     ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ...(so.buyerPoNo ? [{ label: "Customer PO/ref", value: so.buyerPoNo }] : []),

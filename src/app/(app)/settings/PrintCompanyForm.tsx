@@ -47,7 +47,6 @@ export function PrintCompanyForm({
     email: company.email ?? "",
     website: company.website ?? "",
     paperSize: print.paperSize,
-    showTermsQr: print.showTermsQr,
     banks: print.banks,
     eWallets: print.eWallets,
   });
@@ -121,9 +120,6 @@ export function PrintCompanyForm({
             setLive((prev) => ({ ...prev, [t.name]: t.value }));
           }
           if (t.name === "paperSize") setLive((prev) => ({ ...prev, paperSize: t.value as "A4" | "Letter" }));
-          if (t.name === "showTermsQr" && t instanceof HTMLInputElement) {
-            setLive((prev) => ({ ...prev, showTermsQr: t.checked }));
-          }
         }}
       >
         {state.message && (
@@ -197,22 +193,6 @@ export function PrintCompanyForm({
                   Billing, collection, quote, sales order, and customer statement prints always include: THIS DOCUMENT
                   IS NOT VALID FOR CLAIM OF INPUT TAX.
                 </p>
-                <div className="field full field-check">
-                  <label className="check" htmlFor="showTermsQr">
-                    <input type="hidden" name="showTermsQr" value="false" />
-                    <input
-                      id="showTermsQr"
-                      name="showTermsQr"
-                      type="checkbox"
-                      value="true"
-                      defaultChecked={print.showTermsQr}
-                    />
-                    <span className="check-label-text">Show terms QR on prints</span>
-                  </label>
-                  <div className="hint">
-                    Off by default. When on, prints show a QR code and a link to https://haciensolutions.com/policies.
-                  </div>
-                </div>
                 <div className="field full field-check">
                   <label className="check" htmlFor="showReceivingReportCosts">
                     <input type="hidden" name="showReceivingReportCosts" value="false" />
@@ -423,7 +403,7 @@ export function PrintCompanyForm({
               {[live.email, live.phone].filter(Boolean).join(" · ") || "No email / phone yet"}
             </div>
             <div className="small muted" style={{ marginTop: 8 }}>
-              Paper: {live.paperSize} · Terms QR: {live.showTermsQr ? "On" : "Off"}
+              Paper: {live.paperSize}
             </div>
           </aside>
         </div>
