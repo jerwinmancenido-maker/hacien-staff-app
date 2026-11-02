@@ -109,5 +109,5 @@ export async function changePasswordAction(_prev: FormState, form: FormData): Pr
     if (e instanceof UserRuleError) return { message: e.message };
     throw e;
   }
-  return { ok: true, message: "Password changed. The old one no longer works." };
+  return { ok: true, message: "Password changed. Your other sessions were signed out." };
 }
