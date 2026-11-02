@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { changePasswordSchema, newPasswordSchema, verifyPassword } from "@/lib/auth/password";
-import { checkLoginRateLimit, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
+import { checkLoginRateLimit, passwordChangeAttemptEmail, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
 import { createSession, currentTokenHash, destroyCurrentSession, idleRemainingMs as readIdleRemainingMs } from "@/lib/auth/session";
 import { getCurrentUser, requestMeta } from "@/lib/auth/current-user";
 import { UserRuleError, changePassword, requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
@@ -110,7 +110,7 @@ export async function changePasswordAction(_prev: FormState, form: FormData): Pr
   if (!user) redirect("/login");
 
   const { ip } = await requestMeta();
-  const rateKey = `pwd:${user.email}`;
+  const rateKey = passwordChangeAttemptEmail(user.email);
   if (await checkLoginRateLimit(db, rateKey, ip)) return { message: TOO_MANY_TRIES };
 
   try {

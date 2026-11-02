@@ -11,7 +11,7 @@ const hasDb = vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { checkLoginRateLimit } from "@/lib/auth/rate-limit";
+import { checkLoginRateLimit, passwordChangeAttemptEmail } from "@/lib/auth/rate-limit";
 import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { listNeedsAdminCheck } from "@/lib/billing/views";
@@ -353,10 +353,13 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     const staff = await makeUser("staff");
     const staffRow = await db.user.findUniqueOrThrow({ where: { id: staff.id } });
     const ip = "192.168.1.100";
-    const rateKey = `pwd:${staffRow.email}`;
+    const rateKey = passwordChangeAttemptEmail(staffRow.email);
     for (let i = 0; i < 5; i++) {
       await db.loginAttempt.create({ data: { email: rateKey, ip, success: false } });
     }
     expect(await checkLoginRateLimit(db, rateKey, ip)).toBe(true);
+    const longKey = passwordChangeAttemptEmail(`${"a".repeat(179)}@example.com`);
+    await db.loginAttempt.create({ data: { email: longKey, ip, success: false } });
+    expect(longKey.length).toBeLessThanOrEqual(191);
   });
 });

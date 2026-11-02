@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { changePasswordSchema } from "@/lib/auth/password";
-import { isLoginBlocked, MAX_FAILED_LOGINS } from "@/lib/auth/rate-limit";
+import { isLoginBlocked, LOGIN_ATTEMPT_EMAIL_MAX, MAX_FAILED_LOGINS, passwordChangeAttemptEmail } from "@/lib/auth/rate-limit";
 import { IDLE_MS, nextIdleExpiry, SESSION_MS, sessionPastIdle } from "@/lib/auth/session";
 import { DocRuleError } from "@/lib/documents/common";
 import {
@@ -148,6 +148,17 @@ describe("change password rules", () => {
     expect(changePasswordSchema.safeParse({ current: "OldSample123!", password: "short", confirm: "short" }).success).toBe(false);
     expect(changePasswordSchema.safeParse({ current: "OldSample123!", password: "NewSample123!", confirm: "nope" }).success).toBe(false);
     expect(changePasswordSchema.safeParse({ current: "OldSample123!", password: "NewSample123!", confirm: "NewSample123!" }).success).toBe(true);
+  });
+
+  it("fits the password-change rate key in the login attempt column", () => {
+    const short = "staff@example.com";
+    expect(passwordChangeAttemptEmail(short)).toBe(`pwd:${short}`);
+    const long = `${"a".repeat(179)}@example.com`;
+    expect(long.length).toBe(191);
+    const key = passwordChangeAttemptEmail(long);
+    expect(key.length).toBeLessThanOrEqual(LOGIN_ATTEMPT_EMAIL_MAX);
+    expect(key.startsWith("pwd:")).toBe(true);
+    expect(key).not.toBe(`pwd:${long}`);
   });
 
   it("denies repeated wrong current passwords under the login rate limiter", () => {
