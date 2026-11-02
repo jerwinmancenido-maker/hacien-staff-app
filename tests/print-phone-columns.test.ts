@@ -11,8 +11,9 @@ function ruleWidth(selector: string): string {
   if (at < 0) throw new Error(`missing ${selector}`);
   const body = css.slice(at, at + 240);
   const width = body.match(/width:\s*([^;]+);/);
-  if (!width) throw new Error(`no width for ${selector}`);
-  return width[1].trim();
+  const value = width?.[1];
+  if (!value) throw new Error(`no width for ${selector}`);
+  return value.trim();
 }
 
 describe("phone print columns", () => {
