@@ -4932,6 +4932,16 @@ button.contact-card-add {
     font-size: 7.5pt;
     width: 4.6rem;
   }
+  /* Qty and Unit give their width to Description. Amount stays wide enough for ₱520,000.00. */
+  .pp-items .pp-n {
+    width: 1.15rem;
+  }
+  .pp-items .pp-qty {
+    width: 1.7rem;
+  }
+  .pp-items .pp-unit {
+    width: 1.8rem;
+  }
   .pp-items td.num:last-child,
   .pp-items th.num:last-child,
   .pp-items tfoot th.num {

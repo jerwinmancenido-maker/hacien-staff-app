@@ -29,7 +29,7 @@ const PH_HOLIDAYS_2026 = [
 
 export const DEFAULT_SETTINGS: Settings = {
   approval: { marginBelowPct: 18, totalAbove: 500_000, poTotalAbove: 100_000 },
-  quotes: { defaultValidityDays: 30 },
+  quotes: { defaultValidityDays: 15 },
   numbering: {
     quote: { prefix: "QT", padding: 4, resetYearly: true },
     salesOrder: { prefix: "SO", padding: 4, resetYearly: true },

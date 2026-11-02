@@ -116,6 +116,10 @@ describe("professional print documents", () => {
     expect(taxFooterLines("supplier_statement", { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
     expect(html(supplierStatementFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
     expect(html(poPrintFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
+    const withLine = ["billing", "collection", "quote", "sales_order", "customer_statement"] as const;
+    const withoutLine = ["supplier_po", "supplier_statement", "receiving_report", "supplier_payment", "expense"] as const;
+    expect(withLine.filter((kind) => taxFooterLines(kind).includes(INPUT_TAX_DISCLAIMER))).toEqual([...withLine]);
+    expect(withoutLine.filter((kind) => taxFooterLines(kind, { showInputTaxDisclaimer: true }).includes(INPUT_TAX_DISCLAIMER))).toEqual([]);
   });
 
   it("billing and collection say not an official invoice and include the input-tax note", () => {
