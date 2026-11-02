@@ -4,12 +4,26 @@
 //   (or spoofing) IPs can't buy unlimited guesses at one account.
 // A successful sign-in clears the count.
 
+import { createHash } from "node:crypto";
 import type { Db } from "../db";
 
 export const MAX_FAILED_LOGINS = 5;
 export const MAX_FAILED_LOGINS_PER_EMAIL = 20;
 export const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 export const TOO_MANY_TRIES = "Too many tries. Wait 15 minutes and try again.";
+/** LoginAttempt.email is VarChar(191). */
+export const LOGIN_ATTEMPT_EMAIL_MAX = 191;
+
+/**
+ * Rate-limit key for a signed-in password change.
+ * Short addresses stay `pwd:<email>`. A 191-character address plus the prefix
+ * does not fit the column, so those use a hash and the limit can still be stored.
+ */
+export function passwordChangeAttemptEmail(email: string): string {
+  const key = `pwd:${email}`;
+  if (key.length <= LOGIN_ATTEMPT_EMAIL_MAX) return key;
+  return `pwd:${createHash("sha256").update(email).digest("hex")}`;
+}
 
 export type Attempt = { success: boolean; createdAt: Date };
 export type IpAttempt = Attempt & { ip: string };

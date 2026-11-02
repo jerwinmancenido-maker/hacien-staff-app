@@ -117,7 +117,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
   /** A PO taken to SENT. */
   async function sentPo(year: number) {
     const ctx = await salesOrder(year);
-    const [poA] = await createPurchaseOrdersFromSalesOrder(ctx.so.id, fromSo(year), buyer);
+    const [poA] = await createPurchaseOrdersFromSalesOrder(ctx.so.id, fromSo(year), admin);
     await approvePurchaseOrder(poA!.id, approver);
     await markPurchaseOrderSent(poA!.id, buyer);
     const items = await db.purchaseOrderItem.findMany({ where: { purchaseOrderId: poA!.id }, orderBy: { sortOrder: "asc" } });
@@ -137,7 +137,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
     it("creates one Draft PO per supplier in one transaction, with costs copied from the SO lines", async () => {
       const year = await freshYear();
       const { so, a, b, items } = await salesOrder(year);
-      const pos = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
+      const pos = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
       expect(pos.map((p) => p.number)).toEqual([formatDocNumber(poFormat, year, 1), formatDocNumber(poFormat, year, 2)]);
       expect(pos.map((p) => p.supplierId)).toEqual([a.id, b.id]);
       expect(pos.every((p) => p.status === "DRAFT" && p.salesOrderId === so.id)).toBe(true);
@@ -153,18 +153,18 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       // Audit rows written in the same transaction.
       const audits = await db.auditLog.findMany({ where: { entityType: "PurchaseOrder", entityId: { in: pos.map((p) => p.id) }, action: "create" } });
       expect(audits).toHaveLength(2);
-      expect(await db.auditLog.count({ where: { entityType: "SalesOrder", entityId: so.id, action: "update", userId: buyer.id } })).toBe(1);
+      expect(await db.auditLog.count({ where: { entityType: "SalesOrder", entityId: so.id, action: "update", userId: admin.id } })).toBe(1);
     });
 
     it("skips lines already on a PO and lines with no supplier, unless one is picked", async () => {
       const year = await freshYear();
       const { so, b, items } = await salesOrder(year);
-      await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
-      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer)).rejects.toThrow(/Pick a supplier/);
-      const [third] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year, { supplierPicks: { [items[3]!.id]: b.id } }), buyer);
+      await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
+      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin)).rejects.toThrow(/Pick a supplier/);
+      const [third] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year, { supplierPicks: { [items[3]!.id]: b.id } }), admin);
       expect(third!.number).toBe(formatDocNumber(poFormat, year, 3));
       expect(third!.items.map((i) => i.description)).toEqual(["Installation"]);
-      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer)).rejects.toThrow(/already on a PO/);
+      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin)).rejects.toThrow(/already on a PO/);
       const progress = await getSoPurchasing(so.id, admin);
       expect(progress.ordered).toBe(4);
       expect(progress.lines.every((l) => l.state === "ORDERED")).toBe(true);
@@ -178,11 +178,13 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(await db.purchaseOrder.count({ where: { salesOrderId: so.id } })).toBe(2);
     });
 
-    it("needs edit_data AND cost access", async () => {
+    it("create is Admin only, and still needs cost access", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
       await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), staff)).rejects.toBeInstanceOf(ForbiddenError);
       await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), viewer)).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer)).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), approver)).rejects.toBeInstanceOf(ForbiddenError);
       expect(await db.purchaseOrder.count({ where: { salesOrderId: so.id } })).toBe(0);
     });
   });
@@ -192,8 +194,9 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
     it("Draft → Approved → Sent; Approver can't self-approve; Admin can; staff can't approve", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
-      const [po, po2] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), approver);
-      // The creator (an approver, not admin) can't approve their own PO.
+      const [po, po2] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
+      // Only Admin can create. A row whose creator is an Approver still cannot be self-approved.
+      await db.purchaseOrder.update({ where: { id: po!.id }, data: { createdById: approver.id } });
       await expect(approvePurchaseOrder(po!.id, approver)).rejects.toThrow(/other than the creator/);
       await expect(approvePurchaseOrder(po!.id, buyer)).rejects.toBeInstanceOf(ForbiddenError);
       await expect(markPurchaseOrderSent(po!.id, buyer)).rejects.toThrow(/Approve the PO/);
@@ -217,8 +220,9 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
           ...standalone(po!.supplierId, year),
           items: [{ id: null, description: "Approver big buy", kind: "GOODS", qty: "1", unit: "lot", unitCost: "150000" }],
         },
-        approver,
+        admin,
       );
+      await db.purchaseOrder.update({ where: { id: approverOwn.id }, data: { createdById: approver.id } });
       await expect(approvePurchaseOrder(approverOwn.id, approver)).rejects.toThrow(/other than the creator/);
       expect((await approvePurchaseOrder(approverOwn.id, admin)).status).toBe("APPROVED");
       const approved = await approvePurchaseOrder(po!.id, admin);
@@ -226,7 +230,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect((await markPurchaseOrderSent(po!.id, buyer)).status).toBe("SENT");
       await expect(approvePurchaseOrder(po!.id, admin)).rejects.toThrow(/Only a draft/);
       await expect(closePurchaseOrder(po!.id, null, buyer)).rejects.toThrow(/partially or fully received/);
-      expect((await voidPurchaseOrder(po2!.id, "Changed supplier", buyer)).status).toBe("VOID");
+      expect((await voidPurchaseOrder(po2!.id, "Changed supplier", admin)).status).toBe("VOID");
       await expect(markPurchaseOrderSent(po2!.id, buyer)).rejects.toThrow(/void/);
       const audits = await db.auditLog.findMany({ where: { entityType: "PurchaseOrder", entityId: po!.id }, orderBy: { at: "asc" } });
       expect(audits.map((a) => (a.after as { status?: string }).status ?? null)).toEqual(expect.arrayContaining(["DRAFT", "APPROVED", "SENT"]));
@@ -276,8 +280,9 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
           ...standalone(supplier.id, year),
           items: [{ id: null, description: "Approver over limit", kind: "GOODS", qty: "1", unit: "lot", unitCost: "100000.01" }],
         },
-        approver,
+        admin,
       );
+      await db.purchaseOrder.update({ where: { id: approverOver.id }, data: { createdById: approver.id } });
       await expect(approvePurchaseOrder(approverOver.id, approver)).rejects.toThrow(/other than the creator/);
       expect((await approvePurchaseOrder(approverOver.id, admin)).status).toBe("APPROVED");
     });
@@ -349,7 +354,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
     it("editing an approved PO returns it to Draft, clears approval and bumps the revision", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
-      const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
+      const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
       await approvePurchaseOrder(po!.id, approver);
       const edit = (await getPurchaseOrderEditData(po!.id, buyer))!;
       const input: PoInput = {
@@ -363,7 +368,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         notes: null,
         items: edit.items.slice(0, 1).map((i) => ({ id: i.id, description: i.description, kind: i.kind, qty: "8", unit: i.unit, unitCost: "44000" })),
       };
-      const after = await updatePurchaseOrder(po!.id, input, buyer);
+      const after = await updatePurchaseOrder(po!.id, input, admin);
       expect(after.status).toBe("DRAFT");
       expect(after.revision).toBe(2);
       expect(after.approvedById).toBeNull();
@@ -433,18 +438,18 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const { po, lines, so } = await sentPo(year);
       const rr = await postReceivingReport(po.id, receipt(year, [{ lineId: lines[0]!.id, qty: "10" }, { lineId: lines[1]!.id, qty: "10" }], staff.id), staff);
       expect((await db.purchaseOrder.findUniqueOrThrow({ where: { id: po.id } })).status).toBe("RECEIVED");
-      await expect(voidPurchaseOrder(po.id, "Wrong supplier", buyer)).rejects.toThrow(/Only a draft, approved or sent/);
+      await expect(voidPurchaseOrder(po.id, "Wrong supplier", admin)).rejects.toThrow(/Only a draft, approved or sent/);
 
-      await voidReceivingReport(rr.id, "Counted twice", staff);
+      await voidReceivingReport(rr.id, "Counted twice", admin);
       const after = await db.purchaseOrder.findUniqueOrThrow({ where: { id: po.id }, include: { items: true } });
       expect(after.status).toBe("SENT");
       expect(after.items.map((i) => i.receivedQty.toFixed(2))).toEqual(["0.00", "0.00"]);
       expect(await db.documentVoid.count({ where: { docType: "RECEIVING_REPORT", docId: rr.id } })).toBe(1);
-      await expect(voidReceivingReport(rr.id, "again", staff)).rejects.toThrow(/already void/);
+      await expect(voidReceivingReport(rr.id, "again", admin)).rejects.toThrow(/already void/);
 
-      await voidPurchaseOrder(po.id, "Wrong supplier", buyer);
+      await voidPurchaseOrder(po.id, "Wrong supplier", admin);
       expect(await db.purchaseOrderItem.count({ where: { purchaseOrderId: po.id, activeSalesOrderItemId: { not: null } } })).toBe(0);
-      const again = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
+      const again = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
       expect(again.flatMap((p) => p.items.map((i) => i.description))).toEqual(["Laptop i5", "Mouse"]);
     });
 
@@ -457,7 +462,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(closed.status).toBe("CLOSED");
       expect(closed.closeReason).toBe("Supplier out of stock");
       const rr = await db.receivingReport.findFirstOrThrow({ where: { purchaseOrderId: po.id } });
-      await expect(voidReceivingReport(rr.id, "x x x", staff)).rejects.toThrow(/closed/);
+      await expect(voidReceivingReport(rr.id, "x x x", admin)).rejects.toThrow(/closed/);
     });
 
     it("receiving payloads carry no prices for staff; PO pages are cost-gated", async () => {
@@ -539,7 +544,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
     it("bills need a sent PO", async () => {
       const year = await freshYear();
       const { so } = await salesOrder(year);
-      const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), buyer);
+      const [po] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year), admin);
       await expect(recordSupplierBill(po!.id, { billNumber: "X1", billDate: new Date(Date.UTC(year, 3, 5)), amount: "1", notes: null, lines: [] }, buyer)).rejects.toThrow(DocRuleError);
     });
 
@@ -563,12 +568,12 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         buyer,
       );
 
-      await expect(voidReceivingReport(rr.id, "Undo receipt", staff)).rejects.toThrow(/Void the supplier bill first/);
+      await expect(voidReceivingReport(rr.id, "Undo receipt", admin)).rejects.toThrow(/Void the supplier bill first/);
       expect((await db.receivingReport.findUniqueOrThrow({ where: { id: rr.id } })).status).toBe("POSTED");
       expect((await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: lines[0]!.id } })).receivedQty.toFixed(2)).toBe("10.00");
 
       await voidSupplierBill(bill.id, "Wrong bill — void before RR", buyer);
-      await voidReceivingReport(rr.id, "Undo receipt after bill void", staff);
+      await voidReceivingReport(rr.id, "Undo receipt after bill void", admin);
       expect((await db.receivingReport.findUniqueOrThrow({ where: { id: rr.id } })).status).toBe("VOID");
       expect((await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: lines[0]!.id } })).receivedQty.toFixed(2)).toBe("0.00");
     });
@@ -581,8 +586,8 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const { po, lines, a, customer, so } = await sentPo(year);
       await postReceivingReport(po.id, receipt(year, [{ lineId: lines[0]!.id, qty: "2" }], staff.id), staff);
       await recordSupplierBill(po.id, { billNumber: `T-${tag()}`, billDate: new Date(Date.UTC(year, 3, 5)), amount: "90000", notes: null, lines: [] }, buyer);
-      const [extra] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year, { supplierPicks: { [(await db.salesOrderItem.findFirstOrThrow({ where: { salesOrderId: so.id, supplierId: null } })).id]: a.id } }), buyer);
-      await voidPurchaseOrder(extra!.id, "dup", buyer);
+      const [extra] = await createPurchaseOrdersFromSalesOrder(so.id, fromSo(year, { supplierPicks: { [(await db.salesOrderItem.findFirstOrThrow({ where: { salesOrderId: so.id, supplierId: null } })).id]: a.id } }), admin);
+      await voidPurchaseOrder(extra!.id, "dup", admin);
 
       const list = await listTransactions({ kind: "supplier", id: a.id }, {}, admin);
       const kinds = list.rows.map((r) => r.kind);

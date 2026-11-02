@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireCostPage } from "@/lib/auth/current-user";
 import { getCreatePosPreview } from "@/lib/purchasing/views";
 import { isoDate, manilaToday } from "@/lib/format";
@@ -9,6 +9,7 @@ import { createPosFromSalesOrderAction } from "../../../purchase-orders/actions"
 
 export default async function CreatePosPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireCostPage("edit_data");
+  if (!user.isAdmin) redirect("/no-access");
   const { id } = await params;
   const so = await getCreatePosPreview(id, user);
   if (!so) notFound();

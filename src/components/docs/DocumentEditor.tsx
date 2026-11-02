@@ -107,6 +107,8 @@ type Props = {
   termsOptions: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
+  /** Sales order only. locked = Staff/Approver. override = Admin must give a reason to change prices. */
+  priceLock?: "locked" | "override";
 };
 
 let seq = 0;
@@ -157,6 +159,74 @@ function blankItem(picks: readonly WithholdingSnapshot[]): EditorItem {
   };
 }
 
+function centsOf(value: string): bigint | null {
+  try {
+    return toScaled(value || "0", 2);
+  } catch {
+    return null;
+  }
+}
+
+function sameCents(a: string, b: string): boolean {
+  const left = centsOf(a);
+  const right = centsOf(b);
+  return left != null && right != null && left === right;
+}
+
+function sameRate(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  try {
+    return toScaled(left, 4) === toScaled(right, 4);
+  } catch {
+    return false;
+  }
+}
+
+/** True when qty, unit price, line add/remove, or the selling / withholding / net totals differ. */
+function salesOrderPriceFieldsChanged(start: Omit<EditorItem, "key">[], current: EditorItem[]): boolean {
+  if (current.length !== start.length || current.some((row) => !row.id)) return true;
+  const byId = new Map(start.filter((row) => row.id).map((row) => [row.id as string, row]));
+  if (byId.size !== current.length) return true;
+  for (const row of current) {
+    const before = row.id ? byId.get(row.id) : undefined;
+    if (!before) return true;
+    if (!sameCents(before.qty, row.qty) || !sameCents(before.unitPrice, row.unitPrice)) return true;
+    if (before.kind !== row.kind) return true;
+    if ((before.withholdingAtc ?? "").trim() !== (row.withholdingAtc ?? "").trim()) return true;
+    if (!sameRate(before.withholdingRate, row.withholdingRate)) return true;
+  }
+  const beforeTotals = docTotals(start.map(lineMoneyInput));
+  const afterTotals = docTotals(current.map(lineMoneyInput));
+  return (
+    !sameCents(beforeTotals.contractPrice, afterTotals.contractPrice) ||
+    !sameCents(beforeTotals.withholdingTotal, afterTotals.withholdingTotal) ||
+    !sameCents(beforeTotals.netReceived, afterTotals.netReceived)
+  );
+}
+
+function lineMoneyInput(row: { kind: ItemKind; qty: string; unitPrice: string; supplierUnitCost: string; withholdingRate: string | null; withholdingAtc: string | null }) {
+  const amounts = safeLine({
+    key: "",
+    id: null,
+    description: "",
+    unit: "",
+    supplierId: null,
+    withholdingOverride: false,
+    ...row,
+  });
+  return {
+    kind: row.kind,
+    total: amounts.total,
+    supplierTotal: amounts.supplierTotal,
+    margin: amounts.margin,
+    withholdingRate: row.withholdingRate,
+    withholdingAtc: row.withholdingAtc,
+  };
+}
+
 function safeLine(i: EditorItem) {
   try {
     return lineAmounts({ kind: i.kind, qty: i.qty || "0", unitPrice: i.unitPrice || "0", supplierUnitCost: i.supplierUnitCost || "0" });
@@ -170,7 +240,7 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref, priceLock }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -210,6 +280,8 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       : [blankItem(initialPickSnaps)],
   );
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
+  const [priceOverrideReason, setPriceOverrideReason] = useState("");
+  const pricesLocked = priceLock === "locked";
   /** Per-line WH% field errors (client-side 0–15% check). */
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
   /** Raw WH% text while typing (so "1." is not snapped away by the controlled rate). */
@@ -241,6 +313,9 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const t = docTotals(lineInputs);
   const totals = { ...t, withholding: t.withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) })) };
   const computedDocRates = withholdingSnapshotFromLines(lineInputs);
+
+  const priceFieldsChanged = salesOrderPriceFieldsChanged(initial.items, items);
+  const showPriceReason = priceLock === "override" && (priceFieldsChanged || !!e.priceOverrideReason);
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const move = (idx: number, by: number) =>
@@ -358,6 +433,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           terms: h.terms,
           notes: h.notes,
           reapplyWithholding: reapplyWithholding || undefined,
+          priceOverrideReason: showPriceReason ? priceOverrideReason : undefined,
           items: items.map(itemPayload),
         };
 
@@ -522,7 +598,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
               )}
             </div>
           ) : (
-            <div className={`field${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+            <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
               <span className="label">Withholding</span>
               <div className="wh-computed" role="status" aria-label="Withholding from line rates">
                 {computedDocRates.length === 0 ? (
@@ -550,18 +626,21 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         </div>
       </div>
 
-      <div className="card">
+      <div className={`card${mode === "salesOrder" ? " so-items-card" : ""}`}>
         <div className="card-head">
           <h2>Items</h2>
           <div className="right" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={reapplyFromCustomer}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer || pricesLocked} onClick={reapplyFromCustomer}>
               {REAPPLY_WITHHOLDING_LABEL}
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
-              Add line
-            </button>
+            {!pricesLocked && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
+                Add line
+              </button>
+            )}
           </div>
         </div>
+        {pricesLocked && <p className="faint">Prices on a won sales order are locked. An Admin can change them with a reason.</p>}
         {itemErrors.length > 0 && (
           <div className="alert error" role="alert">
             {itemErrors.map(([k, m]) => {
@@ -570,7 +649,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
             })}
           </div>
         )}
-        <div className="edit-table items-edit">
+        <div className={`edit-table items-edit${mode === "salesOrder" ? " so-items-edit" : ""}`}>
           <table className="list">
             <thead>
               <tr>
@@ -600,24 +679,24 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                   i.withholdingOverride || lineDiffersFromUsualPicks(linePicks, i.kind, { rate: i.withholdingRate, atc: i.withholdingAtc });
                 return (
                   <tr key={i.key}>
-                    <td>
+                    <td data-label="Description">
                       <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
                       {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                     </td>
-                    <td className="col-kind">
-                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
+                    <td className="col-kind" data-label="Kind">
+                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} disabled={pricesLocked} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
                         <option value="GOODS">Goods</option>
                         <option value="SERVICES">Services</option>
                       </select>
                     </td>
-                    <td className="num col-qty">
-                      <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
+                    <td className="num col-qty" data-label="Qty">
+                      <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                     </td>
-                    <td className="col-unit">
+                    <td className="col-unit" data-label="Unit">
                       <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
                     </td>
                     {withCosts && (
-                      <td className="col-supplier">
+                      <td className="col-supplier" data-label="Supplier">
                         <select aria-label={`Line ${idx + 1} supplier`} value={i.supplierId ?? ""} onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}>
                           <option value="">—</option>
                           {suppliers!.map((s) => (
@@ -629,7 +708,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                       </td>
                     )}
                     {withCosts && (
-                      <td className="num col-money">
+                      <td className="num col-money" data-label="Unit cost">
                         <input
                           aria-label={`Line ${idx + 1} supplier unit cost`}
                           inputMode="decimal"
@@ -639,22 +718,23 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         />
                       </td>
                     )}
-                    {withCosts && <td className="num muted col-money">{formatPeso(a.supplierTotal)}</td>}
-                    <td className="num col-money">
-                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
+                    {withCosts && <td className="num muted col-money" data-label="Supplier total">{formatPeso(a.supplierTotal)}</td>}
+                    <td className="num col-money" data-label="Price">
+                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
                     </td>
-                    <td className="num strong col-money">{formatPeso(a.total)}</td>
+                    <td className="num strong col-money" data-label="Total">{formatPeso(a.total)}</td>
                     {withCosts && (
-                      <td className={`num col-money${supplierCostMissing(i.supplierUnitCost) || toScaled(a.margin, 2) >= 0n ? "" : " neg"}`}>
+                      <td className={`num col-money${supplierCostMissing(i.supplierUnitCost) || toScaled(a.margin, 2) >= 0n ? "" : " neg"}`} data-label="Margin">
                         {supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : formatPeso(a.margin)}
                       </td>
                     )}
-                    <td className="num col-wh">
+                    <td className="num col-wh" data-label="WH% / ATC">
                       <input
                         aria-label={`Line ${idx + 1} withholding percent`}
                         inputMode="decimal"
                         className="w-wh"
                         value={pct}
+                        readOnly={pricesLocked}
                         placeholder="—"
                         onChange={(ev) => {
                           const raw = ev.target.value;
@@ -687,6 +767,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         aria-label={`Line ${idx + 1} ATC`}
                         className="w-atc"
                         value={i.withholdingAtc ?? ""}
+                        readOnly={pricesLocked}
                         placeholder="ATC"
                         onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                       />
@@ -702,7 +783,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         type="button"
                         className="btn-link danger"
                         aria-label={`Remove line ${idx + 1}`}
-                        disabled={items.length === 1}
+                        disabled={items.length === 1 || pricesLocked}
                         onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}
                       >
                         ✕
@@ -714,6 +795,19 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
             </tbody>
           </table>
         </div>
+        {showPriceReason && (
+          <div className="field" style={{ marginTop: 12 }}>
+            <label htmlFor="price-override-reason">Reason for the price change</label>
+            <textarea
+              id="price-override-reason"
+              rows={2}
+              value={priceOverrideReason}
+              onChange={(ev) => setPriceOverrideReason(ev.target.value)}
+              placeholder="Required when you change a price, quantity, or total"
+            />
+            {e.priceOverrideReason && <div className="error">{e.priceOverrideReason}</div>}
+          </div>
+        )}
         <div className="totals-wrap">
           <div className="wh-internal-panel">
             <div className="wh-internal-panel-label">{WITHHOLDING_INTERNAL_PANEL_LABEL}</div>

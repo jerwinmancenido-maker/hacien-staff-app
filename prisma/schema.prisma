@@ -63,7 +63,9 @@ model User {
   attachmentsUploaded    DocumentAttachment[]
   billingsCreated              Billing[]                 @relation("BillingCreatedBy")
   billingsUpdated              Billing[]                 @relation("BillingUpdatedBy")
+  billingsChecked              Billing[]                 @relation("BillingAdminCheckedBy")
   collectionsCreated           Collection[]              @relation("CollectionCreatedBy")
+  collectionsChecked           Collection[]              @relation("CollectionAdminCheckedBy")
   supplierPaymentsCreated      SupplierPayment[]         @relation("SupplierPaymentCreatedBy")
   cashAccountsCreated          CashAccount[]             @relation("CashAccountCreatedBy")
   cashAccountsUpdated          CashAccount[]             @relation("CashAccountUpdatedBy")
@@ -972,6 +974,11 @@ model Billing {
   notes                String?       @db.Text
   voidedAt             DateTime?
   voidReason           String?       @db.Text
+  // Staff-recorded rows stay true until an Admin marks them checked. Existing rows default false.
+  needsAdminCheck      Boolean       @default(false)
+  adminCheckedAt       DateTime?
+  adminCheckedById     String?
+  adminCheckedBy       User?         @relation("BillingAdminCheckedBy", fields: [adminCheckedById], references: [id])
   createdById          String
   createdBy            User          @relation("BillingCreatedBy", fields: [createdById], references: [id])
   updatedById          String
@@ -990,6 +997,7 @@ model Billing {
   @@index([dueDate])
   @@index([invoiceNo])
   @@index([invoiceDate])
+  @@index([needsAdminCheck])
 }
 
 // Internal CR-YYYY-####. A payment (or advance/downpayment) from a customer.
@@ -1015,6 +1023,11 @@ model Collection {
   status         CollectionStatus   @default(POSTED)
   voidedAt       DateTime?
   voidReason     String?            @db.Text
+  // Staff-recorded rows stay true until an Admin marks them checked. Existing rows default false.
+  needsAdminCheck Boolean           @default(false)
+  adminCheckedAt  DateTime?
+  adminCheckedById String?
+  adminCheckedBy  User?             @relation("CollectionAdminCheckedBy", fields: [adminCheckedById], references: [id])
   createdById    String
   createdBy      User               @relation("CollectionCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime           @default(now())
@@ -1028,6 +1041,7 @@ model Collection {
   @@index([status])
   @@index([date])
   @@index([cashAccountId])
+  @@index([needsAdminCheck])
 }
 
 // Links cash (and optional 2307 withholding) from a collection onto a billing.

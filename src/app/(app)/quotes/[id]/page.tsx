@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canVoid } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
 import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
@@ -72,6 +72,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             status={q.status}
             approvalStatus={q.approvalStatus}
             canEdit={canEdit}
+            canVoid={canVoid(user)}
             canApproveWorkflow={q.canApproveWorkflow}
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={suggestedAddress}

@@ -7,13 +7,14 @@
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, assertCanVoid, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { applyReceipt, checkReceipt, type OpenLine } from "../purchasing/receipt";
 import { poActionError, receiptStatus, type PoStatus } from "../purchasing/status";
 import type { ReceiptInput } from "../validation/purchasing";
+import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type RrActor = PermissionUser & { id: string };
@@ -114,9 +115,12 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
 
 /** Void a posted RR (reason): reverses its quantities and recomputes the PO status. Not on a closed or void PO. */
 export async function voidReceivingReport(id: string, reason: string, actor: RrActor) {
-  assertCan(actor, "edit_data");
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  assertCanVoid(actor);
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   const head = await db.receivingReport.findUnique({ where: { id }, select: { purchaseOrderId: true } });
   if (!head) throw new DocRuleError("Receiving report not found.");
   return withTxRetry(() =>

@@ -16,6 +16,10 @@ type Props = {
   number: string;
   status: string;
   canEdit: boolean;
+  /** Admin only. Staff and Approver do not see Edit. */
+  canMaintain: boolean;
+  /** Admin or Approver. */
+  canVoid: boolean;
   canApprove: boolean;
   approveBlockedReason: string | null;
   /** S-18: Draft under/at the PO limit may mark sent without approval. */
@@ -35,6 +39,8 @@ export function PoActions({
   number,
   status,
   canEdit,
+  canMaintain,
+  canVoid,
   canApprove,
   approveBlockedReason,
   canMarkSentFromDraft = false,
@@ -55,7 +61,7 @@ export function PoActions({
   const editable = status === "DRAFT" || status === "APPROVED";
   const receivable = status === "SENT" || status === "PARTIALLY_RECEIVED";
   const items: MenuItem[] = [];
-  if (canEdit && editable) items.push({ key: "edit", label: status === "APPROVED" ? "Edit (returns to Draft)" : "Edit", href: `/purchase-orders/${id}/edit` });
+  if (canMaintain && editable) items.push({ key: "edit", label: status === "APPROVED" ? "Edit (returns to Draft)" : "Edit", href: `/purchase-orders/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/purchase-orders/${id}`, newTab: true });
   if (canEdit && ((status !== "DRAFT" && status !== "VOID") || canMarkSentFromDraft) && status !== "VOID") {
     items.push({ key: "email", label: "Email draft", onSelect: () => run(() => actions.email(id)) });
@@ -63,7 +69,7 @@ export function PoActions({
   if (canEdit && receivable) items.push({ key: "receive", label: "Receive items", href: `/receiving/${id}/new` });
   if (canEdit && ["SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"].includes(status)) items.push({ key: "bill", label: "Record supplier bill", href: `/purchase-orders/${id}/bill` });
   if (canEdit && (status === "PARTIALLY_RECEIVED" || status === "RECEIVED")) items.push({ key: "close", label: status === "PARTIALLY_RECEIVED" ? "Short-close" : "Close", onSelect: () => setDialog("close") });
-  if (canEdit && ["DRAFT", "APPROVED", "SENT"].includes(status) && postedReceipts === 0) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
+  if (canVoid && ["DRAFT", "APPROVED", "SENT"].includes(status) && postedReceipts === 0) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
   let primary: React.ReactNode = null;
   if (canEdit && status === "DRAFT" && canMarkSentFromDraft) {

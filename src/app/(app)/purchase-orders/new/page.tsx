@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireCostPage } from "@/lib/auth/current-user";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { isoDate, manilaToday } from "@/lib/format";
@@ -7,7 +8,8 @@ import { poEditorSuppliers } from "../editor-data";
 import { savePurchaseOrderAction } from "../actions";
 
 export default async function NewPurchaseOrderPage({ searchParams }: { searchParams: Promise<{ supplier?: string }> }) {
-  await requireCostPage("edit_data");
+  const user = await requireCostPage("edit_data");
+  if (!user.isAdmin) redirect("/no-access");
   const { supplier } = await searchParams;
   const [suppliers, snap] = await Promise.all([poEditorSuppliers(), getSettingsSnapshot()]);
   const s = suppliers.find((x) => x.id === supplier);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCostPage } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canVoid } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
 import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
 import { formatDateTime, formatPeso } from "@/lib/format";
@@ -56,6 +56,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             number={po.number}
             status={po.status}
             canEdit={canEdit}
+            canMaintain={user.isAdmin}
+            canVoid={canVoid(user)}
             canApprove={canApprove}
             approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" && po.approval.needsApproval ? "Waiting for an approver." : po.approval.blockedReason}
             canMarkSentFromDraft={canEdit && po.approval.canMarkSentFromDraft}
@@ -224,7 +226,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           {po.receivingReports.length === 0 ? (
             <EmptyState line={po.status === "DRAFT" || po.status === "APPROVED" ? "Items can be received once the PO is sent." : "Nothing received yet."} />
           ) : (
-            <RrTable reports={po.receivingReports} poId={id} canEdit={canEdit && po.status !== "CLOSED"} voidAction={voidReceivingReportAction} />
+            <RrTable reports={po.receivingReports} poId={id} canVoid={canVoid(user) && po.status !== "CLOSED"} voidAction={voidReceivingReportAction} />
           )}
         </div>
       )}

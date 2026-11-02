@@ -21,3 +21,12 @@ export const newPasswordSchema = z
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords don't match." });
+
+/** Signed-in change. New password uses the same rules as the reset page. */
+export const changePasswordSchema = z
+  .object({
+    current: z.string().min(1, "Enter your current password."),
+    password: z.string().min(10, "Use at least 10 characters.").max(200),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords don't match." });

@@ -17,7 +17,7 @@ import { recordBillingAction } from "../../actions";
 
 export default async function NewBillingPage({ searchParams }: { searchParams: Promise<{ salesOrderId?: string }> }) {
   const user = await requirePagePermission("view");
-  if (!can(user, "manage_billing")) redirect("/no-access");
+  if (!can(user, "record_billing")) redirect("/no-access");
   const { salesOrderId } = await searchParams;
   if (!salesOrderId) {
     // Pick list of open SOs with remaining to bill.

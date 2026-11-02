@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireCostPage } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
 import { listPurchaseOrdersView, PO_STATUSES } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS, type PoStatus } from "@/lib/purchasing/status";
 import { formatPeso } from "@/lib/format";
@@ -32,7 +31,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
         title="Supplier POs"
         subtitle="Purchase orders to suppliers. Create them from a sales order, or a standalone PO."
         actions={
-          can(user, "edit_data") && (
+          user.isAdmin && (
             <Link className="btn" href="/purchase-orders/new">
               <PlusIcon /> New standalone PO
             </Link>

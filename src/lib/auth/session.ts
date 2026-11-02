@@ -6,7 +6,22 @@ import { db } from "../db";
 import { hashToken, randomToken } from "./tokens";
 
 export const SESSION_COOKIE = "hacien_session";
-const SESSION_DAYS = 7;
+/** Absolute session cap, measured from sign-in. */
+export const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+/** Idle sign-out. Each signed-in request pushes the deadline forward by this much. */
+export const IDLE_MS = 30 * 60 * 1000;
+
+/** Next idle deadline, never past createdAt + the 7-day cap. */
+export function nextIdleExpiry(createdAt: Date, now: Date, idleMs = IDLE_MS, maxMs = SESSION_MS): Date {
+  const cap = createdAt.getTime() + maxMs;
+  return new Date(Math.min(cap, now.getTime() + idleMs));
+}
+
+/** True when the idle deadline or the 7-day cap has passed. */
+export function sessionPastIdle(opts: { createdAt: Date; expiresAt: Date; now: Date }, maxMs = SESSION_MS): boolean {
+  if (opts.now.getTime() >= opts.createdAt.getTime() + maxMs) return true;
+  return opts.expiresAt.getTime() <= opts.now.getTime();
+}
 
 /** Secure cookie in production or whenever the app is served over HTTPS. Plain http://localhost works in dev. */
 export function cookieSecure(env: { NODE_ENV?: string; APP_URL?: string } = process.env): boolean {
@@ -15,7 +30,9 @@ export function cookieSecure(env: { NODE_ENV?: string; APP_URL?: string } = proc
 
 export async function createSession(userId: string, meta: { ip?: string; userAgent?: string }) {
   const token = randomToken();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const absolute = new Date(now.getTime() + SESSION_MS);
+  const expiresAt = nextIdleExpiry(now, now);
   await db.session.create({
     data: {
       tokenHash: hashToken(token),
@@ -31,8 +48,38 @@ export async function createSession(userId: string, meta: { ip?: string; userAge
     secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
-    expires: expiresAt,
+    expires: absolute,
   });
+}
+
+/**
+ * Milliseconds left before this session's idle deadline, without sliding it.
+ * 0 when there is no live session. Used by an idle tab so another tab's
+ * activity keeps the shared session. Does not write the cookie.
+ */
+export async function idleRemainingMs(): Promise<number> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return 0;
+  const session = await db.session.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!session || session.revokedAt) return 0;
+  const now = new Date();
+  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+    await db.session.updateMany({
+      where: { tokenHash: session.tokenHash, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    return 0;
+  }
+  return Math.max(0, session.expiresAt.getTime() - now.getTime());
+}
+
+/** HMAC of the current cookie, so a password change can keep this session. */
+export async function currentTokenHash(): Promise<string | null> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return hashToken(token);
 }
 
 /** The active session's user, or null. Checks expiry, revocation and user.active. */
@@ -44,7 +91,22 @@ export async function getSessionUser() {
     where: { tokenHash: hashToken(token) },
     include: { user: true },
   });
-  if (!session || session.revokedAt || session.expiresAt < new Date() || !session.user.active) return null;
+  if (!session || session.revokedAt || !session.user.active) return null;
+  const now = new Date();
+  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+    // Revoke only. Cookie writes are not allowed in a Server Component, and this
+    // lookup runs from page renders. The row is dead, so the next render redirects
+    // to login. Sign out (a Server Action) is what clears the cookie.
+    await db.session.updateMany({
+      where: { tokenHash: session.tokenHash, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    return null;
+  }
+  const expiresAt = nextIdleExpiry(session.createdAt, now);
+  if (expiresAt.getTime() !== session.expiresAt.getTime()) {
+    await db.session.update({ where: { id: session.id }, data: { expiresAt } });
+  }
   return session.user;
 }
 

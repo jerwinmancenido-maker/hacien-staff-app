@@ -6,7 +6,7 @@ import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
-import { assertCan, assertCanApprove, canSeeCosts, type PermissionUser } from "../permissions";
+import { assertCan, assertCanApprove, assertCanVoid, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
@@ -19,7 +19,7 @@ import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } fro
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
-import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
+import { voidReasonSchema, type ConvertInput, type ItemInput, type QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
@@ -515,8 +515,12 @@ export async function refreshQuoteCompanyDetails(id: string, actor: DocActor): P
 }
 
 export async function voidQuote(id: string, reason: string, actor: DocActor) {
-  assertCan(actor, "edit_data");
-  if (!reason.trim()) throw new DocRuleError("A reason is required.", "reason");
+  assertCanVoid(actor);
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This quote is already void.");
@@ -525,7 +529,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
     const now = new Date();
     const after = await tx.quote.update({
       where: { id },
-      data: { status: "VOID", voidedAt: now, voidReason: reason.trim(), updatedById: actor.id },
+      data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id },
       include: { items: { where: { removedAt: null } } },
     });
     await tx.documentVoid.create({
@@ -533,7 +537,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
         docType: "QUOTE",
         docNumber: before.number,
         docId: id,
-        reason: reason.trim(),
+        reason: why,
         snapshot: JSON.parse(JSON.stringify(before)) as Prisma.InputJsonValue,
         voidedById: actor.id,
         voidedAt: now,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canVoid } from "@/lib/permissions";
 import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -42,7 +42,7 @@ export default async function SalesOrderPage({
   // PO numbers for everyone; links (and Create POs) only for cost users.
   const purchasing = await getSoPurchasing(so.id, user);
   const progress = new Map(purchasing.lines.map((l) => [l.id, l]));
-  const canCreatePos = so.canSeeCosts && can(user, "edit_data") && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
+  const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
   const [billingSummary, billings, costMargin] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
@@ -58,7 +58,7 @@ export default async function SalesOrderPage({
         },
       ])
     : null;
-  const canBill = can(user, "manage_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
+  const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
   const overdueOnSo = billings.find((b) => b.overdue.overdue);
 
   const tab: Tab = so.canSeeCosts && TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
@@ -91,7 +91,7 @@ export default async function SalesOrderPage({
                 Create POs
               </Link>
             )}
-            <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} voidAction={voidSalesOrderAction} />
+            <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} voidAction={voidSalesOrderAction} />
           </>
         }
       />

@@ -287,6 +287,14 @@ describe("manage_billing permission", () => {
     expect(can(user(["STAFF"]), "manage_billing")).toBe(false);
     expect(can(user(["VIEWER"]), "manage_billing")).toBe(false);
   });
+
+  it("Staff, Admin and Approver may record; Viewer may not", () => {
+    expect(can(user(["ADMIN"]), "record_billing")).toBe(true);
+    expect(can(user(["APPROVER"]), "record_billing")).toBe(true);
+    expect(can(user(["STAFF"]), "record_billing")).toBe(true);
+    expect(can(user(["VIEWER"]), "record_billing")).toBe(false);
+    expect(can(user(["STAFF"]), "manage_billing")).toBe(false);
+  });
 });
 
 describe("statement running balance (unit)", () => {

@@ -8,7 +8,7 @@ import type { Prisma, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { manilaToday } from "../format";
-import { assertCan, canSeeCosts, ForbiddenError, type Permission, type PermissionUser } from "../permissions";
+import { assertCan, assertCanMaintainPurchaseOrder, assertCanVoid, canSeeCosts, ForbiddenError, type Permission, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
@@ -26,6 +26,7 @@ import {
 } from "../purchasing/status";
 import { planPurchaseOrders, type PlannedPoLine } from "../purchasing/plan";
 import type { CreateFromSoInput, PoInput, PoLineInput } from "../validation/purchasing";
+import { voidReasonSchema } from "../validation/quotes";
 import { defaultAddress } from "./addresses";
 
 export type PoActor = PermissionUser & { id: string };
@@ -124,6 +125,7 @@ export async function orderedSoLineIds(soLineIds: readonly string[], client: Tx 
  * lines already on a live PO are skipped.
  */
 export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, input: CreateFromSoInput, actor: PoActor) {
+  assertCanMaintainPurchaseOrder(actor);
   assertPoAccess(actor);
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.supplierPo;
@@ -220,6 +222,7 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
 // ---------------------------------------------------------------------------
 
 export async function createStandalonePurchaseOrder(input: PoInput, actor: PoActor): Promise<PoWithItems> {
+  assertCanMaintainPurchaseOrder(actor);
   assertPoAccess(actor);
   const supplier = await checkSupplier(input.supplierId, input.supplierContactId);
   const snap = await getSettingsSnapshot();
@@ -262,6 +265,7 @@ export async function createStandalonePurchaseOrder(input: PoInput, actor: PoAct
  * lines keep their link; removed lines free their SO line.
  */
 export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoActor): Promise<PoWithItems> {
+  assertCanMaintainPurchaseOrder(actor);
   assertPoAccess(actor);
   const current = await db.purchaseOrder.findUnique({ where: { id } });
   if (!current) throw new DocRuleError("Purchase order not found.");
@@ -425,9 +429,13 @@ export async function closePurchaseOrder(id: string, reason: string | null, acto
 
 /** Void (reason) a Draft/Approved/Sent PO with no posted receiving report. Frees its SO lines. */
 export async function voidPurchaseOrder(id: string, reason: string, actor: PoActor) {
-  assertPoAccess(actor);
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  assertCanVoid(actor);
+  if (!canSeeCosts(actor)) throw new ForbiddenError();
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   return db.$transaction(async (tx) => {
     const before = await lockPurchaseOrder(tx, id);
     const posted = await tx.receivingReport.count({ where: { purchaseOrderId: id, status: "POSTED" } });

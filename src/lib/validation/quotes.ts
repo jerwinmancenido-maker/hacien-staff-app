@@ -192,6 +192,8 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   reapplyWithholding: z.boolean().optional(),
   /** Optional pick codes when re-applying from the customer's saved pick. */
   withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).nullable().optional(),
+  /** Required when an Admin changes a won sales order's prices, quantities, or total. */
+  priceOverrideReason: z.string().trim().max(1000).optional(),
   items,
 });
 export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;

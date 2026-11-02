@@ -5,7 +5,7 @@
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
@@ -15,6 +15,7 @@ import { billingToday } from "../billing/dates";
 import { unappliedCash } from "../billing/status";
 import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
+import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
 
@@ -280,7 +281,7 @@ async function upsert2307(
 }
 
 export async function recordCollection(input: CollectionInput, actor: CollectionActor, files: readonly UploadFile[] = []) {
-  assertManageBilling(actor);
+  assertCan(actor, "record_billing");
   if (toScaled(input.amountReceived, 2) <= 0n) throw new DocRuleError("Amount received must be greater than 0.", "amountReceived");
 
   const snap = await getSettingsSnapshot();
@@ -328,6 +329,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             amountReceived: input.amountReceived,
             cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,
+            needsAdminCheck: staffNeedsAdminCheck(actor),
             createdById: actor.id,
           },
         });
@@ -547,8 +549,11 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
 
 export async function voidCollection(id: string, reason: string, actor: CollectionActor) {
   assertManageBilling(actor);
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -574,7 +579,7 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
       const now = new Date();
       const after = await tx.collection.update({
         where: { id },
-        data: { status: "VOID", voidedAt: now, voidReason: why },
+        data: { status: "VOID", voidedAt: now, voidReason: why, needsAdminCheck: false },
       });
       // Soft-clear pending 2307 amounts (keep rows for audit; same as upsert2307
       // when withholding is removed — amount 0.00, status stays PENDING).
@@ -653,6 +658,31 @@ export async function mark2307Received(
     await discardUploads(uploads);
     throw e;
   }
+}
+
+/** Admin clears the staff-recorded check flag. Same transaction as the audit row. */
+export async function markCollectionChecked(id: string, actor: CollectionActor) {
+  assertCanMarkAdminCheck(actor);
+  return db.$transaction(async (tx) => {
+    const before = await tx.collection.findUnique({ where: { id } });
+    if (!before) throw new DocRuleError("Collection not found.");
+    if (!before.needsAdminCheck) return before;
+    const now = new Date();
+    const after = await tx.collection.update({
+      where: { id },
+      data: { needsAdminCheck: false, adminCheckedAt: now, adminCheckedById: actor.id },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Collection",
+      entityId: id,
+      action: "update",
+      before: { needsAdminCheck: true },
+      after: { needsAdminCheck: false, adminCheckedAt: now.toISOString() },
+      diff: false,
+    });
+    return after;
+  });
 }
 
 /** Customer credit = sum of unapplied cash on posted collections. */

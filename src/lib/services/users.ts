@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { appUrl, getMailer } from "../mailer";
-import { hashPassword } from "../auth/password";
+import { hashPassword, verifyPassword } from "../auth/password";
 import { hashToken, randomToken } from "../auth/tokens";
 import { lastRoleGuard, roleFlags, ROLES, type Role } from "../permissions";
 
@@ -153,6 +153,38 @@ export async function findValidToken(token: string) {
   const row = await db.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
   if (!row || row.usedAt || row.expiresAt < new Date() || !row.user.active) return null;
   return row;
+}
+
+/**
+ * Signed-in password change. Wrong current password is refused.
+ * Other sessions are revoked. The session matching currentTokenHash stays.
+ */
+export async function changePassword(userId: string, currentPassword: string, nextPassword: string, currentTokenHash: string | null) {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user || !user.active) throw new UserRuleError("Sign in again.");
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) throw new UserRuleError("That current password is wrong.");
+  const passwordHash = await hashPassword(nextPassword);
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    await tx.session.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        ...(currentTokenHash ? { NOT: { tokenHash: currentTokenHash } } : {}),
+      },
+      data: { revokedAt: new Date() },
+    });
+    await writeAudit(tx, {
+      userId,
+      entityType: "User",
+      entityId: userId,
+      action: "update",
+      before: null,
+      after: { password: "changed" },
+      diff: false,
+    });
+  });
 }
 
 export async function setPasswordWithToken(token: string, password: string): Promise<boolean> {

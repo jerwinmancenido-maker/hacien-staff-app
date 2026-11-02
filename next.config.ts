@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { pageCsp, securityHeaders } from "./src/lib/security-headers";
 
 // Business-document uploads go through a server action, so its body limit (1 MB
 // by default) must fit the largest allowed file (UPLOAD_MAX_MB, default 10) plus
@@ -15,6 +16,15 @@ const hostingerBuild = process.env.HOSTINGER_BUILD === "1";
 const nextConfig: NextConfig = {
   // Plain Node.js server (Hostinger): no edge runtime, no Vercel-only features.
   poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        // Skip /files — those downloads already send default-src 'none'; sandbox.
+        source: "/((?!files(?:/|$)).*)",
+        headers: securityHeaders.map((h) => (h.key === "Content-Security-Policy" ? { ...h, value: pageCsp() } : h)),
+      },
+    ];
+  },
   experimental: {
     cpus: 1,
     workerThreads: false,

@@ -2,17 +2,18 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatPeso } from "@/lib/format";
-import { arAgingSummary, taxYearBillingMeter } from "@/lib/billing/views";
+import { arAgingSummary, listNeedsAdminCheck, taxYearBillingMeter } from "@/lib/billing/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { formatNonVatPctLabel } from "@/lib/services/non-vat";
 import { BillingNav } from "@/components/billing/BillingNav";
-import { PageHeader } from "@/components/ui";
+import { Chip, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
 export default async function BillingHomePage() {
   const user = await requirePagePermission("view");
-  const canManage = can(user, "manage_billing");
-  const [summary, meter] = await Promise.all([arAgingSummary(), taxYearBillingMeter()]);
+  const canRecord = can(user, "record_billing");
+  const [summary, meter, unchecked] = await Promise.all([arAgingSummary(), taxYearBillingMeter(), listNeedsAdminCheck()]);
+  const waiting = [...unchecked.billings, ...unchecked.collections];
 
   return (
     <>
@@ -20,7 +21,7 @@ export default async function BillingHomePage() {
         title="Billing & Collections"
         subtitle="Record hand-written booklet invoices and collections. Nothing here is an official invoice or OR."
         actions={
-          canManage && (
+          canRecord && (
             <>
               <Link className="btn btn-secondary" href="/billing/collections/new">
                 <PlusIcon /> Record collection
@@ -33,6 +34,27 @@ export default async function BillingHomePage() {
         }
       />
       <BillingNav active="home" />
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-head">
+          <h2>Needs Admin check</h2>
+        </div>
+        {waiting.length === 0 ? (
+          <p className="faint">None waiting for a check.</p>
+        ) : (
+          <ul className="plain-list">
+            {waiting.map((row) => (
+              <li key={row.href}>
+                <Link href={row.href}>
+                  {row.number}
+                </Link>
+                <span className="muted"> · {row.label} · {row.customer} · {formatPeso(row.amount)}</span>{" "}
+                <Chip tone="dark">Needs Admin check</Chip>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <Link className="card stat stat-link" href="/billing/aging">
