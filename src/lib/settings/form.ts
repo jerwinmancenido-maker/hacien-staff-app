@@ -127,12 +127,35 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
       return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
     case "documents":
       return { expiryWarningDays: get("expiryWarningDays") };
-    case "invoiceBooklet":
+    case "invoiceBooklet": {
+      const readType = (prefix: string) => ({
+        atpNo: (get(`${prefix}.atpNo`) ?? "").trim(),
+        atpDate: (get(`${prefix}.atpDate`) ?? "").trim(),
+        printer: (get(`${prefix}.printer`) ?? "").trim(),
+        seriesFrom: get(`${prefix}.seriesFrom`) ?? get("seriesFrom") ?? "1",
+        seriesTo: get(`${prefix}.seriesTo`) ?? get("seriesTo") ?? "500",
+        bookletCount: get(`${prefix}.bookletCount`) ?? "10",
+        setsPerBooklet: get(`${prefix}.setsPerBooklet`) ?? "50",
+        isNonVat: get(`${prefix}.isNonVat`) !== null ? checked(get(`${prefix}.isNonVat`)) : true,
+      });
+      const si = readType("salesInvoice");
+      const dr = readType("deliveryReceipt");
+      const cr = readType("collectionReceipt");
       return {
-        seriesFrom: get("seriesFrom"),
-        seriesTo: get("seriesTo"),
+        seriesFrom: si.seriesFrom,
+        seriesTo: si.seriesTo,
         label: get("label") ?? "",
+        atpNo: si.atpNo,
+        atpDate: si.atpDate,
+        printer: si.printer,
+        bookletCount: si.bookletCount,
+        setsPerBooklet: si.setsPerBooklet,
+        isNonVat: si.isNonVat,
+        salesInvoice: si,
+        deliveryReceipt: dr,
+        collectionReceipt: cr,
       };
+    }
     case "collections":
       return { overdueGraceDays: get("overdueGraceDays") };
     case "features":

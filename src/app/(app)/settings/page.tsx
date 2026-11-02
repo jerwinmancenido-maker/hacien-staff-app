@@ -216,15 +216,32 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               versionId={snap.versionId}
               action={save("invoiceBooklet")}
               fields={[
-                {
-                  name: "seriesFrom",
-                  label: "Series from",
-                  kind: "number",
-                  value: s.invoiceBooklet.seriesFrom,
-                  hint: "Pre-printed booklet start. The app only records these numbers.",
-                },
-                { name: "seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.seriesTo },
-                { name: "label", label: "Label", kind: "text", value: s.invoiceBooklet.label ?? "", hint: "e.g. Booklet 1" },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.atpNo", label: "ATP no.", kind: "text", value: s.invoiceBooklet.salesInvoice?.atpNo ?? "" },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.atpDate", label: "ATP date", kind: "text", value: s.invoiceBooklet.salesInvoice?.atpDate ?? "", hint: "YYYY-MM-DD" },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.printer", label: "Printer", kind: "text", value: s.invoiceBooklet.salesInvoice?.printer ?? "", hint: "e.g. CEPRINTS EMPIRE INC." },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.seriesFrom", label: "Series from", kind: "number", value: s.invoiceBooklet.salesInvoice?.seriesFrom ?? s.invoiceBooklet.seriesFrom },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.salesInvoice?.seriesTo ?? s.invoiceBooklet.seriesTo },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.bookletCount", label: "Number of booklets", kind: "number", value: s.invoiceBooklet.salesInvoice?.bookletCount ?? 10 },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.setsPerBooklet", label: "Sets per booklet", kind: "number", value: s.invoiceBooklet.salesInvoice?.setsPerBooklet ?? 50 },
+                { group: "Sales Invoice (SI)", name: "salesInvoice.isNonVat", label: "Marked NON-VAT", kind: "checkbox", value: s.invoiceBooklet.salesInvoice?.isNonVat ?? true },
+
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.atpNo", label: "ATP no.", kind: "text", value: s.invoiceBooklet.deliveryReceipt?.atpNo ?? "" },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.atpDate", label: "ATP date", kind: "text", value: s.invoiceBooklet.deliveryReceipt?.atpDate ?? "", hint: "YYYY-MM-DD" },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.printer", label: "Printer", kind: "text", value: s.invoiceBooklet.deliveryReceipt?.printer ?? "", hint: "e.g. CEPRINTS EMPIRE INC." },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.seriesFrom", label: "Series from", kind: "number", value: s.invoiceBooklet.deliveryReceipt?.seriesFrom ?? 1 },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.deliveryReceipt?.seriesTo ?? 500 },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.bookletCount", label: "Number of booklets", kind: "number", value: s.invoiceBooklet.deliveryReceipt?.bookletCount ?? 10 },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.setsPerBooklet", label: "Sets per booklet", kind: "number", value: s.invoiceBooklet.deliveryReceipt?.setsPerBooklet ?? 50 },
+                { group: "Delivery Receipt (DR)", name: "deliveryReceipt.isNonVat", label: "Marked NON-VAT", kind: "checkbox", value: s.invoiceBooklet.deliveryReceipt?.isNonVat ?? true },
+
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.atpNo", label: "ATP no.", kind: "text", value: s.invoiceBooklet.collectionReceipt?.atpNo ?? "" },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.atpDate", label: "ATP date", kind: "text", value: s.invoiceBooklet.collectionReceipt?.atpDate ?? "", hint: "YYYY-MM-DD" },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.printer", label: "Printer", kind: "text", value: s.invoiceBooklet.collectionReceipt?.printer ?? "", hint: "e.g. CEPRINTS EMPIRE INC." },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.seriesFrom", label: "Series from", kind: "number", value: s.invoiceBooklet.collectionReceipt?.seriesFrom ?? 1 },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.seriesTo", label: "Series to", kind: "number", value: s.invoiceBooklet.collectionReceipt?.seriesTo ?? 500 },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.bookletCount", label: "Number of booklets", kind: "number", value: s.invoiceBooklet.collectionReceipt?.bookletCount ?? 10 },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.setsPerBooklet", label: "Sets per booklet", kind: "number", value: s.invoiceBooklet.collectionReceipt?.setsPerBooklet ?? 50 },
+                { group: "Collection Receipt (CR)", name: "collectionReceipt.isNonVat", label: "Marked NON-VAT", kind: "checkbox", value: s.invoiceBooklet.collectionReceipt?.isNonVat ?? true },
               ]}
             />
             <p className="faint small settings-tab-link">

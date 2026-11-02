@@ -65,6 +65,19 @@ export default async function HomePage() {
         actions={actions}
       />
 
+      {dash.bookletWarnings?.length > 0 && (
+        <div className="home-booklet-warnings" style={{ marginBottom: 16 }}>
+          {dash.bookletWarnings.map((w) => (
+            <div key={w} className="alert warn" role="alert" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{w}</span>
+              <Link href="/billing/booklet" className="underline" style={{ marginLeft: 12, fontWeight: 600 }}>
+                Open booklet →
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
       {dash.empty && dash.gettingStarted ? (
         <HomeGettingStarted
           addCustomerHref={dash.gettingStarted.addCustomerHref}

@@ -7,7 +7,7 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, type BookletType } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance } from "../services/collections";
@@ -621,14 +621,80 @@ export async function list2307(filters: { status?: Withholding2307Status | "ALL"
   });
 }
 
-export async function getBookletView() {
+export async function getBookletView(docType: BookletType = "SI") {
   const snap = await getSettingsSnapshot();
-  const range = snap.settings.invoiceBooklet;
-  const used = await db.billing.findMany({
-    where: { invoiceNo: { gte: range.seriesFrom, lte: range.seriesTo } },
-    select: { id: true, number: true, invoiceNo: true, status: true },
+  const range =
+    docType === "DR"
+      ? snap.settings.invoiceBooklet.deliveryReceipt
+      : docType === "CR"
+        ? snap.settings.invoiceBooklet.collectionReceipt
+        : snap.settings.invoiceBooklet.salesInvoice ?? snap.settings.invoiceBooklet;
+
+  let used: { invoiceNo: number; id: string; number: string; status: string }[] = [];
+  if (docType === "SI") {
+    const billings = await db.billing.findMany({
+      where: { invoiceNo: { gte: range.seriesFrom, lte: range.seriesTo } },
+      select: { id: true, number: true, invoiceNo: true, status: true },
+    });
+    used = billings.map((b) => ({
+      invoiceNo: b.invoiceNo,
+      id: b.id,
+      number: b.number,
+      status: b.status,
+    }));
+  } else if (docType === "DR") {
+    const deliveries = await db.delivery.findMany({
+      select: { id: true, drNumber: true, voidedAt: true },
+    });
+    used = deliveries.flatMap((d) => {
+      const n = parseInt(d.drNumber.replace(/\D/g, ""), 10);
+      if (isNaN(n) || n < range.seriesFrom || n > range.seriesTo) return [];
+      return [{
+        invoiceNo: n,
+        id: d.id,
+        number: `DR #${d.drNumber}`,
+        status: d.voidedAt ? "VOID" : "RECORDED",
+      }];
+    });
+  } else if (docType === "CR") {
+    const collections = await db.collection.findMany({
+      where: { receiptNo: { not: null } },
+      select: { id: true, number: true, receiptNo: true, status: true },
+    });
+    used = collections.flatMap((c) => {
+      if (!c.receiptNo) return [];
+      const n = parseInt(c.receiptNo.replace(/\D/g, ""), 10);
+      if (isNaN(n) || n < range.seriesFrom || n > range.seriesTo) return [];
+      return [{
+        invoiceNo: n,
+        id: c.id,
+        number: c.receiptNo,
+        status: c.status,
+      }];
+    });
+  }
+
+  const spoiled = await db.spoiledBookletNumber.findMany({
+    where: { type: docType, number: { gte: range.seriesFrom, lte: range.seriesTo } },
+    select: { id: true, number: true, reason: true },
   });
-  return { range, ...bookletGrid(range, used) };
+
+  const typeName = BOOKLET_DOC_TYPES[docType]?.label ?? "Sales Invoice";
+  const grid = bookletGrid(range, used, spoiled, typeName);
+
+  return {
+    docType,
+    typeName,
+    range,
+    ...grid,
+    spoiled,
+  };
+}
+
+export async function getAllBookletWarnings(): Promise<string[]> {
+  const types: BookletType[] = ["SI", "DR", "CR"];
+  const views = await Promise.all(types.map((t) => getBookletView(t)));
+  return views.map((v) => v.warning).filter((w): w is string => !!w);
 }
 
 export async function customerArSnapshot(customerId: string) {
