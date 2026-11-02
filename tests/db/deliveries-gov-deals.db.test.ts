@@ -7,7 +7,7 @@ const env = vi.hoisted(() => {
 });
 
 import { db } from "@/lib/db";
-import { makeCustomer, makeUser, quoteInput } from "./fixtures";
+import { customerDeliveryAddressId, makeCustomer, makeUser, quoteInput } from "./fixtures";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { expectedPaymentDateFromIar, isOverdue } from "@/lib/billing/dates";
@@ -33,7 +33,8 @@ async function makeTestSalesOrder(admin: DocActor, qty = "10") {
     admin,
   );
   await approveQuote(q.id, admin);
-  return convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: "Test delivery address" }, admin);
+  const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+  return convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddressId }, admin);
 }
 
 describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)", () => {

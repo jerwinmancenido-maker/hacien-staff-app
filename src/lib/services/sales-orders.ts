@@ -218,11 +218,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           deliveryAddress: input.deliveryAddress,
           terms: input.terms,
           notes: input.notes,
-          philgepsRef: input.philgepsRef,
-          bidNo: input.bidNo,
-          noaDate: input.noaDate ?? null,
-          agencyPoNo: input.agencyPoNo,
-          iarDate: input.iarDate ?? null,
+          // Government deal fields are owned by updateSalesOrderGovDeal /
+          // GovernmentDealBox. DocumentEditor does not send them — writing
+          // `noaDate`/`iarDate` as null here would wipe IAR (and Expected by).
+          ...(input.philgepsRef !== undefined ? { philgepsRef: input.philgepsRef } : {}),
+          ...(input.bidNo !== undefined ? { bidNo: input.bidNo } : {}),
+          ...(input.noaDate !== undefined ? { noaDate: input.noaDate ?? null } : {}),
+          ...(input.agencyPoNo !== undefined ? { agencyPoNo: input.agencyPoNo } : {}),
+          ...(input.iarDate !== undefined ? { iarDate: input.iarDate ?? null } : {}),
           withholding: preserved.withholding as unknown as Prisma.InputJsonValue,
           ...preserved.totals,
           updatedById: actor.id,

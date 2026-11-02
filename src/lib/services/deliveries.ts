@@ -56,7 +56,11 @@ export async function recordDelivery(
         const so = await lockForDelivery(tx, salesOrderId);
         const check = checkDelivery(so.lines as OpenDeliveryLine[], input.items);
         if (!check.ok) {
-          throw new DocRuleError(check.message, Object.keys(check.errors)[0]);
+          const firstId = Object.keys(check.errors)[0];
+          throw new DocRuleError(
+            firstId ? (check.errors[firstId] ?? check.message) : check.message,
+            firstId ? `items.${firstId}` : undefined,
+          );
         }
 
         const now = new Date();
@@ -135,6 +139,8 @@ export async function voidDelivery(id: string, reason: string, actor: DeliveryAc
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
+      // Lock the delivery row first so concurrent voids cannot both reverse qty.
+      await tx.$queryRaw`SELECT \`id\` FROM \`Delivery\` WHERE \`id\` = ${id} FOR UPDATE`;
       const delivery = await tx.delivery.findUnique({
         where: { id },
         include: { items: true, salesOrder: true },

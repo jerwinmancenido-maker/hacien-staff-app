@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatDate } from "@/lib/format";
+import { formatDate, isoDate, manilaToday } from "@/lib/format";
 import { QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { VoidButton } from "@/components/purchasing/DocButtons";
@@ -63,7 +63,7 @@ export function DeliverySection({
   const [showForm, setShowForm] = useState(false);
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const progress = soDeliveryProgress(items);
-  const todayYmd = new Date().toISOString().slice(0, 10);
+  const todayYmd = isoDate(manilaToday());
 
   const { state, pending, onSubmit } = useFormAction(async (prev, form) => {
     const res = await action(prev, form);
@@ -260,14 +260,15 @@ export function DeliverySection({
                         <td className="num strong">{rem}</td>
                         <td className={`num${err ? " has-error" : ""}`}>
                           <input type="hidden" name="itemId" value={i.id} />
+                          {/* readOnly (not disabled) so itemQty still posts and stays aligned with itemId */}
                           <input
                             name="itemQty"
                             type="text"
                             inputMode="decimal"
                             className="w-num-s input"
                             placeholder="0"
-                            disabled={done}
-                            value={qtys[i.id] ?? ""}
+                            readOnly={done}
+                            value={done ? "" : (qtys[i.id] ?? "")}
                             onChange={(ev) => setQtys({ ...qtys, [i.id]: ev.target.value })}
                           />
                         </td>
