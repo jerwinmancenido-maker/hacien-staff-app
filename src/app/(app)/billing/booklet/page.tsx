@@ -98,7 +98,7 @@ export default async function BookletPage({
           </div>
           <div>
             <dt className="faint small">Tax type</dt>
-            <dd className="strong">NON-VAT</dd>
+            <dd className="strong">{view.range.isNonVat === false ? "VAT" : "NON-VAT"}</dd>
           </div>
         </dl>
       </div>

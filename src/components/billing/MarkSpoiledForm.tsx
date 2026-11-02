@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { markBookletNumberSpoiledAction } from "@/app/(app)/billing/actions";
 import { Modal } from "@/components/docs/Dialogs";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { BookletType } from "@/lib/billing/booklet";
 
 export function MarkSpoiledForm({
@@ -73,6 +74,7 @@ export function MarkSpoiledForm({
                   accept="image/jpeg,image/png,application/pdf"
                   required
                 />
+                <NoIdUploadWarning />
                 {e.files && <div className="error">{e.files}</div>}
               </div>
             </div>

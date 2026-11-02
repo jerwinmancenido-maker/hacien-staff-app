@@ -278,7 +278,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
 
     const billingId = (ok[0] as PromiseFulfilledResult<{ id: string }>).value.id;
     await voidBilling(billingId, "Wrong booklet", admin);
-    await expect(recordBilling(input, admin)).rejects.toThrow(/never reused|already on billing/i);
+    await expect(recordBilling(input, admin)).rejects.toThrow(/already used \/ marked spoiled|never reused|already on billing/i);
   });
 
   it("voided SO blocks new billings", async () => {

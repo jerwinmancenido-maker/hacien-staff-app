@@ -14,6 +14,7 @@ import { netExpected, proRataWithholding, remainingToBill } from "../billing/sta
 import type { BillingInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { lockSiBookletNumber } from "./booklet";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -73,7 +74,8 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
           );
         }
 
-        // Voided numbers stay used: unique on invoiceNo covers all rows.
+        // Voided numbers stay used: unique on invoiceNo + gap locks vs spoil.
+        await lockSiBookletNumber(tx, input.invoiceNo);
         const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { id: true, number: true, status: true } });
         const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
         if (taken || spoiled) {
@@ -185,6 +187,7 @@ export async function updateBilling(
           throw new DocRuleError(`Amount exceeds the remaining to bill on ${so.number} (₱${remaining} left).`, "amount");
         }
 
+        await lockSiBookletNumber(tx, input.invoiceNo);
         if (input.invoiceNo !== before.invoiceNo) {
           const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { number: true, status: true } });
           const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });

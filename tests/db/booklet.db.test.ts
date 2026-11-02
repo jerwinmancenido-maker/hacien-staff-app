@@ -15,20 +15,72 @@ import { db } from "@/lib/db";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import { getBookletView } from "@/lib/billing/views";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", () => {
   let admin: DocActor;
+  let invoiceSeq = 800_000;
+
+  const nextInvoice = () => ++invoiceSeq;
 
   beforeAll(async () => {
     process.env.UPLOAD_DIR = mkdtempSync(path.join(tmpdir(), "hacien-booklet-uploads-"));
     admin = await makeUser("costs");
+    await ensureWideBooklet();
+    const [maxBilling, maxSpoiled] = await Promise.all([
+      db.billing.aggregate({ _max: { invoiceNo: true } }),
+      db.spoiledBookletNumber.aggregate({ _max: { number: true } }),
+    ]);
+    invoiceSeq =
+      Math.max(800_000, Number(maxBilling._max.invoiceNo ?? 0), Number(maxSpoiled._max.number ?? 0)) +
+      Math.floor(Math.random() * 100);
   });
 
   afterAll(async () => {
     await db.$disconnect();
   });
+
+  async function ensureWideBooklet() {
+    const wide = {
+      seriesFrom: 1,
+      seriesTo: 9_999_999,
+      label: "Test booklet Q09",
+      salesInvoice: {
+        atpNo: "",
+        atpDate: "",
+        printer: "",
+        seriesFrom: 1,
+        seriesTo: 9_999_999,
+        bookletCount: 10,
+        setsPerBooklet: 50,
+        isNonVat: true,
+      },
+    };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      if ((snap.settings.invoiceBooklet.salesInvoice?.seriesTo ?? snap.settings.invoiceBooklet.seriesTo) >= 9_999_999) {
+        return;
+      }
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...(latest.data as object), invoiceBooklet: { ...snap.settings.invoiceBooklet, ...wide } } as never,
+            changedKey: "invoiceBooklet",
+            before: snap.settings.invoiceBooklet,
+            after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race — retry.
+      }
+    }
+  }
 
   async function openSo(year: number) {
     const customer = await makeCustomer();
@@ -68,28 +120,27 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     const year = await freshYear();
     const { so } = await openSo(year);
     const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const inv = nextInvoice();
 
-    // Record billing with serial 101
     const b1 = await recordBilling(
       {
         salesOrderId: so.id,
         amount: "500.00",
-        invoiceNo: 101,
+        invoiceNo: inv,
         invoiceDate: d,
         dueDate: d,
         notes: null,
       },
       admin,
     );
-    expect(b1.invoiceNo).toBe(101);
+    expect(b1.invoiceNo).toBe(inv);
 
-    // Attempting duplicate 101 throws error
     await expect(
       recordBilling(
         {
           salesOrderId: so.id,
           amount: "100.00",
-          invoiceNo: 101,
+          invoiceNo: inv,
           invoiceDate: d,
           dueDate: d,
           notes: null,
@@ -98,16 +149,14 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
       ),
     ).rejects.toThrow(/already used \/ marked spoiled/);
 
-    // Void b1
     await voidBilling(b1.id, "Void test", admin);
 
-    // Number 101 remains used even after void
     await expect(
       recordBilling(
         {
           salesOrderId: so.id,
           amount: "100.00",
-          invoiceNo: 101,
+          invoiceNo: inv,
           invoiceDate: d,
           dueDate: d,
           notes: null,
@@ -121,40 +170,115 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     const year = await freshYear();
     const { so } = await openSo(year);
     const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const inv = nextInvoice();
 
-    // Mark 107 spoiled
     const spoiled = await markBookletNumberSpoiled(
       {
         type: "SI",
-        number: 107,
+        number: inv,
         reason: "Printer jam torn sheet",
       },
       admin,
       [{ name: "jam.png", size: dummyPng.length, bytes: dummyPng }],
     );
-    expect(spoiled.number).toBe(107);
+    expect(spoiled.number).toBe(inv);
     expect(spoiled.type).toBe("SI");
 
-    // Attempting to record billing with spoiled 107 is blocked
     await expect(
       recordBilling(
         {
           salesOrderId: so.id,
           amount: "100.00",
-          invoiceNo: 107,
+          invoiceNo: inv,
           invoiceDate: d,
           dueDate: d,
           notes: null,
         },
         admin,
       ),
-    ).rejects.toThrow(/SI no\. 107 is already used \/ marked spoiled/);
+    ).rejects.toThrow(/already used \/ marked spoiled/);
   });
 
   it("next-free skips used and spoiled numbers without skipping serials", async () => {
     const view = await getBookletView("SI");
-    // Next free is a valid number in range
     expect(view.nextFree).toBeGreaterThanOrEqual(view.range.seriesFrom);
     expect(view.nextFree).toBeLessThanOrEqual(view.range.seriesTo);
+  });
+
+  it("refuses out-of-range SI numbers with a plain message", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const snap = await getSettingsSnapshot();
+    const to = snap.settings.invoiceBooklet.salesInvoice?.seriesTo ?? snap.settings.invoiceBooklet.seriesTo;
+    await expect(
+      recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "100.00",
+          invoiceNo: to + 1,
+          invoiceDate: d,
+          dueDate: d,
+          notes: null,
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/outside the booklet range/);
+  });
+
+  it("concurrent billings never share the same SI number", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const other = await makeUser("costs");
+    const invoiceNo = nextInvoice();
+    const input = {
+      salesOrderId: so.id,
+      amount: "100.00",
+      invoiceNo,
+      invoiceDate: d,
+      dueDate: d,
+      notes: null as string | null,
+    };
+    const results = await Promise.allSettled([recordBilling(input, admin), recordBilling(input, other)]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    expect((bad[0] as PromiseRejectedResult).reason.message).toMatch(/already used \/ marked spoiled/);
+    const rows = await db.billing.findMany({ where: { invoiceNo } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("concurrent spoil and billing of the same SI: exactly one wins", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const invoiceNo = nextInvoice();
+    const results = await Promise.allSettled([
+      recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "100.00",
+          invoiceNo,
+          invoiceDate: d,
+          dueDate: d,
+          notes: null,
+        },
+        admin,
+      ),
+      markBookletNumberSpoiled(
+        { type: "SI", number: invoiceNo, reason: "Torn sheet during concurrent test" },
+        admin,
+        [{ name: "jam.png", size: dummyPng.length, bytes: dummyPng }],
+      ),
+    ]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    const billing = await db.billing.findFirst({ where: { invoiceNo } });
+    const spoiled = await db.spoiledBookletNumber.findFirst({ where: { type: "SI", number: invoiceNo } });
+    expect([billing, spoiled].filter(Boolean)).toHaveLength(1);
   });
 });

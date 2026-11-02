@@ -2,7 +2,7 @@
 // Numbers marked spoiled stay on record forever and can never be reused.
 
 import type { BookletType } from "@prisma/client";
-import { db, isUniqueViolation } from "../db";
+import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
@@ -11,6 +11,16 @@ import { bookletRangeError, formatBookletNumber } from "../billing/booklet";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type BookletActor = PermissionUser & { id: string };
+
+/**
+ * Serialize SI booklet claims across Billing + SpoiledBookletNumber.
+ * Gap locks on both unique keys (same order everywhere) so concurrent
+ * billing and spoil of the same serial cannot both succeed.
+ */
+export async function lockSiBookletNumber(tx: Tx, invoiceNo: number) {
+  await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = 'SI' AND \`number\` = ${invoiceNo} FOR UPDATE`;
+  await tx.$queryRaw`SELECT \`id\` FROM \`Billing\` WHERE \`invoiceNo\` = ${invoiceNo} FOR UPDATE`;
+}
 
 export type SpoiledInput = {
   type: BookletType;
@@ -54,6 +64,12 @@ export async function markBookletNumberSpoiled(
   try {
     return await withTxRetry(() =>
       db.$transaction(async (tx) => {
+        if (input.type === "SI") {
+          await lockSiBookletNumber(tx, input.number);
+        } else {
+          await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = ${input.type} AND \`number\` = ${input.number} FOR UPDATE`;
+        }
+
         // Check if already spoiled
         const existingSpoiled = await tx.spoiledBookletNumber.findFirst({
           where: { type: input.type, number: input.number },
