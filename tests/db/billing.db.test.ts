@@ -123,7 +123,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
   let invoiceSeq = 700_000 + Math.floor(Math.random() * 50_000);
   const nextInvoice = () => ++invoiceSeq;
 
-  it("Admin and Approver can record; Staff and Viewer cannot", async () => {
+  it("Staff can record a billing that needs an Admin check; Viewer cannot; Admin and Approver are not flagged", async () => {
     const year = await freshYear();
     const { so } = await openSo(year);
     const base = {
@@ -133,12 +133,15 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       dueDate: new Date(Date.UTC(year, 3, 4)),
       notes: null as string | null,
     };
-    await expect(recordBilling({ ...base, invoiceNo: nextInvoice() }, staff)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(recordBilling({ ...base, invoiceNo: nextInvoice() }, viewer)).rejects.toBeInstanceOf(ForbiddenError);
+    const staffBilling = await recordBilling({ ...base, invoiceNo: nextInvoice() }, staff);
+    expect(staffBilling.needsAdminCheck).toBe(true);
     const a = await recordBilling({ ...base, invoiceNo: nextInvoice() }, admin);
     expect(a.number).toMatch(/^BL-\d{4}-\d+$/);
+    expect(a.needsAdminCheck).toBe(false);
     const b = await recordBilling({ ...base, amount: "5000.00", invoiceNo: nextInvoice() }, approver);
     expect(b.createdById).toBe(approver.id);
+    expect(b.needsAdminCheck).toBe(false);
   });
 
   it("cannot bill more than SO remaining; concurrent billings respect the cap", async () => {

@@ -925,7 +925,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
       await expect(voidQuote(q.id, "Changed mind", costUser)).rejects.toThrow("Void the sales order first.");
 
-      await voidSalesOrder(order.id, "Buyer cancelled the PO", staff);
+      await voidSalesOrder(order.id, "Buyer cancelled the PO", costUser);
       const after = await db.salesOrder.findUnique({ where: { id: order.id } });
       expect(after?.status).toBe("VOID");
       expect(after?.number).toBe(order.number);
@@ -934,7 +934,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
       const voids = await db.documentVoid.findMany({ where: { docId: order.id } });
       expect(voids).toHaveLength(1);
-      expect(voids[0]).toMatchObject({ docType: "SALES_ORDER", docNumber: order.number, reason: "Buyer cancelled the PO", voidedById: staff.id });
+      expect(voids[0]).toMatchObject({ docType: "SALES_ORDER", docNumber: order.number, reason: "Buyer cancelled the PO", voidedById: costUser.id });
       expect((voids[0]!.snapshot as { number: string }).number).toBe(order.number);
       const audit = await db.auditLog.findFirst({ where: { entityType: "SalesOrder", entityId: order.id, action: "void" } });
       expect(audit).toBeTruthy();
@@ -950,7 +950,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const customer = await makeCustomer();
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
       const first = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-A", deliveryAddress: null }, costUser);
-      await voidSalesOrder(first.id, "Wrong buyer PO", staff);
+      await voidSalesOrder(first.id, "Wrong buyer PO", costUser);
       const second = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-B", deliveryAddress: null }, costUser);
       const view = (await getQuoteView(q.id, costUser))!;
       expect(view.salesOrders.map((s) => [s.number, s.status, s.buyerPoNo])).toEqual([

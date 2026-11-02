@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
+import { Chip } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { getBillingView } from "@/lib/billing/views";
@@ -13,7 +14,7 @@ import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
 import { customerCreditBalance } from "@/lib/services/collections";
-import { voidBillingAction } from "../../actions";
+import { markBillingCheckedAction, voidBillingAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -42,6 +43,7 @@ export default async function BillingDetailPage({
           <>
             Booklet #{b.invoiceNo}
             <BillingStatusChip status={b.status} />
+            {b.needsAdminCheck && <Chip tone="dark">Needs Admin check</Chip>}
             <OverdueBadge label={b.overdue.label} />
           </>
         }
@@ -51,6 +53,13 @@ export default async function BillingDetailPage({
             <Link className="btn btn-secondary" href={`/print/billings/${id}`} target="_blank">
               Print / Save PDF
             </Link>
+            {user.isAdmin && b.needsAdminCheck && (
+              <form action={markBillingCheckedAction.bind(null, id)}>
+                <button className="btn" type="submit">
+                  Mark checked
+                </button>
+              </form>
+            )}
             {canVoid && (
               <VoidButton
                 label="Void"

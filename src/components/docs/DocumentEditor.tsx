@@ -107,6 +107,8 @@ type Props = {
   termsOptions: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
+  /** Sales order only. locked = Staff/Approver. override = Admin must give a reason to change prices. */
+  priceLock?: "locked" | "override";
 };
 
 let seq = 0;
@@ -170,7 +172,7 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref, priceLock }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -210,6 +212,8 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       : [blankItem(initialPickSnaps)],
   );
   const [reapplyWithholding, setReapplyWithholding] = useState(false);
+  const [priceOverrideReason, setPriceOverrideReason] = useState("");
+  const pricesLocked = priceLock === "locked";
   /** Per-line WH% field errors (client-side 0–15% check). */
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
   /** Raw WH% text while typing (so "1." is not snapped away by the controlled rate). */
@@ -358,6 +362,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           terms: h.terms,
           notes: h.notes,
           reapplyWithholding: reapplyWithholding || undefined,
+          priceOverrideReason: priceLock === "override" ? priceOverrideReason : undefined,
           items: items.map(itemPayload),
         };
 
@@ -554,14 +559,30 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         <div className="card-head">
           <h2>Items</h2>
           <div className="right" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={reapplyFromCustomer}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer || pricesLocked} onClick={reapplyFromCustomer}>
               {REAPPLY_WITHHOLDING_LABEL}
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
-              Add line
-            </button>
+            {!pricesLocked && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
+                Add line
+              </button>
+            )}
           </div>
         </div>
+        {pricesLocked && <p className="faint">Prices on a won sales order are locked. An Admin can change them with a reason.</p>}
+        {priceLock === "override" && (
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label htmlFor="price-override-reason">Reason for the price change</label>
+            <textarea
+              id="price-override-reason"
+              rows={2}
+              value={priceOverrideReason}
+              onChange={(ev) => setPriceOverrideReason(ev.target.value)}
+              placeholder="Required when you change a price, quantity, or total"
+            />
+            {e.priceOverrideReason && <div className="error">{e.priceOverrideReason}</div>}
+          </div>
+        )}
         {itemErrors.length > 0 && (
           <div className="alert error" role="alert">
             {itemErrors.map(([k, m]) => {
@@ -605,13 +626,13 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                       {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                     </td>
                     <td className="col-kind">
-                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
+                      <select aria-label={`Line ${idx + 1} kind`} value={i.kind} disabled={pricesLocked} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
                         <option value="GOODS">Goods</option>
                         <option value="SERVICES">Services</option>
                       </select>
                     </td>
                     <td className="num col-qty">
-                      <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
+                      <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                     </td>
                     <td className="col-unit">
                       <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
@@ -641,7 +662,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                     )}
                     {withCosts && <td className="num muted col-money">{formatPeso(a.supplierTotal)}</td>}
                     <td className="num col-money">
-                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
+                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
                     </td>
                     <td className="num strong col-money">{formatPeso(a.total)}</td>
                     {withCosts && (
@@ -655,6 +676,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         inputMode="decimal"
                         className="w-wh"
                         value={pct}
+                        readOnly={pricesLocked}
                         placeholder="—"
                         onChange={(ev) => {
                           const raw = ev.target.value;
@@ -702,7 +724,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         type="button"
                         className="btn-link danger"
                         aria-label={`Remove line ${idx + 1}`}
-                        disabled={items.length === 1}
+                        disabled={items.length === 1 || pricesLocked}
                         onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}
                       >
                         ✕

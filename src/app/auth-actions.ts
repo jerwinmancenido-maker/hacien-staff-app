@@ -3,11 +3,11 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
-import { verifyPassword, newPasswordSchema } from "@/lib/auth/password";
+import { changePasswordSchema, newPasswordSchema, verifyPassword } from "@/lib/auth/password";
 import { checkLoginRateLimit, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
-import { createSession, destroyCurrentSession } from "@/lib/auth/session";
-import { requestMeta } from "@/lib/auth/current-user";
-import { requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
+import { createSession, currentTokenHash, destroyCurrentSession } from "@/lib/auth/session";
+import { getCurrentUser, requestMeta } from "@/lib/auth/current-user";
+import { UserRuleError, changePassword, requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
 import { ACCOUNT_OFF, RESET_SENT, WRONG_CREDENTIALS } from "@/lib/auth/messages";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -92,4 +92,22 @@ export async function resetPassword(_prev: FormState, form: FormData): Promise<F
   }
   if (!ok) return { message: "This link has expired or was already used. Ask for a new one." };
   redirect("/login?reset=1");
+}
+
+export async function changePasswordAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const parsed = changePasswordSchema.safeParse({
+    current: str(form, "current"),
+    password: str(form, "password"),
+    confirm: str(form, "confirm"),
+  });
+  if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  try {
+    await changePassword(user.id, parsed.data.current, parsed.data.password, await currentTokenHash());
+  } catch (e) {
+    if (e instanceof UserRuleError) return { message: e.message };
+    throw e;
+  }
+  return { ok: true, message: "Password changed. The old one no longer works." };
 }

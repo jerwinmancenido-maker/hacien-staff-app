@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCostAction } from "@/lib/auth/current-user";
+import { assertCanMaintainPurchaseOrder, assertCanVoid } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import {
   approvePurchaseOrder,
@@ -39,6 +40,7 @@ export async function createPosFromSalesOrderAction(salesOrderId: string, _prev:
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await requireCostAction("edit_data");
+    assertCanMaintainPurchaseOrder(user);
     const parsed = createFromSoSchema.safeParse(payload(form));
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
     const pos = await createPurchaseOrdersFromSalesOrder(salesOrderId, parsed.data, user);
@@ -55,6 +57,7 @@ export async function savePurchaseOrderAction(id: string | null, _prev: FormStat
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await requireCostAction("edit_data");
+    assertCanMaintainPurchaseOrder(user);
     const parsed = poInputSchema.safeParse(payload(form));
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
     const po = id ? await updatePurchaseOrder(id, parsed.data, user) : await createStandalonePurchaseOrder(parsed.data, user);
@@ -97,7 +100,8 @@ export async function closePurchaseOrderAction(id: string, reason: string): Prom
 
 export async function voidPurchaseOrderAction(id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await requireCostAction("edit_data");
+    const user = await requireCostAction("view");
+    assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
     const po = await voidPurchaseOrder(id, parsed.data, user);

@@ -176,6 +176,7 @@ export async function getBillingView(id: string) {
     notes: b.notes,
     voidReason: b.voidReason,
     voidedAt: b.voidedAt,
+    needsAdminCheck: b.needsAdminCheck,
     customer: b.customer,
     salesOrder: { ...b.salesOrder, contractPrice: money(b.salesOrder.contractPrice) },
     balance,
@@ -339,6 +340,7 @@ export async function getCollectionView(id: string) {
     notes: c.notes,
     status: c.status,
     voidReason: c.voidReason,
+    needsAdminCheck: c.needsAdminCheck,
     customer: c.customer,
     allocations: c.allocations.map((a) => ({
       id: a.id,
@@ -362,6 +364,42 @@ export async function getCollectionView(id: string) {
       atcCode: w.atcCode,
       status: w.status,
       billingId: w.billingId,
+    })),
+  };
+}
+
+/** Staff-recorded billings and collections still waiting for an Admin check. */
+export async function listNeedsAdminCheck() {
+  const [billings, collections] = await Promise.all([
+    db.billing.findMany({
+      where: { needsAdminCheck: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, number: true, invoiceNo: true, amount: true, customer: { select: { name: true } } },
+    }),
+    db.collection.findMany({
+      where: { needsAdminCheck: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, number: true, amountReceived: true, customer: { select: { name: true } } },
+    }),
+  ]);
+  return {
+    billings: billings.map((b) => ({
+      id: b.id,
+      number: b.number,
+      label: `Booklet #${b.invoiceNo}`,
+      customer: b.customer.name,
+      amount: money(b.amount),
+      href: `/billing/billings/${b.id}`,
+    })),
+    collections: collections.map((c) => ({
+      id: c.id,
+      number: c.number,
+      label: "Collection",
+      customer: c.customer.name,
+      amount: money(c.amountReceived),
+      href: `/billing/collections/${c.id}`,
     })),
   };
 }

@@ -29,6 +29,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
         termsOptions={settings.lists.paymentTerms}
         action={saveSalesOrderAction.bind(null, id)}
         cancelHref={`/sales-orders/${id}`}
+        priceLock={user.isAdmin ? "override" : "locked"}
         initial={{
           customerId: so.customer.id,
           contactId: so.contact?.id ?? "",

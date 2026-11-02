@@ -6,7 +6,7 @@ import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
-import { assertCan, assertCanApprove, canSeeCosts, type PermissionUser } from "../permissions";
+import { assertCan, assertCanApprove, assertCanVoid, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
@@ -509,7 +509,7 @@ export async function refreshQuoteCompanyDetails(id: string, actor: DocActor): P
 }
 
 export async function voidQuote(id: string, reason: string, actor: DocActor) {
-  assertCan(actor, "edit_data");
+  assertCanVoid(actor);
   if (!reason.trim()) throw new DocRuleError("A reason is required.", "reason");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);

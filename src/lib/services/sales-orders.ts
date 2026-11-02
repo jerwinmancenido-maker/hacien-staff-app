@@ -4,7 +4,8 @@
 import type { Prisma, SalesOrder, SalesOrderItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, canSeeCosts } from "../permissions";
+import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
+import { toScaled } from "../quotes/calc";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
@@ -14,6 +15,54 @@ import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
 type SoWithItems = SalesOrder & { items: SalesOrderItem[] };
+
+export type SoPriceLine = { id: string | null; qty: string; unitPrice: string };
+
+export type SoPriceSnapshot = {
+  contractPrice: string;
+  withholdingTotal: string;
+  netReceived: string;
+  lines: readonly SoPriceLine[];
+};
+
+function scaledEq(a: string, b: string): boolean {
+  return toScaled(a || "0", 2) === toScaled(b || "0", 2);
+}
+
+/** Qty, unit price, line add/remove, or the selling / withholding / net totals. */
+export function salesOrderPricesChanged(before: SoPriceSnapshot, after: SoPriceSnapshot): boolean {
+  if (!scaledEq(before.contractPrice, after.contractPrice)) return true;
+  if (!scaledEq(before.withholdingTotal, after.withholdingTotal)) return true;
+  if (!scaledEq(before.netReceived, after.netReceived)) return true;
+  const beforeById = new Map(before.lines.filter((l) => l.id).map((l) => [l.id as string, l]));
+  const afterById = new Map(after.lines.filter((l) => l.id).map((l) => [l.id as string, l]));
+  if (beforeById.size !== afterById.size) return true;
+  if (after.lines.some((l) => !l.id)) return true;
+  if (before.lines.length !== after.lines.length) return true;
+  for (const [id, line] of beforeById) {
+    const next = afterById.get(id);
+    if (!next) return true;
+    if (!scaledEq(line.qty, next.qty)) return true;
+    if (!scaledEq(line.unitPrice, next.unitPrice)) return true;
+  }
+  return false;
+}
+
+export const PRICE_LOCK_MESSAGE = "Won sales order prices are locked. An Admin can change them with a reason.";
+export const PRICE_OVERRIDE_REASON = "Give a reason (at least 3 characters).";
+
+/** Null when the save may proceed. Staff cannot change prices. Admin must give a reason. */
+export function salesOrderPriceLockError(opts: {
+  isAdmin: boolean;
+  reason: string | null | undefined;
+  before: SoPriceSnapshot;
+  after: SoPriceSnapshot;
+}): string | null {
+  if (!salesOrderPricesChanged(opts.before, opts.after)) return null;
+  if (!opts.isAdmin) return PRICE_LOCK_MESSAGE;
+  if ((opts.reason ?? "").trim().length < 3) return PRICE_OVERRIDE_REASON;
+  return null;
+}
 
 export function salesOrderAudit(so: SoWithItems) {
   return {
@@ -87,6 +136,27 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
       if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
+      const priceOverrideReason = (input.priceOverrideReason ?? "").trim();
+      const beforePrices = {
+        contractPrice: money(before.contractPrice),
+        withholdingTotal: money(before.withholdingTotal),
+        netReceived: money(before.netReceived),
+        lines: before.items.map((i) => ({ id: i.id, qty: money(i.qty), unitPrice: money(i.unitPrice) })),
+      };
+      const afterPrices = {
+        contractPrice: money(preserved.totals.contractPrice),
+        withholdingTotal: money(preserved.totals.withholdingTotal),
+        netReceived: money(preserved.totals.netReceived),
+        lines: items.map((i) => ({ id: i.id, qty: money(i.qty), unitPrice: money(i.unitPrice) })),
+      };
+      const lockMsg = salesOrderPriceLockError({
+        isAdmin: actor.isAdmin === true,
+        reason: priceOverrideReason,
+        before: beforePrices,
+        after: afterPrices,
+      });
+      if (lockMsg) throw new DocRuleError(lockMsg, lockMsg === PRICE_OVERRIDE_REASON ? "priceOverrideReason" : "items");
+      const pricesChanged = salesOrderPricesChanged(beforePrices, afterPrices);
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });
       }
@@ -109,7 +179,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         },
         include: { items: { where: { removedAt: null } } },
       });
-      await writeAudit(tx, { userId: actor.id, entityType: "SalesOrder", entityId: id, action: "update", before: salesOrderAudit(before), after: salesOrderAudit(after) });
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "SalesOrder",
+        entityId: id,
+        action: "update",
+        before: salesOrderAudit(before),
+        after: { ...salesOrderAudit(after), ...(pricesChanged ? { priceOverrideReason } : {}) },
+      });
       return after;
     }, DOC_TX),
   );
@@ -117,7 +194,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
 
 /** Void an open SO (reason required). Its quote goes back to Sent so it can be converted again. */
 export async function voidSalesOrder(id: string, reason: string, actor: DocActor) {
-  assertCan(actor, "edit_data");
+  assertCanVoid(actor);
   if (!reason.trim()) throw new DocRuleError("A reason is required.", "reason");
   return db.$transaction(async (tx) => {
     const before = await lockSalesOrder(tx, id);

@@ -10,8 +10,8 @@ import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionStatusChip, MethodLabel, PRINTABLE_DISCLAIMER } from "@/components/billing/BillingParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
-import { PageHeader } from "@/components/ui";
-import { voidCollectionAction } from "../../actions";
+import { Chip, PageHeader } from "@/components/ui";
+import { markCollectionCheckedAction, voidCollectionAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -39,6 +39,7 @@ export default async function CollectionDetailPage({
           <>
             {c.number}
             <CollectionStatusChip status={c.status} />
+            {c.needsAdminCheck && <Chip tone="dark">Needs Admin check</Chip>}
           </>
         }
         subtitle={`${c.customer.name} · ${PRINTABLE_DISCLAIMER}`}
@@ -47,6 +48,13 @@ export default async function CollectionDetailPage({
             <Link className="btn btn-secondary" href={`/print/collections/${id}`} target="_blank">
               Print / Save PDF
             </Link>
+            {user.isAdmin && c.needsAdminCheck && (
+              <form action={markCollectionCheckedAction.bind(null, id)}>
+                <button className="btn" type="submit">
+                  Mark checked
+                </button>
+              </form>
+            )}
             {canVoid && (
               <VoidButton
                 label="Void"

@@ -31,6 +31,8 @@ type Props = {
   status: string;
   approvalStatus: "PENDING" | "APPROVED" | "REJECTED";
   canEdit: boolean;
+  /** Admin or Approver. Staff keep Edit and do not see Void. */
+  canVoid: boolean;
   canApproveWorkflow: boolean;
   /** An open sales order made from this quote, if any. */
   openSalesOrderId: string | null;
@@ -62,6 +64,7 @@ export function QuoteActions({
   status,
   approvalStatus,
   canEdit,
+  canVoid,
   canApproveWorkflow,
   openSalesOrderId,
   customerAddress,
@@ -108,7 +111,7 @@ export function QuoteActions({
   if (canEdit && approved && status !== "VOID") items.push({ key: "email", label: "Email", onSelect: () => run(() => actions.email(id)) });
   if (canEdit && approved && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
-  if (canEdit && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
+  if (canVoid && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
   function onMarkSent() {
     const gate = quoteMarkSentGate({
@@ -284,15 +287,16 @@ type SoProps = {
   number: string;
   status: string;
   canEdit: boolean;
+  canVoid: boolean;
   voidAction: (id: string, reason: string) => Promise<FormState>;
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, voidAction }: SoProps) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction }: SoProps) {
   const [voiding, setVoiding] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
-  if (canEdit && status === "OPEN") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
+  if (canVoid && status === "OPEN") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
   return (
     <>
       <ActionsMenu items={items} />

@@ -4,7 +4,7 @@
 import type { BillingStatus, Prisma } from "@prisma/client";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
@@ -41,7 +41,7 @@ async function nonVoidBillings(tx: Tx, salesOrderId: string) {
 }
 
 export async function recordBilling(input: BillingInput, actor: BillingActor, files: readonly UploadFile[] = []) {
-  assertManageBilling(actor);
+  assertCan(actor, "record_billing");
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
 
   const snap = await getSettingsSnapshot();
@@ -98,6 +98,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             netExpected: net,
             status: "OPEN",
             notes: input.notes,
+            needsAdminCheck: staffNeedsAdminCheck(actor),
             createdById: actor.id,
             updatedById: actor.id,
           },
@@ -275,6 +276,31 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       return after;
     }, DOC_TX),
   );
+}
+
+/** Admin clears the staff-recorded check flag. Same transaction as the audit row. */
+export async function markBillingChecked(id: string, actor: BillingActor) {
+  assertCanMarkAdminCheck(actor);
+  return db.$transaction(async (tx) => {
+    const before = await tx.billing.findUnique({ where: { id } });
+    if (!before) throw new DocRuleError("Billing not found.");
+    if (!before.needsAdminCheck) return before;
+    const now = new Date();
+    const after = await tx.billing.update({
+      where: { id },
+      data: { needsAdminCheck: false, adminCheckedAt: now, adminCheckedById: actor.id, updatedById: actor.id },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Billing",
+      entityId: id,
+      action: "update",
+      before: { needsAdminCheck: true },
+      after: { needsAdminCheck: false, adminCheckedAt: now.toISOString() },
+      diff: false,
+    });
+    return after;
+  });
 }
 
 /** Recompute and persist a billing's status from its posted allocations. */

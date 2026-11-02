@@ -19,7 +19,7 @@ import { recordCollectionAction } from "../../actions";
 
 export default async function NewCollectionPage({ searchParams }: { searchParams: Promise<{ customerId?: string }> }) {
   const user = await requirePagePermission("view");
-  if (!can(user, "manage_billing")) redirect("/no-access");
+  if (!can(user, "record_billing")) redirect("/no-access");
   const { customerId } = await searchParams;
 
   if (!customerId) {

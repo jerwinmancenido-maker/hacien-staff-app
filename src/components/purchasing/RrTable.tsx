@@ -8,12 +8,12 @@ import { AttachmentLinks, day, qtyText, RrStatusChip } from "./PoParts";
 export function RrTable({
   reports,
   poId,
-  canEdit,
+  canVoid,
   voidAction,
 }: {
   reports: { id: string; number: string; status: string; receivedDate: string; receivedBy: string; deliveryRef: string | null; notes: string | null; voidReason: string | null; items: { description: string; qty: string }[]; attachments: { id: string; fileName: string; sizeBytes: number }[] }[];
   poId: string;
-  canEdit: boolean;
+  canVoid: boolean;
   voidAction: (poId: string, id: string, reason: string) => Promise<FormState>;
 }) {
   return (
@@ -59,7 +59,7 @@ export function RrTable({
                   <Link className="btn-link small" href={`/print/receiving-reports/${r.id}`} target="_blank">
                     Print
                   </Link>
-                  {canEdit && r.status === "POSTED" && (
+                  {canVoid && r.status === "POSTED" && (
                     <VoidButton
                       label="Void"
                       docLabel="receiving report"

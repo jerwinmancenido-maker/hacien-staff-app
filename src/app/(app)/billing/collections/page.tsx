@@ -22,7 +22,7 @@ export default async function CollectionsListPage({
   const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
   const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
   const rows = await listCollections({ status, q: sp.q, fromYmd, toYmd });
-  const canManage = can(user, "manage_billing");
+  const canRecord = can(user, "record_billing");
 
   return (
     <>
@@ -30,7 +30,7 @@ export default async function CollectionsListPage({
         title="Collections"
         subtitle="Payments and advances. Unapplied cash is customer credit."
         actions={
-          canManage && (
+          canRecord && (
             <Link className="btn" href="/billing/collections/new">
               <PlusIcon /> Record collection
             </Link>
@@ -57,7 +57,7 @@ export default async function CollectionsListPage({
             title="All clear here"
             line="No collections yet. Record a collection when a customer pays."
             action={
-              canManage ? (
+              canRecord ? (
                 <Link className="btn btn-secondary" href="/billing/collections/new">
                   Record collection
                 </Link>

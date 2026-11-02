@@ -377,7 +377,7 @@ function buildKpis(opts: {
 function headerActions(user: PermissionUser): HomeHeaderActions {
   return {
     newQuoteHref: can(user, "edit_data") ? newQuoteHref() : null,
-    newBillingHref: can(user, "manage_billing") ? newBillingHref() : null,
+    newBillingHref: can(user, "record_billing") ? newBillingHref() : null,
   };
 }
 
