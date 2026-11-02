@@ -479,6 +479,41 @@ describe("Q07 customer save: address flags and legacy terms", () => {
     expect(addrs.find((a) => a.kind === "DELIVERY")?.isDefault).toBe(true);
   });
 
+  it("saves a delivery address when the billing street is blank", async () => {
+    const res = await saveCustomerAction(
+      null,
+      {},
+      customerForm({
+        street: "",
+        barangay: "",
+        cityMunicipality: "",
+        province: "",
+        zip: "",
+        sameAsBilling: "false",
+        isDelivery: "true",
+        deliveryStreet: "88 Commerce Ave",
+        deliveryBarangay: "Manggahan",
+        deliveryCityMunicipality: "Pasig",
+        deliveryProvince: "Metro Manila",
+        deliveryZip: "1611",
+      }),
+    );
+    expect(res.ok).toBe(true);
+    expect(fake.state.customers).toHaveLength(1);
+    const id = fake.state.customers[0]!.id;
+    const addrs = fake.state.addresses.filter((a) => a.customerId === id);
+    expect(addrs).toHaveLength(1);
+    expect(addrs[0]).toMatchObject({
+      kind: "DELIVERY",
+      street: "88 Commerce Ave",
+      barangay: "Manggahan",
+      cityMunicipality: "Pasig",
+      province: "Metro Manila",
+      zip: "1611",
+      isDefault: true,
+    });
+  });
+
   it("does not create a customer when the address is incomplete", async () => {
     const res = await saveCustomerAction(null, {}, customerForm({ barangay: "", cityMunicipality: "", province: "", zip: "" }));
     expect(res.ok).toBeFalsy();
