@@ -91,7 +91,6 @@ export const DEFAULT_SETTINGS: Settings = {
   print: {
     paperSize: "A4",
     showInputTaxDisclaimer: true,
-    showTermsQr: false,
     showReceivingReportCosts: false,
     quoteTerms: "",
     deliveryNotes: "",
