@@ -37,6 +37,9 @@ export async function saveQuoteAction(id: string | null, _prev: FormState, form:
     const parsed = quoteInputSchema.safeParse(readJson(form, "payload"));
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
     const quote = id ? await updateQuote(id, parsed.data, user) : await createQuote(parsed.data, user);
+    // Mark as sent in this same request. A successful save redirects, so the
+    // editor never sees ok and cannot call markQuoteSent afterwards.
+    if (id && str(form, "alsoMarkSent") === "1") await markQuoteSent(quote.id, user);
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${quote.id}`);
     goTo = `/quotes/${quote.id}`;

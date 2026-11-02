@@ -6,7 +6,7 @@
 // quote-trow, quote-int2, quote-tbox, quote-sticky-act, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
@@ -224,8 +224,7 @@ export function QuoteEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
   const skipCostWarn = useRef(false);
-  const saveThenSend = useRef(false);
-  const sawSavePending = useRef(false);
+  const alsoMarkSentRef = useRef<HTMLInputElement>(null);
   const [costConfirmOpen, setCostConfirmOpen] = useState(false);
   const [costConfirmNext, setCostConfirmNext] = useState<"save" | "sent">("save");
   const [sentPending, startSentTransition] = useTransition();
@@ -458,12 +457,12 @@ export function QuoteEditor({
   const canMarkSent = quoteId && status === "DRAFT" && approvalStatus === "APPROVED" && markSentAction;
   const busy = pending || sentPending;
 
-  const markSentNow = useCallback(() => {
+  function markSentNow() {
     if (!canMarkSent || !quoteId || !markSentAction) return;
     startSentTransition(async () => {
       await markSentAction(quoteId);
     });
-  }, [canMarkSent, quoteId, markSentAction]);
+  }
 
   function confirmNoneAndMarkSent() {
     if (!quoteId) return;
@@ -479,10 +478,12 @@ export function QuoteEditor({
   function onSubmitMaybeWarn(e: FormEvent<HTMLFormElement>) {
     if (withCosts && !skipCostWarn.current && linesMissingSupplierCost(items)) {
       e.preventDefault();
+      if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
       setCostConfirmNext("save");
       setCostConfirmOpen(true);
       return;
     }
+    if (!skipCostWarn.current && alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
     skipCostWarn.current = false;
     onSubmit(e);
   }
@@ -491,21 +492,9 @@ export function QuoteEditor({
     const next = costConfirmNext;
     setCostConfirmOpen(false);
     skipCostWarn.current = true;
-    if (next === "sent") saveThenSend.current = true;
+    if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = next === "sent" ? "1" : "";
     formRef.current?.requestSubmit();
   }
-
-  useEffect(() => {
-    if (!saveThenSend.current) return;
-    if (pending) {
-      sawSavePending.current = true;
-      return;
-    }
-    if (!sawSavePending.current) return;
-    sawSavePending.current = false;
-    saveThenSend.current = false;
-    if (state.ok) markSentNow();
-  }, [pending, state.ok, markSentNow]);
 
   function submitMarkSent() {
     if (canMarkSent) {
@@ -531,6 +520,7 @@ export function QuoteEditor({
     <>
       <form ref={formRef} className="quote-editor" onSubmit={onSubmitMaybeWarn} noValidate>
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+        <input ref={alsoMarkSentRef} type="hidden" name="alsoMarkSent" value="" />
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
