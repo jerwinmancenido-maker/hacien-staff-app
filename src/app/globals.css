@@ -4963,10 +4963,10 @@ button.contact-card-add {
     width: 1.15rem;
   }
   .pp-items .pp-qty {
-    width: 1.7rem;
+    width: calc(1.7rem + 1px);
   }
   .pp-items .pp-unit {
-    width: 1.8rem;
+    width: calc(1.8rem + 1px);
   }
   .pp-items td.num:last-child,
   .pp-items th.num:last-child,
@@ -5715,9 +5715,9 @@ button.contact-card-add {
 .home-ks-bar {
   gap: 8px;
 }
-.home-ks-bar b {
-  color: #0a0a0a;
-  font-weight: 800;
+.home-ks-goal {
+  color: #737373;
+  font-weight: 500;
 }
 .home-mini-bar {
   flex: 1;
@@ -6607,12 +6607,6 @@ button.contact-card-add {
   }
   .home-na-empty {
     padding: 6px 12px 12px;
-  }
-  .home-ks-phone-limit {
-    display: block !important; /* override flex from .home-phone-only */
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .home-na-row {
     min-height: 40px;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { currentMonthPeriod } from "@/lib/books/period";
-import { addDays, isoDate, manilaToday } from "@/lib/format";
+import { addDays, formatPesoWhole, isoDate, manilaToday } from "@/lib/format";
 import { activitySummary, documentHref, formatHomeActivityWhen } from "@/lib/home/activity";
 import {
   HOME_WITHHOLDING_NOT_SET_LABEL,
@@ -12,7 +12,7 @@ import {
   homeTodayPlusDaysYmd,
 } from "@/lib/home/dashboard";
 import { customersNoWithholdingHref } from "@/lib/home/hrefs";
-import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
+import { collectedWholePesos, hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
 import {
   formatCompactPesoLimit,
@@ -40,6 +40,16 @@ describe("home money figures", () => {
     expect(sumPesoAmounts([])).toBe("0.00");
     expect(sumPesoAmounts(["10.10", "20.20", "0.03"])).toBe("30.33");
     expect(homeSumAmounts(["100.00", "0.01"])).toBe("100.01");
+  });
+
+  it("rounds the collected card from one exact total so the shown parts add up", () => {
+    const shown = collectedWholePesos("20000.50", "500.50");
+    expect(formatPesoWhole(shown.total)).toBe("₱20,501");
+    expect(Number(shown.cash) + Number(shown.received2307)).toBe(Number(shown.total));
+    expect(formatPesoWhole(shown.cash)).toBe("₱20,001");
+    expect(formatPesoWhole(shown.received2307)).toBe("₱500");
+    // Each figure rounded on its own would be ₱20,001 + ₱501 = ₱20,502.
+    expect(Number(formatPesoWhole(shown.cash).replace(/[^\d]/g, "")) + Number(formatPesoWhole(shown.received2307).replace(/[^\d]/g, ""))).toBe(20501);
   });
 
   it("splits owed vs overdue (overdue never exceeds total)", () => {
@@ -255,13 +265,14 @@ describe("home tax phone strip label", () => {
 });
 
 describe("home billed-year phone limit label", () => {
-  it("joins live pctLabel with compact Non-VAT limit (not hard-coded 46.8)", () => {
-    expect(billedYearPhoneLimitLabel("46.8%", 3_000_000)).toBe("46.8% of ₱3M limit");
-    expect(billedYearPhoneLimitLabel("0.0%", 3_000_000)).toBe("0.0% of ₱3M limit");
-    expect(billedYearPhoneLimitLabel("50.0%", 1_500_000)).toBe("50.0% of ₱1.5M limit");
-    // Uses the same compact formatter as the Non-VAT title / sidebar.
+  it("joins the live percent with a compact goal (same words at both widths)", () => {
+    expect(billedYearPhoneLimitLabel("0.6%", 3_000_000)).toBe("0.6% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("46.8%", 3_000_000)).toBe("46.8% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("0.0%", 3_000_000)).toBe("0.0% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("50.0%", 1_500_000)).toBe("50.0% of ₱1.5M goal");
     expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
     expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).not.toMatch(/^46\.8/);
+    expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).not.toMatch(/limit|Non-VAT/);
   });
 });
 

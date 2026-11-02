@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   quoteApprovalBackfill,
+  quoteMarkSentGate,
   quoteMoneyFieldsChanged,
   quoteNotApprovedError,
   QUOTE_APPROVAL_LABELS,
@@ -102,8 +103,37 @@ describe("quoteMoneyFieldsChanged", () => {
     ).toBe(true);
   });
 
+  it("Mark as sent with withholding unset still warns on a missing cost and blocks when approval is needed", () => {
+    expect(
+      quoteMarkSentGate({ approved: true, withholdingUnset: true, supplierCostMissing: true }),
+    ).toBe("cost-warning");
+    expect(
+      quoteMarkSentGate({ approved: false, withholdingUnset: true, supplierCostMissing: true }),
+    ).toBe("need-approval");
+    expect(
+      quoteMarkSentGate({ approved: false, withholdingUnset: true, supplierCostMissing: false }),
+    ).toBe("need-approval");
+    expect(
+      quoteMarkSentGate({ approved: true, withholdingUnset: true, supplierCostMissing: false }),
+    ).toBe("withholding-unset");
+    expect(
+      quoteMarkSentGate({ approved: true, withholdingUnset: false, supplierCostMissing: false }),
+    ).toBe("send");
+  });
+
   it("detects supplier cost and withholding-only changes", () => {
     const base = snap();
+    expect(
+      quoteMoneyFieldsChanged(
+        base,
+        snap({
+          supplierCost: "0.00",
+          netMargin: "100.00",
+          netMarginPct: "100.00",
+          items: [line({ id: "a", supplierUnitCost: "0.00", supplierTotal: "0.00" })],
+        }),
+      ),
+    ).toBe(true);
     expect(
       quoteMoneyFieldsChanged(
         base,

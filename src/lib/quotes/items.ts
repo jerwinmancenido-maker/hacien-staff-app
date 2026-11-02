@@ -100,7 +100,9 @@ export function planItems(
     const old = input.id && !used.has(input.id) ? existing.find((e) => e.id === input.id) : undefined;
     if (old) used.add(old.id);
     const supplierId = withCosts ? input.supplierId : (old?.supplierId ?? null);
-    const supplierUnitCost = withCosts ? input.supplierUnitCost : (old?.supplierUnitCost ?? "0");
+    // A cleared box is the same ₱0 as a typed 0.00, so the approval compare sees the clear.
+    const typedCost = String(input.supplierUnitCost ?? "").trim();
+    const supplierUnitCost = withCosts ? (typedCost === "" ? "0" : typedCost) : (old?.supplierUnitCost ?? "0");
     const wh = resolveLineWithholding(input, old, opts);
     return {
       id: old?.id ?? null,

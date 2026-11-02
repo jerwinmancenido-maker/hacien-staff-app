@@ -494,7 +494,7 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-kv(?:\.num)?\s*\{[^}]*text-align:\s*left/s);
     expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisMonth\.amount\)/);
     expect(sections).toMatch(/formatPesoWhole\(kpis\.owedByCustomers\.amount\)/);
-    expect(sections).toMatch(/formatPesoWhole\(kpis\.collectedThisMonth\.amount\)/);
+    expect(sections).toMatch(/formatPesoWhole\(paid\.total\)/);
     expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisYear\.amount\)/);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
     expect(chartSrc).toMatch(/formatPesoWhole\(current\.month\.amount\)/);

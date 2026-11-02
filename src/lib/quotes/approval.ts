@@ -22,6 +22,24 @@ export function quoteApprovalBackfill(status: QuoteStatus): QuoteApprovalStatus 
   return status === "DRAFT" ? "PENDING" : "APPROVED";
 }
 
+/** What Mark as sent should do next. Cost warning wins over the withholding question. */
+export type QuoteMarkSentGate = "need-approval" | "cost-warning" | "withholding-unset" | "send";
+
+/**
+ * Mark as sent with withholding still unset must still warn when a supplier
+ * cost is missing, and must not send while approval is still required.
+ */
+export function quoteMarkSentGate(input: {
+  approved: boolean;
+  withholdingUnset: boolean;
+  supplierCostMissing: boolean;
+}): QuoteMarkSentGate {
+  if (!input.approved) return "need-approval";
+  if (input.supplierCostMissing) return "cost-warning";
+  if (input.withholdingUnset) return "withholding-unset";
+  return "send";
+}
+
 /** Error if send / email / convert is blocked by approval state, else null. */
 export function quoteNotApprovedError(approvalStatus: QuoteApprovalStatus): string | null {
   if (approvalStatus === "APPROVED") return null;

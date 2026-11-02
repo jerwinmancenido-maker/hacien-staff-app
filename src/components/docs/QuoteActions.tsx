@@ -16,6 +16,8 @@ import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
 import { ConvertDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
+import { quoteMarkSentGate, quoteNotApprovedError } from "@/lib/quotes/approval";
 import {
   WITHHOLDING_NONE_CONFIRM_PICK,
   WITHHOLDING_NONE_CONFIRM_TITLE,
@@ -37,6 +39,8 @@ type Props = {
   addressOptions?: AddressOption[];
   /** When true, Mark as sent shows the no-withholding confirm first. */
   withholdingNotSet?: boolean;
+  /** Cost viewer, and at least one line has a blank or ₱0.00 supplier cost. */
+  costMissing?: boolean;
   actions: {
     markSent: (id: string) => Promise<FormState>;
     /** Saves explicit none then marks sent (Yes, none). */
@@ -63,10 +67,11 @@ export function QuoteActions({
   customerAddress,
   addressOptions,
   withholdingNotSet = false,
+  costMissing = false,
   actions,
 }: Props) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | "reject" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | "cost" | "reject" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const rejectReasonRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
@@ -106,7 +111,20 @@ export function QuoteActions({
   if (canEdit && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
   function onMarkSent() {
-    if (withholdingNotSet) {
+    const gate = quoteMarkSentGate({
+      approved: approvalStatus === "APPROVED",
+      withholdingUnset: withholdingNotSet,
+      supplierCostMissing: costMissing,
+    });
+    if (gate === "need-approval") {
+      setMessage(quoteNotApprovedError(approvalStatus));
+      return;
+    }
+    if (gate === "cost-warning") {
+      setDialog("cost");
+      return;
+    }
+    if (gate === "withholding-unset") {
       setDialog("wh-none");
       return;
     }
@@ -186,6 +204,22 @@ export function QuoteActions({
         onConfirm={() => {
           setDialog(null);
           run(() => actions.markLost(id));
+        }}
+      />
+      <ConfirmDialog
+        open={dialog === "cost"}
+        title={COST_NOT_SET_LABEL}
+        body="One or more lines have no supplier cost. Margin will show Cost not set until you enter it. Save anyway?"
+        confirmLabel="Save anyway"
+        cancelLabel="Go back"
+        onCancel={() => setDialog(null)}
+        onConfirm={() => {
+          setDialog(null);
+          if (withholdingNotSet) {
+            setDialog("wh-none");
+            return;
+          }
+          run(() => actions.markSent(id));
         }}
       />
       <ConfirmDialog

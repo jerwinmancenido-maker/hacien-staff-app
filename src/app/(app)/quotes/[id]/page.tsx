@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
-import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
+import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
 import { formatAddress } from "@/lib/addresses/format";
@@ -77,6 +77,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             customerAddress={suggestedAddress}
             addressOptions={addressOptions}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
+            costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,

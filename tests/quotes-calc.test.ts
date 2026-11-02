@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalReasons, COST_NOT_SET_LABEL, docTotals, fromScaled, lineAmounts, linesMissingSupplierCost, pctToRate, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { approvalReasons, COST_NOT_SET_LABEL, docTotals, fromScaled, lineAmounts, linesMissingSupplierCost, pctToRate, ratePctLabel, supplierCostMissing, supplierCostStateFromSupplierTotals, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import { planItems } from "@/lib/quotes/items";
 import { buildWithholdingSnapshot } from "@/lib/services/withholding";
 import { formatDocNumber, seriesYear } from "@/lib/documents/series";
@@ -273,6 +273,26 @@ describe("approval flag", () => {
     const low = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "900" }]);
     expect(approvalReasons(low, approval)).toEqual(["Margin is below 18%"]);
   });
+
+  it("mixed lines need approval and show Cost not set only on the blank and ₱0.00 lines", () => {
+    const lines = [
+      { kind: "GOODS" as const, qty: "2", unitPrice: "1000", supplierUnitCost: "600" },
+      { kind: "GOODS" as const, qty: "1", unitPrice: "500", supplierUnitCost: "" },
+      { kind: "SERVICES" as const, qty: "1", unitPrice: "200", supplierUnitCost: "0.00" },
+    ];
+    const totals = docTotals(lines);
+    expect(totals.supplierCostState).toBe("partial");
+    expect(approvalReasons(totals, approval)).toEqual(["Cost not set"]);
+    const costed = { ...lines[0]!, ...lineAmounts(lines[0]!) };
+    const blank = { ...lines[1]!, ...lineAmounts(lines[1]!) };
+    const zero = { ...lines[2]!, ...lineAmounts(lines[2]!) };
+    expect(supplierCostMissing(costed.supplierUnitCost)).toBe(false);
+    expect(costed.margin).toBe("800.00");
+    expect(supplierCostMissing(blank.supplierUnitCost)).toBe(true);
+    expect(supplierCostMissing(zero.supplierUnitCost)).toBe(true);
+    expect(linesMissingSupplierCost([costed])).toBe(false);
+    expect(linesMissingSupplierCost([blank, zero])).toBe(true);
+  });
 });
 
 describe("withholding snapshot", () => {
@@ -302,6 +322,11 @@ describe("item planning", () => {
     expect(items[0]).toMatchObject({ id: "a", supplierId: "sup1", supplierUnitCost: "45000.00", supplierTotal: "90000.00", total: "104000.00" });
     expect(items[1]).toMatchObject({ id: null, supplierId: null, supplierUnitCost: "0", supplierTotal: "0.00" });
     expect(removedIds).toEqual([]);
+  });
+
+  it("stores a blank supplier cost as 0 so clearing it is a real money change", () => {
+    const { items } = planItems(existing, [{ ...input, supplierUnitCost: "" }], true);
+    expect(items[0]).toMatchObject({ supplierUnitCost: "0", supplierTotal: "0.00" });
   });
 
   it("takes costs from cost users and reports removed rows", () => {

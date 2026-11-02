@@ -23,6 +23,7 @@ import {
   type ItemKind,
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
+import { quoteMarkSentGate } from "@/lib/quotes/approval";
 import {
   lineDiffersFromUsualPicks,
   lineWithholdingChipsFromPicks,
@@ -225,6 +226,8 @@ export function QuoteEditor({
   const { state, pending, onSubmit } = useFormAction(action);
   const skipCostWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
+  /** Cost warning already shown; Yes, none must save the cleared cost in the same request. */
+  const sendAfterCostWarn = useRef(false);
   const [costConfirmOpen, setCostConfirmOpen] = useState(false);
   const [costConfirmNext, setCostConfirmNext] = useState<"save" | "sent">("save");
   const [sentPending, startSentTransition] = useTransition();
@@ -467,6 +470,22 @@ export function QuoteEditor({
   function confirmNoneAndMarkSent() {
     if (!quoteId) return;
     setNoneConfirmOpen(false);
+    // Cleared costs have to be saved with the send. The side action would mark
+    // the already-approved quote sent and drop the clear.
+    if (sendAfterCostWarn.current && formRef.current) {
+      sendAfterCostWarn.current = false;
+      const payloadInput = formRef.current.querySelector<HTMLInputElement>('input[name="payload"]');
+      if (payloadInput) {
+        const data = JSON.parse(payloadInput.value) as { withholdingCodes?: unknown; withholdingExplicitNone?: boolean };
+        data.withholdingCodes = [];
+        data.withholdingExplicitNone = true;
+        payloadInput.value = JSON.stringify(data);
+      }
+      skipCostWarn.current = true;
+      if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "1";
+      formRef.current.requestSubmit();
+      return;
+    }
     startSentTransition(async () => {
       // Persist explicit none locally so a concurrent draft save matches.
       applyPickDefaults([], items);
@@ -491,6 +510,12 @@ export function QuoteEditor({
   function confirmCostAnyway() {
     const next = costConfirmNext;
     setCostConfirmOpen(false);
+    if (next === "sent" && pick == null) {
+      sendAfterCostWarn.current = true;
+      setNoneConfirmOpen(true);
+      return;
+    }
+    sendAfterCostWarn.current = false;
     skipCostWarn.current = true;
     if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = next === "sent" ? "1" : "";
     formRef.current?.requestSubmit();
@@ -498,13 +523,18 @@ export function QuoteEditor({
 
   function submitMarkSent() {
     if (canMarkSent) {
-      if (pick == null) {
-        setNoneConfirmOpen(true);
-        return;
-      }
-      if (withCosts && linesMissingSupplierCost(items)) {
+      const gate = quoteMarkSentGate({
+        approved: true,
+        withholdingUnset: pick == null,
+        supplierCostMissing: withCosts && linesMissingSupplierCost(items),
+      });
+      if (gate === "cost-warning") {
         setCostConfirmNext("sent");
         setCostConfirmOpen(true);
+        return;
+      }
+      if (gate === "withholding-unset") {
+        setNoneConfirmOpen(true);
         return;
       }
       markSentNow();

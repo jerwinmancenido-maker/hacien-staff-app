@@ -394,7 +394,7 @@ export function pctToRate(pct: string): string {
  * the stored margin percent is 100.
  */
 export function approvalReasons(
-  totals: Pick<DocTotals, "contractPrice" | "netMarginPct"> & { supplierCostState?: SupplierCostState },
+  totals: Pick<DocTotals, "contractPrice" | "netMarginPct" | "supplierCostState">,
   approval: { marginBelowPct: number; totalAbove: number },
 ): string[] {
   const reasons: string[] = [];
