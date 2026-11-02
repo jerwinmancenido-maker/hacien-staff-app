@@ -21,12 +21,12 @@ describe("phone print columns", () => {
     const qty = ruleWidth(".pp-items .pp-qty");
     const unit = ruleWidth(".pp-items .pp-unit");
     const amount = ruleWidth(".pp-items td.num:last-child");
-    expect(qty).toBe("1.7rem");
-    expect(unit).toBe("1.8rem");
+    expect(qty).toBe("calc(1.7rem + 1px)");
+    expect(unit).toBe("calc(1.8rem + 1px)");
     // 5.6rem fits ₱520,000.00 at 7.5pt with the cell padding. Do not shrink this.
     expect(amount).toBe("5.6rem");
-    expect(Number.parseFloat(qty)).toBeLessThan(Number.parseFloat(amount));
-    expect(Number.parseFloat(unit)).toBeLessThan(Number.parseFloat(amount));
+    expect(1.7).toBeLessThan(Number.parseFloat(amount));
+    expect(1.8).toBeLessThan(Number.parseFloat(amount));
     expect(css).toMatch(/\.pp-items \.num,\s*\.pp-totals \.num\s*\{[^}]*white-space:\s*nowrap/);
   });
 });

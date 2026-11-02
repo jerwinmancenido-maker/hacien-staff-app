@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
+import { collectedWholePesos } from "@/lib/home/money";
 import { HOME_RECENT_PHONE_ROWS } from "@/lib/home/activity";
 import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomePipeline } from "@/lib/home/pipeline";
@@ -92,6 +93,7 @@ function KpiMtdFoot({
 }
 
 export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
+  const paid = collectedWholePesos(kpis.collectedThisMonth.cashCollected, kpis.collectedThisMonth.received2307);
   return (
     <div className="home-kps">
       <div className="card home-kp">
@@ -123,9 +125,9 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           {kpis.collectedThisMonth.label}
         </div>
         <div className="home-ks home-ks-paid" aria-label="Cash collected and 2307 received">
-          <div>Cash collected <b className="num">{formatPesoWhole(kpis.collectedThisMonth.cashCollected)}</b></div>
-          <div>2307 received <b className="num">{formatPesoWhole(kpis.collectedThisMonth.received2307)}</b></div>
-          <div>Total paid <b className="num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</b></div>
+          <div>Cash collected <b className="num">{formatPesoWhole(paid.cash)}</b></div>
+          <div>2307 received <b className="num">{formatPesoWhole(paid.received2307)}</b></div>
+          <div>Total paid <b className="num">{formatPesoWhole(paid.total)}</b></div>
         </div>
         <KpiMtdFoot
           change={kpis.collectedThisMonth.change}

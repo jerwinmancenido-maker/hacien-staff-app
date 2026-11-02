@@ -4963,10 +4963,10 @@ button.contact-card-add {
     width: 1.15rem;
   }
   .pp-items .pp-qty {
-    width: 1.7rem;
+    width: calc(1.7rem + 1px);
   }
   .pp-items .pp-unit {
-    width: 1.8rem;
+    width: calc(1.8rem + 1px);
   }
   .pp-items td.num:last-child,
   .pp-items th.num:last-child,

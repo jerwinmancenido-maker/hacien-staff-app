@@ -17,6 +17,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { DocRuleError, money } from "@/lib/documents/common";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
+import { salesOrderMoney } from "@/lib/billing/status";
 import { recordBilling, voidBilling, soBillingSummary } from "@/lib/services/billings";
 import {
   applyCustomerCredit,
@@ -174,6 +175,83 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const summary = await soBillingSummary(so.id);
     expect(summary?.billed).toBe("600.00");
     expect(summary?.remainingToBill).toBe("400.00");
+  });
+
+  it("Completed follows soBillingSummary; a void billing or collection drops it back to Open", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year, { unitPrice: "100000.00" });
+
+    async function shown() {
+      const row = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id }, select: { status: true } });
+      const summary = await soBillingSummary(so.id);
+      if (!summary) throw new Error("missing billing summary");
+      const money = salesOrderMoney(row.status === "VOID" ? "VOID" : "OPEN", summary.contractPrice, [
+        {
+          status: "OPEN",
+          amount: summary.billed,
+          cashApplied: summary.cashCollected,
+          withholdingApplied: summary.withholdingCollected,
+        },
+      ]);
+      return { status: row.status, money };
+    }
+
+    const soRow = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+    const contract = money(soRow.contractPrice);
+    const wh = money(soRow.withholdingTotal);
+    const cash = fromScaled(toScaled(contract, 2) - toScaled(wh, 2), 2);
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: contract,
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    const collection = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-${year}`,
+        amountReceived: cash,
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: cash,
+            withholdingApplied: wh,
+            withholdingRate: "0.0100",
+            atcCode: "WC010",
+          },
+        ],
+      },
+      admin,
+    );
+
+    const done = await shown();
+    expect(done.money.completed).toBe(true);
+    // Display only — the sales order row stays OPEN.
+    expect(done.status).toBe("OPEN");
+
+    // Void collection: posted cash and 2307 drop out of soBillingSummary; the billing stays.
+    await voidCollection(collection.id, "Reverse the payment", admin);
+    const afterCollection = await shown();
+    expect(afterCollection.money.completed).toBe(false);
+    expect(afterCollection.status).toBe("OPEN");
+
+    // Void billing: soBillingSummary leaves the void row out.
+    await voidBilling(billing.id, "Reverse the billing", admin);
+    const afterBilling = await shown();
+    expect(afterBilling.money.completed).toBe(false);
+    expect(afterBilling.money.billed).toBe("0.00");
+    expect(afterBilling.status).toBe("OPEN");
   });
 
   it("two billings cannot take the same booklet number at once; voided numbers stay used", async () => {

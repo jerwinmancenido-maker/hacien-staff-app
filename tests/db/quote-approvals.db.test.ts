@@ -22,7 +22,8 @@ import {
   updateQuote,
   type DocActor,
 } from "@/lib/services/quotes";
-import { listQuotesView } from "@/lib/quotes/views";
+import { getQuoteView, listQuotesView } from "@/lib/quotes/views";
+import { COST_NOT_SET_LABEL, supplierCostMissing } from "@/lib/quotes/calc";
 import { money } from "@/lib/documents/common";
 import type { QuoteInput } from "@/lib/validation/quotes";
 import { freshYear, makeCustomer, makeUser, quoteInput } from "./fixtures";
@@ -275,5 +276,74 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     const after = await updateQuote(q.id, reversed, staff);
     expect(after.approvalStatus).toBe("APPROVED");
     expect(after.approvedById).toBe(approver.id);
+  });
+
+  it("mixed lines need approval and label Cost not set only on the blank and zero lines", async () => {
+    const customer = await makeCustomer();
+    const year = await freshYear();
+    const input = quoteInput(customer.id, year);
+    input.items = [
+      { id: null, description: "Costed", kind: "GOODS", qty: "2", unit: "pc", supplierId: null, supplierUnitCost: "600", unitPrice: "1000" },
+      { id: null, description: "Blank", kind: "GOODS", qty: "1", unit: "pc", supplierId: null, supplierUnitCost: "", unitPrice: "500" },
+      { id: null, description: "Zero", kind: "SERVICES", qty: "1", unit: "lot", supplierId: null, supplierUnitCost: "0.00", unitPrice: "200" },
+    ];
+    const q = await createQuote(input, admin);
+    expect(q.approvalStatus).toBe("PENDING");
+    const view = await getQuoteView(q.id, admin);
+    expect(view?.approval.needed).toBe(true);
+    expect(view?.approval.reasons).toEqual([COST_NOT_SET_LABEL]);
+    expect(view?.totals.supplierCostState).toBe("partial");
+    const costed = view?.items.find((i) => i.description === "Costed");
+    const blank = view?.items.find((i) => i.description === "Blank");
+    const zero = view?.items.find((i) => i.description === "Zero");
+    expect(supplierCostMissing(costed?.supplierUnitCost)).toBe(false);
+    expect(costed?.margin).toBe("800.00");
+    expect(supplierCostMissing(blank?.supplierUnitCost)).toBe(true);
+    expect(supplierCostMissing(zero?.supplierUnitCost)).toBe(true);
+    await expect(markQuoteSent(q.id, staff)).rejects.toThrow(/waiting for approval/i);
+    await expect(convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, staff)).rejects.toThrow(
+      /waiting for approval/i,
+    );
+  });
+
+  it("clearing an approved quote's supplier cost to 0.00 or blank needs approval again before send or convert", async () => {
+    const customer = await makeCustomer();
+    const year = await freshYear();
+
+    async function approvedQuote() {
+      const q = await createQuote(quoteInput(customer.id, year), admin);
+      await approveQuote(q.id, approver);
+      return q.id;
+    }
+
+    async function clearCosts(id: string, value: string) {
+      const row = await db.quote.findUniqueOrThrow({
+        where: { id },
+        include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+      });
+      const edit = inputFromQuote(row);
+      edit.items = edit.items.map((i) => ({ ...i, supplierUnitCost: value }));
+      return updateQuote(id, edit, admin);
+    }
+
+    const zeroId = await approvedQuote();
+    const zeroed = await clearCosts(zeroId, "0.00");
+    expect(zeroed.approvalStatus).toBe("PENDING");
+    expect(zeroed.approvedById).toBeNull();
+    await expect(markQuoteSent(zeroId, staff)).rejects.toThrow(/waiting for approval/i);
+    await expect(convertQuoteToSalesOrder(zeroId, { buyerPoNo: null, deliveryAddress: null }, staff)).rejects.toThrow(
+      /waiting for approval/i,
+    );
+    await expect(confirmNoneAndMarkQuoteSent(zeroId, staff)).rejects.toThrow(/waiting for approval/i);
+
+    const blankId = await approvedQuote();
+    const blanked = await clearCosts(blankId, "");
+    expect(blanked.approvalStatus).toBe("PENDING");
+    expect(blanked.approvedById).toBeNull();
+    expect(blanked.items.every((i) => money(i.supplierUnitCost) === "0.00")).toBe(true);
+    await expect(markQuoteSent(blankId, staff)).rejects.toThrow(/waiting for approval/i);
+    await expect(convertQuoteToSalesOrder(blankId, { buyerPoNo: null, deliveryAddress: null }, staff)).rejects.toThrow(
+      /waiting for approval/i,
+    );
   });
 });
