@@ -12,7 +12,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
-import { recordBilling, voidBilling } from "@/lib/services/billings";
+import { recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { getBookletView } from "@/lib/billing/views";
@@ -257,6 +257,54 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     expect((bad[0] as PromiseRejectedResult).reason.message).toMatch(/already used \/ marked spoiled/);
     const rows = await db.billing.findMany({ where: { invoiceNo } });
     expect(rows).toHaveLength(1);
+  });
+
+  it("editing SI invoiceNo keeps the old claim; old serial stays refused", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const first = nextInvoice();
+    const second = nextInvoice();
+    const b1 = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "100.00",
+        invoiceNo: first,
+        invoiceDate: d,
+        dueDate: d,
+        notes: null,
+      },
+      admin,
+    );
+    await updateBilling(
+      b1.id,
+      {
+        amount: "100.00",
+        invoiceNo: second,
+        invoiceDate: d,
+        dueDate: d,
+        notes: null,
+      },
+      admin,
+    );
+    expect(await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: first } } })).toBeTruthy();
+    expect(await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: second } } })).toBeTruthy();
+    await expect(
+      recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "50.00",
+          invoiceNo: first,
+          invoiceDate: d,
+          dueDate: d,
+          notes: null,
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already used \/ marked spoiled/);
+    const view = await getBookletView("SI");
+    const slot = view.slots.find((s) => s.invoiceNo === first);
+    expect(slot?.status).not.toBe("free");
   });
 
   it("refuses duplicate DR serials including after void", async () => {

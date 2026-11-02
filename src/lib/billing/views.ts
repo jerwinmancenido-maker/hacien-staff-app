@@ -678,6 +678,19 @@ export async function getBookletView(docType: BookletType = "SI") {
     select: { id: true, number: true, reason: true },
   });
 
+  // Claims cover serials still reserved after an invoiceNo edit (hard-delete forbidden).
+  const claims = await db.bookletSerialClaim.findMany({
+    where: { type: docType, number: { gte: range.seriesFrom, lte: range.seriesTo } },
+    select: { number: true },
+  });
+  const usedNos = new Set(used.map((u) => u.invoiceNo));
+  const spoiledNos = new Set(spoiled.map((s) => s.number));
+  for (const c of claims) {
+    if (usedNos.has(c.number) || spoiledNos.has(c.number)) continue;
+    used.push({ invoiceNo: c.number, id: "", number: "Reserved", status: "OPEN" });
+    usedNos.add(c.number);
+  }
+
   const typeName = BOOKLET_DOC_TYPES[docType]?.label ?? "Sales Invoice";
   const grid = bookletGrid(range, used, spoiled, typeName);
 

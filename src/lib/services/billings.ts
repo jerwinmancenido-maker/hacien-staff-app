@@ -198,6 +198,8 @@ export async function updateBilling(
               "invoiceNo",
             );
           }
+          // Claim the new serial. The prior serial stays claimed (never reused;
+          // hard-delete of claims is forbidden). Grid treats claims as occupied.
           await claimBookletSerial(tx, "SI", input.invoiceNo);
         } else {
           const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
