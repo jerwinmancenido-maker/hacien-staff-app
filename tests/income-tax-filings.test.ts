@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import {
   generateOccurrences,
+  manilaTodayYmd,
+  statusForDueDate,
   workingDayRule,
 } from "@/lib/tax/calendar-dates";
 import {
@@ -12,6 +14,7 @@ import {
 } from "@/lib/tax/calendar-build";
 import { PH_HOLIDAYS_2026 } from "@/lib/tax/holidays";
 import {
+  defaultDoneDateYmd,
   isIncomeTaxFiled,
   selectNextFiling,
   selectNextIncomeTaxFilings,
@@ -20,6 +23,7 @@ import {
 } from "@/lib/services/tax-calendar";
 import { ForbiddenError, type PermissionUser } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import { isoDate, manilaToday } from "@/lib/format";
 
 const adminUser: PermissionUser & { id: string } = {
   id: "usr_admin_test",
@@ -236,6 +240,90 @@ describe("next-filing selection logic", () => {
     expect(a1701).toBeDefined();
     expect(a1701?.obligationKey).toBe("1701a");
     expect(a1701?.periodKey).toBe("TY2025");
+  });
+});
+
+describe("Manila vs UTC midnight crossings (HIGH RISK tax dates)", () => {
+  // Asia/Manila = UTC+8. 17:00Z is 01:00 the next calendar day in Manila.
+  // Naive UTC `toISOString().slice(0,10)` is the wrong day for filed defaults and status.
+
+  it("default filed date is the Manila calendar day when UTC is still the previous day", () => {
+    // 2026-11-14 17:00 UTC = 2026-11-15 01:00 Asia/Manila
+    const now = new Date("2026-11-14T17:00:00.000Z");
+    expect(now.toISOString().slice(0, 10)).toBe("2026-11-14"); // UTC-only trap
+    expect(isoDate(manilaToday(now))).toBe("2026-11-15");
+    expect(manilaTodayYmd(now)).toBe("2026-11-15");
+    // Same helper the Home mark-filed default and tax calendar "done" default use.
+    expect(defaultDoneDateYmd(now)).toBe("2026-11-15");
+  });
+
+  it("1701Q Q3 2026 legal Nov 15 rolls to Nov 16; status follows Manila day vs rolled due", () => {
+    const occs = generateOccurrences("1701q", 2026, 2026, { holidays: PH_HOLIDAYS_2026 });
+    const q3 = occs.find((o) => o.periodKey === "2026-Q3");
+    expect(q3?.legalDueYmd).toBe("2026-11-15");
+    // Sunday → next working day Monday
+    expect(q3?.dueYmd).toBe("2026-11-16");
+    const dueYmd = q3!.dueYmd!;
+
+    // Day before legal Nov 15 in Manila (Nov 14 01:00 PHT); UTC still Nov 13.
+    const dayBeforeLegal = new Date("2026-11-13T17:00:00.000Z");
+    expect(dayBeforeLegal.toISOString().slice(0, 10)).toBe("2026-11-13");
+    expect(manilaTodayYmd(dayBeforeLegal)).toBe("2026-11-14");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(dayBeforeLegal), false)).not.toBe("overdue");
+
+    // On legal Nov 15 in Manila (01:00 PHT); UTC still Nov 14 — not overdue yet (due is Nov 16).
+    const onLegalDay = new Date("2026-11-14T17:00:00.000Z");
+    expect(onLegalDay.toISOString().slice(0, 10)).toBe("2026-11-14");
+    expect(manilaTodayYmd(onLegalDay)).toBe("2026-11-15");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(onLegalDay), false)).toBe("dueIn2");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(onLegalDay), false)).not.toBe("overdue");
+
+    // Day after legal Nov 15 = rolled due day Nov 16 in Manila; UTC still Nov 15 — due today, not overdue.
+    const onRolledDue = new Date("2026-11-15T17:00:00.000Z");
+    expect(onRolledDue.toISOString().slice(0, 10)).toBe("2026-11-15");
+    expect(manilaTodayYmd(onRolledDue)).toBe("2026-11-16");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(onRolledDue), false)).toBe("dueIn2");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(onRolledDue), false)).not.toBe("overdue");
+
+    // Day after rolled due in Manila (Nov 17 01:00 PHT); UTC still Nov 16 — overdue.
+    const dayAfterRolled = new Date("2026-11-16T17:00:00.000Z");
+    expect(dayAfterRolled.toISOString().slice(0, 10)).toBe("2026-11-16");
+    expect(manilaTodayYmd(dayAfterRolled)).toBe("2026-11-17");
+    expect(statusForDueDate(dueYmd, manilaTodayYmd(dayAfterRolled), false)).toBe("overdue");
+  });
+
+  it("buildTaxCalendarRows uses Manila today for 1701Q Q3 overdue across the UTC/Manila midnight split", () => {
+    const incomeTax = {
+      year: 2026,
+      incomeTaxMethod: "EIGHT_PERCENT" as const,
+      incomeTaxMethodsByYear: { "2026": "EIGHT_PERCENT" as const },
+    };
+    const base = {
+      settings: defaultTaxCalendarSettings(),
+      holidays: PH_HOLIDAYS_2026,
+      fromYear: 2026,
+      toYear: 2026,
+      incomeTax,
+      view: "all" as const,
+    };
+
+    const q3At = (now: Date) =>
+      buildTaxCalendarRows({ ...base, now }).find((r) => r.occurrenceKey === "1701q|2026-Q3");
+
+    // Manila Nov 15 (UTC Nov 14 17:00) — rolled due Nov 16 is still in the future.
+    const beforeDue = q3At(new Date("2026-11-14T17:00:00.000Z"));
+    expect(beforeDue?.dueYmd).toBe("2026-11-16");
+    expect(beforeDue?.status).toBe("dueIn2");
+    expect(beforeDue?.status).not.toBe("overdue");
+
+    // Manila Nov 16 (UTC Nov 15 17:00) — due today (Manila), not overdue.
+    const onDue = q3At(new Date("2026-11-15T17:00:00.000Z"));
+    expect(onDue?.status).toBe("dueIn2");
+    expect(onDue?.status).not.toBe("overdue");
+
+    // Manila Nov 17 (UTC Nov 16 17:00) — overdue.
+    const afterDue = q3At(new Date("2026-11-16T17:00:00.000Z"));
+    expect(afterDue?.status).toBe("overdue");
   });
 });
 
