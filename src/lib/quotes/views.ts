@@ -18,7 +18,7 @@ import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { remainingToBill } from "../billing/status";
-import { approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { COST_NOT_SET_LABEL, approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { parseWithholdingPick } from "./withholding-defaults";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
@@ -159,7 +159,9 @@ function approvalFromSnap(
   supplierCostState: SupplierCostState,
 ) {
   const reasons = approvalReasons({ contractPrice, netMarginPct, supplierCostState }, snap.settings.approval);
-  return withCosts ? { needed: reasons.length > 0, reasons } : { needed: reasons.length > 0 };
+  // Staff who cannot see costs must not get a "low margin" chip for a missing cost.
+  const visible = withCosts ? reasons : reasons.filter((r) => r !== COST_NOT_SET_LABEL);
+  return { needed: visible.length > 0, reasons: visible };
 }
 
 async function approvalFor(

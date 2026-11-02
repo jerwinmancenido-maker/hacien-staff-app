@@ -307,25 +307,32 @@ function buildKpis(opts: {
   collected: string;
   collectedPriorSameDays: string;
   received2307: string;
+  received2307PriorSameDays: string;
   nonVat: HomeNonVat;
   now: Date;
 }): HomeKpis {
-  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, received2307, nonVat, now } =
-    opts;
+  const {
+    sales,
+    owedAmount,
+    overdueCount,
+    openCount,
+    collected,
+    collectedPriorSameDays,
+    received2307,
+    received2307PriorSameDays,
+    nonVat,
+    now,
+  } = opts;
   const totalPaid = sumPesoAmounts([collected, received2307]);
+  const totalPaidPrior = sumPesoAmounts([collectedPriorSameDays, received2307PriorSameDays]);
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
-  const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const day = sales.mtdDay;
   const billedChip = sales.mtdChip;
-  const collectedChip = mtdVsSameDaysChip(collected, collectedPriorSameDays, lastKey, day);
+  const collectedChip = mtdVsSameDaysChip(totalPaid, totalPaidPrior, lastKey, day);
   const collectedCaption =
-    collectedChip != null
-      ? ""
-      : !Number.isFinite(collectedNum) || collectedNum <= 0
-        ? "No payments yet"
-        : `Posted collections in ${mon}`;
+    collectedChip != null ? "" : toScaled(totalPaid, 2) <= 0n ? "No payments yet" : `Posted collections in ${mon}`;
 
   const billingCount = openCount;
   const billingCountLabel =
@@ -473,6 +480,7 @@ export async function loadHomeDashboard(
             collected: "0.00",
             collectedPriorSameDays: "0.00",
             received2307: "0.00",
+            received2307PriorSameDays: "0.00",
             nonVat,
             now,
           })
@@ -506,6 +514,7 @@ export async function loadHomeDashboard(
     collected,
     collectedPriorSameDays,
     received2307,
+    received2307Prior,
     nonVatSnap,
     sales,
     recent,
@@ -527,6 +536,11 @@ export async function loadHomeDashboard(
       toYmd: priorSameDaysTo,
     }),
     sumWithholdingCredited({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumWithholdingCredited({
+      status: "POSTED",
+      fromYmd: priorSameDaysFrom,
+      toYmd: priorSameDaysTo,
+    }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
     // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
@@ -611,6 +625,7 @@ export async function loadHomeDashboard(
           collected,
           collectedPriorSameDays,
           received2307,
+          received2307PriorSameDays: received2307Prior,
           nonVat,
           now,
         })
