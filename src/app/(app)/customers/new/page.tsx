@@ -13,7 +13,7 @@ export default async function NewCustomerPage() {
   const visible = allowGovVatOption() ? rates : rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
   return (
     <>
-      <PageHeader title="New customer" subtitle="Name and customer type are required. Withholding rates are picked below." />
+      <PageHeader title="New customer" subtitle="Name, payment terms, and customer type are required. Withholding rates are picked below." />
       <div className="card" style={{ maxWidth: 760 }}>
         <CustomerForm
           customer={null}

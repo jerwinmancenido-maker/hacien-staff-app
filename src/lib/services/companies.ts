@@ -138,6 +138,66 @@ export async function setCustomerActive(id: string, active: boolean, actorId: st
   });
 }
 
+/** Duplicate customer: copy created with name + " (copy)", TIN blank, same addresses copied. */
+export async function duplicateCustomer(id: string, actor: CustomerSaveActor | string) {
+  const actorId = typeof actor === "string" ? actor : actor.id;
+  return db.$transaction(async (tx) => {
+    const original = await tx.customer.findUniqueOrThrow({
+      where: { id },
+      include: { addresses: { where: { archivedAt: null } } },
+    });
+    const suffix = " (copy)";
+    // Name is VARCHAR(191). Keep the suffix so a long name still duplicates.
+    const copyName = `${original.name.slice(0, 191 - suffix.length)}${suffix}`;
+    const created = await tx.customer.create({
+      data: {
+        name: copyName,
+        tin: null,
+        withholdingType: original.withholdingType,
+        defaultWithholding: original.defaultWithholding ?? Prisma.DbNull,
+        defaultTerms: original.defaultTerms,
+        notes: original.notes,
+      },
+    });
+    await writeAudit(tx, {
+      userId: actorId,
+      entityType: "Customer",
+      entityId: created.id,
+      action: "create",
+      after: { ...created, duplicatedFrom: original.id },
+    });
+
+    for (const a of original.addresses) {
+      const addr = await tx.address.create({
+        data: {
+          customerId: created.id,
+          kind: a.kind,
+          label: a.label,
+          street: a.street,
+          barangay: a.barangay,
+          cityMunicipality: a.cityMunicipality,
+          province: a.province,
+          zip: a.zip,
+          isDefault: a.isDefault,
+          needsReview: a.needsReview,
+        },
+      });
+      await writeAudit(tx, {
+        userId: actorId,
+        entityType: "Address",
+        entityId: addr.id,
+        action: "create",
+        after: addr,
+      });
+    }
+
+    return tx.customer.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { addresses: true },
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Suppliers
 // ---------------------------------------------------------------------------

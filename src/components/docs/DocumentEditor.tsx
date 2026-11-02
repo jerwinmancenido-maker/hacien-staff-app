@@ -830,7 +830,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       </div>
 
       {mode === "quote" && (
-        <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} />
+        <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} terms={termsOptions} />
       )}
     </form>
     <ConfirmDialog

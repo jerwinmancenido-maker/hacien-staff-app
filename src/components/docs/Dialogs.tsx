@@ -94,21 +94,31 @@ export function ConvertDialog({
   defaultAddress: string;
   addressOptions?: AddressOption[];
   onClose: () => void;
-  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }) => Promise<FormState>;
+  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
 }) {
-  const [v, setV] = useState({ buyerPoNo: "", buyerPoDate: "", deliveryAddress: defaultAddress });
-  const picked = addressOptions.find((o) => o.text === v.deliveryAddress)?.id ?? "";
+  const initialPicked = addressOptions.find((o) => o.text === defaultAddress)?.id ?? addressOptions[0]?.id ?? "";
+  const [v, setV] = useState({ buyerPoNo: "", buyerPoDate: "", deliveryAddressId: initialPicked });
   const [state, setState] = useState<FormState>({});
   const [pending, setPending] = useState(false);
   const e = state.fieldErrors ?? {};
+  const selectedOption = addressOptions.find((o) => o.id === v.deliveryAddressId);
+  const hasOptions = addressOptions.length > 0;
+
   return (
     <Modal title={`Convert ${number} to a sales order?`} onClose={onClose} labelId="convert-title">
       <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding. You can fill in the buyer PO later.</p>
       <form
         onSubmit={async (ev) => {
           ev.preventDefault();
+          if (!v.deliveryAddressId) {
+            setState({ message: "Pick a delivery address from the customer's saved addresses.", fieldErrors: { deliveryAddressId: "Pick a delivery address from the customer's saved addresses." } });
+            return;
+          }
           setPending(true);
-          const res = await onConvert(v);
+          const res = await onConvert({
+            ...v,
+            deliveryAddress: selectedOption?.text ?? "",
+          });
           setPending(false);
           if (!res.ok) setState(res);
         }}
@@ -116,6 +126,11 @@ export function ConvertDialog({
         {state.message && !state.ok && (
           <div className="alert error" role="alert">
             {state.message}
+          </div>
+        )}
+        {!hasOptions && (
+          <div className="alert error" role="alert">
+            This customer has no saved addresses. Add an address to the customer before converting to a sales order.
           </div>
         )}
         <div className="form-grid">
@@ -129,37 +144,38 @@ export function ConvertDialog({
             <input id="buyerPoDate" type="date" className="input" value={v.buyerPoDate} onChange={(ev) => setV({ ...v, buyerPoDate: ev.target.value })} />
             {e.buyerPoDate && <div className="error">{e.buyerPoDate}</div>}
           </div>
-          {addressOptions.length > 0 && (
-            <div className="field full">
-              <label htmlFor="deliveryAddressPick">Saved address</label>
-              <select
-                id="deliveryAddressPick"
-                value={picked}
-                onChange={(ev) => {
-                  const o = addressOptions.find((a) => a.id === ev.target.value);
-                  if (o) setV({ ...v, deliveryAddress: o.text });
-                }}
-              >
-                <option value="">Typed or edited address</option>
-                {addressOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="field full">
-            <label htmlFor="deliveryAddress">Delivery address</label>
-            <textarea id="deliveryAddress" rows={3} value={v.deliveryAddress} onChange={(ev) => setV({ ...v, deliveryAddress: ev.target.value })} />
-            <div className="hint">Saved on the sales order as typed. Editing the customer&apos;s addresses later won&apos;t change it.</div>
+          <div className={`field full${e.deliveryAddressId ? " has-error" : ""}`}>
+            <label htmlFor="deliveryAddressPick">
+              Delivery address <span className="req">*</span>
+            </label>
+            <select
+              id="deliveryAddressPick"
+              value={v.deliveryAddressId}
+              onChange={(ev) => setV({ ...v, deliveryAddressId: ev.target.value })}
+              required
+              disabled={!hasOptions}
+            >
+              <option value="">Pick a delivery address…</option>
+              {addressOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {e.deliveryAddressId && <div className="error">{e.deliveryAddressId}</div>}
+            {selectedOption && (
+              <div className="hint" style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
+                {selectedOption.text}
+              </div>
+            )}
+            <div className="hint">Saved on the sales order from the customer&apos;s address. Editing the customer&apos;s addresses later won&apos;t change it.</div>
           </div>
         </div>
         <div className="buttons">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn" disabled={pending}>
+          <button type="submit" className="btn" disabled={pending || !v.deliveryAddressId || !hasOptions}>
             {pending ? "Converting…" : "Convert to SO"}
           </button>
         </div>

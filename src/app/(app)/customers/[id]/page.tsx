@@ -31,7 +31,7 @@ import {
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { CustomerForm } from "../CustomerForm";
-import { saveCustomerAction, setCustomerActiveAction } from "../actions";
+import { duplicateCustomerAction, saveCustomerAction, setCustomerActiveAction } from "../actions";
 
 export default async function CustomerPage({
   params,
@@ -133,6 +133,13 @@ export default async function CustomerPage({
                   body="It can be used on new documents again."
                 />
               )}
+              <ConfirmAction
+                action={duplicateCustomerAction.bind(null, id)}
+                label="Duplicate customer"
+                title={`Duplicate ${customer.name}?`}
+                body="Creates a copy with (copy) in the name and copies saved addresses. The TIN is left blank."
+                confirmLabel="Duplicate"
+              />
               <Link className="btn" href={`/contacts/new?customer=${id}`}>
                 <PlusIcon /> Add contact
               </Link>
@@ -195,6 +202,7 @@ export default async function CustomerPage({
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
             canEditWithholding={user.isAdmin}
+            addresses={addresses}
           />
         </div>
       )}

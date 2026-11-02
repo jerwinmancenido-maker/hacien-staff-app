@@ -56,7 +56,7 @@ describe("S-19 blank withholding rejected", () => {
     expect(schema.safeParse({ name: "X", tin: "", withholdingType: "GOVERNMENT", defaultWithholding: null, defaultTerms: "", notes: "" }).success).toBe(
       false,
     );
-    expect(schema.safeParse({ name: "X", tin: "", withholdingType: "NONE", defaultWithholding: [], defaultTerms: "", notes: "" }).success).toBe(true);
+    expect(schema.safeParse({ name: "X", tin: "", withholdingType: "NONE", defaultWithholding: [], defaultTerms: "Net 30", notes: "" }).success).toBe(true);
   });
 });
 

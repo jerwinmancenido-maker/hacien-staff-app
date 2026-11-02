@@ -32,7 +32,7 @@ import { arAgingSummary, countPending2307Expected, getStatement, list2307 } from
 import { getBillingPrintModel } from "@/lib/print/views";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import { saveCustomer } from "@/lib/services/companies";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
   let admin: DocActor;
@@ -113,7 +113,8 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddress: "Manila" }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so, year };
@@ -1110,7 +1111,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
           tin: customer.tin,
           withholdingType: "NONE",
           defaultWithholding: [],
-          defaultTerms: customer.defaultTerms,
+          defaultTerms: customer.defaultTerms ?? "Net 30",
           notes: null,
         },
         { id: staff.id, isAdmin: false },
@@ -1125,7 +1126,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
           tin: customer.tin,
           withholdingType: "NONE",
           defaultWithholding: [],
-          defaultTerms: customer.defaultTerms,
+          defaultTerms: customer.defaultTerms ?? "Net 30",
           notes: null,
         },
         { id: admin.id, isAdmin: true },

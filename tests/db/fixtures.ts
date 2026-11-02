@@ -131,6 +131,7 @@ export async function makeCustomer(defaultWithholding: string[] | null = null, w
     data: {
       name: `Test Customer ${t}`,
       withholdingType: inferred,
+      defaultTerms: "Net 30",
       address: "Test address",
       defaultWithholding: defaultWithholding === null ? Prisma.DbNull : defaultWithholding,
       contacts: { create: [{ name: `Buyer ${t}`, email: `buyer-${t}@test.example.com`, isMain: true }] },
@@ -141,6 +142,23 @@ export async function makeCustomer(defaultWithholding: string[] | null = null, w
 
 export async function makeSupplier() {
   return db.supplier.create({ data: { name: `Test Supplier ${tag()}`, taxType: "VAT" } });
+}
+
+/** Delivery address for convert. Uses one the test already saved; creates one only when the customer has none. */
+export async function customerDeliveryAddressId(customerId: string): Promise<string> {
+  const existing =
+    (await db.address.findFirst({
+      where: { customerId, archivedAt: null, kind: "DELIVERY" },
+      orderBy: { isDefault: "desc" },
+    })) ??
+    (await db.address.findFirst({ where: { customerId, archivedAt: null }, orderBy: { isDefault: "desc" } }));
+  if (existing) return existing.id;
+  const customer = await db.customer.findUnique({ where: { id: customerId }, select: { address: true } });
+  const street = customer?.address?.trim() || "Test delivery address";
+  const created = await db.address.create({
+    data: { customerId, kind: "DELIVERY", street, isDefault: true },
+  });
+  return created.id;
 }
 
 export function quoteInput(customerId: string, year: number, extra: Partial<QuoteInput> = {}, supplierId: string | null = null): QuoteInput {
