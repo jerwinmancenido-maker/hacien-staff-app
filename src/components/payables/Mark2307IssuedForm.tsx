@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 
 export function Mark2307IssuedForm({
@@ -26,6 +27,7 @@ export function Mark2307IssuedForm({
         {pending ? "…" : "Mark issued"}
       </button>
       {state.message && <span className={`small ${state.ok ? "ok" : "error"}`}>{state.message}</span>}
+      <NoIdUploadWarning style={{ width: "100%" }} />
     </form>
   );
 }

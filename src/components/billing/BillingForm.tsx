@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 
 export function BillingForm({
@@ -97,6 +98,7 @@ export function BillingForm({
         <div className={`field full${e.files ? " has-error" : ""}`}>
           <label htmlFor="files">Scan of filled-in booklet (optional)</label>
           <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <NoIdUploadWarning />
           {e.files ? <div className="error">{e.files}</div> : <div className="hint">PDF, JPG or PNG · max 10 MB each</div>}
         </div>
       </div>

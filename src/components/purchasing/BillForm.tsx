@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled } from "@/lib/quotes/calc";
 import type { FormState } from "@/lib/validation/forms";
@@ -68,6 +69,7 @@ export function BillForm({ lines, defaultDate, action, cancelHref, maxMb }: { li
           <div className={`field${e.files ? " has-error" : ""}`}>
             <label htmlFor="files">Attachments</label>
             <input id="files" name="files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" />
+            <NoIdUploadWarning />
             {e.files ? <div className="error">{e.files}</div> : <div className="hint">Invoice scan. PDF, JPG or PNG, up to {maxMb} MB each.</div>}
           </div>
           <div className="field full">
