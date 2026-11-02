@@ -11,6 +11,7 @@ const hasDb = vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { checkLoginRateLimit } from "@/lib/auth/rate-limit";
 import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { listNeedsAdminCheck } from "@/lib/billing/views";
@@ -54,7 +55,9 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       await expect(voidSalesOrder(so.id, "Buyer cancelled", actor)).rejects.toBeInstanceOf(ForbiddenError);
     }
     await expect(voidQuote(quote.id, "  ", admin)).rejects.toThrow(/reason/);
+    await expect(voidQuote(quote.id, "no", admin)).rejects.toThrow(/at least 3 characters/i);
     await expect(voidSalesOrder(so.id, "  ", approver)).rejects.toThrow(/reason/);
+    await expect(voidSalesOrder(so.id, "no", approver)).rejects.toThrow(/at least 3 characters/i);
 
     const supplier = await makeSupplier();
     const poInput: PoInput = {
@@ -73,6 +76,7 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       await expect(voidPurchaseOrder(po.id, "Wrong supplier", actor)).rejects.toBeInstanceOf(ForbiddenError);
     }
     await expect(voidPurchaseOrder(po.id, " ", admin)).rejects.toThrow(/reason/);
+    await expect(voidPurchaseOrder(po.id, "no", admin)).rejects.toThrow(/at least 3 characters/i);
     await markPurchaseOrderSent(po.id, admin);
     const line = await db.purchaseOrderItem.findFirstOrThrow({ where: { purchaseOrderId: po.id } });
     const rr = await postReceivingReport(
@@ -90,6 +94,7 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       await expect(voidReceivingReport(rr.id, "Counted twice", actor)).rejects.toBeInstanceOf(ForbiddenError);
     }
     await expect(voidReceivingReport(rr.id, " ", admin)).rejects.toThrow(/reason/);
+    await expect(voidReceivingReport(rr.id, "no", admin)).rejects.toThrow(/at least 3 characters/i);
 
     const { settings } = await getSettingsSnapshot();
     const { seriesFrom, seriesTo } = settings.invoiceBooklet;
@@ -98,6 +103,20 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       where: { invoiceNo: { gte: seriesFrom, lte: seriesTo } },
     });
     const invoiceNo = Math.max(seriesFrom, (maxInvoice._max.invoiceNo ?? seriesFrom - 1) + 1);
+    await expect(
+      recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "100.00",
+          invoiceNo,
+          invoiceDate: new Date(Date.UTC(year, 2, 5)),
+          dueDate: new Date(Date.UTC(year, 3, 4)),
+          notes: null,
+        },
+        viewer,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
     const billing = await recordBilling(
       {
         salesOrderId: so.id,
@@ -114,6 +133,7 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       await expect(voidBilling(billing.id, "Wrong booklet", actor)).rejects.toBeInstanceOf(ForbiddenError);
     }
     await expect(voidBilling(billing.id, " ", admin)).rejects.toThrow(/reason/);
+    await expect(voidBilling(billing.id, "no", approver)).rejects.toThrow(/at least 3 characters/i);
 
     const collection = await recordCollection(
       {
@@ -144,13 +164,16 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       await expect(voidCollection(collection.id, "Reverse", actor)).rejects.toBeInstanceOf(ForbiddenError);
     }
     await expect(voidCollection(collection.id, " ", admin)).rejects.toThrow(/reason/);
+    await expect(voidCollection(collection.id, "no", approver)).rejects.toThrow(/at least 3 characters/i);
 
     await expect(markBillingChecked(billing.id, approver)).rejects.toBeInstanceOf(ForbiddenError);
     expect((await markBillingChecked(billing.id, admin)).needsAdminCheck).toBe(false);
-    await voidCollection(collection.id, "Reverse the sample payment", admin);
+    expect((await voidCollection(collection.id, "Reverse the sample payment", approver)).status).toBe("VOID");
     const queue = await listNeedsAdminCheck();
     expect(queue.collections.some((row) => row.id === collection.id)).toBe(false);
     expect((await db.collection.findUniqueOrThrow({ where: { id: collection.id } })).needsAdminCheck).toBe(false);
+
+    expect((await voidBilling(billing.id, "Approver voided billing", approver)).status).toBe("VOID");
 
     await expect(createStandalonePurchaseOrder(poInput, staff)).rejects.toBeInstanceOf(ForbiddenError);
     expect((await voidReceivingReport(rr.id, "Counted twice", admin)).status).toBe("VOID");
@@ -186,15 +209,89 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     expect(JSON.stringify(audit?.after)).toContain("Correct the peso");
   });
 
-  it("change password needs the current password and retires the old one", async () => {
+  it("won sales order rejects Staff reapplyWithholding with a new code and allows Admin with reason", async () => {
+    const { admin, staff } = await actors();
+    const { so } = await wonSo(admin);
+    const firstRow = await db.salesOrderItem.findFirstOrThrow({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    const originalAtc = firstRow.withholdingAtc;
+    const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    const items = rows.map((i) => ({
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: Number(i.qty).toFixed(2),
+      unit: i.unit,
+      unitPrice: Number(i.unitPrice).toFixed(2),
+      supplierId: i.supplierId,
+      supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+      withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+      withholdingAtc: i.withholdingAtc,
+      withholdingOverride: false,
+    }));
+    const base = { contactId: so.contactId, buyerPoNo: so.buyerPoNo, deliveryAddress: so.deliveryAddress, terms: so.terms, notes: so.notes, items };
+
+    // Staff tries to POST reapplyWithholding: true with a different ATC (e.g. SERVICES_2 / WI640)
+    const reapplyPayload = {
+      ...base,
+      reapplyWithholding: true,
+      withholdingCodes: ["SERVICES_2"],
+    };
+
+    // Staff is rejected
+    await expect(updateSalesOrder(so.id, reapplyPayload, staff)).rejects.toThrow(/locked/);
+
+    // Verify nothing changed in DB
+    const unchanged = await db.salesOrderItem.findFirstOrThrow({ where: { salesOrderId: so.id, removedAt: null } });
+    expect(unchanged.withholdingAtc).toBe(originalAtc);
+
+    // Admin without reason is rejected
+    await expect(updateSalesOrder(so.id, reapplyPayload, admin)).rejects.toThrow(/reason/);
+
+    // Admin with reason succeeds
+    const updated = await updateSalesOrder(
+      so.id,
+      { ...reapplyPayload, priceOverrideReason: "Admin updated ATC" },
+      admin,
+    );
+    const updatedItem = updated.items.find((i) => i.id === unchanged.id);
+    expect(updatedItem?.withholdingAtc).not.toBe(originalAtc);
+  });
+
+  it("change password needs the current password, retires the old one, and revokes other sessions", async () => {
     const staff = await makeUser("staff");
     const current = "OldSample123!";
     const next = "NewSample123!";
     await db.user.update({ where: { id: staff.id }, data: { passwordHash: await hashPassword(current) } });
+
+    const keptTokenHash = `kept-hash-${tag()}`;
+    const otherTokenHash = `other-hash-${tag()}`;
+    await db.session.createMany({
+      data: [
+        { userId: staff.id, tokenHash: keptTokenHash, expiresAt: new Date(Date.now() + 100_000) },
+        { userId: staff.id, tokenHash: otherTokenHash, expiresAt: new Date(Date.now() + 100_000) },
+      ],
+    });
+
     await expect(changePassword(staff.id, "WrongSample123!", next, null)).rejects.toThrow(/current password/i);
-    await changePassword(staff.id, current, next, "kept-session");
+    await changePassword(staff.id, current, next, keptTokenHash);
     const row = await db.user.findUniqueOrThrow({ where: { id: staff.id } });
     expect(await verifyPassword(current, row.passwordHash)).toBe(false);
     expect(await verifyPassword(next, row.passwordHash)).toBe(true);
+
+    const keptSession = await db.session.findUniqueOrThrow({ where: { tokenHash: keptTokenHash } });
+    expect(keptSession.revokedAt).toBeNull();
+    const otherSession = await db.session.findUniqueOrThrow({ where: { tokenHash: otherTokenHash } });
+    expect(otherSession.revokedAt).not.toBeNull();
+  });
+
+  it("denies repeated wrong current passwords under the rate limiter", async () => {
+    const staff = await makeUser("staff");
+    const staffRow = await db.user.findUniqueOrThrow({ where: { id: staff.id } });
+    const ip = "192.168.1.100";
+    const rateKey = `pwd:${staffRow.email}`;
+    for (let i = 0; i < 5; i++) {
+      await db.loginAttempt.create({ data: { email: rateKey, ip, success: false } });
+    }
+    expect(await checkLoginRateLimit(db, rateKey, ip)).toBe(true);
   });
 });

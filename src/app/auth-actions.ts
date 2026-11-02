@@ -108,11 +108,22 @@ export async function changePasswordAction(_prev: FormState, form: FormData): Pr
   if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  const { ip } = await requestMeta();
+  const rateKey = `pwd:${user.email}`;
+  if (await checkLoginRateLimit(db, rateKey, ip)) return { message: TOO_MANY_TRIES };
+
   try {
     await changePassword(user.id, parsed.data.current, parsed.data.password, await currentTokenHash());
   } catch (e) {
-    if (e instanceof UserRuleError) return { message: e.message };
+    if (e instanceof UserRuleError) {
+      if (e.message === "That current password is wrong.") {
+        await db.loginAttempt.create({ data: { email: rateKey, ip, success: false } });
+      }
+      return { message: e.message };
+    }
     throw e;
   }
-  return { ok: true, message: "Password changed. Your other sessions were signed out." };
+  await db.loginAttempt.create({ data: { email: rateKey, ip, success: true } });
+  return { ok: true, message: "Password changed. Your other devices are signed out. This device stays signed in." };
 }

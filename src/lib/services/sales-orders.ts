@@ -10,7 +10,7 @@ import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry,
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
-import type { SalesOrderInput } from "../validation/quotes";
+import { voidReasonSchema, type SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
@@ -172,12 +172,11 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         contractPrice: money(preserved.totals.contractPrice),
         withholdingTotal: money(preserved.totals.withholdingTotal),
         netReceived: money(preserved.totals.netReceived),
-        // Compare what the user sent. The legacy null-rate backfill may fill a
-        // stored rate from this document's own snapshot; that is not a rewrite.
-        lines: input.items.map((i) => ({
+        // Compare the planned / persisted rows that will actually be saved.
+        lines: items.map((i) => ({
           id: i.id ?? null,
-          qty: i.qty,
-          unitPrice: i.unitPrice,
+          qty: money(i.qty),
+          unitPrice: money(i.unitPrice),
           kind: i.kind,
           withholdingRate: i.withholdingRate ?? null,
           withholdingAtc: i.withholdingAtc ?? null,
@@ -229,19 +228,23 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
 /** Void an open SO (reason required). Its quote goes back to Sent so it can be converted again. */
 export async function voidSalesOrder(id: string, reason: string, actor: DocActor) {
   assertCanVoid(actor);
-  if (!reason.trim()) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   return db.$transaction(async (tx) => {
     const before = await lockSalesOrder(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This sales order is already void.");
     await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
-    const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: reason.trim(), updatedById: actor.id } });
+    const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
     await tx.documentVoid.create({
       data: {
         docType: "SALES_ORDER",
         docNumber: before.number,
         docId: id,
-        reason: reason.trim(),
+        reason: why,
         snapshot: JSON.parse(JSON.stringify(before)) as Prisma.InputJsonValue,
         voidedById: actor.id,
         voidedAt: now,

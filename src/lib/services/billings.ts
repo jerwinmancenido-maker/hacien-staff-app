@@ -12,6 +12,7 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { bookletRangeError } from "../billing/booklet";
 import { netExpected, proRataWithholding, remainingToBill } from "../billing/status";
 import type { BillingInput } from "../validation/billing";
+import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type BillingActor = PermissionUser & { id: string };
@@ -230,8 +231,11 @@ export async function updateBilling(
 
 export async function voidBilling(id: string, reason: string, actor: BillingActor) {
   assertManageBilling(actor);
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {

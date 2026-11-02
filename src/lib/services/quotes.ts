@@ -19,7 +19,7 @@ import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } fro
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
-import type { ConvertInput, ItemInput, QuoteInput } from "../validation/quotes";
+import { voidReasonSchema, type ConvertInput, type ItemInput, type QuoteInput } from "../validation/quotes";
 import { suggestedDeliveryAddress } from "./addresses";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
@@ -510,7 +510,11 @@ export async function refreshQuoteCompanyDetails(id: string, actor: DocActor): P
 
 export async function voidQuote(id: string, reason: string, actor: DocActor) {
   assertCanVoid(actor);
-  if (!reason.trim()) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This quote is already void.");
@@ -519,7 +523,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
     const now = new Date();
     const after = await tx.quote.update({
       where: { id },
-      data: { status: "VOID", voidedAt: now, voidReason: reason.trim(), updatedById: actor.id },
+      data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id },
       include: { items: { where: { removedAt: null } } },
     });
     await tx.documentVoid.create({
@@ -527,7 +531,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
         docType: "QUOTE",
         docNumber: before.number,
         docId: id,
-        reason: reason.trim(),
+        reason: why,
         snapshot: JSON.parse(JSON.stringify(before)) as Prisma.InputJsonValue,
         voidedById: actor.id,
         voidedAt: now,

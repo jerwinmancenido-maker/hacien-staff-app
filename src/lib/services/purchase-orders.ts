@@ -26,6 +26,7 @@ import {
 } from "../purchasing/status";
 import { planPurchaseOrders, type PlannedPoLine } from "../purchasing/plan";
 import type { CreateFromSoInput, PoInput, PoLineInput } from "../validation/purchasing";
+import { voidReasonSchema } from "../validation/quotes";
 import { defaultAddress } from "./addresses";
 
 export type PoActor = PermissionUser & { id: string };
@@ -430,8 +431,11 @@ export async function closePurchaseOrder(id: string, reason: string | null, acto
 export async function voidPurchaseOrder(id: string, reason: string, actor: PoActor) {
   assertCanVoid(actor);
   if (!canSeeCosts(actor)) throw new ForbiddenError();
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
   return db.$transaction(async (tx) => {
     const before = await lockPurchaseOrder(tx, id);
     const posted = await tx.receivingReport.count({ where: { purchaseOrderId: id, status: "POSTED" } });

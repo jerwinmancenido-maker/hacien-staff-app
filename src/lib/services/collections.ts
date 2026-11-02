@@ -15,6 +15,7 @@ import { billingToday } from "../billing/dates";
 import { unappliedCash } from "../billing/status";
 import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
+import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
 
@@ -548,8 +549,11 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
 
 export async function voidCollection(id: string, reason: string, actor: CollectionActor) {
   assertManageBilling(actor);
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
