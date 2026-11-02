@@ -960,6 +960,8 @@ model DocumentAttachment {
   delivery                  Delivery?                @relation(fields: [deliveryId], references: [id])
   spoiledBookletNumberId    String?
   spoiledBookletNumber      SpoiledBookletNumber?    @relation(fields: [spoiledBookletNumberId], references: [id])
+  taxCalendarCompletionId   String?
+  taxCalendarCompletion     TaxCalendarCompletion?   @relation(fields: [taxCalendarCompletionId], references: [id])
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int
@@ -980,6 +982,7 @@ model DocumentAttachment {
   @@index([expenseId])
   @@index([deliveryId])
   @@index([spoiledBookletNumberId])
+  @@index([taxCalendarCompletionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1500,6 +1503,8 @@ model TaxCalendarCompletion {
   /// Date the staff marked it done (Manila DATE).
   doneDate       DateTime  @db.Date
   note           String?   @db.Text
+  /// BIR filing reference number (eFPS / eBIRForms confirmation).
+  referenceNo    String?   @db.VarChar(100)
   createdById    String
   createdBy      User      @relation("TaxCalendarCompletionBy", fields: [createdById], references: [id])
   createdAt      DateTime  @default(now())
@@ -1508,6 +1513,9 @@ model TaxCalendarCompletion {
   undoneAt       DateTime?
   undoneById     String?
   undoneBy       User?     @relation("TaxCalendarCompletionUndoneBy", fields: [undoneById], references: [id])
+  voidedAt       DateTime?
+  voidReason     String?   @db.Text
+  attachments    DocumentAttachment[]
 
   @@index([occurrenceKey, undoneAt])
   @@index([obligationKey])

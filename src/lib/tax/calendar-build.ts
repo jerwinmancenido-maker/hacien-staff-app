@@ -42,6 +42,10 @@ export type CompletionRow = {
   occurrenceKey: string;
   doneDateYmd: string;
   note: string | null;
+  id?: string;
+  referenceNo?: string | null;
+  attachmentId?: string | null;
+  attachmentFileName?: string | null;
 };
 
 export type TaxCalendarRow = {
@@ -72,6 +76,10 @@ export type TaxCalendarRow = {
   markedDone: boolean;
   doneDateYmd: string | null;
   doneNote: string | null;
+  referenceNo: string | null;
+  attachmentId: string | null;
+  attachmentFileName: string | null;
+  completionId: string | null;
   /** Extra staff tasks (e.g. SAWT when 2307s exist). */
   tasks: string[];
   /** True when this row is N/A (hidden by default; never overdue; no Mark as done). */
@@ -307,7 +315,16 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
   const rows: TaxCalendarRow[] = [];
 
   for (const def of TAX_CALENDAR_OBLIGATIONS) {
-    if (!isEnabled(input.settings, def.key)) continue;
+    if (def.key === "2551q") {
+      const hasGraduatedYear = Array.from(
+        { length: toYear - fromYear + 1 },
+        (_, idx) => fromYear + idx,
+      ).some((y) => isGraduated(incomeTaxMethodForYear(incomeTax, y)));
+      const enabled = isEnabled(input.settings, def.key) || hasGraduatedYear || input.showNotApplicable;
+      if (!enabled) continue;
+    } else {
+      if (!isEnabled(input.settings, def.key)) continue;
+    }
 
     const occurrences = generateOccurrences(def.key, fromYear, toYear, {
       override: overrideFor(input.settings, def.key),
@@ -399,6 +416,10 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
         markedDone,
         doneDateYmd: done?.doneDateYmd ?? null,
         doneNote: done?.note ?? null,
+        referenceNo: done?.referenceNo ?? null,
+        attachmentId: done?.attachmentId ?? null,
+        attachmentFileName: done?.attachmentFileName ?? null,
+        completionId: done?.id ?? null,
         tasks,
         notApplicable,
         taxYearForMethod: taxYear,

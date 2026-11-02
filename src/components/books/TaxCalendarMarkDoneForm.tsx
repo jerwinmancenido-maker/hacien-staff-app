@@ -12,6 +12,7 @@ export function TaxCalendarMarkDoneForm({
   markedDone,
   doneDateYmd,
   doneNote,
+  referenceNo = null,
   secondary = false,
 }: {
   occurrenceKey: string;
@@ -20,6 +21,8 @@ export function TaxCalendarMarkDoneForm({
   markedDone: boolean;
   doneDateYmd: string | null;
   doneNote: string | null;
+  /** When set, this row is an Admin income-tax filing — note Undo is blocked. */
+  referenceNo?: string | null;
   /** Outline style (e.g. does-not-apply rows) so opacity fade does not look disabled. */
   secondary?: boolean;
 }) {
@@ -27,26 +30,34 @@ export function TaxCalendarMarkDoneForm({
   const undo = useFormAction(undoTaxCalendarDoneAction);
   const [open, setOpen] = useState(false);
   const openBtnClass = secondary ? "btn btn-secondary btn-sm" : "btn btn-sm";
+  const isFiled = Boolean(referenceNo?.trim());
 
   if (markedDone) {
     return (
       <div className="stack" style={{ gap: 6 }}>
         <div className="small">
-          Done {doneDateYmd ? <span className="tax-cal-done-date">{doneDateYmd}</span> : null}
-          {doneNote ? ` — ${doneNote}` : ""}
+          {isFiled ? "Filed" : "Done"}{" "}
+          {doneDateYmd ? <span className="tax-cal-done-date">{doneDateYmd}</span> : null}
+          {isFiled && referenceNo ? ` — ref ${referenceNo}` : doneNote ? ` — ${doneNote}` : ""}
         </div>
-        <form
-          noValidate
-          onSubmit={(ev) => {
-            ev.preventDefault();
-            undo.submit(ev.currentTarget);
-          }}
-        >
-          <input type="hidden" name="occurrenceKey" value={occurrenceKey} />
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={undo.pending}>
-            {undo.pending ? "Undoing…" : "Undo"}
-          </button>
-        </form>
+        {isFiled ? (
+          <p className="faint small" style={{ margin: 0 }}>
+            Undo from Home (Admin) with a reason — records stay in the audit log.
+          </p>
+        ) : (
+          <form
+            noValidate
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              undo.submit(ev.currentTarget);
+            }}
+          >
+            <input type="hidden" name="occurrenceKey" value={occurrenceKey} />
+            <button className="btn btn-secondary btn-sm" type="submit" disabled={undo.pending}>
+              {undo.pending ? "Undoing…" : "Undo"}
+            </button>
+          </form>
+        )}
         {undo.state.message ? (
           <div className={undo.state.ok ? "alert ok" : "alert error"} role="status">
             {undo.state.message}

@@ -120,7 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
       "1701q": { enabled: true, dueDay: 15, dueMonth: null },
       "1701": { enabled: true, dueDay: 15, dueMonth: 4 },
       "1701a": { enabled: true, dueDay: 15, dueMonth: 4 },
-      "2551q": { enabled: true, dueDay: null, dueMonth: null },
+      "2551q": { enabled: false, dueDay: null, dueMonth: null },
       "2550q": { enabled: true, dueDay: 25, dueMonth: null },
       "0619e": { enabled: false, dueDay: 10, dueMonth: null },
       "1601eq": { enabled: false, dueDay: null, dueMonth: null },
