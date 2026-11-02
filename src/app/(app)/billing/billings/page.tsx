@@ -106,11 +106,11 @@ export default async function BillingsListPage({
                       <Link href={`/sales-orders/${r.salesOrder.id}`}>{r.salesOrder.number}</Link>
                     </td>
                     <td>{day(r.invoiceDate)}</td>
-                    <td>{day(r.dueDate)}</td>
+                    <td>{r.expectedPaymentLabel ? r.expectedPaymentLabel : day(r.dueDate)}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td className="num strong">{formatPeso(r.balance)}</td>
                     <td>
-                      <BillingStatusChip status={r.status} /> <OverdueBadge label={r.overdue.label} />
+                      <BillingStatusChip status={r.status} /> {!r.isGovernment && <OverdueBadge label={r.overdue.label} />}
                     </td>
                   </tr>
                 ))}

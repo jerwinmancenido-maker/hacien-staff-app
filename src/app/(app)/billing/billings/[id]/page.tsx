@@ -14,7 +14,7 @@ import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
 import { customerCreditBalance } from "@/lib/services/collections";
-import { markBillingCheckedAction, voidBillingAction } from "../../actions";
+import { markBillingCheckedAction, updateBillingExpectedDateFormAction, voidBillingAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -44,7 +44,7 @@ export default async function BillingDetailPage({
             Booklet #{b.invoiceNo}
             <BillingStatusChip status={b.status} />
             {b.needsAdminCheck && b.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
-            <OverdueBadge label={b.overdue.label} />
+            {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
           </>
         }
         subtitle={`${b.number} · ${b.customer.name} · ${PRINTABLE_DISCLAIMER}`}
@@ -94,10 +94,30 @@ export default async function BillingDetailPage({
             <dd className="num strong">{b.invoiceNo}</dd>
             <dt>Invoice date</dt>
             <dd>{day(b.invoiceDate)}</dd>
-            <dt>Due date</dt>
-            <dd>
-              {day(b.dueDate)} <OverdueBadge label={b.overdue.label} />
-            </dd>
+            {b.expectedPaymentLabel ? (
+              <>
+                <dt>Expected by</dt>
+                <dd>
+                  <span className="strong">{b.expectedPaymentLabel}</span>
+                  {can(user, "edit_data") && b.status !== "VOID" && (
+                    <details style={{ marginTop: "4px" }}>
+                      <summary className="small muted" style={{ cursor: "pointer" }}>Change Expected by date</summary>
+                      <form action={updateBillingExpectedDateFormAction.bind(null, b.id)} style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
+                        <input type="date" name="expectedDate" defaultValue={b.expectedDate ?? ""} className="input" style={{ width: "auto" }} />
+                        <button type="submit" className="btn btn-secondary">Save</button>
+                      </form>
+                    </details>
+                  )}
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt>Due date</dt>
+                <dd>
+                  {day(b.dueDate)} {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
+                </dd>
+              </>
+            )}
             <dt>Amount</dt>
             <dd className="num">{formatPeso(b.amount)}</dd>
             <dt>Withholding expected</dt>

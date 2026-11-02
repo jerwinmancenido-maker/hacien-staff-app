@@ -19,6 +19,7 @@ export type AuditEntityType =
   | "PurchaseOrder"
   | "ReceivingReport"
   | "SupplierBill"
+  | "Delivery"
   | "DocumentAttachment"
   | "Billing"
   | "Collection"

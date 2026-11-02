@@ -16,8 +16,9 @@ export const AGING_BUCKET_LABELS: Record<AgingBucket, string> = {
   d90_plus: "90+",
 };
 
-/** Which bucket a (dueDate, today) pair falls into. Balance is ignored here. */
-export function agingBucket(dueDate: Date, today: Date = billingToday()): AgingBucket {
+/** Which bucket a (dueDate, today) pair falls into. Government billings stay in "current". */
+export function agingBucket(dueDate: Date, today: Date = billingToday(), isGovernment = false): AgingBucket {
+  if (isGovernment) return "current";
   const days = calendarDaysBetween(dueDate, today);
   if (days <= 0) return "current";
   if (days <= 30) return "d1_30";
@@ -34,7 +35,7 @@ export function emptyAging(): AgingAmounts {
 
 /** Sum balances into aging buckets. Only include rows with balance > 0. */
 export function sumAging(
-  rows: readonly { dueDate: Date; balance: string }[],
+  rows: readonly { dueDate: Date; balance: string; isGovernment?: boolean }[],
   today: Date = billingToday(),
 ): AgingAmounts {
   const cents: Record<AgingBucket, bigint> = {
@@ -47,7 +48,7 @@ export function sumAging(
   for (const r of rows) {
     const bal = toScaled(r.balance, 2);
     if (bal <= 0n) continue;
-    cents[agingBucket(r.dueDate, today)] += bal;
+    cents[agingBucket(r.dueDate, today, r.isGovernment)] += bal;
   }
   const total = Object.values(cents).reduce((a, b) => a + b, 0n);
   return {
