@@ -50,6 +50,7 @@ function MarkDone({
       markedDone={r.markedDone}
       doneDateYmd={r.doneDateYmd}
       doneNote={r.doneNote}
+      referenceNo={r.referenceNo}
       secondary={r.applies === "does_not_apply" || r.greyedOut}
     />
   );

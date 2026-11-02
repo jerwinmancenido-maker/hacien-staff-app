@@ -6,14 +6,16 @@
 // Admin only: record that you filed with reference number & attachment; undo with reason.
 // The app never files or pays anything with BIR.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useFormAction } from "@/components/useFormAction";
 import {
   markIncomeTaxFiledAction,
   undoIncomeTaxFiledAction,
 } from "@/app/(app)/books/tax/calendar/actions";
 import type { HomeDashboard, HomeIncomeTaxItem } from "@/lib/home/dashboard";
+import { isoDate, manilaToday } from "@/lib/format";
 
 function IncomeTaxFilingRow({
   item,
@@ -22,12 +24,21 @@ function IncomeTaxFilingRow({
   item: HomeIncomeTaxItem;
   isAdmin?: boolean;
 }) {
+  const router = useRouter();
   const mark = useFormAction(markIncomeTaxFiledAction);
   const undo = useFormAction(undoIncomeTaxFiledAction);
   const [showMark, setShowMark] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Manila calendar day — never UTC (wrong after ~08:00 PHT).
+  const todayIso = isoDate(manilaToday());
+  // Hide forms on success without setState-in-effect (refresh picks up new RSC props).
+  const markOpen = showMark && !mark.state.ok;
+  const undoOpen = showUndo && !undo.state.ok;
+
+  useEffect(() => {
+    if (mark.state.ok || undo.state.ok) router.refresh();
+  }, [mark.state.ok, undo.state.ok, router]);
 
   return (
     <div
@@ -99,7 +110,7 @@ function IncomeTaxFilingRow({
 
         {isAdmin ? (
           <div style={{ display: "flex", gap: 6 }}>
-            {!item.isFiled && !showMark ? (
+            {!item.isFiled && !markOpen ? (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -108,7 +119,7 @@ function IncomeTaxFilingRow({
                 Record that you filed
               </button>
             ) : null}
-            {item.isFiled && !showUndo ? (
+            {item.isFiled && !undoOpen ? (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -121,7 +132,7 @@ function IncomeTaxFilingRow({
         ) : null}
       </div>
 
-      {showMark ? (
+      {markOpen ? (
         <form
           noValidate
           onSubmit={mark.onSubmit}
@@ -235,7 +246,7 @@ function IncomeTaxFilingRow({
         </form>
       ) : null}
 
-      {showUndo ? (
+      {undoOpen ? (
         <form
           noValidate
           onSubmit={undo.onSubmit}

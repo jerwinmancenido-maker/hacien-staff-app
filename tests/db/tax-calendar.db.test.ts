@@ -188,10 +188,18 @@ describe.skipIf(!env.hasDb)("tax calendar (MySQL)", () => {
     expect(row?.attachments).toHaveLength(1);
     expect(row?.attachments[0]?.fileName).toBe("efps_confirmation.pdf");
 
-    // Non-admin cannot undo
+    // Non-admin cannot undo via filed path
     await expect(
       undoTaxCalendarFiled({ occurrenceKey: key, reason: "Wrong ref" }, staff),
     ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Note Undo must refuse filed rows (even for Admin) — requires void reason path
+    await expect(undoTaxCalendarDone({ occurrenceKey: key }, admin)).rejects.toThrow(
+      /filed income tax record/i,
+    );
+    await expect(undoTaxCalendarDone({ occurrenceKey: key }, staff)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
 
     // Admin undoes with reason
     await undoTaxCalendarFiled({ occurrenceKey: key, reason: "Wrong ref" }, admin);

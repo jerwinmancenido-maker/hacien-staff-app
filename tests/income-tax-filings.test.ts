@@ -12,6 +12,7 @@ import {
 } from "@/lib/tax/calendar-build";
 import { PH_HOLIDAYS_2026 } from "@/lib/tax/holidays";
 import {
+  isIncomeTaxFiled,
   selectNextFiling,
   selectNextIncomeTaxFilings,
   markTaxCalendarFiled,
@@ -123,9 +124,29 @@ describe("next-filing selection logic", () => {
     expect(selectedQ1?.occurrenceKey).toBe("1701q|2026-Q1");
     expect(selectedQ1?.markedDone).toBe(false);
 
-    // If Q1 is filed, then Q2 is the earliest overdue unfiled.
+    // Staff note without referenceNo is NOT a filing — Q1 stays the next item.
+    const rowsWithQ1NoteOnly = baseRows.map((r) =>
+      r.occurrenceKey === "1701q|2026-Q1"
+        ? { ...r, markedDone: true, doneDateYmd: "2026-05-15", referenceNo: null }
+        : r,
+    );
+    expect(isIncomeTaxFiled(rowsWithQ1NoteOnly.find((r) => r.occurrenceKey === "1701q|2026-Q1")!)).toBe(
+      false,
+    );
+    expect(selectNextFiling(rowsWithQ1NoteOnly, "1701q", "2026-09-01")?.occurrenceKey).toBe(
+      "1701q|2026-Q1",
+    );
+
+    // If Q1 is filed (ref present), then Q2 is the earliest overdue unfiled.
     const rowsWithQ1Done = baseRows.map((r) =>
-      r.occurrenceKey === "1701q|2026-Q1" ? { ...r, markedDone: true, doneDateYmd: "2026-05-15" } : r,
+      r.occurrenceKey === "1701q|2026-Q1"
+        ? {
+            ...r,
+            markedDone: true,
+            doneDateYmd: "2026-05-15",
+            referenceNo: "TEST-REF-Q1",
+          }
+        : r,
     );
     const selectedQ2 = selectNextFiling(rowsWithQ1Done, "1701q", "2026-09-01");
     expect(selectedQ2).toBeDefined();

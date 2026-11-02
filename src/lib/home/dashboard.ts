@@ -16,7 +16,11 @@ import { listQuotesView, listSalesOrdersView } from "../quotes/views";
 import { listCustomers } from "../services/companies";
 import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
-import { listTaxCalendar, selectNextIncomeTaxFilings } from "../services/tax-calendar";
+import {
+  isIncomeTaxFiled,
+  listTaxCalendar,
+  selectNextIncomeTaxFilings,
+} from "../services/tax-calendar";
 import { fromScaled, toScaled } from "../quotes/calc";
 import {
   HOME_RECENT_DESKTOP_ROWS,
@@ -667,10 +671,11 @@ export async function loadHomeDashboard(
 
     const mapFiling = (r: typeof q1701, form: "1701Q" | "1701A", key: "1701q" | "1701a"): HomeIncomeTaxItem | null => {
       if (!r) return null;
-      const isFiled = r.markedDone;
-      const filedDateYmd = r.doneDateYmd ?? null;
+      // Staff "Mark as done" notes are not BIR filings — need reference number.
+      const isFiled = isIncomeTaxFiled(r);
+      const filedDateYmd = isFiled ? (r.doneDateYmd ?? null) : null;
       const filedDateFormatted = filedDateYmd ? formatDate(new Date(`${filedDateYmd}T00:00:00.000Z`)) : null;
-      const referenceNo = r.referenceNo ?? null;
+      const referenceNo = isFiled ? (r.referenceNo ?? null) : null;
       let statusLabel = "Not filed yet";
       if (isFiled) {
         if (filedDateFormatted && referenceNo) {
@@ -694,9 +699,9 @@ export async function loadHomeDashboard(
         filedDateFormatted,
         referenceNo,
         statusLabel,
-        attachmentId: r.attachmentId,
-        attachmentFileName: r.attachmentFileName,
-        completionId: r.completionId,
+        attachmentId: isFiled ? r.attachmentId : null,
+        attachmentFileName: isFiled ? r.attachmentFileName : null,
+        completionId: isFiled ? r.completionId : null,
       };
     };
 
@@ -709,18 +714,19 @@ export async function loadHomeDashboard(
       const dueYmd = next?.dueYmd ?? null;
       const badge = taxBadge(dueYmd);
       const form = next?.form ?? "Tax calendar";
+      // Phone strip: calm income-tax wording only — never "overdue" / alarming copy.
+      const stripPrimary = incomeTaxFilings.q1701 ?? incomeTaxFilings.a1701;
+      const calmStrip = stripPrimary
+        ? stripPrimary.isFiled
+          ? `${stripPrimary.form} · Filed`
+          : `${stripPrimary.form} · Due ${stripPrimary.dueFormatted}`
+        : `${badge.badgeMonth ?? "Tax"} ${badge.badgeDay ?? ""} · Tax calendar`.replace(/\s+/g, " ").trim();
       tax = {
         form,
         description: next?.description ?? "Open the tax calendar",
         dueLabel: dueYmd ? formatDate(new Date(`${dueYmd}T00:00:00.000Z`)) : "No upcoming date",
         dueDetail: buildTaxDetail(dueYmd, now),
-        stripLabel: buildTaxStripLabel({
-          form,
-          badgeMonth: badge.badgeMonth,
-          badgeDay: badge.badgeDay,
-          dueYmd,
-          now,
-        }),
+        stripLabel: calmStrip,
         dueYmd,
         badgeMonth: badge.badgeMonth,
         badgeDay: badge.badgeDay,

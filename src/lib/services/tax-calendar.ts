@@ -278,6 +278,13 @@ export async function undoTaxCalendarDone(
       if (!existing) {
         throw new DocRuleError("Nothing to undo for this item.");
       }
+      // Filed income-tax records (ref + confirmation) must use Admin undoTaxCalendarFiled
+      // with a reason — never the note Undo path (view_books / no void history).
+      if (existing.referenceNo?.trim()) {
+        throw new DocRuleError(
+          "This is a filed income tax record. An Admin must undo it with a reason (Home → Undo filed).",
+        );
+      }
 
       const row = await tx.taxCalendarCompletion.update({
         where: { id: existing.id },
@@ -486,6 +493,17 @@ export async function undoTaxCalendarFiled(
 }
 
 /**
+ * Home / income-tax "filed" means Admin recorded a BIR reference (and confirmation file).
+ * A calendar "Mark as done" note alone is not a filing.
+ */
+export function isIncomeTaxFiled(row: {
+  markedDone?: boolean;
+  referenceNo?: string | null;
+}): boolean {
+  return Boolean(row.markedDone && row.referenceNo?.trim());
+}
+
+/**
  * Select the single next filing occurrence for an obligation (e.g. 1701Q or 1701A).
  * 1. An unfiled occurrence whose due date is in the past (overdue) takes top priority.
  * 2. Otherwise, the earliest occurrence whose due date is today or later (upcoming cycle).
@@ -501,9 +519,9 @@ export function selectNextFiling(
   );
   if (matching.length === 0) return null;
 
-  // 1. Earliest unfiled overdue occurrence
+  // 1. Earliest unfiled overdue occurrence (staff notes without a ref are still unfiled)
   const unfiledOverdue = matching
-    .filter((r) => !r.markedDone && r.dueYmd && r.dueYmd < todayYmd)
+    .filter((r) => !isIncomeTaxFiled(r) && r.dueYmd && r.dueYmd < todayYmd)
     .sort((a, b) => (a.dueYmd!).localeCompare(b.dueYmd!))[0];
   if (unfiledOverdue) return unfiledOverdue;
 
