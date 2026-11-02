@@ -14,6 +14,7 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
+import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { getBookletView } from "@/lib/billing/views";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
@@ -43,24 +44,32 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
   });
 
   async function ensureWideBooklet() {
+    const typeWide = {
+      atpNo: "",
+      atpDate: "",
+      printer: "",
+      seriesFrom: 1,
+      seriesTo: 9_999_999,
+      bookletCount: 10,
+      setsPerBooklet: 50,
+      isNonVat: true,
+    };
     const wide = {
       seriesFrom: 1,
       seriesTo: 9_999_999,
       label: "Test booklet Q09",
-      salesInvoice: {
-        atpNo: "",
-        atpDate: "",
-        printer: "",
-        seriesFrom: 1,
-        seriesTo: 9_999_999,
-        bookletCount: 10,
-        setsPerBooklet: 50,
-        isNonVat: true,
-      },
+      salesInvoice: { ...typeWide },
+      deliveryReceipt: { ...typeWide },
+      collectionReceipt: { ...typeWide },
     };
     for (let attempt = 0; attempt < 5; attempt++) {
       const snap = await getSettingsSnapshot();
-      if ((snap.settings.invoiceBooklet.salesInvoice?.seriesTo ?? snap.settings.invoiceBooklet.seriesTo) >= 9_999_999) {
+      const ib = snap.settings.invoiceBooklet;
+      if (
+        (ib.salesInvoice?.seriesTo ?? ib.seriesTo) >= 9_999_999 &&
+        (ib.deliveryReceipt?.seriesTo ?? 0) >= 9_999_999 &&
+        (ib.collectionReceipt?.seriesTo ?? 0) >= 9_999_999
+      ) {
         return;
       }
       const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
@@ -68,9 +77,9 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
         await db.settingsVersion.create({
           data: {
             version: latest.version + 1,
-            data: { ...(latest.data as object), invoiceBooklet: { ...snap.settings.invoiceBooklet, ...wide } } as never,
+            data: { ...(latest.data as object), invoiceBooklet: { ...ib, ...wide } } as never,
             changedKey: "invoiceBooklet",
-            before: snap.settings.invoiceBooklet,
+            before: ib,
             after: wide,
             createdById: admin.id,
           },
@@ -248,6 +257,56 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     expect((bad[0] as PromiseRejectedResult).reason.message).toMatch(/already used \/ marked spoiled/);
     const rows = await db.billing.findMany({ where: { invoiceNo } });
     expect(rows).toHaveLength(1);
+  });
+
+  it("refuses duplicate DR serials including after void", async () => {
+    const year = await freshYear();
+    const a = await openSo(year);
+    const b = await openSo(year);
+    const soA = await db.salesOrder.findUniqueOrThrow({
+      where: { id: a.so.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    const soB = await db.salesOrder.findUniqueOrThrow({
+      where: { id: b.so.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    const drNo = String(nextInvoice());
+    const del = await recordDelivery(
+      a.so.id,
+      {
+        drNumber: drNo,
+        deliveryDate: new Date(Date.UTC(year, 5, 1)),
+        idSightChecked: false,
+        items: [{ salesOrderItemId: soA.items[0]!.id, qty: "1" }],
+      },
+      admin,
+    );
+    await expect(
+      recordDelivery(
+        b.so.id,
+        {
+          drNumber: drNo,
+          deliveryDate: new Date(Date.UTC(year, 5, 2)),
+          idSightChecked: false,
+          items: [{ salesOrderItemId: soB.items[0]!.id, qty: "1" }],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already used \/ marked spoiled/);
+    await voidDelivery(del.id, "Wrong DR", admin);
+    await expect(
+      recordDelivery(
+        b.so.id,
+        {
+          drNumber: `DR-${drNo}`,
+          deliveryDate: new Date(Date.UTC(year, 5, 3)),
+          idSightChecked: false,
+          items: [{ salesOrderItemId: soB.items[0]!.id, qty: "1" }],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already used \/ marked spoiled/);
   });
 
   it("concurrent spoil and billing of the same SI: exactly one wins", async () => {

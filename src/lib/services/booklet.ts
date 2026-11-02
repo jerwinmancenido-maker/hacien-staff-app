@@ -13,10 +13,25 @@ import { createAttachments, discardUploads, prepareUploads, type UploadFile } fr
 export type BookletActor = PermissionUser & { id: string };
 
 /**
- * Serialize SI booklet claims across Billing + SpoiledBookletNumber.
- * Gap locks on both unique keys (same order everywhere) so concurrent
- * billing and spoil of the same serial cannot both succeed.
+ * Cross-table unique claim for SI/DR/CR serials (Billing, Delivery, Collection,
+ * Spoiled). Insert wins; unique violation means the serial is already used.
+ * Claims are never deleted (voided docs keep the number used).
  */
+export async function claimBookletSerial(tx: Tx, type: "SI" | "DR" | "CR", number: number) {
+  try {
+    await tx.bookletSerialClaim.create({ data: { type, number } });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      throw new DocRuleError(
+        `${type} no. ${formatBookletNumber(number)} is already used / marked spoiled.`,
+        type === "SI" ? "invoiceNo" : type === "DR" ? "drNumber" : "receiptNo",
+      );
+    }
+    throw e;
+  }
+}
+
+/** SI gap locks kept as a second line behind claimBookletSerial. */
 export async function lockSiBookletNumber(tx: Tx, invoiceNo: number) {
   await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = 'SI' AND \`number\` = ${invoiceNo} FOR UPDATE`;
   await tx.$queryRaw`SELECT \`id\` FROM \`Billing\` WHERE \`invoiceNo\` = ${invoiceNo} FOR UPDATE`;
@@ -118,6 +133,8 @@ export async function markBookletNumberSpoiled(
             );
           }
         }
+
+        await claimBookletSerial(tx, input.type, input.number);
 
         const spoiled = await tx.spoiledBookletNumber.create({
           data: {

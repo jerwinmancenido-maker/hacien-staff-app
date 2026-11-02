@@ -14,7 +14,7 @@ import { netExpected, proRataWithholding, remainingToBill } from "../billing/sta
 import type { BillingInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
-import { lockSiBookletNumber } from "./booklet";
+import { claimBookletSerial, lockSiBookletNumber } from "./booklet";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -74,7 +74,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
           );
         }
 
-        // Voided numbers stay used: unique on invoiceNo + gap locks vs spoil.
+        // Voided numbers stay used: unique on invoiceNo + cross-table claim vs spoil.
         await lockSiBookletNumber(tx, input.invoiceNo);
         const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { id: true, number: true, status: true } });
         const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
@@ -84,6 +84,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             "invoiceNo",
           );
         }
+        await claimBookletSerial(tx, "SI", input.invoiceNo);
 
         const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
         const net = netExpected(input.amount, withholdingExpected);
@@ -197,6 +198,7 @@ export async function updateBilling(
               "invoiceNo",
             );
           }
+          await claimBookletSerial(tx, "SI", input.invoiceNo);
         } else {
           const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
           if (spoiled) {

@@ -13,6 +13,7 @@ import { getSettingsSnapshot } from "../settings";
 import type { DeliveryInput } from "../validation/deliveries";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { claimBookletSerial } from "./booklet";
 
 export type DeliveryActor = PermissionUser & { id: string };
 
@@ -103,17 +104,21 @@ export async function recordDelivery(
           );
         }
 
+        // Gap-lock spoiled unique key, then refuse any existing DR (incl. voided).
         await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = 'DR' AND \`number\` = ${drSerial} FOR UPDATE`;
         const spoiled = await tx.spoiledBookletNumber.findFirst({
           where: { type: "DR", number: drSerial },
           select: { id: true },
         });
-        if (spoiled) {
+        const deliveries = await tx.delivery.findMany({ select: { drNumber: true } });
+        const taken = deliveries.some((d) => parseBookletSerial(d.drNumber) === drSerial);
+        if (spoiled || taken) {
           throw new DocRuleError(
             `DR no. ${formatBookletNumber(drSerial)} is already used / marked spoiled.`,
             "drNumber",
           );
         }
+        await claimBookletSerial(tx, "DR", drSerial);
 
         const now = new Date();
         const idCheckedAt = input.idSightChecked ? now : null;

@@ -1070,6 +1070,16 @@ enum BookletType {
   CR
 }
 
+// Cross-table unique claim for a booklet serial (SI/DR/CR). Inserted when a
+// billing, delivery, collection receipt serial, or spoiled row takes the
+// number. Never deleted — voided docs keep the serial used.
+model BookletSerialClaim {
+  type   BookletType
+  number Int
+
+  @@id([type, number])
+}
+
 // Pre-printed BIR booklet numbers marked spoiled (photo required).
 // Stays on record, never reused, never deleted (void/archive only).
 model SpoiledBookletNumber {
