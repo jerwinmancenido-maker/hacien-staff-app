@@ -30,6 +30,11 @@ type Props = {
 
 const DEFAULT_TERMS = ["COD", "Net 7", "Net 15", "Net 30", "Net 60"];
 
+function termsDefault(list?: string[]) {
+  const opts = list && list.length > 0 ? list : DEFAULT_TERMS;
+  return opts.includes("Net 30") ? "Net 30" : (opts[0] ?? "");
+}
+
 const empty = {
   name: "",
   tin: "",
@@ -46,7 +51,8 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
   const titleId = useId();
   const firstRef = useRef<HTMLInputElement>(null);
   const [formKey, setFormKey] = useState(0);
-  const [v, setV] = useState(empty);
+  const termOptions = terms && terms.length > 0 ? terms : DEFAULT_TERMS;
+  const [v, setV] = useState(() => ({ ...empty, defaultTerms: termsDefault(terms) }));
   const [pick, setPick] = useState<string[] | null>(null);
   const [state, setState] = useState<CreateCustomerForQuoteState>({});
   const [pending, startTransition] = useTransition();
@@ -56,7 +62,6 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
   const pickSnapshots =
     effectivePick == null ? null : rates.filter((r) => effectivePick.includes(r.code));
   const pickHint = customerWithholdingHint(pickSnapshots);
-  const termOptions = terms && terms.length > 0 ? terms : DEFAULT_TERMS;
 
   function onTypeChange(next: string) {
     setV({ ...v, withholdingType: next });
@@ -69,7 +74,7 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
     onClose();
     // Reset on next open via remount key (avoids setState-in-effect lint).
     setFormKey((k) => k + 1);
-    setV(empty);
+    setV({ ...empty, defaultTerms: termsDefault(terms) });
     setPick(null);
     setState({});
   }

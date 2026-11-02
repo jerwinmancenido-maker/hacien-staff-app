@@ -132,6 +132,7 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 const { createCustomerForQuoteAction } = await import("@/app/(app)/quotes/create-customer-action");
+const { saveCustomerAction } = await import("@/app/(app)/customers/actions");
 const { duplicateCustomer } = await import("@/lib/services/companies");
 const { convertQuoteToSalesOrder } = await import("@/lib/services/quotes");
 
@@ -408,5 +409,108 @@ describe("Q07 S-24: Duplicate customer copy", () => {
     expect(billingCopy?.isDefault).toBe(true);
     expect(deliveryCopy?.street).toBe("456 Port Road");
     expect(deliveryCopy?.isDefault).toBe(true);
+  });
+
+  it("keeps the (copy) suffix when the name is already 191 characters", async () => {
+    const origCust = {
+      id: "cust_long",
+      name: "L".repeat(191),
+      tin: "222-333-444-000",
+      withholdingType: "NONE",
+      defaultWithholding: [],
+      defaultTerms: null,
+      notes: null,
+      active: true,
+      archivedAt: null,
+    };
+    fake.state.customers.push(origCust);
+    const dup = await duplicateCustomer(origCust.id, "u_admin");
+    expect(dup.name.endsWith(" (copy)")).toBe(true);
+    expect(dup.name.length).toBeLessThanOrEqual(191);
+    expect(dup.tin).toBeNull();
+    expect(dup.defaultTerms).toBeNull();
+  });
+});
+
+function customerForm(extra: Record<string, string> = {}) {
+  const fd = new FormData();
+  const fields: Record<string, string> = {
+    name: "Acme Trading",
+    tin: "",
+    withholdingType: "NONE",
+    defaultWithholdingJson: "[]",
+    defaultTerms: "Net 30",
+    notes: "",
+    isBilling: "true",
+    sameAsBilling: "true",
+    street: "12 Rizal St",
+    barangay: "San Antonio",
+    cityMunicipality: "Pasig",
+    province: "Metro Manila",
+    zip: "1605",
+    ...extra,
+  };
+  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  return fd;
+}
+
+describe("Q07 customer save: address flags and legacy terms", () => {
+  it("saves billing and a separate delivery address when Same as billing is off", async () => {
+    const res = await saveCustomerAction(
+      null,
+      {},
+      customerForm({
+        sameAsBilling: "false",
+        isDelivery: "true",
+        deliveryStreet: "88 Commerce Ave",
+        deliveryBarangay: "Manggahan",
+        deliveryCityMunicipality: "Pasig",
+        deliveryProvince: "Metro Manila",
+        deliveryZip: "1611",
+      }),
+    );
+    expect(res.ok).toBe(true);
+    expect(fake.state.customers).toHaveLength(1);
+    const id = fake.state.customers[0]!.id;
+    const addrs = fake.state.addresses.filter((a) => a.customerId === id);
+    expect(addrs.find((a) => a.kind === "BILLING")?.street).toBe("12 Rizal St");
+    expect(addrs.find((a) => a.kind === "DELIVERY")?.street).toBe("88 Commerce Ave");
+    expect(addrs.find((a) => a.kind === "BILLING")?.isDefault).toBe(true);
+    expect(addrs.find((a) => a.kind === "DELIVERY")?.isDefault).toBe(true);
+  });
+
+  it("does not create a customer when the address is incomplete", async () => {
+    const res = await saveCustomerAction(null, {}, customerForm({ barangay: "", cityMunicipality: "", province: "", zip: "" }));
+    expect(res.ok).toBeFalsy();
+    expect(res.fieldErrors?.barangay).toBeDefined();
+    expect(fake.state.customers).toHaveLength(0);
+    expect(fake.state.addresses).toHaveLength(0);
+  });
+
+  it("keeps blank terms and a term that is no longer in Settings when editing", async () => {
+    fake.state.customers.push({
+      id: "cust_old",
+      name: "Old Buyer",
+      tin: null,
+      withholdingType: "NONE",
+      defaultWithholding: [],
+      defaultTerms: null,
+      notes: "keep me",
+      active: true,
+      archivedAt: null,
+    });
+    const blank = await saveCustomerAction("cust_old", {}, customerForm({ name: "Old Buyer", defaultTerms: "", notes: "still here", street: "" }));
+    expect(blank.ok).toBe(true);
+    expect(fake.state.customers.find((c) => c.id === "cust_old")?.defaultTerms).toBeNull();
+    expect(fake.state.customers.find((c) => c.id === "cust_old")?.notes).toBe("still here");
+
+    fake.state.customers[0]!.defaultTerms = "50% on delivery";
+    const kept = await saveCustomerAction(
+      "cust_old",
+      {},
+      customerForm({ name: "Old Buyer", defaultTerms: "50% on delivery", notes: "still here", street: "" }),
+    );
+    expect(kept.ok).toBe(true);
+    expect(fake.state.customers.find((c) => c.id === "cust_old")?.defaultTerms).toBe("50% on delivery");
   });
 });

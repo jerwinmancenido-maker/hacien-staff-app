@@ -35,7 +35,8 @@ export const TAX_TYPE_LABELS: Record<SupplierTaxTypeValue, string> = {
   NO_RECEIPT: "Usually no receipt",
 };
 
-export const PHONE_PATTERN = /^[0-9+\s-]+$/;
+/** Digits, +, spaces and dashes. Tabs and other whitespace are not spaces. */
+export const PHONE_PATTERN = /^[0-9+ -]+$/;
 export const PHONE_FORMAT_MESSAGE = "Only digits, +, spaces and dashes allowed.";
 
 export const phoneField = (max = 64) =>
@@ -73,7 +74,15 @@ function requiredTermsField(allowedTerms: readonly string[]) {
  *   []    = explicit none
  *   [codes] = saved picks
  */
-export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
+/**
+ * `termsRequired` is false only when updating a customer who still has no terms,
+ * so staff can edit that record without inventing terms. New customers always require them.
+ */
+export function customerSchema(
+  allowedTerms: readonly string[],
+  allowedWithholdingCodes?: readonly string[],
+  termsRequired = true,
+) {
   return z
     .object({
       name: z.string().trim().min(1, "Name is required.").max(191),
@@ -92,7 +101,7 @@ export function customerSchema(allowedTerms: readonly string[], allowedWithholdi
             .transform((codes) => [...new Set(codes)]),
         ])
         .optional(),
-      defaultTerms: requiredTermsField(allowedTerms),
+      defaultTerms: termsRequired ? requiredTermsField(allowedTerms) : termsField(allowedTerms),
       notes: optionalText(5000),
     })
     .superRefine((v, ctx) => {

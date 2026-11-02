@@ -5,12 +5,12 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { duplicateCustomer, saveCustomer, setCustomerActive } from "@/lib/services/companies";
+import { duplicateCustomer, getCustomer, saveCustomer, setCustomerActive } from "@/lib/services/companies";
 import { saveAddress } from "@/lib/services/addresses";
 import { listWithholdingRates } from "@/lib/services/withholding";
 import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema } from "@/lib/validation/companies";
-import { addressSchema } from "@/lib/validation/addresses";
+import { addressSchema, type AddressInput } from "@/lib/validation/addresses";
 import { bool, formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
 function parsePickFromForm(form: FormData): string[] | null {
@@ -36,7 +36,17 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     // "No" always saves explicit none []; Yes shows the pick boxes.
     // Blank / not-set stays null and is rejected by the schema (never coerced to []).
     const pick = resolveCustomerSavedPick(type, parsePickFromForm(form));
-    const parsed = customerSchema(settings.lists.paymentTerms, activeCodes).safeParse({
+    // A customer saved before terms were required can still be edited with blank terms.
+    // A term already on the record stays valid even if it later leaves the Settings list.
+    let allowedTerms = settings.lists.paymentTerms;
+    let termsRequired = true;
+    if (id) {
+      const existing = await getCustomer(id);
+      const current = existing?.defaultTerms?.trim() ?? "";
+      if (current && !allowedTerms.includes(current)) allowedTerms = [...allowedTerms, current];
+      if (!current) termsRequired = false;
+    }
+    const parsed = customerSchema(allowedTerms, activeCodes, termsRequired).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),
       withholdingType: type,
@@ -50,9 +60,11 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     const cityMunicipality = str(form, "cityMunicipality");
     const province = str(form, "province");
     const zip = str(form, "zip");
-    const isBilling = form.get("isBilling") !== null ? bool(form, "isBilling") : true;
-    const sameAsBilling = form.get("sameAsBilling") !== null ? bool(form, "sameAsBilling") : true;
-    const isDelivery = form.get("isDelivery") !== null ? bool(form, "isDelivery") : true;
+    // Unchecked boxes are omitted from FormData. The form sends explicit true/false.
+    // Missing (older posts) still means "this is the default billing and delivery address".
+    const isBilling = form.has("isBilling") ? bool(form, "isBilling") : true;
+    const sameAsBilling = form.has("sameAsBilling") ? bool(form, "sameAsBilling") : true;
+    const isDelivery = form.has("isDelivery") ? bool(form, "isDelivery") : true;
 
     const deliveryStreet = str(form, "deliveryStreet");
     const deliveryBarangay = str(form, "deliveryBarangay");
@@ -65,10 +77,12 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       Object.assign(fieldErrors, zodFieldErrors(parsed.error));
     }
 
-    if (street) {
+    let billingData: AddressInput | null = null;
+    let deliveryData: AddressInput | null = null;
+    if (street.trim()) {
       const parsedBilling = addressSchema.safeParse({
         kind: "BILLING",
-        label: null,
+        label: "",
         street,
         barangay,
         cityMunicipality,
@@ -78,13 +92,15 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       });
       if (!parsedBilling.success) {
         Object.assign(fieldErrors, zodFieldErrors(parsedBilling.error));
+      } else {
+        billingData = parsedBilling.data;
       }
     }
 
-    if (!sameAsBilling && deliveryStreet) {
+    if (!sameAsBilling && deliveryStreet.trim()) {
       const parsedDelivery = addressSchema.safeParse({
         kind: "DELIVERY",
-        label: null,
+        label: "",
         street: deliveryStreet,
         barangay: deliveryBarangay,
         cityMunicipality: deliveryCityMunicipality,
@@ -96,6 +112,8 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
         for (const [k, v] of Object.entries(zodFieldErrors(parsedDelivery.error))) {
           fieldErrors[`delivery${k.charAt(0).toUpperCase() + k.slice(1)}`] = v;
         }
+      } else {
+        deliveryData = parsedDelivery.data;
       }
     }
 
@@ -103,6 +121,7 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       return {
         values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
         fieldErrors,
+        message: "Fix the fields marked below.",
       };
     }
 
@@ -128,58 +147,15 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       throw err;
     }
 
-    if (street) {
-      const owner = { kind: "customer" as const, id: saved.id };
-      if (isBilling || sameAsBilling) {
-        await saveAddress(
-          null,
-          owner,
-          {
-            kind: "BILLING",
-            label: null,
-            street,
-            barangay,
-            cityMunicipality,
-            province,
-            zip,
-            isDefault: isBilling,
-          },
-          user.id,
-        );
-      }
+    const owner = { kind: "customer" as const, id: saved.id };
+    if (billingData) {
+      await saveAddress(null, owner, billingData, user.id);
       if (sameAsBilling) {
-        await saveAddress(
-          null,
-          owner,
-          {
-            kind: "DELIVERY",
-            label: null,
-            street,
-            barangay,
-            cityMunicipality,
-            province,
-            zip,
-            isDefault: true,
-          },
-          user.id,
-        );
-      } else if (deliveryStreet) {
-        await saveAddress(
-          null,
-          owner,
-          {
-            kind: "DELIVERY",
-            label: null,
-            street: deliveryStreet,
-            barangay: deliveryBarangay,
-            cityMunicipality: deliveryCityMunicipality,
-            province: deliveryProvince,
-            zip: deliveryZip,
-            isDefault: isDelivery,
-          },
-          user.id,
-        );
+        await saveAddress(null, owner, { ...billingData, kind: "DELIVERY", isDefault: true }, user.id);
       }
+    }
+    if (deliveryData) {
+      await saveAddress(null, owner, deliveryData, user.id);
     }
 
     if (!id) createdId = saved.id;

@@ -53,6 +53,13 @@ describe("customer validation", () => {
     expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "Net 30" }).success).toBe(true);
   });
 
+  it("lets a customer who has no terms yet keep them blank", () => {
+    const kept = customerSchema(TERMS, undefined, false).safeParse({ ...base, defaultTerms: "  " });
+    expect(kept.success).toBe(true);
+    if (kept.success) expect(kept.data.defaultTerms).toBeNull();
+    expect(customerSchema(TERMS, undefined, false).safeParse({ ...base, defaultTerms: "Net 90" }).success).toBe(false);
+  });
+
   it("rejects blank (null) withholding; accepts [] / [codes] from the allowed list", () => {
     const schema = customerSchema(TERMS, ["GOODS_1", "GOV_PT_3"]);
     // S-19: never silently save "not set" as No — null is rejected.
@@ -102,6 +109,8 @@ describe("contacts", () => {
     ).toBe(true);
     expect(contactSchema(ROLES).safeParse({ ...base, phone: "+63 917 123-4567" }).success).toBe(true);
     expect(contactSchema(ROLES).safeParse({ ...base, phone: "0917-000-0000" }).success).toBe(true);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "(02) 8123-4567" }).success).toBe(false);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "0917\t1234567" }).success).toBe(false);
   });
 
   it("validates email format", () => {

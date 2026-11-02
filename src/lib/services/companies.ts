@@ -146,7 +146,9 @@ export async function duplicateCustomer(id: string, actor: CustomerSaveActor | s
       where: { id },
       include: { addresses: { where: { archivedAt: null } } },
     });
-    const copyName = `${original.name} (copy)`;
+    const suffix = " (copy)";
+    // Name is VARCHAR(191). Keep the suffix so a long name still duplicates.
+    const copyName = `${original.name.slice(0, 191 - suffix.length)}${suffix}`;
     const created = await tx.customer.create({
       data: {
         name: copyName,

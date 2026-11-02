@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Address, Customer } from "@prisma/client";
+import { formatAddress } from "@/lib/addresses/format";
+import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { Field } from "@/components/Field";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
@@ -53,16 +55,16 @@ export function CustomerForm({
   });
   const e = state.fieldErrors ?? {};
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
-  const [defaultTerms, setDefaultTerms] = useState(
-    state.values?.defaultTerms ?? customer?.defaultTerms ?? (terms[0] ?? "")
-  );
+  // Blank stays blank. Do not invent the first list item for a customer who has no terms yet.
+  const [defaultTerms, setDefaultTerms] = useState(state.values?.defaultTerms ?? customer?.defaultTerms ?? "");
+  const termsRequired = !customer || Boolean(customer.defaultTerms?.trim());
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [isBilling, setIsBilling] = useState(true);
   const [isDelivery, setIsDelivery] = useState(true);
 
   // Blank withholding (type unset, or Yes with rates still null) blocks save — never silent "No".
   const withholdingBlank = !withholding || (typeIsYes(withholding) && pick == null);
-  const blocked = !name.trim() || withholdingBlank || !defaultTerms.trim();
+  const blocked = !name.trim() || withholdingBlank || (termsRequired && !defaultTerms.trim());
   const showPick = typeIsYes(withholding);
   const withholdingLocked = !canEditWithholding;
 
@@ -155,37 +157,35 @@ export function CustomerForm({
             <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
           </Field>
 
-          {/* Addresses section */}
-          <div className="field full" style={{ marginTop: 12 }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: "8px 0" }}>Addresses</h3>
-            {addresses && addresses.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div className="small faint" style={{ marginBottom: 6 }}>Current active addresses:</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {addresses.filter((a) => !a.archivedAt).map((a) => (
-                    <div key={a.id} className="small" style={{ padding: "6px 10px", background: "#f8f9fa", borderRadius: 4 }}>
-                      <b>{a.kind}</b>{a.isDefault ? " (default)" : ""}: {a.street}, {a.barangay ? `${a.barangay}, ` : ""}{a.cityMunicipality} {a.province} {a.zip}
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <div className="field full">
+            <div className="label">Addresses</div>
+            {addresses && addresses.some((a) => !a.archivedAt) && (
+              <ul className="plain-list">
+                {addresses.filter((a) => !a.archivedAt).map((a) => (
+                  <li key={a.id}>
+                    {ADDRESS_KIND_LABELS[a.kind]}
+                    {a.isDefault ? " · Default" : ""}
+                    {" — "}
+                    {formatAddress(a)}
+                  </li>
+                ))}
+              </ul>
             )}
-            <div className="hint" style={{ marginBottom: 8 }}>
-              {addresses && addresses.length > 0 ? "Add a new address or update defaults below:" : "Enter address details below:"}
+            <div className="hint">
+              {addresses && addresses.some((a) => !a.archivedAt)
+                ? "Saved addresses stay as they are. Use the fields below to add another. One default billing and one default delivery."
+                : "Optional. Fill this in to save a billing address and a delivery address."}
             </div>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "8px 0" }}>
+            <input type="hidden" name="isBilling" value={isBilling ? "true" : "false"} />
+            <input type="hidden" name="sameAsBilling" value={sameAsBilling ? "true" : "false"} />
+            <div className="check-row">
               <label className="check">
-                <input type="checkbox" name="isBilling" checked={isBilling} onChange={(ev) => setIsBilling(ev.target.checked)} />
-                Billing address (default)
+                <input type="checkbox" checked={isBilling} onChange={(ev) => setIsBilling(ev.target.checked)} />
+                Default billing address
               </label>
               <label className="check">
-                <input
-                  type="checkbox"
-                  name="sameAsBilling"
-                  checked={sameAsBilling}
-                  onChange={(ev) => setSameAsBilling(ev.target.checked)}
-                />
-                Same as billing (use this address for delivery)
+                <input type="checkbox" checked={sameAsBilling} onChange={(ev) => setSameAsBilling(ev.target.checked)} />
+                Same as billing
               </label>
             </div>
           </div>
@@ -207,11 +207,12 @@ export function CustomerForm({
 
           {!sameAsBilling && (
             <>
-              <div className="field full" style={{ marginTop: 12 }}>
-                <h4 style={{ fontWeight: 600 }}>Delivery address</h4>
-                <label className="check" style={{ marginTop: 6 }}>
-                  <input type="checkbox" name="isDelivery" checked={isDelivery} onChange={(ev) => setIsDelivery(ev.target.checked)} />
-                  Delivery address (default)
+              <div className="field full">
+                <div className="label">Delivery address</div>
+                <input type="hidden" name="isDelivery" value={isDelivery ? "true" : "false"} />
+                <label className="check">
+                  <input type="checkbox" checked={isDelivery} onChange={(ev) => setIsDelivery(ev.target.checked)} />
+                  Default delivery address
                 </label>
               </div>
               <Field label="Unit / building / street" name="deliveryStreet" error={e.deliveryStreet} full>
@@ -237,7 +238,11 @@ export function CustomerForm({
             <button className="btn" type="submit" disabled={pending || blocked}>
               {pending ? "Saving…" : "Save"}
             </button>
-            {blocked && <span className="small faint">Name, payment terms, and customer type are required.</span>}
+            {blocked && (
+              <span className="small faint">
+                {termsRequired ? "Name, payment terms, and customer type are required." : "Name and customer type are required."}
+              </span>
+            )}
           </div>
         )}
       </fieldset>
