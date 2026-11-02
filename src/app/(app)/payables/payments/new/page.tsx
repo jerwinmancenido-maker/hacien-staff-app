@@ -23,7 +23,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
   const suppliers = await db.supplier.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, bankAccountNumber: true },
+    select: { id: true, name: true },
     take: 500,
   });
 
@@ -72,10 +72,12 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
     );
   }
 
-  const supplier =
-    suppliers.find((s) => s.id === sp.supplierId) ??
-    (await db.supplier.findUnique({ where: { id: sp.supplierId }, select: { id: true, name: true, bankAccountNumber: true } }));
+  const supplier = await db.supplier.findUnique({
+    where: { id: sp.supplierId },
+    select: { id: true, name: true, bankAccountNumber: true },
+  });
   if (!supplier) notFound();
+  const maskedBankNumber = maskBankAccountNumber(supplier.bankAccountNumber);
   const open = await openSupplierBillsForPayment(supplier.id);
   const today = ymd(manilaToday())!;
   const cashOn = await isCashEnabled();
@@ -94,7 +96,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           action={recordSupplierPaymentAction}
           supplierId={supplier.id}
           supplierName={supplier.name}
-          supplierBankNumber={maskBankAccountNumber(supplier.bankAccountNumber)}
+          supplierBankNumber={maskedBankNumber}
           defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
           cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({

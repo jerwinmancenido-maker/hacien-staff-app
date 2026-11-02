@@ -25,14 +25,22 @@ import {
   createStandalonePurchaseOrder,
   markPurchaseOrderSent,
 } from "@/lib/services/purchase-orders";
-import { recordSupplierPayment, voidSupplierPayment } from "@/lib/services/supplier-payments";
+import { recordSupplierPayment as recordSupplierPaymentRaw, voidSupplierPayment } from "@/lib/services/supplier-payments";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
 import { createCashAccount } from "@/lib/services/cash-accounts";
 import { getBookRegister, listBookSourceRows } from "@/lib/services/books";
 import { REGISTER_CONFIGS } from "@/lib/books/config";
 import { sumMoney } from "@/lib/books/registers";
 import { manilaYmdFromInstant } from "@/lib/books/period";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+
+function recordSupplierPayment(
+  input: Parameters<typeof recordSupplierPaymentRaw>[0],
+  actor: Parameters<typeof recordSupplierPaymentRaw>[1],
+  files: Parameters<typeof recordSupplierPaymentRaw>[2] = paymentProof,
+) {
+  return recordSupplierPaymentRaw(input, actor, files);
+}
 
 describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
   let admin: DocActor;

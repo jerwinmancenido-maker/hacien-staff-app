@@ -24,7 +24,7 @@ import {
   createStandalonePurchaseOrder,
   markPurchaseOrderSent,
 } from "@/lib/services/purchase-orders";
-import { recordSupplierPayment, voidSupplierPayment } from "@/lib/services/supplier-payments";
+import { recordSupplierPayment as recordSupplierPaymentRaw, voidSupplierPayment } from "@/lib/services/supplier-payments";
 import {
   creditableWithholdingYtd,
   cumulativeCollectedTotal,
@@ -41,7 +41,15 @@ import { NON_VAT_THRESHOLD_PESOS } from "@/lib/tax/constants";
 import { build1701qWorksheet, incomeBaseFromTax } from "@/lib/tax/math";
 import { customer2307ToSawtCsv } from "@/lib/tax/csv";
 import { manilaYmdFromInstant } from "@/lib/books/period";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+
+function recordSupplierPayment(
+  input: Parameters<typeof recordSupplierPaymentRaw>[0],
+  actor: Parameters<typeof recordSupplierPaymentRaw>[1],
+  files: Parameters<typeof recordSupplierPaymentRaw>[2] = paymentProof,
+) {
+  return recordSupplierPaymentRaw(input, actor, files);
+}
 
 describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
   let admin: DocActor;

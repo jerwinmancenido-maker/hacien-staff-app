@@ -97,7 +97,9 @@ export function computeWeOweRows(
     let cashScaled = 0n;
     let whScaled = 0n;
     for (const a of b.allocations) {
-      if (a.supplierPayment && a.supplierPayment.status !== "POSTED") continue;
+      // Fail closed: only a posted payment reduces what we owe. Voided, missing,
+      // or any other status is ignored (a dropped include must not look like cash paid).
+      if (a.supplierPayment?.status !== "POSTED") continue;
       cashScaled += toScaled(money(a.cashApplied as never), 2);
       whScaled += toScaled(money(a.withholdingApplied as never), 2);
     }
@@ -105,8 +107,8 @@ export function computeWeOweRows(
     const amtScaled = toScaled(money(b.amount as never), 2);
     const leftScaled = amtScaled > paidScaled ? amtScaled - paidScaled : 0n;
 
-    // Fully paid bills disappear from the list.
-    if (leftScaled <= 0n || b.status === "PAID") continue;
+    // Balance math decides. A stale PAID flag must not hide money still left.
+    if (leftScaled <= 0n) continue;
 
     totalLeftScaled += leftScaled;
     totalAmountScaled += amtScaled;

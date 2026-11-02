@@ -32,8 +32,16 @@ import {
   markPurchaseOrderSent,
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
-import { recordSupplierPayment, voidSupplierPayment, type PayablesActor } from "@/lib/services/supplier-payments";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { recordSupplierPayment as recordSupplierPaymentRaw, voidSupplierPayment, type PayablesActor } from "@/lib/services/supplier-payments";
+import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+
+function recordSupplierPayment(
+  input: Parameters<typeof recordSupplierPaymentRaw>[0],
+  actor: Parameters<typeof recordSupplierPaymentRaw>[1],
+  files: Parameters<typeof recordSupplierPaymentRaw>[2] = paymentProof,
+) {
+  return recordSupplierPaymentRaw(input, actor, files);
+}
 
 describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () => {
   let admin: CashActor & DocActor & PayablesActor;
@@ -281,6 +289,7 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
             ],
           },
           admin,
+          [],
         ),
       ).rejects.toThrow(/Cash is turned off/i);
     } finally {

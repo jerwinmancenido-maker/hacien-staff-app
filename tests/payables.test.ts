@@ -9,12 +9,14 @@ import { dealsNavHrefs } from "@/components/Sidebar";
 import { visiblePayablesNavTabs } from "@/components/payables/PayablesNav";
 import { payablesEnabledFromEnv } from "@/lib/payables/features";
 import { payables2307EnabledFromEnv } from "@/lib/payables/issue2307";
-import { can, canMaintainSupplierPayment, canVoid, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
+import { can, canMaintainSupplierPayment, canVoid, ForbiddenError, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { formatDocNumber } from "@/lib/settings/numbering";
 import { computeWeOweRows, weOweDueLabel } from "@/lib/payables/we-owe";
-import { supplierPaymentInputSchema } from "@/lib/validation/payables";
+import { supplierPaymentInputSchema, type SupplierPaymentInput } from "@/lib/validation/payables";
 import { maskBankAccountNumber } from "@/lib/bank-mask";
+import { DocRuleError } from "@/lib/documents/common";
+import { recordSupplierPayment } from "@/lib/services/supplier-payments";
 
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 
@@ -252,8 +254,25 @@ describe("Q06 S-41: Supplier payment role rules", () => {
     expect(canVoid(user(["STAFF"]))).toBe(false);
     expect(canVoid(user(["VIEWER"]))).toBe(false);
     expect(canVoid({ ...user(["ADMIN"]), active: false })).toBe(false);
+    expect(canVoid({ ...user(["APPROVER"]), active: false })).toBe(false);
   });
 });
+
+const proof = [{ name: "proof.png", size: 8, bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) }];
+
+function paymentInput(over: Partial<SupplierPaymentInput> = {}): SupplierPaymentInput {
+  return {
+    supplierId: "sup-1",
+    date: d("2026-11-02"),
+    method: "BANK_TRANSFER",
+    reference: "UB-TXN-987654",
+    amountPaid: "25000.00",
+    allocations: [
+      { supplierBillId: "b1", cashApplied: "25000.00", withholdingApplied: "0.00", withholdingRate: "0.0000", atcCode: null },
+    ],
+    ...over,
+  };
+}
 
 describe("Q06 S-41: Payment validation messages", () => {
   it("requires UnionBank reference when method is bank transfer", () => {
@@ -290,6 +309,102 @@ describe("Q06 S-41: Payment validation messages", () => {
     const src = readFileSync(path.join(process.cwd(), "src/app/(app)/payables/actions.ts"), "utf8");
     expect(src).toMatch(/Attach proof of payment/);
   });
+
+  it("keeps check bank required and notes optional after the columns were made nullable", () => {
+    const alloc = [{ supplierBillId: "b1", cashApplied: "100.00", withholdingApplied: "0", withholdingRate: "0" }];
+    const checkMissingBank = supplierPaymentInputSchema.safeParse({
+      supplierId: "sup-1",
+      date: "2026-11-02",
+      method: "CHECK",
+      reference: "0012345",
+      amountPaid: "100.00",
+      allocations: alloc,
+    });
+    expect(checkMissingBank.success).toBe(false);
+    if (!checkMissingBank.success) {
+      expect(checkMissingBank.error.issues.find((i) => i.path.includes("checkBank"))?.message).toBe(
+        "Bank is required for checks.",
+      );
+    }
+
+    const checkEmptyBank = supplierPaymentInputSchema.safeParse({
+      supplierId: "sup-1",
+      date: "2026-11-02",
+      method: "CHECK",
+      reference: "0012345",
+      checkBank: "   ",
+      amountPaid: "100.00",
+      allocations: alloc,
+    });
+    expect(checkEmptyBank.success).toBe(false);
+
+    const checkOk = supplierPaymentInputSchema.safeParse({
+      supplierId: "sup-1",
+      date: "2026-11-02",
+      method: "CHECK",
+      reference: "0012345",
+      checkBank: "UnionBank",
+      amountPaid: "100.00",
+      allocations: alloc,
+    });
+    expect(checkOk.success).toBe(true);
+
+    const cashNoNotes = supplierPaymentInputSchema.safeParse({
+      supplierId: "sup-1",
+      date: "2026-11-02",
+      method: "CASH",
+      amountPaid: "100.00",
+      allocations: alloc,
+    });
+    expect(cashNoNotes.success).toBe(true);
+    if (cashNoNotes.success) expect(cashNoNotes.data.notes).toBeUndefined();
+
+    const notesTooLong = supplierPaymentInputSchema.safeParse({
+      supplierId: "sup-1",
+      date: "2026-11-02",
+      method: "CASH",
+      notes: "x".repeat(5001),
+      amountPaid: "100.00",
+      allocations: alloc,
+    });
+    expect(notesTooLong.success).toBe(false);
+  });
+
+  it("rejects bank transfer without a reference, a check without a bank, missing proof, and non-admins before any write", async () => {
+    const admin = { id: "admin-1", ...user(["ADMIN"]) };
+    const approver = { id: "appr-1", ...user(["APPROVER"]) };
+    await expect(recordSupplierPayment(paymentInput(), approver, proof)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(recordSupplierPayment(paymentInput(), { ...admin, active: false }, proof)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(recordSupplierPayment(paymentInput(), admin, [])).rejects.toMatchObject({
+      message: "Attach proof of payment",
+      field: "files",
+    });
+    await expect(recordSupplierPayment(paymentInput({ reference: null }), admin, proof)).rejects.toBeInstanceOf(DocRuleError);
+    await expect(recordSupplierPayment(paymentInput({ reference: "   " }), admin, proof)).rejects.toThrow(/UnionBank reference/);
+    await expect(
+      recordSupplierPayment(paymentInput({ method: "CHECK", reference: "0012345", checkBank: null }), admin, proof),
+    ).rejects.toThrow(/Bank is required for checks/);
+    await expect(
+      recordSupplierPayment(paymentInput({ method: "CHECK", reference: null, checkBank: "UnionBank" }), admin, proof),
+    ).rejects.toThrow(/Check number is required/);
+    await expect(recordSupplierPayment(paymentInput({ method: "E_WALLET", reference: null }), admin, proof)).rejects.toThrow(
+      /Reference number is required/,
+    );
+  });
+
+  it("reports cash off before it asks for proof", async () => {
+    const prev = process.env.CASH_ENABLED;
+    process.env.CASH_ENABLED = "false";
+    try {
+      const admin = { id: "admin-1", ...user(["ADMIN"]) };
+      await expect(
+        recordSupplierPayment(paymentInput({ cashAccountId: "cash-1" }), admin, []),
+      ).rejects.toThrow(/Cash is turned off/);
+    } finally {
+      if (prev === undefined) delete process.env.CASH_ENABLED;
+      else process.env.CASH_ENABLED = prev;
+    }
+  });
 });
 
 describe("Q06 S-41: Supplier payment allocation math and over-pay blocking", () => {
@@ -321,6 +436,47 @@ describe("Q06 S-41: Supplier payment allocation math and over-pay blocking", () 
     const res = computeWeOweRows([bill], d("2026-11-02"));
     expect(res.rows).toHaveLength(0);
     expect(res.totalLeftToPay).toBe("0.00");
+  });
+
+  it("a stale PAID flag does not hide a balance, and cents stay exact", () => {
+    const stale = {
+      id: "b1",
+      billNumber: "BILL-001",
+      dueDate: d("2026-11-01"),
+      amount: "40000.10",
+      status: "PAID" as const,
+      supplier: { id: "s1", name: "Alpha Supplier" },
+      purchaseOrder: null,
+      allocations: [
+        { cashApplied: "25000.10", withholdingApplied: "0.00", supplierPayment: { status: "POSTED" as const } },
+      ],
+    };
+    const res = computeWeOweRows([stale], d("2026-11-02"));
+    expect(res.rows).toHaveLength(1);
+    expect(res.rows[0]!.paid).toBe("25000.10");
+    expect(res.rows[0]!.leftToPay).toBe("15000.00");
+    expect(res.rows[0]!.dueLabel).toBe("Overdue");
+
+    const cents = computeWeOweRows(
+      [
+        {
+          id: "b2",
+          billNumber: "BILL-002",
+          dueDate: d("2026-11-08"),
+          amount: "1.00",
+          status: "PARTIALLY_PAID" as const,
+          supplier: { id: "s1", name: "Alpha Supplier" },
+          purchaseOrder: null,
+          allocations: [
+            { cashApplied: "0.10", withholdingApplied: "0.20", supplierPayment: { status: "POSTED" as const } },
+          ],
+        },
+      ],
+      d("2026-11-02"),
+    );
+    expect(cents.rows[0]!.paid).toBe("0.30");
+    expect(cents.rows[0]!.leftToPay).toBe("0.70");
+    expect(cents.rows[0]!.dueLabel).toBe("Due this week");
   });
 
   it("blocks over-pay when allocation exceeds bill left to pay", () => {
@@ -431,6 +587,21 @@ describe("Q06 S-41: We-owe totals, sorting, labels, and voided payment exclusion
     expect(res.rows[0]!.leftToPay).toBe("25000.00");
     expect(res.totalLeftToPay).toBe("25000.00");
     expect(res.totalPaid).toBe("15000.00");
+
+    const missingPayment = computeWeOweRows(
+      [
+        {
+          ...bill,
+          allocations: [
+            { cashApplied: "40000.00", withholdingApplied: "0.00", supplierPayment: null },
+            { cashApplied: "10000.00", withholdingApplied: "0.00" },
+          ],
+        },
+      ],
+      today,
+    );
+    expect(missingPayment.rows[0]!.paid).toBe("0.00");
+    expect(missingPayment.rows[0]!.leftToPay).toBe("40000.00");
   });
 
   it("bank account masking helper shows last 4 only", () => {
