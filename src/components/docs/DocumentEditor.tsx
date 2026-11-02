@@ -173,6 +173,18 @@ function sameCents(a: string, b: string): boolean {
   return left != null && right != null && left === right;
 }
 
+function sameRate(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  try {
+    return toScaled(left, 4) === toScaled(right, 4);
+  } catch {
+    return false;
+  }
+}
+
 /** True when qty, unit price, line add/remove, or the selling / withholding / net totals differ. */
 function salesOrderPriceFieldsChanged(start: Omit<EditorItem, "key">[], current: EditorItem[]): boolean {
   if (current.length !== start.length || current.some((row) => !row.id)) return true;
@@ -180,7 +192,11 @@ function salesOrderPriceFieldsChanged(start: Omit<EditorItem, "key">[], current:
   if (byId.size !== current.length) return true;
   for (const row of current) {
     const before = row.id ? byId.get(row.id) : undefined;
-    if (!before || !sameCents(before.qty, row.qty) || !sameCents(before.unitPrice, row.unitPrice)) return true;
+    if (!before) return true;
+    if (!sameCents(before.qty, row.qty) || !sameCents(before.unitPrice, row.unitPrice)) return true;
+    if (before.kind !== row.kind) return true;
+    if ((before.withholdingAtc ?? "").trim() !== (row.withholdingAtc ?? "").trim()) return true;
+    if (!sameRate(before.withholdingRate, row.withholdingRate)) return true;
   }
   const beforeTotals = docTotals(start.map(lineMoneyInput));
   const afterTotals = docTotals(current.map(lineMoneyInput));
@@ -751,6 +767,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                         aria-label={`Line ${idx + 1} ATC`}
                         className="w-atc"
                         value={i.withholdingAtc ?? ""}
+                        readOnly={pricesLocked}
                         placeholder="ATC"
                         onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
                       />

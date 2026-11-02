@@ -25,7 +25,7 @@ function user(roles: Role[], extra: Partial<PermissionUser> = {}): PermissionUse
   return { ...roleFlags(roles), active: true, canSeeCosts: false, ...extra };
 }
 
-const line = { id: "l1", qty: "1.00", unitPrice: "81500.75" };
+const line = { id: "l1", qty: "1.00", unitPrice: "81500.75", kind: "GOODS", withholdingRate: "0.0100", withholdingAtc: "WI158" };
 const snap = (patch: Partial<SoPriceSnapshot> = {}): SoPriceSnapshot => ({
   contractPrice: "81500.75",
   withholdingTotal: "0.00",
@@ -87,6 +87,10 @@ describe("won sales order price lock", () => {
     expect(salesOrderPriceLockError({ isAdmin: false, reason: "", before, after: snap({ lines: [{ ...line, qty: "1.00" }] }) })).toBeNull();
     const changed = snap({ contractPrice: "81501.50", netReceived: "81501.50", lines: [{ ...line, unitPrice: "81501.50" }] });
     expect(salesOrderPriceLockError({ isAdmin: false, reason: "please", before, after: changed })).toBe(PRICE_LOCK_MESSAGE);
+    const rewrittenCode = snap({ lines: [{ ...line, withholdingAtc: "WI160", withholdingRate: "0.0200" }] });
+    expect(salesOrderPriceLockError({ isAdmin: false, reason: "", before, after: rewrittenCode })).toBe(PRICE_LOCK_MESSAGE);
+    const rewrittenKind = snap({ lines: [{ ...line, kind: "SERVICES" }] });
+    expect(salesOrderPriceLockError({ isAdmin: false, reason: "", before, after: rewrittenKind })).toBe(PRICE_LOCK_MESSAGE);
   });
 
   it("requires an Admin reason and accepts one", () => {

@@ -16,7 +16,14 @@ import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./
 
 type SoWithItems = SalesOrder & { items: SalesOrderItem[] };
 
-export type SoPriceLine = { id: string | null; qty: string; unitPrice: string };
+export type SoPriceLine = {
+  id: string | null;
+  qty: string;
+  unitPrice: string;
+  kind: string;
+  withholdingRate: string | null;
+  withholdingAtc: string | null;
+};
 
 export type SoPriceSnapshot = {
   contractPrice: string;
@@ -25,11 +32,19 @@ export type SoPriceSnapshot = {
   lines: readonly SoPriceLine[];
 };
 
-function scaledEq(a: string, b: string): boolean {
-  return toScaled(a || "0", 2) === toScaled(b || "0", 2);
+function scaledEq(a: string, b: string, dp = 2): boolean {
+  return toScaled(a || "0", dp) === toScaled(b || "0", dp);
 }
 
-/** Qty, unit price, line add/remove, or the selling / withholding / net totals. */
+function rateEq(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return scaledEq(left, right, 4);
+}
+
+/** Qty, unit price, kind, withholding rate/ATC, line add/remove, or the selling / withholding / net totals. */
 export function salesOrderPricesChanged(before: SoPriceSnapshot, after: SoPriceSnapshot): boolean {
   if (!scaledEq(before.contractPrice, after.contractPrice)) return true;
   if (!scaledEq(before.withholdingTotal, after.withholdingTotal)) return true;
@@ -44,6 +59,9 @@ export function salesOrderPricesChanged(before: SoPriceSnapshot, after: SoPriceS
     if (!next) return true;
     if (!scaledEq(line.qty, next.qty)) return true;
     if (!scaledEq(line.unitPrice, next.unitPrice)) return true;
+    if (line.kind !== next.kind) return true;
+    if (!rateEq(line.withholdingRate, next.withholdingRate)) return true;
+    if ((line.withholdingAtc ?? "").trim() !== (next.withholdingAtc ?? "").trim()) return true;
   }
   return false;
 }
@@ -141,13 +159,29 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         contractPrice: money(before.contractPrice),
         withholdingTotal: money(before.withholdingTotal),
         netReceived: money(before.netReceived),
-        lines: before.items.map((i) => ({ id: i.id, qty: money(i.qty), unitPrice: money(i.unitPrice) })),
+        lines: before.items.map((i) => ({
+          id: i.id,
+          qty: money(i.qty),
+          unitPrice: money(i.unitPrice),
+          kind: i.kind,
+          withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+          withholdingAtc: i.withholdingAtc,
+        })),
       };
       const afterPrices = {
         contractPrice: money(preserved.totals.contractPrice),
         withholdingTotal: money(preserved.totals.withholdingTotal),
         netReceived: money(preserved.totals.netReceived),
-        lines: items.map((i) => ({ id: i.id, qty: money(i.qty), unitPrice: money(i.unitPrice) })),
+        // Compare what the user sent. The legacy null-rate backfill may fill a
+        // stored rate from this document's own snapshot; that is not a rewrite.
+        lines: input.items.map((i) => ({
+          id: i.id ?? null,
+          qty: i.qty,
+          unitPrice: i.unitPrice,
+          kind: i.kind,
+          withholdingRate: i.withholdingRate ?? null,
+          withholdingAtc: i.withholdingAtc ?? null,
+        })),
       };
       const lockMsg = salesOrderPriceLockError({
         isAdmin: actor.isAdmin === true,
