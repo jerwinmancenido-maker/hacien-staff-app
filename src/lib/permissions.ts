@@ -187,6 +187,19 @@ export function assertCanMarkAdminCheck(user: PermissionUser | null | undefined)
   if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();
 }
 
+/** Active Admin only may add/edit supplier bank details or view full numbers. */
+export function canManageSupplierBank(user: PermissionUser | null | undefined): boolean {
+  return !!user && user.active && user.isAdmin;
+}
+
+/** Throws ForbiddenError unless the user is an active Admin. */
+export function assertCanManageSupplierBank(user: PermissionUser | null | undefined): void {
+  if (!canManageSupplierBank(user)) throw new ForbiddenError();
+}
+
+export const assertCanViewFullSupplierBank = assertCanManageSupplierBank;
+
+
 // ---------------------------------------------------------------------------
 // Last Admin / last Approver guard
 // ---------------------------------------------------------------------------
