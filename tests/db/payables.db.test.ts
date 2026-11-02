@@ -24,14 +24,23 @@ import {
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
 import {
   markSupplier2307Issued,
-  recordSupplierPayment,
+  recordSupplierPayment as recordSupplierPaymentRaw,
   voidSupplierPayment,
   type PayablesActor,
 } from "@/lib/services/supplier-payments";
 import { PAYABLES_2307_OFF_MESSAGE } from "@/lib/payables/issue2307";
 import { apAgingSummary } from "@/lib/payables/views";
 import { addDays } from "@/lib/format";
-import { freshYear, makeSupplier, makeUser, tag } from "./fixtures";
+import { freshYear, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+import { listWeOweBills } from "@/lib/payables/we-owe";
+
+function recordSupplierPayment(
+  input: Parameters<typeof recordSupplierPaymentRaw>[0],
+  actor: Parameters<typeof recordSupplierPaymentRaw>[1],
+  files: Parameters<typeof recordSupplierPaymentRaw>[2] = paymentProof,
+) {
+  return recordSupplierPaymentRaw(input, actor, files);
+}
 
 describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
   let admin: PayablesActor;
@@ -101,7 +110,7 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
     return { supplier, po, bill, year, billDate };
   }
 
-  it("Admin and Approver can record; Staff and Viewer cannot", async () => {
+  it("active Admin can record; Approver, Staff, Viewer, and inactive Admin cannot", async () => {
     const year = await freshYear();
     const { supplier, bill } = await openBill(year, "10000.00");
     const base = {
@@ -125,6 +134,17 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
     };
     await expect(recordSupplierPayment(base, staff)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(recordSupplierPayment(base, viewer)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(recordSupplierPayment(base, approver)).rejects.toBeInstanceOf(ForbiddenError);
+    const inactive = await db.user.create({
+      data: {
+        email: `inactive-admin-${tag()}@test.example.com`,
+        name: "Inactive Admin",
+        isAdmin: true,
+        active: false,
+      },
+    });
+    await expect(recordSupplierPayment(base, inactive)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(recordSupplierPayment(base, admin, [])).rejects.toThrow(/Attach proof of payment/);
     // Fresh bill for successful creates (first attempt would have failed before write).
     const a = await openBill(year, "5000.00");
     const pay = await recordSupplierPayment(
@@ -145,26 +165,8 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
       admin,
     );
     expect(pay.number).toMatch(/^PAY-\d{4}-\d+$/);
-    const b = await openBill(year, "3000.00");
-    const pay2 = await recordSupplierPayment(
-      {
-        ...base,
-        supplierId: b.supplier.id,
-        amountPaid: "3000.00",
-        reference: "REF-APP",
-        allocations: [
-          {
-            supplierBillId: b.bill.id,
-            cashApplied: "3000.00",
-            withholdingApplied: "0",
-            withholdingRate: "0.0000",
-            atcCode: null,
-          },
-        ],
-      },
-      approver,
-    );
-    expect(pay2.createdById).toBe(approver.id);
+    expect(pay.createdById).toBe(admin.id);
+    expect(await db.documentAttachment.count({ where: { supplierPaymentId: pay.id } })).toBe(1);
   });
 
   it("partial and full payment update bill status; over- and under-allocation blocked", async () => {
@@ -429,7 +431,7 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
     await expect(voidSupplierPayment(pay.id, "  ", admin)).rejects.toThrow(/reason/i);
     await expect(voidSupplierPayment(pay.id, "Wrong amount", staff)).rejects.toBeInstanceOf(ForbiddenError);
 
-    await voidSupplierPayment(pay.id, "Wrong amount", admin);
+    await voidSupplierPayment(pay.id, "Wrong amount", approver);
     expect((await db.supplierPayment.findUniqueOrThrow({ where: { id: pay.id } })).status).toBe("VOID");
     expect((await db.supplierBill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe("RECORDED");
     expect(await db.documentVoid.count({ where: { docType: "SUPPLIER_PAYMENT", docId: pay.id } })).toBe(1);
@@ -754,5 +756,140 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
       admin,
     );
     expect(await db.auditLog.count({ where: { entityType: "SupplierPayment", entityId: pay.id, action: "create" } })).toBe(1);
+  });
+
+  it("₱25,000 of ₱40,000 leaves ₱15,000 on We owe; the rest marks Paid and drops; voided cash is ignored; bank number is last 4", async () => {
+    const year = await freshYear();
+    const today = new Date(Date.UTC(year, 5, 15));
+    const overdue = await openBill(year, "40000.00");
+    const soon = await openBill(year, "8000.00");
+    const fullAccount = "109876543210";
+    await db.supplier.update({ where: { id: overdue.supplier.id }, data: { bankAccountNumber: fullAccount } });
+    await db.supplierBill.update({
+      where: { id: overdue.bill.id },
+      data: { dueDate: new Date(Date.UTC(year, 5, 10)) },
+    });
+    await db.supplierBill.update({
+      where: { id: soon.bill.id },
+      data: { dueDate: new Date(Date.UTC(year, 5, 18)) },
+    });
+
+    await expect(
+      recordSupplierPaymentRaw(
+        {
+          supplierId: overdue.supplier.id,
+          date: today,
+          method: "BANK_TRANSFER",
+          reference: null,
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "25000.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: overdue.bill.id,
+              cashApplied: "25000.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        admin,
+        paymentProof,
+      ),
+    ).rejects.toThrow(/UnionBank reference/);
+
+    const partial = await recordSupplierPayment(
+      {
+        supplierId: overdue.supplier.id,
+        date: today,
+        method: "BANK_TRANSFER",
+        reference: "UB-25000",
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "25000.00",
+        notes: null,
+        allocations: [
+          {
+            supplierBillId: overdue.bill.id,
+            cashApplied: "25000.00",
+            withholdingApplied: "0",
+            withholdingRate: "0.0000",
+            atcCode: null,
+          },
+        ],
+      },
+      admin,
+    );
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: overdue.bill.id } })).status).toBe("PARTIALLY_PAID");
+
+    const open = await listWeOweBills(today);
+    const owed = open.rows.find((r) => r.id === overdue.bill.id);
+    const dueSoon = open.rows.find((r) => r.id === soon.bill.id);
+    expect(owed?.paid).toBe("25000.00");
+    expect(owed?.leftToPay).toBe("15000.00");
+    expect(owed?.dueLabel).toBe("Overdue");
+    expect(owed?.supplier.bankAccountNumber).toBe("•••• 3210");
+    expect(dueSoon?.dueLabel).toBe("Due this week");
+    expect(dueSoon?.leftToPay).toBe("8000.00");
+    expect(JSON.stringify(open)).not.toContain(fullAccount);
+
+    await expect(
+      recordSupplierPayment(
+        {
+          supplierId: overdue.supplier.id,
+          date: today,
+          method: "BANK_TRANSFER",
+          reference: "UB-OVER",
+          checkBank: null,
+          checkDate: null,
+          amountPaid: "16000.00",
+          notes: null,
+          allocations: [
+            {
+              supplierBillId: overdue.bill.id,
+              cashApplied: "16000.00",
+              withholdingApplied: "0",
+              withholdingRate: "0.0000",
+              atcCode: null,
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/only has ₱15000\.00 left/);
+
+    await voidSupplierPayment(partial.id, "Wrong amount", approver);
+    const afterVoid = await listWeOweBills(today);
+    expect(afterVoid.rows.find((r) => r.id === overdue.bill.id)?.leftToPay).toBe("40000.00");
+    expect(afterVoid.rows.find((r) => r.id === overdue.bill.id)?.paid).toBe("0.00");
+
+    await recordSupplierPayment(
+      {
+        supplierId: overdue.supplier.id,
+        date: today,
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "40000.00",
+        notes: null,
+        allocations: [
+          {
+            supplierBillId: overdue.bill.id,
+            cashApplied: "40000.00",
+            withholdingApplied: "0",
+            withholdingRate: "0.0000",
+            atcCode: null,
+          },
+        ],
+      },
+      admin,
+    );
+    expect((await db.supplierBill.findUniqueOrThrow({ where: { id: overdue.bill.id } })).status).toBe("PAID");
+    const gone = await listWeOweBills(today);
+    expect(gone.rows.find((r) => r.id === overdue.bill.id)).toBeUndefined();
+    expect(gone.rows.find((r) => r.id === soon.bill.id)?.dueLabel).toBe("Due this week");
   });
 });

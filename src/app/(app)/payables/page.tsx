@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can, canSeeCosts } from "@/lib/permissions";
+import { canMaintainSupplierPayment, canSeeCosts } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { isPayables2307Enabled } from "@/lib/payables/issue2307";
 import { apAgingSummary, listSupplierBillsOpen } from "@/lib/payables/views";
@@ -17,7 +17,7 @@ export default async function PayablesHomePage({
   searchParams: Promise<{ dueFrom?: string; dueTo?: string }>;
 }) {
   const user = await requirePagePermission("view");
-  const canManage = can(user, "manage_payables");
+  const canRecord = canMaintainSupplierPayment(user);
   const sp = await searchParams;
   const dueFrom = sp.dueFrom && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueFrom) ? sp.dueFrom : undefined;
   const dueTo = sp.dueTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.dueTo) ? sp.dueTo : undefined;
@@ -36,7 +36,7 @@ export default async function PayablesHomePage({
         title="Payables"
         subtitle="Record payments already made at the bank. The app never connects to a bank or sends email."
         actions={
-          canManage && (
+          canRecord && (
             <Link className="btn" href="/payables/payments/new">
               <PlusIcon /> Record payment
             </Link>
@@ -121,7 +121,7 @@ export default async function PayablesHomePage({
           <div className="empty" style={{ padding: "16px 0" }}>
             <p className="faint">No open payables yet.</p>
             <p className="faint small">Record a supplier bill on a purchase order, then come back to pay it.</p>
-            {canManage && (
+            {canRecord && (
               <div className="empty-actions">
                 <Link className="btn btn-secondary" href="/purchase-orders">
                   Go to supplier POs

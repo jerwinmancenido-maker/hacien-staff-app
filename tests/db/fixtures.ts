@@ -5,8 +5,17 @@
 import { randomBytes } from "node:crypto";
 import { Prisma, type WithholdingType } from "@prisma/client";
 import { db } from "@/lib/db";
+import type { UploadFile } from "@/lib/services/attachments";
 import type { DocActor } from "@/lib/services/quotes";
 import type { QuoteInput } from "@/lib/validation/quotes";
+
+/** Real PNG header so supplier-payment tests satisfy the required proof file. */
+const PAYMENT_PROOF_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82,
+]);
+export const paymentProof: UploadFile[] = [
+  { name: "proof.png", size: PAYMENT_PROOF_BYTES.length, bytes: PAYMENT_PROOF_BYTES },
+];
 
 export const tag = () => randomBytes(4).toString("hex");
 

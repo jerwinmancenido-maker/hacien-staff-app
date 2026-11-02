@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
+import { assertCanMaintainSupplierPayment, assertCanVoid } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { markSupplier2307Issued, recordSupplierPayment, voidSupplierPayment } from "@/lib/services/supplier-payments";
 import { markSupplier2307IssuedSchema, parseSupplierPaymentForm } from "@/lib/validation/payables";
@@ -41,8 +42,12 @@ export async function recordSupplierPaymentAction(_prev: FormState, form: FormDa
   const result = await runAction(async () => {
     await assertFeatureOn();
     const user = await requireActionPermission("manage_payables");
+    assertCanMaintainSupplierPayment(user);
     const { files, error } = await formFiles(form);
     if (error) return { values: echo, fieldErrors: { files: error } };
+    if (!files || files.length === 0) {
+      return { values: echo, fieldErrors: { files: "Attach proof of payment" }, message: "Attach proof of payment." };
+    }
     const payment = await recordSupplierPayment(parsed.data, user, files);
     refreshPayables(payment.supplierId, payment.id);
     goTo = `/payables/payments/${payment.id}`;
@@ -56,6 +61,7 @@ export async function voidSupplierPaymentAction(id: string, reason: string): Pro
   return runAction(async () => {
     await assertFeatureOn();
     const user = await requireActionPermission("manage_payables");
+    assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
     const payment = await voidSupplierPayment(id, parsed.data, user);

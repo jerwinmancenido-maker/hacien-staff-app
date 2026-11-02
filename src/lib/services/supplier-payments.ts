@@ -5,7 +5,7 @@
 import type { Prisma, SupplierBillStatus } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, assertCanMaintainSupplierPayment, assertCanVoid, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
@@ -160,9 +160,29 @@ async function upsertSupplier2307(
   });
 }
 
+/** Schema columns are nullable. Required method rules are enforced here, not by the column. */
+function assertPaymentMethodFields(input: SupplierPaymentInput) {
+  const reference = input.reference?.trim() ?? "";
+  if (input.method === "BANK_TRANSFER" && !reference) {
+    throw new DocRuleError("Add the UnionBank reference", "reference");
+  }
+  if (input.method === "E_WALLET" && !reference) {
+    throw new DocRuleError("Reference number is required.", "reference");
+  }
+  if (input.method === "CHECK") {
+    if (!reference) throw new DocRuleError("Check number is required.", "reference");
+    if (!input.checkBank?.trim()) throw new DocRuleError("Bank is required for checks.", "checkBank");
+  }
+}
+
 export async function recordSupplierPayment(input: SupplierPaymentInput, actor: PayablesActor, files: readonly UploadFile[] = []) {
-  assertManagePayables(actor);
+  assertCanMaintainSupplierPayment(actor);
+  // Cash off must win over the proof rule. A payment tied to a cash account
+  // is refused before we ask for a file, so "Cash is turned off" stays the error.
+  if (input.cashAccountId) await assertCashEnabled();
+  if (!files || files.length === 0) throw new DocRuleError("Attach proof of payment", "files");
   if (toScaled(input.amountPaid, 2) <= 0n) throw new DocRuleError("Amount paid must be greater than 0.", "amountPaid");
+  assertPaymentMethodFields(input);
 
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.supplierPayment;
@@ -275,7 +295,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
 }
 
 export async function voidSupplierPayment(id: string, reason: string, actor: PayablesActor) {
-  assertManagePayables(actor);
+  assertCanVoid(actor);
   const why = reason.trim();
   if (!why) throw new DocRuleError("A reason is required.", "reason");
 
