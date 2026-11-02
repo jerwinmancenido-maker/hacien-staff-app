@@ -219,7 +219,7 @@ export const settingsSections = {
   // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
-    /** UNVERIFIED BIR rule — default ON for billing / collection prints. */
+    /** Stored so older snapshots still parse. The input-tax line is no longer gated by this flag. */
     showInputTaxDisclaimer: z.boolean(),
     /**
      * When ON, receiving-report prints may show unit cost / amount — but only

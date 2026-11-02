@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { qrSvg, TERMS_URL } from "@/lib/print/qr";
 import { NON_VAT_LABEL } from "@/lib/print/tax-wording";
-import { quotePrintFixture, withholdingQuotePrintFixture } from "./fixtures/print-doc";
+import { quotePrintFixture, salesOrderPrintFixture, withholdingQuotePrintFixture } from "./fixtures/print-doc";
 
 describe("print document", () => {
   it("renders NON-VAT, the QR code, the footer and the contract price", async () => {
@@ -43,6 +43,17 @@ describe("print document", () => {
   it("generates the QR locally for the terms URL", async () => {
     const svg = await qrSvg();
     expect(svg.startsWith("<svg")).toBe(true);
-    expect(TERMS_URL).toBe("https://haciensolutions.com/terms");
+    expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
+  });
+
+  it("quote and sales order print HTML use the policies URL", async () => {
+    const svg = await qrSvg();
+    for (const fixture of [quotePrintFixture, salesOrderPrintFixture]) {
+      const doc = { ...fixture(), qrSvg: svg, termsUrl: TERMS_URL };
+      const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc }));
+      expect(html).toContain("<svg");
+      expect(html).toContain("https://haciensolutions.com/policies");
+      expect(html).not.toContain("haciensolutions.com/terms");
+    }
   });
 });

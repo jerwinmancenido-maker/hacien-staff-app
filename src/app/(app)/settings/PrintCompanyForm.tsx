@@ -47,7 +47,6 @@ export function PrintCompanyForm({
     email: company.email ?? "",
     website: company.website ?? "",
     paperSize: print.paperSize,
-    showInputTaxDisclaimer: print.showInputTaxDisclaimer,
     banks: print.banks,
     eWallets: print.eWallets,
   });
@@ -121,9 +120,6 @@ export function PrintCompanyForm({
             setLive((prev) => ({ ...prev, [t.name]: t.value }));
           }
           if (t.name === "paperSize") setLive((prev) => ({ ...prev, paperSize: t.value as "A4" | "Letter" }));
-          if (t.name === "showInputTaxDisclaimer" && t instanceof HTMLInputElement) {
-            setLive((prev) => ({ ...prev, showInputTaxDisclaimer: t.checked }));
-          }
         }}
       >
         {state.message && (
@@ -188,23 +184,15 @@ export function PrintCompanyForm({
                     <option value="Letter">Letter</option>
                   </select>
                 </div>
-                <div className="field full field-check">
-                  <label className="check" htmlFor="showInputTaxDisclaimer">
-                    <input type="hidden" name="showInputTaxDisclaimer" value="false" />
-                    <input
-                      id="showInputTaxDisclaimer"
-                      name="showInputTaxDisclaimer"
-                      type="checkbox"
-                      value="true"
-                      defaultChecked={live.showInputTaxDisclaimer}
-                    />
-                    <span className="check-label-text">
-                      Print &quot;This document is not valid for claim of input tax&quot; on billing and collection
-                      documents
-                    </span>
-                  </label>
-                  <div className="hint">Check with your accountant. HACIEN is NON-VAT — no VAT lines are ever printed.</div>
-                </div>
+                <input
+                  type="hidden"
+                  name="showInputTaxDisclaimer"
+                  value={print.showInputTaxDisclaimer ? "true" : "false"}
+                />
+                <p className="hint">
+                  Billing, collection, quote, sales order, and customer statement prints always include: THIS DOCUMENT
+                  IS NOT VALID FOR CLAIM OF INPUT TAX.
+                </p>
                 <div className="field full field-check">
                   <label className="check" htmlFor="showReceivingReportCosts">
                     <input type="hidden" name="showReceivingReportCosts" value="false" />
@@ -415,7 +403,7 @@ export function PrintCompanyForm({
               {[live.email, live.phone].filter(Boolean).join(" · ") || "No email / phone yet"}
             </div>
             <div className="small muted" style={{ marginTop: 8 }}>
-              Paper: {live.paperSize} · Input-tax note: {live.showInputTaxDisclaimer ? "ON" : "OFF"}
+              Paper: {live.paperSize}
             </div>
           </aside>
         </div>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { addDays } from "@/lib/format";
 import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
 import { formatDocNumber } from "@/lib/settings/numbering";
 import { changedLeaves, settingsValueFromForm } from "@/lib/settings/form";
@@ -36,7 +37,10 @@ function memoryStore(): SettingsStore & { rows: SettingsVersionRecord[] } {
 describe("settings defaults", () => {
   it("seeds the agreed defaults", () => {
     expect(DEFAULT_SETTINGS.approval).toEqual({ marginBelowPct: 18, totalAbove: 500000, poTotalAbove: 100000 });
-    expect(DEFAULT_SETTINGS.quotes.defaultValidityDays).toBe(30);
+    expect(DEFAULT_SETTINGS.quotes.defaultValidityDays).toBe(15);
+    // New quotes with no validity date use this default (Nov 2 + 15 days).
+    const nov2 = new Date("2026-11-02T00:00:00.000Z");
+    expect(addDays(nov2, DEFAULT_SETTINGS.quotes.defaultValidityDays).toISOString().slice(0, 10)).toBe("2026-11-17");
     expect(DEFAULT_SETTINGS.taxYear).toMatchObject({
       year: 2026,
       nonVatLimit: 3000000,
@@ -109,7 +113,7 @@ describe("settings versioning", () => {
   it("rejects a save based on an outdated version", async () => {
     const store = memoryStore();
     const v1 = await getSettingsSnapshot(store);
-    await saveSettingsSection(store, { key: "quotes", value: { defaultValidityDays: 15 }, userId: "a", baseVersionId: v1.versionId });
+    await saveSettingsSection(store, { key: "quotes", value: { defaultValidityDays: 20 }, userId: "a", baseVersionId: v1.versionId });
     await expect(
       saveSettingsSection(store, { key: "quotes", value: { defaultValidityDays: 45 }, userId: "b", baseVersionId: v1.versionId }),
     ).rejects.toBeInstanceOf(SettingsConflictError);
@@ -130,7 +134,7 @@ describe("settings versioning", () => {
     };
     const err = await saveSettingsSection(store, {
       key: "quotes",
-      value: { defaultValidityDays: 15 },
+      value: { defaultValidityDays: 20 },
       userId: "a",
       baseVersionId: v1.versionId,
     }).catch((e) => e);
@@ -157,7 +161,7 @@ describe("settings versioning", () => {
   it("does not create a version when nothing changed", async () => {
     const store = memoryStore();
     const v1 = await getSettingsSnapshot(store);
-    const res = await saveSettingsSection(store, { key: "quotes", value: { defaultValidityDays: "30" }, userId: "a", baseVersionId: v1.versionId });
+    const res = await saveSettingsSection(store, { key: "quotes", value: { defaultValidityDays: "15" }, userId: "a", baseVersionId: v1.versionId });
     expect(res.ok && !res.changed).toBe(true);
     expect(store.rows).toHaveLength(1);
   });

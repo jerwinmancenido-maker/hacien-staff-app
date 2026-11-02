@@ -166,10 +166,12 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
                 <th>Date</th>
                 <td>{doc.date}</td>
               </tr>
-              <tr className={hideStatus ? "pp-status-row no-print" : "pp-status-row"}>
-                <th>Status</th>
-                <td>{doc.status}</td>
-              </tr>
+              {hideStatus ? null : (
+                <tr className="pp-status-row">
+                  <th>Status</th>
+                  <td>{doc.status}</td>
+                </tr>
+              )}
               {doc.meta.map((m) => (
                 <tr key={`${m.label}-${m.value}`}>
                   <th>{m.label}</th>
@@ -194,10 +196,10 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
         <table className="pp-items">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Description</th>
-              <th className="num">Qty</th>
-              <th>Unit</th>
+              <th className="pp-n">#</th>
+              <th className="pp-desc">Description</th>
+              <th className="num pp-qty">Qty</th>
+              <th className="pp-unit">Unit</th>
               {!hideAmounts && <th className="num">{unitLabel}</th>}
               {!hideAmounts && <th className="num">Amount</th>}
             </tr>
@@ -205,13 +207,13 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
           <tbody>
             {doc.items.map((i, n) => (
               <tr key={n}>
-                <td>{n + 1}</td>
-                <td>
+                <td className="pp-n">{n + 1}</td>
+                <td className="pp-desc">
                   <div className="pp-pre">{i.description}</div>
                   {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
                 </td>
-                <td className="num">{qty(i.qty)}</td>
-                <td>{i.unit}</td>
+                <td className="num pp-qty">{qty(i.qty)}</td>
+                <td className="pp-unit">{i.unit}</td>
                 {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
                 {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
               </tr>
