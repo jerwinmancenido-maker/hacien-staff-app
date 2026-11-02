@@ -8,7 +8,7 @@ import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
 import { toScaled } from "../quotes/calc";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
-import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
+import { preserveLegacyWithholdingOnSave, rateFromDocWithholding } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { voidReasonSchema, type SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
@@ -159,14 +159,21 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         contractPrice: money(before.contractPrice),
         withholdingTotal: money(before.withholdingTotal),
         netReceived: money(before.netReceived),
-        lines: before.items.map((i) => ({
-          id: i.id,
-          qty: money(i.qty),
-          unitPrice: money(i.unitPrice),
-          kind: i.kind,
-          withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
-          withholdingAtc: i.withholdingAtc,
-        })),
+        // NULL line rates are filled from this order's own withholding JSON on save.
+        // That fill is the snapshot already stored on the document, so it is not a
+        // price or ATC change. A submitted rate or ATC still has to match it.
+        lines: before.items.map((i) => {
+          const storedRate = i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null;
+          const fromDoc = storedRate == null ? rateFromDocWithholding(before.withholding, i.kind) : null;
+          return {
+            id: i.id,
+            qty: money(i.qty),
+            unitPrice: money(i.unitPrice),
+            kind: i.kind,
+            withholdingRate: storedRate ?? fromDoc?.withholdingRate ?? null,
+            withholdingAtc: i.withholdingAtc ?? fromDoc?.withholdingAtc ?? null,
+          };
+        }),
       };
       const afterPrices = {
         contractPrice: money(preserved.totals.contractPrice),

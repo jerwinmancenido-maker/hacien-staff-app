@@ -257,6 +257,71 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     expect(updatedItem?.withholdingAtc).not.toBe(originalAtc);
   });
 
+  function soItems(
+    rows: { id: string; description: string; kind: "GOODS" | "SERVICES"; qty: { toString(): string }; unit: string; unitPrice: { toString(): string }; supplierId: string | null; supplierUnitCost: { toString(): string }; withholdingRate: { toString(): string } | null; withholdingAtc: string | null; withholdingOverride: boolean }[],
+  ) {
+    return rows.map((i) => ({
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: Number(i.qty).toFixed(2),
+      unit: i.unit,
+      unitPrice: Number(i.unitPrice).toFixed(2),
+      supplierId: i.supplierId,
+      supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+      withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+      withholdingAtc: i.withholdingAtc,
+      withholdingOverride: i.withholdingOverride,
+    }));
+  }
+
+  it("won sales order rejects a same-rate ATC swap and still backfills legacy null rates", async () => {
+    const { admin, staff } = await actors();
+    const { so } = await wonSo(admin);
+    const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    const goods = rows.find((i) => i.kind === "GOODS");
+    expect(goods?.withholdingAtc).toBe("WI158");
+    const items = soItems(rows);
+    const base = { contactId: so.contactId, buyerPoNo: so.buyerPoNo, deliveryAddress: so.deliveryAddress, terms: so.terms, notes: so.notes, items };
+    const swap = { ...base, reapplyWithholding: true as const, withholdingCodes: ["GOV_GOODS_1"] };
+
+    await expect(updateSalesOrder(so.id, swap, staff)).rejects.toThrow(/locked/);
+    expect((await db.salesOrderItem.findUniqueOrThrow({ where: { id: goods!.id } })).withholdingAtc).toBe("WI158");
+    await expect(updateSalesOrder(so.id, swap, admin)).rejects.toThrow(/reason/);
+    const updated = await updateSalesOrder(so.id, { ...swap, priceOverrideReason: "Use the government goods code" }, admin);
+    expect(updated.items.find((i) => i.id === goods!.id)?.withholdingAtc).toBe("WI640");
+    expect(Number(updated.withholdingTotal).toFixed(2)).toBe(Number(so.withholdingTotal).toFixed(2));
+
+    const legacy = await wonSo(admin);
+    const legacyRows = await db.salesOrderItem.findMany({ where: { salesOrderId: legacy.so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    const legacyGoods = legacyRows.find((i) => i.kind === "GOODS");
+    await db.salesOrderItem.updateMany({
+      where: { salesOrderId: legacy.so.id },
+      data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+    });
+    const nulled = soItems(legacyRows).map((i) => ({ ...i, withholdingRate: null, withholdingAtc: null, withholdingOverride: false }));
+    const legacyBase = {
+      contactId: legacy.so.contactId,
+      buyerPoNo: legacy.so.buyerPoNo,
+      deliveryAddress: legacy.so.deliveryAddress,
+      terms: legacy.so.terms,
+      notes: legacy.so.notes,
+      items: nulled,
+    };
+    const sneak = {
+      ...legacyBase,
+      items: nulled.map((i) => (i.id === legacyGoods!.id ? { ...i, withholdingAtc: "WI640" } : i)),
+    };
+    await expect(updateSalesOrder(legacy.so.id, sneak, staff)).rejects.toThrow(/locked/);
+    const untouched = await db.salesOrderItem.findUniqueOrThrow({ where: { id: legacyGoods!.id } });
+    expect(untouched.withholdingRate).toBeNull();
+    expect(untouched.withholdingAtc).toBeNull();
+
+    const saved = await updateSalesOrder(legacy.so.id, legacyBase, staff);
+    expect(saved.items.find((i) => i.id === legacyGoods!.id)?.withholdingAtc).toBe("WI158");
+    expect(Number(saved.withholdingTotal).toFixed(2)).toBe(Number(legacy.so.withholdingTotal).toFixed(2));
+  });
+
   it("change password needs the current password, retires the old one, and revokes other sessions", async () => {
     const staff = await makeUser("staff");
     const current = "OldSample123!";
