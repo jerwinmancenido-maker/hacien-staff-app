@@ -372,13 +372,13 @@ export async function getCollectionView(id: string) {
 export async function listNeedsAdminCheck() {
   const [billings, collections] = await Promise.all([
     db.billing.findMany({
-      where: { needsAdminCheck: true },
+      where: { needsAdminCheck: true, status: { not: "VOID" } },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: { id: true, number: true, invoiceNo: true, amount: true, customer: { select: { name: true } } },
     }),
     db.collection.findMany({
-      where: { needsAdminCheck: true },
+      where: { needsAdminCheck: true, status: { not: "VOID" } },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: { id: true, number: true, amountReceived: true, customer: { select: { name: true } } },

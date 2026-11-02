@@ -575,7 +575,7 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
       const now = new Date();
       const after = await tx.collection.update({
         where: { id },
-        data: { status: "VOID", voidedAt: now, voidReason: why },
+        data: { status: "VOID", voidedAt: now, voidReason: why, needsAdminCheck: false },
       });
       // Soft-clear pending 2307 amounts (keep rows for audit; same as upsert2307
       // when withholding is removed — amount 0.00, status stays PENDING).

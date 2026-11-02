@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { changePasswordSchema, newPasswordSchema, verifyPassword } from "@/lib/auth/password";
 import { checkLoginRateLimit, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
-import { createSession, currentTokenHash, destroyCurrentSession } from "@/lib/auth/session";
+import { createSession, currentTokenHash, destroyCurrentSession, idleRemainingMs as readIdleRemainingMs } from "@/lib/auth/session";
 import { getCurrentUser, requestMeta } from "@/lib/auth/current-user";
 import { UserRuleError, changePassword, requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
 import { ACCOUNT_OFF, RESET_SENT, WRONG_CREDENTIALS } from "@/lib/auth/messages";
@@ -66,6 +66,11 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
 export async function signOut() {
   await destroyCurrentSession();
   redirect("/login");
+}
+
+/** Idle check for an open tab. Does not extend the deadline. */
+export async function idleRemainingMs(): Promise<number> {
+  return readIdleRemainingMs();
 }
 
 export async function forgotPassword(_prev: FormState, form: FormData): Promise<FormState> {

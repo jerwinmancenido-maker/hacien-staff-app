@@ -3,24 +3,45 @@
 import { useEffect } from "react";
 
 type SignOutAction = () => void | Promise<void>;
+type RemainingMs = () => Promise<number>;
 
-/** Signs the open tab out after idleMs with no pointer, key, or scroll. The server still enforces the same window. */
-export function IdleSignOut({ idleMs, signOutAction }: { idleMs: number; signOutAction: SignOutAction }) {
+/**
+ * After a quiet spell, ask the server how much idle time is left. Another tab's
+ * work keeps the shared session, so this tab only signs out when the server
+ * deadline has actually passed.
+ */
+export function IdleSignOut({
+  idleMs,
+  signOutAction,
+  remainingMs,
+}: {
+  idleMs: number;
+  signOutAction: SignOutAction;
+  remainingMs: RemainingMs;
+}) {
   useEffect(() => {
     let timer = 0;
-    const arm = () => {
+    let cancelled = false;
+    const arm = (ms: number) => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void signOutAction();
-      }, idleMs);
+        void (async () => {
+          const left = await remainingMs();
+          if (cancelled) return;
+          if (left > 0) arm(left);
+          else void signOutAction();
+        })();
+      }, ms);
     };
+    const onActivity = () => arm(idleMs);
     const events = ["pointerdown", "keydown", "scroll"] as const;
-    for (const name of events) window.addEventListener(name, arm, { passive: true });
-    arm();
+    for (const name of events) window.addEventListener(name, onActivity, { passive: true });
+    arm(idleMs);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
-      for (const name of events) window.removeEventListener(name, arm);
+      for (const name of events) window.removeEventListener(name, onActivity);
     };
-  }, [idleMs, signOutAction]);
+  }, [idleMs, remainingMs, signOutAction]);
   return null;
 }

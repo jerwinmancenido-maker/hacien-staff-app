@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { ForbiddenError } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { listNeedsAdminCheck } from "@/lib/billing/views";
 import { markBillingChecked, recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection, voidCollection } from "@/lib/services/collections";
 import { createStandalonePurchaseOrder, markPurchaseOrderSent, voidPurchaseOrder } from "@/lib/services/purchase-orders";
@@ -146,6 +147,10 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
 
     await expect(markBillingChecked(billing.id, approver)).rejects.toBeInstanceOf(ForbiddenError);
     expect((await markBillingChecked(billing.id, admin)).needsAdminCheck).toBe(false);
+    await voidCollection(collection.id, "Reverse the sample payment", admin);
+    const queue = await listNeedsAdminCheck();
+    expect(queue.collections.some((row) => row.id === collection.id)).toBe(false);
+    expect((await db.collection.findUniqueOrThrow({ where: { id: collection.id } })).needsAdminCheck).toBe(false);
 
     await expect(createStandalonePurchaseOrder(poInput, staff)).rejects.toBeInstanceOf(ForbiddenError);
     expect((await voidReceivingReport(rr.id, "Counted twice", admin)).status).toBe("VOID");

@@ -39,7 +39,7 @@ export default async function CollectionDetailPage({
           <>
             {c.number}
             <CollectionStatusChip status={c.status} />
-            {c.needsAdminCheck && <Chip tone="dark">Needs Admin check</Chip>}
+            {c.needsAdminCheck && c.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
           </>
         }
         subtitle={`${c.customer.name} · ${PRINTABLE_DISCLAIMER}`}
@@ -48,7 +48,7 @@ export default async function CollectionDetailPage({
             <Link className="btn btn-secondary" href={`/print/collections/${id}`} target="_blank">
               Print / Save PDF
             </Link>
-            {user.isAdmin && c.needsAdminCheck && (
+            {user.isAdmin && c.needsAdminCheck && c.status !== "VOID" && (
               <form action={markCollectionCheckedAction.bind(null, id)}>
                 <button className="btn" type="submit">
                   Mark checked

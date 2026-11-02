@@ -52,6 +52,28 @@ export async function createSession(userId: string, meta: { ip?: string; userAge
   });
 }
 
+/**
+ * Milliseconds left before this session's idle deadline, without sliding it.
+ * 0 when there is no live session. Used by an idle tab so another tab's
+ * activity keeps the shared session. Does not write the cookie.
+ */
+export async function idleRemainingMs(): Promise<number> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return 0;
+  const session = await db.session.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!session || session.revokedAt) return 0;
+  const now = new Date();
+  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+    await db.session.updateMany({
+      where: { tokenHash: session.tokenHash, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    return 0;
+  }
+  return Math.max(0, session.expiresAt.getTime() - now.getTime());
+}
+
 /** HMAC of the current cookie, so a password change can keep this session. */
 export async function currentTokenHash(): Promise<string | null> {
   const jar = await cookies();
@@ -72,11 +94,13 @@ export async function getSessionUser() {
   if (!session || session.revokedAt || !session.user.active) return null;
   const now = new Date();
   if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+    // Revoke only. Cookie writes are not allowed in a Server Component, and this
+    // lookup runs from page renders. The row is dead, so the next render redirects
+    // to login. Sign out (a Server Action) is what clears the cookie.
     await db.session.updateMany({
       where: { tokenHash: session.tokenHash, revokedAt: null },
       data: { revokedAt: now },
     });
-    jar.delete(SESSION_COOKIE);
     return null;
   }
   const expiresAt = nextIdleExpiry(session.createdAt, now);

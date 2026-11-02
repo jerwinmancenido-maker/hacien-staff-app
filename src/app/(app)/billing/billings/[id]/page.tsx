@@ -43,7 +43,7 @@ export default async function BillingDetailPage({
           <>
             Booklet #{b.invoiceNo}
             <BillingStatusChip status={b.status} />
-            {b.needsAdminCheck && <Chip tone="dark">Needs Admin check</Chip>}
+            {b.needsAdminCheck && b.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
             <OverdueBadge label={b.overdue.label} />
           </>
         }
@@ -53,7 +53,7 @@ export default async function BillingDetailPage({
             <Link className="btn btn-secondary" href={`/print/billings/${id}`} target="_blank">
               Print / Save PDF
             </Link>
-            {user.isAdmin && b.needsAdminCheck && (
+            {user.isAdmin && b.needsAdminCheck && b.status !== "VOID" && (
               <form action={markBillingCheckedAction.bind(null, id)}>
                 <button className="btn" type="submit">
                   Mark checked

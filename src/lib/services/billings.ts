@@ -251,7 +251,7 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       // invoiceNo stays set — voided booklet numbers are never reused.
       const after = await tx.billing.update({
         where: { id },
-        data: { status: "VOID" satisfies BillingStatus, voidedAt: now, voidReason: why, updatedById: actor.id },
+        data: { status: "VOID" satisfies BillingStatus, voidedAt: now, voidReason: why, needsAdminCheck: false, updatedById: actor.id },
       });
       await tx.documentVoid.create({
         data: {
