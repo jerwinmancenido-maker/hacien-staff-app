@@ -319,3 +319,5 @@ export async function supplierPayableBalance(supplierId: string): Promise<string
   }
   return fromScaled(bal, 2);
 }
+
+export { listWeOweBills, computeWeOweRows, weOweDueLabel, type WeOweRow, type WeOweSummary, type WeOweDueLabel } from "./we-owe";

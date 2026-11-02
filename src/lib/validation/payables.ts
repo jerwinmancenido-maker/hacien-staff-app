@@ -63,17 +63,20 @@ export const supplierPaymentInputSchema = z
       .string()
       .trim()
       .max(100)
-      .transform((v) => v || null),
+      .transform((v) => v || null)
+      .optional(),
     checkBank: z
       .string()
       .trim()
       .max(100)
-      .transform((v) => v || null),
+      .transform((v) => v || null)
+      .optional(),
     checkDate: z
       .string()
       .trim()
       .transform((v) => (v ? v : null))
-      .pipe(z.union([ymd, z.null()])),
+      .pipe(z.union([ymd, z.null()]))
+      .optional(),
     amountPaid: moneyStr,
     // Optional cash account (Part 7a). Blank = not assigned.
     cashAccountId: z
@@ -86,7 +89,8 @@ export const supplierPaymentInputSchema = z
       .string()
       .trim()
       .max(5000)
-      .transform((v) => v || null),
+      .transform((v) => v || null)
+      .optional(),
     allocations: z.array(paymentAllocationRowSchema).min(1, "Allocate to at least one bill."),
   })
   .superRefine((v, ctx) => {
@@ -94,7 +98,10 @@ export const supplierPaymentInputSchema = z
       if (!v.reference) ctx.addIssue({ code: "custom", message: "Check number is required.", path: ["reference"] });
       if (!v.checkBank) ctx.addIssue({ code: "custom", message: "Bank is required for checks.", path: ["checkBank"] });
     }
-    if ((v.method === "BANK_TRANSFER" || v.method === "E_WALLET") && !v.reference) {
+    if (v.method === "BANK_TRANSFER" && !v.reference) {
+      ctx.addIssue({ code: "custom", message: "Add the UnionBank reference", path: ["reference"] });
+    }
+    if (v.method === "E_WALLET" && !v.reference) {
       ctx.addIssue({ code: "custom", message: "Reference number is required.", path: ["reference"] });
     }
   });

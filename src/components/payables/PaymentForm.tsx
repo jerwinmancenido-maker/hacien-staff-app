@@ -9,6 +9,7 @@ import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/validation/payable
 import { formatDate, formatPeso } from "@/lib/format";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
+import { maskBankAccountNumber } from "@/lib/bank-mask";
 
 export type OpenBillRow = {
   id: string;
@@ -60,6 +61,7 @@ export function PaymentForm({
   action,
   supplierId,
   supplierName,
+  supplierBankNumber,
   defaults,
   openBills,
   cashAccounts = [],
@@ -69,6 +71,7 @@ export function PaymentForm({
   action: (state: FormState, form: FormData) => Promise<FormState>;
   supplierId: string;
   supplierName: string;
+  supplierBankNumber?: string | null;
   defaults: { date: string; amountPaid: string; method: string; cashAccountId?: string };
   openBills: OpenBillRow[];
   cashAccounts?: CashAccountOption[];
@@ -93,7 +96,7 @@ export function PaymentForm({
   if (!canEdit) {
     return (
       <div className="empty">
-        <p className="faint">You can look at payments, but only an Admin or Approver can record one.</p>
+        <p className="faint">You can look at payments, but only an Admin can record one.</p>
       </div>
     );
   }
@@ -154,12 +157,15 @@ export function PaymentForm({
           <label>Supplier</label>
           <div>
             <Link href={`/suppliers/${supplierId}`}>{supplierName}</Link>
+            {supplierBankNumber && (
+              <div className="hint">UnionBank · {maskBankAccountNumber(supplierBankNumber)}</div>
+            )}
             <div className="hint">Open balance: {formatPeso(totalOpen)}</div>
           </div>
         </div>
 
         <div className={`field${e.date ? " has-error" : ""}`}>
-          <label htmlFor="date">Date paid</label>
+          <label htmlFor="date">Date</label>
           <input id="date" name="date" type="date" defaultValue={state.values?.date ?? defaults.date} />
           <div className="hint">Defaults to today.</div>
           {e.date && <div className="error">{e.date}</div>}
@@ -178,13 +184,28 @@ export function PaymentForm({
         </div>
 
         <div className={`field${e.reference ? " has-error" : ""}`}>
-          <label htmlFor="reference">{method === "CHECK" ? "Check number" : "Bank / e-wallet reference"}</label>
+          <label htmlFor="reference">
+            {method === "BANK_TRANSFER"
+              ? "UnionBank reference"
+              : method === "CHECK"
+                ? "Check number"
+                : "Reference"}
+          </label>
           <input
             id="reference"
             name="reference"
-            placeholder={method === "CHECK" ? "e.g. 0012345" : "e.g. transfer or GCash reference"}
+            placeholder={
+              method === "BANK_TRANSFER"
+                ? "e.g. UnionBank transaction ref"
+                : method === "CHECK"
+                  ? "e.g. 0012345"
+                  : "e.g. transfer or GCash reference"
+            }
             defaultValue={state.values?.reference ?? ""}
           />
+          {method === "BANK_TRANSFER" && supplierBankNumber && (
+            <div className="hint">Paying to UnionBank · {maskBankAccountNumber(supplierBankNumber)}</div>
+          )}
           {e.reference && <div className="error">{e.reference}</div>}
         </div>
 
@@ -204,7 +225,7 @@ export function PaymentForm({
         )}
 
         <div className={`field${e.amountPaid ? " has-error" : ""}`}>
-          <label htmlFor="amountPaid">Cash paid</label>
+          <label htmlFor="amountPaid">Amount</label>
           <input
             id="amountPaid"
             name="amountPaid"
@@ -239,17 +260,17 @@ export function PaymentForm({
           {e.notes && <div className="error">{e.notes}</div>}
         </div>
 
-        <div className="field full">
-          <label htmlFor="files">Proof of payment (optional)</label>
+        <div className={`field full${e.files ? " has-error" : ""}`}>
+          <label htmlFor="files">Proof</label>
           <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple />
           <NoIdUploadWarning />
-          <div className="hint">Bank screenshot or deposit slip — PDF, JPG or PNG, up to 5 files.</div>
+          <div className="hint">Bank screenshot or deposit slip — PDF, JPG or PNG, up to 5 files (required).</div>
           {e.files && <div className="error">{e.files}</div>}
         </div>
       </div>
 
       <h3 className="section-title" style={{ marginTop: 24 }}>
-        Apply to unpaid bills
+        Bills paid
       </h3>
       <p className="faint small">
         Put the cash against the oldest bills first. The amounts below must add up to the cash paid.
@@ -262,7 +283,7 @@ export function PaymentForm({
       )}
 
       <div className="table-wrap">
-        <table className="list" aria-label="Apply payment to bills">
+        <table className="list" aria-label="Bills paid">
           <thead>
             <tr>
               <th>Supplier bill</th>

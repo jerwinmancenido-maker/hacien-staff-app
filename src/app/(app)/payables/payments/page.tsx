@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { canMaintainSupplierPayment } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listSupplierPayments } from "@/lib/payables/views";
 import { PayablesNav } from "@/components/payables/PayablesNav";
@@ -16,7 +16,7 @@ export default async function PaymentsListPage({ searchParams }: { searchParams:
   const sp = await searchParams;
   const status = (sp.status === "POSTED" || sp.status === "VOID" ? sp.status : "ALL") as SupplierPaymentStatus | "ALL";
   const rows = await listSupplierPayments({ status, q: sp.q, supplierId: sp.supplierId });
-  const canManage = can(user, "manage_payables");
+  const canManage = canMaintainSupplierPayment(user);
 
   return (
     <>

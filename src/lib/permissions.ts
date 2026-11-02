@@ -174,6 +174,16 @@ export function assertCanMaintainPurchaseOrder(user: PermissionUser | null | und
   if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();
 }
 
+/** Record supplier payments: active Admin only (Part 6). */
+export function canMaintainSupplierPayment(user: PermissionUser | null | undefined): boolean {
+  return !!user && user.active && user.isAdmin;
+}
+
+/** Throws ForbiddenError unless the user is an active Admin. */
+export function assertCanMaintainSupplierPayment(user: PermissionUser | null | undefined): void {
+  if (!canMaintainSupplierPayment(user)) throw new ForbiddenError();
+}
+
 /**
  * Staff-made billing or collection (not Admin, not Approver) waits for an Admin check.
  * Admin and Approver records are not flagged.

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { canMaintainSupplierPayment } from "@/lib/permissions";
+import { maskBankAccountNumber } from "@/lib/bank-mask";
 import { db } from "@/lib/db";
 import { formatPeso, manilaToday } from "@/lib/format";
 import { ymd } from "@/lib/documents/common";
@@ -17,12 +18,12 @@ import { recordSupplierPaymentAction } from "../../actions";
 
 export default async function NewPaymentPage({ searchParams }: { searchParams: Promise<{ supplierId?: string }> }) {
   const user = await requirePagePermission("view");
-  const canManage = can(user, "manage_payables");
+  const canManage = canMaintainSupplierPayment(user);
   const sp = await searchParams;
   const suppliers = await db.supplier.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, bankAccountNumber: true },
     take: 500,
   });
 
@@ -38,7 +39,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
         <PayablesNav active="payments" />
         <div className="card">
           {!canManage ? (
-            <EmptyState title="View only" line="Ask an Admin or Approver if you need a payment recorded." />
+            <EmptyState title="View only" line="Ask an Admin if you need a payment recorded." />
           ) : owing.length === 0 ? (
             <div className="empty" style={{ padding: "8px 0" }}>
               <EmptyState
@@ -73,7 +74,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
 
   const supplier =
     suppliers.find((s) => s.id === sp.supplierId) ??
-    (await db.supplier.findUnique({ where: { id: sp.supplierId }, select: { id: true, name: true } }));
+    (await db.supplier.findUnique({ where: { id: sp.supplierId }, select: { id: true, name: true, bankAccountNumber: true } }));
   if (!supplier) notFound();
   const open = await openSupplierBillsForPayment(supplier.id);
   const today = ymd(manilaToday())!;
@@ -93,6 +94,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           action={recordSupplierPaymentAction}
           supplierId={supplier.id}
           supplierName={supplier.name}
+          supplierBankNumber={maskBankAccountNumber(supplier.bankAccountNumber)}
           defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
           cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({
