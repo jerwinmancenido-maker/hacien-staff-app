@@ -53,6 +53,7 @@ import {
   type EditorInitial,
   type EditorItem,
 } from "./DocumentEditor";
+import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -60,6 +61,7 @@ type QuoteEditorInitial = EditorInitial & {
   internalNotes?: string;
   subject?: string;
   buyerPoNo?: string;
+  validForDays?: number | string | null;
   /** Quote-level pick: null = not set, [] = none, [codes] = picks. */
   withholdingPick?: string[] | null;
 };
@@ -271,6 +273,76 @@ export function QuoteEditor({
   /** Expanded withholding checkboxes under Quote details (collapsed by default). */
   const [whPickOpen, setWhPickOpen] = useState(() => resolveInitialPick(initial) == null);
 
+  const initialDays =
+    initial.validForDays != null
+      ? String(initial.validForDays)
+      : initial.validUntil && initial.date
+        ? String(validityDaysFromDates(initial.date, initial.validUntil) ?? defaultValidityDays)
+        : String(defaultValidityDays);
+  const [validForDays, setValidForDays] = useState<string>(initialDays);
+
+  function onValidForDaysChange(val: string) {
+    setValidForDays(val);
+    const n = parseTypedValidityDays(val);
+    if (n !== null && h.date) {
+      const nextDate = validUntilFromDays(h.date, n);
+      if (nextDate) {
+        setH((prev) => ({ ...prev, validUntil: nextDate }));
+      }
+    }
+  }
+
+  function onValidUntilChange(val: string) {
+    setH((prev) => ({ ...prev, validUntil: val }));
+    if (val && h.date) {
+      const days = validityDaysFromDates(h.date, val);
+      if (days !== null) {
+        setValidForDays(String(days));
+      }
+    }
+  }
+
+  function onDateChange(newDate: string) {
+    setH((prev) => {
+      const n = parseTypedValidityDays(validForDays);
+      if (n !== null && newDate) {
+        const nextUntil = validUntilFromDays(newDate, n);
+        return { ...prev, date: newDate, validUntil: nextUntil ?? prev.validUntil };
+      }
+      return { ...prev, date: newDate };
+    });
+  }
+
+  const nDays = parseTypedValidityDays(validForDays);
+  // Quotes saved before the 1-day rule can still be edited when that same-day
+  // pair is left alone. Changing either date applies the minimum.
+  const legacySameDayUnchanged =
+    !isNew &&
+    validityDaysFromDates(initial.date, initial.validUntil) === 0 &&
+    h.date === initial.date &&
+    h.validUntil === initial.validUntil;
+  const validityDaysError = legacySameDayUnchanged
+    ? null
+    : nDays === null
+      ? validForDays.trim()
+        ? "Must be a whole number of days."
+        : "At least 1 day."
+      : nDays < 1
+        ? "At least 1 day."
+        : null;
+  const validUntilError =
+    h.validUntil && h.date && h.validUntil < h.date
+      ? "Valid until can't be before the quote date."
+      : null;
+  const hasValidityError = Boolean(validityDaysError || validUntilError);
+
+  const derivedDays =
+    nDays != null && nDays >= 1
+      ? nDays
+      : h.date && h.validUntil
+        ? validityDaysFromDates(h.date, h.validUntil)
+        : null;
+
   const e = state.fieldErrors ?? {};
   const customer = customerList.find((c) => c.id === h.customerId);
   const contacts = customer?.contacts ?? [];
@@ -435,6 +507,7 @@ export function QuoteEditor({
     contactId: h.contactId || null,
     date: h.date,
     validUntil: h.validUntil,
+    validForDays: nDays != null && nDays >= 1 ? nDays : undefined,
     terms: h.terms,
     notes: h.notes,
     internalNotes: h.internalNotes,
@@ -495,6 +568,10 @@ export function QuoteEditor({
   }
 
   function onSubmitMaybeWarn(e: FormEvent<HTMLFormElement>) {
+    if (hasValidityError) {
+      e.preventDefault();
+      return;
+    }
     if (withCosts && !skipCostWarn.current && linesMissingSupplierCost(items)) {
       e.preventDefault();
       if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
@@ -594,20 +671,7 @@ export function QuoteEditor({
               )}
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
-            <div className={`quote-f field${e.validUntil ? " has-error" : ""}`}>
-              <label htmlFor="validUntil">Valid until</label>
-              <input id="validUntil" type="date" className="input" value={h.validUntil} onChange={(ev) => setH({ ...h, validUntil: ev.target.value })} />
-              {e.validUntil ? <div className="error">{e.validUntil}</div> : <div className="hint">{defaultValidityDays} days, from Settings</div>}
-            </div>
-            <div className={`quote-f field${e.date ? " has-error" : ""}`}>
-              <label htmlFor="date">
-                Date<span className="req"> *</span>
-              </label>
-              <input id="date" type="date" className="input" value={h.date} onChange={(ev) => setH({ ...h, date: ev.target.value })} />
-              {e.date && <div className="error">{e.date}</div>}
-              {isNew && !e.date && <div className="hint">Number on save</div>}
-            </div>
-            <div className={`quote-f quote-f-w2 field${e.contactId ? " has-error" : ""}`}>
+            <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
               <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer}>
                 <option value="">None</option>
@@ -619,6 +683,44 @@ export function QuoteEditor({
                 ))}
               </select>
               {e.contactId && <div className="error">{e.contactId}</div>}
+            </div>
+            <div className={`quote-f field${e.date ? " has-error" : ""}`}>
+              <label htmlFor="date">
+                Date<span className="req"> *</span>
+              </label>
+              <input id="date" type="date" className="input" value={h.date} onChange={(ev) => onDateChange(ev.target.value)} />
+              {e.date && <div className="error">{e.date}</div>}
+              {isNew && !e.date && <div className="hint">Number on save</div>}
+            </div>
+            <div className={`quote-f field${e.validForDays || validityDaysError ? " has-error" : ""}`}>
+              <label htmlFor="validForDays">Valid for (days)</label>
+              <input
+                id="validForDays"
+                type="number"
+                min={legacySameDayUnchanged ? 0 : 1}
+                className="input"
+                value={validForDays}
+                onChange={(ev) => onValidForDaysChange(ev.target.value)}
+              />
+              {e.validForDays || validityDaysError ? (
+                <div className="error">{e.validForDays ?? validityDaysError}</div>
+              ) : (
+                <div className="hint">{defaultValidityDays} days default</div>
+              )}
+            </div>
+            <div className={`quote-f field${e.validUntil || validUntilError ? " has-error" : ""}`}>
+              <label htmlFor="validUntil">Valid until</label>
+              <input
+                id="validUntil"
+                type="date"
+                min={h.date}
+                className="input"
+                value={h.validUntil}
+                onChange={(ev) => onValidUntilChange(ev.target.value)}
+              />
+              {e.validUntil || validUntilError ? (
+                <div className="error">{e.validUntil ?? validUntilError}</div>
+              ) : null}
             </div>
             <div className={`quote-f quote-f-w2 field${e.buyerPoNo ? " has-error" : ""}`}>
               <label htmlFor="buyerPoNo">Customer PO / RFQ no.</label>
@@ -1135,7 +1237,7 @@ export function QuoteEditor({
               </div>
               <div className="quote-f field">
                 <span className="label">Validity</span>
-                <div>{defaultValidityDays} days</div>
+                <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
               </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>
@@ -1218,11 +1320,11 @@ export function QuoteEditor({
                 Preview print
               </button>
             )}
-            <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0}>
+            <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError}>
               {pending ? "Saving…" : "Save draft"}
             </button>
             {canMarkSent ? (
-              <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0} onClick={submitMarkSent}>
+              <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError} onClick={submitMarkSent}>
                 {sentPending ? "Sending…" : "Mark as sent"}
               </button>
             ) : approvalStatus === "PENDING" || approvalStatus === "REJECTED" ? (

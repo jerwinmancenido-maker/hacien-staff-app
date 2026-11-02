@@ -44,6 +44,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           contactId: preset?.contacts.find((c) => c.isMain)?.id ?? "",
           date: isoDate(today),
           validUntil: isoDate(addDays(today, settings.quotes.defaultValidityDays)),
+          validForDays: settings.quotes.defaultValidityDays,
           terms: preset?.defaultTerms ?? "",
           notes: "",
           internalNotes: "",
