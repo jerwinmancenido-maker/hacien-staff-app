@@ -26,7 +26,7 @@ import { getQuoteView, listQuotesView } from "@/lib/quotes/views";
 import { COST_NOT_SET_LABEL, supplierCostMissing } from "@/lib/quotes/calc";
 import { money } from "@/lib/documents/common";
 import type { QuoteInput } from "@/lib/validation/quotes";
-import { freshYear, makeCustomer, makeUser, quoteInput } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeUser, quoteInput } from "./fixtures";
 
 function inputFromQuote(
   q: {
@@ -154,8 +154,8 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
 
     const sent = await markQuoteSent(q.id, staff);
     expect(sent.status).toBe("SENT");
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddressId: delivAddr!.id }, staff);
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddressId }, staff);
     expect(so.quoteId).toBe(q.id);
     const quoteAfter = await db.quote.findUniqueOrThrow({ where: { id: q.id } });
     expect(quoteAfter.status).toBe("WON");
@@ -185,8 +185,8 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     const won = await createQuote(quoteInput(customer.id, year), staff);
     await approveQuote(won.id, approver);
     await markQuoteSent(won.id, staff);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    await convertQuoteToSalesOrder(won.id, { buyerPoNo: null, deliveryAddressId: delivAddr!.id }, staff);
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    await convertQuoteToSalesOrder(won.id, { buyerPoNo: null, deliveryAddressId }, staff);
     const wonRow = await db.quote.findUniqueOrThrow({ where: { id: won.id } });
     expect(wonRow.status).toBe("WON");
     // WON stays APPROVED; even if forced PENDING it must stay out of the waiting list.

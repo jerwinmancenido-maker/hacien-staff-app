@@ -21,7 +21,7 @@ import {
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection } from "@/lib/services/collections";
-import { freshYear, freshYearPair, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, freshYearPair, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
   let admin: DocActor;
@@ -95,8 +95,8 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so };

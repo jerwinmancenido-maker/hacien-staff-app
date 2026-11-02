@@ -23,7 +23,7 @@ import { postReceivingReport, voidReceivingReport } from "@/lib/services/receivi
 import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
 import { changePassword } from "@/lib/services/users";
 import type { PoInput } from "@/lib/validation/purchasing";
-import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
 describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)", () => {
   async function actors() {
@@ -40,8 +40,8 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     const customer = await makeCustomer();
     const quote = await createQuote(quoteInput(customer.id, year, { withholdingCodes: ["GOODS_1"] }), admin);
     await approveQuote(quote.id, admin);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(quote.id, { buyerPoNo: null, deliveryAddressId: delivAddr!.id }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(quote.id, { buyerPoNo: null, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { year, customer, quote, so };

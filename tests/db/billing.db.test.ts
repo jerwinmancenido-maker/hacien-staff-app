@@ -32,7 +32,7 @@ import { arAgingSummary, countPending2307Expected, getStatement, list2307 } from
 import { getBillingPrintModel } from "@/lib/print/views";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import { saveCustomer } from "@/lib/services/companies";
-import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
   let admin: DocActor;
@@ -113,8 +113,8 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddressId: delivAddr!.id }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so, year };

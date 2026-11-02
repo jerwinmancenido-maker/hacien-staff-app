@@ -37,7 +37,7 @@ import { defaultWithholdingPickFor } from "@/lib/quotes/withholding-defaults";
 import { getQuotePrint, getQuoteView, getSalesOrderPrint, getSalesOrderView, listQuotesView } from "@/lib/quotes/views";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
 import { saveSettings } from "@/lib/settings";
-import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
 /** Keys that must never reach a user without "Can see costs". */
 const COST_KEYS = ["supplierId", "supplierName", "supplierUnitCost", "supplierTotal", "supplierCost", "margin", "netMargin", "netMarginPct"];
@@ -81,13 +81,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     await ensureApproved(args[0]);
     if (!args[1].deliveryAddressId) {
       const q = await db.quote.findUnique({ where: { id: args[0] }, select: { customerId: true } });
-      if (q) {
-        let addr = await db.address.findFirst({ where: { customerId: q.customerId, archivedAt: null } });
-        if (!addr) {
-          addr = await db.address.create({ data: { customerId: q.customerId, kind: "DELIVERY", street: "Test delivery address", isDefault: true } });
-        }
-        args[1] = { ...args[1], deliveryAddressId: addr.id };
-      }
+      if (q) args[1] = { ...args[1], deliveryAddressId: await customerDeliveryAddressId(q.customerId) };
     }
     return convertQuoteToSalesOrderSvc(...args);
   }

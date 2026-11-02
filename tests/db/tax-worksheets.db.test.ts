@@ -41,7 +41,7 @@ import { NON_VAT_THRESHOLD_PESOS } from "@/lib/tax/constants";
 import { build1701qWorksheet, incomeBaseFromTax } from "@/lib/tax/math";
 import { customer2307ToSawtCsv } from "@/lib/tax/csv";
 import { manilaYmdFromInstant } from "@/lib/books/period";
-import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
 
 function recordSupplierPayment(
   input: Parameters<typeof recordSupplierPaymentRaw>[0],
@@ -142,8 +142,8 @@ describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-TAX-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-TAX-${tag()}`, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 0, 16)),
     });
     return { customer, supplier, so, year };

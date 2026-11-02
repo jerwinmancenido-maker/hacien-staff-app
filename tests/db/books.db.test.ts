@@ -32,7 +32,7 @@ import { getBookRegister, listBookSourceRows } from "@/lib/services/books";
 import { REGISTER_CONFIGS } from "@/lib/books/config";
 import { sumMoney } from "@/lib/books/registers";
 import { manilaYmdFromInstant } from "@/lib/books/period";
-import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
 
 function recordSupplierPayment(
   input: Parameters<typeof recordSupplierPaymentRaw>[0],
@@ -121,8 +121,8 @@ describe.skipIf(!env.hasDb)("books registers (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-BK-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-BK-${tag()}`, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, supplier, so, year };
