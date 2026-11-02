@@ -5678,6 +5678,14 @@ button.contact-card-add {
   white-space: nowrap;
   overflow: hidden;
 }
+.home-ks.home-ks-paid {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 0;
+  white-space: normal;
+  overflow: visible;
+}
 .home-ks-bar {
   gap: 8px;
 }

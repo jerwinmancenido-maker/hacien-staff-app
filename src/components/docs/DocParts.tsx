@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import { formatPeso } from "@/lib/format";
 import { Chip, type ChipTone } from "@/components/ui";
+import { COST_NOT_SET_LABEL, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
 const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "amber", WON: "green", LOST: "red", VOID: "red" };
@@ -111,7 +112,11 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
               {showCosts && <td className="num">{formatPeso(i.supplierTotal ?? 0)}</td>}
               <td className="num">{formatPeso(i.unitPrice)}</td>
               <td className="num strong">{formatPeso(i.total)}</td>
-              {showCosts && <td className={`num${Number(i.margin) < 0 ? " neg" : ""}`}>{formatPeso(i.margin ?? 0)}</td>}
+              {showCosts && (
+                <td className={`num${supplierCostMissing(i.supplierUnitCost) ? "" : Number(i.margin) < 0 ? " neg" : ""}`}>
+                  {supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : formatPeso(i.margin ?? 0)}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -128,7 +133,38 @@ export type TotalsBoxData = {
   supplierCost?: string;
   netMargin?: string;
   netMarginPct?: string;
+  supplierCostState?: SupplierCostState;
 };
+
+function totalsCostState(totals: TotalsBoxData): SupplierCostState {
+  if (totals.supplierCostState) return totals.supplierCostState;
+  if (totals.supplierCost !== undefined && supplierCostMissing(totals.supplierCost)) return "none";
+  return "full";
+}
+
+function MarginRow({ totals }: { totals: TotalsBoxData }) {
+  const state = totalsCostState(totals);
+  const label = state === "partial" ? "Margin so far" : "Margin";
+  return (
+    <div className={`totals-row strong${state !== "none" && Number(totals.netMargin) < 0 ? " neg" : ""}`}>
+      <span>
+        {label}
+        <div className="small faint" style={{ fontWeight: 400 }}>
+          {state === "none" ? "Supplier cost is blank" : "Contract price minus supplier cost"}
+        </div>
+      </span>
+      <span className="num">
+        {state === "none" ? (
+          COST_NOT_SET_LABEL
+        ) : (
+          <>
+            {formatPeso(totals.netMargin ?? 0)} <span className="muted">({totals.netMarginPct}%)</span>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
 
 function Row({ label, value, strong, sub }: { label: ReactNode; value: string; strong?: boolean; sub?: boolean }) {
   return (
@@ -165,17 +201,7 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
         <>
           <div className="totals-sep" />
           <Row label="Supplier cost" value={`−${formatPeso(totals.supplierCost)}`} />
-          <div className={`totals-row strong${Number(totals.netMargin) < 0 ? " neg" : ""}`}>
-            <span>
-              Margin
-              <div className="small faint" style={{ fontWeight: 400 }}>
-                Contract price minus supplier cost
-              </div>
-            </span>
-            <span className="num">
-              {formatPeso(totals.netMargin ?? 0)} <span className="muted">({totals.netMarginPct}%)</span>
-            </span>
-          </div>
+          <MarginRow totals={totals} />
         </>
       )}
     </div>

@@ -51,6 +51,11 @@ export type LineForDocTotals = (LineInput | (Pick<LineInput, "kind"> & LineAmoun
 
 export type WithholdingLine = WithholdingSnapshot & { base: string; amount: string };
 
+export type SupplierCostState = "none" | "partial" | "full";
+
+/** Shown instead of a peso and a percent when supplier cost was not entered. */
+export const COST_NOT_SET_LABEL = "Cost not set";
+
 export type DocTotals = {
   /** Sum of buyer line totals. */
   contractPrice: string;
@@ -60,11 +65,39 @@ export type DocTotals = {
   netReceived: string;
   /** Sum of supplier totals. */
   supplierCost: string;
-  /** Net received − supplier cost. */
+  /**
+   * Contract − supplier. Withholding is not a cost.
+   * A blank supplier cost still stores this as the full contract (netMarginPct 100.00).
+   */
   netMargin: string;
   /** Net margin as % of the contract price (2 dp); "0.00" when the contract price is 0. */
   netMarginPct: string;
+  /** none = every line's supplier total is 0; partial = some; full = every line. */
+  supplierCostState: SupplierCostState;
 };
+
+/** Blank or ₱0.00 supplier unit cost. A typed zero uses the same path as a blank. */
+export function supplierCostMissing(value: string | null | undefined): boolean {
+  const s = String(value ?? "").trim();
+  if (s === "") return true;
+  if (!DECIMAL.test(s)) return true;
+  return toScaled(s, CENTS) === 0n;
+}
+
+export function linesMissingSupplierCost(lines: readonly { supplierUnitCost?: string | null }[]): boolean {
+  return lines.some((l) => supplierCostMissing(l.supplierUnitCost));
+}
+
+export function supplierCostStateFromSupplierTotals(totals: readonly string[]): SupplierCostState {
+  if (totals.length === 0) return "none";
+  let present = 0;
+  for (const t of totals) {
+    if (!supplierCostMissing(t)) present += 1;
+  }
+  if (present === 0) return "none";
+  if (present === totals.length) return "full";
+  return "partial";
+}
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
@@ -315,8 +348,10 @@ export function docTotals(lines: LineForDocTotals[], picks?: readonly Withholdin
   const netReceived = contract - withheld;
   // Margin is contract − supplier. Withholding is a tax credit (cash timing), not a cost —
   // it must never shrink margin or make a profitable deal look like a loss.
+  // A blank supplier cost still stores netMarginPct 100.00 so approval does not treat it as a low margin.
   const netMargin = contract - supplier;
   const pct = contract === 0n ? 0n : divRound(netMargin * 10_000n, contract);
+  const supplierTotals = lines.map((raw) => resolveAmounts(raw).supplierTotal);
 
   return {
     contractPrice: fromScaled(contract, CENTS),
@@ -326,6 +361,7 @@ export function docTotals(lines: LineForDocTotals[], picks?: readonly Withholdin
     supplierCost: fromScaled(supplier, CENTS),
     netMargin: fromScaled(netMargin, CENTS),
     netMarginPct: fromScaled(pct, 2),
+    supplierCostState: supplierCostStateFromSupplierTotals(supplierTotals),
   };
 }
 

@@ -6,15 +6,18 @@
 // quote-trow, quote-int2, quote-tbox, quote-sticky-act, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
-import { useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import {
+  COST_NOT_SET_LABEL,
   docTotals,
   lineAmounts,
+  linesMissingSupplierCost,
   ratePctLabel,
+  supplierCostMissing,
   toScaled,
   withholdingSnapshotFromLines,
   type ItemKind,
@@ -220,6 +223,9 @@ export function QuoteEditor({
 }: QuoteEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
+  const skipCostWarn = useRef(false);
+  const [costConfirmOpen, setCostConfirmOpen] = useState(false);
+  const [costConfirmNext, setCostConfirmNext] = useState<"save" | "sent">("save");
   const [sentPending, startSentTransition] = useTransition();
   const rates = visibleRates(allRates);
   const withCosts = suppliers !== null;
@@ -468,10 +474,37 @@ export function QuoteEditor({
     });
   }
 
+  function onSubmitMaybeWarn(e: FormEvent<HTMLFormElement>) {
+    if (withCosts && !skipCostWarn.current && linesMissingSupplierCost(items)) {
+      e.preventDefault();
+      setCostConfirmNext("save");
+      setCostConfirmOpen(true);
+      return;
+    }
+    skipCostWarn.current = false;
+    onSubmit(e);
+  }
+
+  function confirmCostAnyway() {
+    const next = costConfirmNext;
+    setCostConfirmOpen(false);
+    if (next === "sent") {
+      markSentNow();
+      return;
+    }
+    skipCostWarn.current = true;
+    formRef.current?.requestSubmit();
+  }
+
   function submitMarkSent() {
     if (canMarkSent) {
       if (pick == null) {
         setNoneConfirmOpen(true);
+        return;
+      }
+      if (withCosts && linesMissingSupplierCost(items)) {
+        setCostConfirmNext("sent");
+        setCostConfirmOpen(true);
         return;
       }
       markSentNow();
@@ -485,7 +518,7 @@ export function QuoteEditor({
 
   return (
     <>
-      <form ref={formRef} className="quote-editor" onSubmit={onSubmit} noValidate>
+      <form ref={formRef} className="quote-editor" onSubmit={onSubmitMaybeWarn} noValidate>
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
@@ -670,8 +703,14 @@ export function QuoteEditor({
                     ? i.withholdingAtc
                     : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
-                  const below = toScaled(a.margin, 2) < 0n;
+                  const costMissing = supplierCostMissing(i.supplierUnitCost);
+                  const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
+                  const marginText = costMissing
+                    ? COST_NOT_SET_LABEL
+                    : below
+                      ? `⚠ Price is below cost · ${formatPeso(a.margin)} · ${marginPct}%`
+                      : `${formatPeso(a.margin)} · ${marginPct}%`;
                   const whLabel = pct ? `WHT ${pct}%` : "WHT —";
                   return (
                     <div className="quote-ln" key={i.key}>
@@ -793,7 +832,7 @@ export function QuoteEditor({
                           <span className={`quote-cost-field${below ? " neg" : ""}`}>
                             Margin{" "}
                             <b>
-                              {below ? `⚠ Price is below cost · ${formatPeso(a.margin)} · ${marginPct}%` : `${formatPeso(a.margin)} · ${marginPct}%`}
+                              {marginText}
                             </b>
                           </span>
                         </div>
@@ -928,7 +967,7 @@ export function QuoteEditor({
                         <div className="quote-line-card-total num strong">{formatPeso(a.total)}</div>
                       </div>
                       <div className="quote-line-card-meta">
-                        {withCosts ? <span>Margin {formatPeso(a.margin)}</span> : null}
+                        {withCosts ? <span>{supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : `Margin ${formatPeso(a.margin)}`}</span> : null}
                         {usePickChips ? (
                           <span className="quote-line-card-wh-chips">
                             {pickChips.map((chip) => (
@@ -982,13 +1021,19 @@ export function QuoteEditor({
                       <span>Supplier cost</span>
                       <span className="num">{formatPeso(totals.supplierCost)}</span>
                     </div>
-                    <div className={`totals-row strong${Number(totals.netMargin) < 0 ? " neg" : ""}`}>
-                      <span>{INTERNAL_MARGIN_LABEL}</span>
+                    <div className={`totals-row strong${totals.supplierCostState !== "none" && Number(totals.netMargin) < 0 ? " neg" : ""}`}>
+                      <span>{totals.supplierCostState === "partial" ? "Margin so far" : INTERNAL_MARGIN_LABEL}</span>
                       <span className="num">
-                        {formatPeso(totals.netMargin)}{" "}
-                        <span className="muted">
-                          ({Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%)
-                        </span>
+                        {totals.supplierCostState === "none" ? (
+                          COST_NOT_SET_LABEL
+                        ) : (
+                          <>
+                            {formatPeso(totals.netMargin)}{" "}
+                            <span className="muted">
+                              ({Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%)
+                            </span>
+                          </>
+                        )}
                       </span>
                     </div>
                     <div className="totals-row">
@@ -1159,6 +1204,16 @@ export function QuoteEditor({
       </form>
 
       <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} />
+
+      <ConfirmDialog
+        open={costConfirmOpen}
+        title={COST_NOT_SET_LABEL}
+        body="One or more lines have no supplier cost. Margin will show Cost not set until you enter it. Save anyway?"
+        confirmLabel="Save anyway"
+        cancelLabel="Go back"
+        onCancel={() => setCostConfirmOpen(false)}
+        onConfirm={confirmCostAnyway}
+      />
 
       <ConfirmDialog
         open={noneConfirmOpen}

@@ -25,6 +25,56 @@ export function remainingToBill(contractPrice: string, nonVoidBillingAmounts: re
   return fromScaled(toScaled(contractPrice, 2) - billed, 2);
 }
 
+export type SoBillingMoney = {
+  status: string;
+  amount: string;
+  cashApplied: string;
+  withholdingApplied: string;
+};
+
+export type SoMoneySnapshot = {
+  billed: string;
+  leftToBill: string;
+  unpaidBilled: string;
+  cashCollected: string;
+  received2307: string;
+  totalPaid: string;
+  /** Display only. The sales order row stays OPEN until it is voided. */
+  completed: boolean;
+};
+
+/**
+ * Sales-order money from billing rows. VOID rows are ignored.
+ * Completed when the order is OPEN, left to bill is ₱0.00, and unpaid billed is ₱0.00
+ * (cash + 2307 credited equals the non-void billed total).
+ */
+export function salesOrderMoney(
+  soStatus: "OPEN" | "VOID",
+  contractPrice: string,
+  billings: readonly SoBillingMoney[],
+): SoMoneySnapshot {
+  const live = billings.filter((b) => b.status !== "VOID");
+  let billed = 0n;
+  let cash = 0n;
+  let wh = 0n;
+  for (const b of live) {
+    billed += toScaled(b.amount || "0", 2);
+    cash += toScaled(b.cashApplied || "0", 2);
+    wh += toScaled(b.withholdingApplied || "0", 2);
+  }
+  const left = toScaled(contractPrice, 2) - billed;
+  const unpaid = billed - cash - wh;
+  return {
+    billed: fromScaled(billed, 2),
+    leftToBill: fromScaled(left, 2),
+    unpaidBilled: fromScaled(unpaid, 2),
+    cashCollected: fromScaled(cash, 2),
+    received2307: fromScaled(wh, 2),
+    totalPaid: fromScaled(cash + wh, 2),
+    completed: soStatus === "OPEN" && left === 0n && unpaid === 0n,
+  };
+}
+
 /** Pro-rata withholding expected for a billing amount against the SO totals. */
 export function proRataWithholding(billingAmount: string, contractPrice: string, withholdingTotal: string): string {
   const contract = toScaled(contractPrice, 2);

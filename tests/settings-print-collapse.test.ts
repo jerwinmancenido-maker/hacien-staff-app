@@ -125,7 +125,7 @@ describe("PrintCompanyForm collapsed sections", () => {
     expect(html).not.toMatch(/name="quoteTerms"[^>]*\bdisabled\b/);
 
     // Select keeps selected option. The old input-tax flag is a hidden value.
-    // The terms QR switch is present and off.
+    // The terms QR switch is not in this form.
     expect(html).toMatch(/<select[^>]*name="paperSize"[^>]*>[\s\S]*?<option value="A4" selected=""/);
     expect(html).toMatch(/name="showInputTaxDisclaimer"[^>]*value="true"|value="true"[^>]*name="showInputTaxDisclaimer"/);
     expect(html).not.toMatch(/id="showInputTaxDisclaimer"/);

@@ -87,8 +87,29 @@ export function actualMargin(
   const contract = toScaled(contractPrice, CENTS);
   const cost = toScaled(totalCost, CENTS);
   const margin = contract - cost;
-  const pct = contract === 0n ? 0n : divRound(margin * 10_000n, contract);
-  return { margin: fromScaled(margin, CENTS), marginPct: fromScaled(pct, 2) };
+  return { margin: fromScaled(margin, CENTS), marginPct: marginPercent(fromScaled(margin, CENTS), contractPrice) };
+}
+
+/** Margin amount as a percent of the contract price (2 dp), half away from zero. */
+export function marginPercent(marginAmount: string, contractPrice: string): string {
+  const contract = toScaled(contractPrice, CENTS);
+  if (contract === 0n) return "0.00";
+  return fromScaled(divRound(toScaled(marginAmount, CENTS) * 10_000n, contract), 2);
+}
+
+export type CostState = "none" | "partial" | "full";
+
+/** Non-zero supplier bill, or a posted receipt. A PO total alone is not incurred cost. */
+export function incurredAmount(input: {
+  poTotal: string;
+  receivedValue: string;
+  billedAmount: string;
+  hasBills: boolean;
+  hasReceipts: boolean;
+}): string | null {
+  if (input.hasBills && toScaled(input.billedAmount, CENTS) !== 0n) return input.billedAmount;
+  if (input.hasReceipts) return input.receivedValue;
+  return null;
 }
 
 /** True when ordered qty on non-void POs is still short of the SO line qty. */
@@ -134,9 +155,19 @@ export type CostMarginSummary = {
   contractPrice: string;
   /** Stored SO withholding total (per-line sum when last saved as a draft). */
   withholdingTotal: string;
+  /** Sum of incurred costs (billed or received). PO totals are not included. */
+  incurredCost: string;
+  /** Quote / SO planned supplier cost. */
+  plannedCost: string;
+  costState: CostState;
+  /** "Margin so far" while incurred cost is partial; otherwise "Actual margin". */
+  marginLabel: string;
   actual: { margin: string; marginPct: string };
   planned: { margin: string; marginPct: string };
-  /** Contract − withholding − cost (same per-line withholding sum as document totals). */
+  /**
+   * Peso is net received − incurred cost.
+   * Percent is that peso divided by the contract price (not by net received).
+   */
   afterWithholding: { margin: string; marginPct: string; netReceived: string };
   warnings: CostMarginWarning[];
 };
@@ -160,14 +191,26 @@ export function buildCostMarginSummary(input: {
     };
   });
   const totalCost = sumMoney(rows.map((r) => r.cost));
+  const incurredParts = input.pos.map((p) => incurredAmount(p)).filter((v): v is string => v != null);
+  const incurredCost = sumMoney(incurredParts);
+  const incurredCount = incurredParts.length;
+  const costState: CostState =
+    incurredCount === 0
+      ? "none"
+      : input.pos.length > 0 && incurredCount === input.pos.length && input.uncoveredLineCount === 0
+        ? "full"
+        : "partial";
+  const marginLabel = costState === "partial" ? "Margin so far" : "Actual margin";
   const withholdingTotal = input.withholdingTotal ?? "0.00";
   const netReceived = fromScaled(toScaled(input.contractPrice, CENTS) - toScaled(withholdingTotal, CENTS), CENTS);
-  // Before withholding: contract − cost.
-  const actual = actualMargin(input.contractPrice, totalCost);
+  // Before withholding: contract − incurred cost. Percent of the contract.
+  const actual = actualMargin(input.contractPrice, incurredCost);
   const planned = actualMargin(input.contractPrice, input.plannedCost);
-  // After customer withholding: net received − cost (same per-line WH sum).
+  // After customer withholding: peso is net received − incurred cost; percent is of the contract.
+  const afterPeso = actualMargin(netReceived, incurredCost);
   const afterWithholding = {
-    ...actualMargin(netReceived, totalCost),
+    margin: afterPeso.margin,
+    marginPct: marginPercent(afterPeso.margin, input.contractPrice),
     netReceived,
   };
   const warnings: CostMarginWarning[] = [];
@@ -190,6 +233,10 @@ export function buildCostMarginSummary(input: {
   return {
     rows,
     totalCost,
+    incurredCost,
+    plannedCost: input.plannedCost,
+    costState,
+    marginLabel,
     contractPrice: input.contractPrice,
     withholdingTotal,
     actual,

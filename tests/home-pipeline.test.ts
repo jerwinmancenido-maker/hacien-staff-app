@@ -89,7 +89,8 @@ describe("home pipeline role gating + empty state", () => {
     });
     expect(pipe).not.toBeNull();
     expect(pipe!.quotes?.caption).toBe("0 open · ₱0");
-    expect(pipe!.salesOrders?.caption).toBe("0 open · ₱0");
+    expect(pipe!.salesOrders?.caption).toBe("0 open · ₱0 left to bill");
+    expect(pipe!.salesOrders?.label).toBe("Open sales orders");
     expect(pipelineOpenCaption(0, 0)).toBe("0 open · ₱0");
   });
 });

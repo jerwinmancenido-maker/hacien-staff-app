@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived } from "../billing/views";
+import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -150,7 +150,12 @@ export type HomeKpis = {
   collectedThisMonth: {
     /** e.g. "Collected (Oct)". */
     label: string;
+    /** Cash collected + 2307 received. */
     amount: string;
+    /** Posted collection receipts (amount received). */
+    cashCollected: string;
+    /** 2307 credited on those collections. */
+    received2307: string;
     /** Legacy muted line when there is no MTD chip (e.g. both ₱0). */
     caption: string;
     change: HomeKpiChange;
@@ -301,11 +306,13 @@ function buildKpis(opts: {
   openCount: number;
   collected: string;
   collectedPriorSameDays: string;
+  received2307: string;
   nonVat: HomeNonVat;
   now: Date;
 }): HomeKpis {
-  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, nonVat, now } =
+  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, received2307, nonVat, now } =
     opts;
+  const totalPaid = sumPesoAmounts([collected, received2307]);
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
   const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
@@ -342,7 +349,9 @@ function buildKpis(opts: {
     },
     collectedThisMonth: {
       label: `Collected (${mon})`,
-      amount: collected,
+      amount: totalPaid,
+      cashCollected: collected,
+      received2307,
       caption: collectedCaption,
       change: collectedChip?.change ?? { label: "—", tone: "none" },
       vsCaption: collectedChip?.vsCaption ?? "",
@@ -463,6 +472,7 @@ export async function loadHomeDashboard(
             openCount: 0,
             collected: "0.00",
             collectedPriorSameDays: "0.00",
+            received2307: "0.00",
             nonVat,
             now,
           })
@@ -495,6 +505,7 @@ export async function loadHomeDashboard(
     pending2307Count,
     collected,
     collectedPriorSameDays,
+    received2307,
     nonVatSnap,
     sales,
     recent,
@@ -515,6 +526,7 @@ export async function loadHomeDashboard(
       fromYmd: priorSameDaysFrom,
       toYmd: priorSameDaysTo,
     }),
+    sumWithholdingCredited({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     getSettingsSnapshot().then((s) => getNonVatMeter(s.settings.taxYear, now)),
     loadHomeSales(user, { now }),
     // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
@@ -598,6 +610,7 @@ export async function loadHomeDashboard(
           openCount: ar.openCount,
           collected,
           collectedPriorSameDays,
+          received2307,
           nonVat,
           now,
         })

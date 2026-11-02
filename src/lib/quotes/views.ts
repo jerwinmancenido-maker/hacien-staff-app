@@ -18,7 +18,7 @@ import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { remainingToBill } from "../billing/status";
-import { approvalReasons, docTotals, ratePctLabel, toScaled, type ItemKind, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { parseWithholdingPick } from "./withholding-defaults";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
@@ -83,6 +83,7 @@ export type TotalsView = {
   supplierCost?: string;
   netMargin?: string;
   netMarginPct?: string;
+  supplierCostState?: SupplierCostState;
 };
 
 function itemView(i: ItemRow, withCosts: boolean): ItemView {
@@ -141,7 +142,13 @@ function totalsView(items: ItemRow[], withholding: WithholdingSnapshot[], stored
     netReceived: stored.netReceived,
   };
   if (!withCosts) return base;
-  return { ...base, supplierCost: stored.supplierCost, netMargin: stored.netMargin, netMarginPct: stored.netMarginPct };
+  return {
+    ...base,
+    supplierCost: stored.supplierCost,
+    netMargin: stored.netMargin,
+    netMarginPct: stored.netMarginPct,
+    supplierCostState: supplierCostStateFromSupplierTotals(lineInputs.map((i) => i.supplierTotal)),
+  };
 }
 
 function approvalFromSnap(

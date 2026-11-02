@@ -1,7 +1,28 @@
 import Link from "next/link";
 import { formatPeso } from "@/lib/format";
 import type { CostMarginSummary } from "@/lib/purchasing/cost-margin";
+import { toScaled } from "@/lib/quotes/calc";
 import { PoStatusChip } from "./PoParts";
+
+function marginValue(summary: CostMarginSummary, kind: "actual" | "after" | "planned") {
+  if (kind === "planned") {
+    if (toScaled(summary.plannedCost, 2) === 0n) return <>-</>;
+    return (
+      <>
+        {formatPeso(summary.planned.margin)}
+        <span className="muted"> ({summary.planned.marginPct}%)</span>
+      </>
+    );
+  }
+  if (summary.costState === "none") return <>-</>;
+  const fig = kind === "actual" ? summary.actual : summary.afterWithholding;
+  return (
+    <>
+      <span className="strong">{formatPeso(fig.margin)}</span>
+      <span className="muted"> ({fig.marginPct}%)</span>
+    </>
+  );
+}
 
 export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
   return (
@@ -83,26 +104,29 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
           <dt>SO contract total</dt>
           <dd className="num strong">{formatPeso(summary.contractPrice)}</dd>
           <dt>Cost so far</dt>
-          <dd className="num strong">{formatPeso(summary.totalCost)}</dd>
-          <dt>Actual margin (before withholding)</dt>
+          <dd className="num strong">{formatPeso(summary.incurredCost)}</dd>
+          <dt>
+            {summary.marginLabel} (before withholding)
+          </dt>
+          <dd className="num">{marginValue(summary, "actual")}</dd>
+          <dt>
+            {summary.costState === "partial" ? "Margin so far (after customer withholding)" : "Actual margin after customer withholding"}
+          </dt>
           <dd className="num">
-            <span className="strong">{formatPeso(summary.actual.margin)}</span>
-            <span className="muted"> ({summary.actual.marginPct}%)</span>
-          </dd>
-          <dt>Actual margin after customer withholding</dt>
-          <dd className="num">
-            <span className="strong">{formatPeso(summary.afterWithholding.margin)}</span>
-            <span className="muted"> ({summary.afterWithholding.marginPct}%)</span>
-            <div className="small faint">
-              Net received ({formatPeso(summary.afterWithholding.netReceived)}) minus cost so far — same per-line
-              withholding sum as the document totals
-            </div>
+            {marginValue(summary, "after")}
+            {summary.costState !== "none" && (
+              <div className="small faint">
+                Net received ({formatPeso(summary.afterWithholding.netReceived)}) minus cost so far. Percent of the
+                contract price.
+              </div>
+            )}
           </dd>
           <dt>Planned margin (before withholding)</dt>
           <dd className="num">
-            {formatPeso(summary.planned.margin)}
-            <span className="muted"> ({summary.planned.marginPct}%)</span>
-            <div className="small faint">Contract minus planned supplier cost, before customer withholding</div>
+            {marginValue(summary, "planned")}
+            {toScaled(summary.plannedCost, 2) !== 0n && (
+              <div className="small faint">Contract minus planned supplier cost, before customer withholding</div>
+            )}
           </dd>
         </dl>
       </div>

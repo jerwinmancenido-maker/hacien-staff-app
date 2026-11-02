@@ -258,6 +258,17 @@ export async function sumCollectionsReceived(filters: CollectionListFilters = {}
   return money(agg._sum.amountReceived ?? 0);
 }
 
+/** Posted collection allocations' 2307 credited, same filters as sumCollectionsReceived. */
+export async function sumWithholdingCredited(filters: CollectionListFilters = {}): Promise<string> {
+  const rows = await db.collectionAllocation.findMany({
+    where: { collection: collectionsWhere(filters) },
+    select: { withholdingApplied: true },
+  });
+  let cents = 0n;
+  for (const row of rows) cents += toScaled(money(row.withholdingApplied), 2);
+  return fromScaled(cents, 2);
+}
+
 export async function listCollections(filters: CollectionListFilters = {}) {
   const where = collectionsWhere(filters);
   const rows = await db.collection.findMany({
