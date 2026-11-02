@@ -53,6 +53,7 @@ type ItemRow = {
   withholdingRate?: Dec | null;
   withholdingAtc?: string | null;
   withholdingOverride?: boolean;
+  deliveredQty?: Dec | null;
 };
 
 export type ItemView = {
@@ -63,6 +64,7 @@ export type ItemView = {
   unit: string;
   unitPrice: string;
   total: string;
+  deliveredQty?: string;
   /** Snapshotted withholding on the line (staff views / editor). */
   withholdingRate: string | null;
   withholdingAtc: string | null;
@@ -96,6 +98,7 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     unit: i.unit,
     unitPrice: money(i.unitPrice),
     total: money(i.total),
+    deliveredQty: "deliveredQty" in i && i.deliveredQty != null ? money(i.deliveredQty as Dec) : "0.00",
     withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
     withholdingAtc: i.withholdingAtc ?? null,
     withholdingOverride: i.withholdingOverride ?? false,
@@ -379,6 +382,11 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     deliveryAddress: so.deliveryAddress,
     terms: so.terms,
     notes: so.notes,
+    philgepsRef: so.philgepsRef,
+    bidNo: so.bidNo,
+    noaDate: ymd(so.noaDate),
+    agencyPoNo: so.agencyPoNo,
+    iarDate: ymd(so.iarDate),
     voidReason: so.voidReason,
     customer: so.customer,
     contact: so.contact,

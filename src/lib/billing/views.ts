@@ -8,7 +8,7 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
 import { bookletGrid } from "./booklet";
-import { billingToday, daysPastDue, isOverdue } from "./dates";
+import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance } from "../services/collections";
 import { getNonVatMeter } from "../services/non-vat";
@@ -28,9 +28,10 @@ export const COLLECTION_STATUS_LABELS: Record<CollectionStatus, string> = {
 
 export type OverdueInfo = { overdue: boolean; days: number; label: string | null };
 
-export function overdueInfo(dueDate: Date, balance: string, graceDays: number, today = billingToday()): OverdueInfo {
-  const days = daysPastDue(dueDate, today, graceDays);
-  const overdue = isOverdue(dueDate, balance, today, graceDays);
+export function overdueInfo(dueDate: Date, balance: string, graceDays: number, today = billingToday(), isGovernment = false): OverdueInfo {
+  if (isGovernment) return { overdue: false, days: 0, label: null };
+  const days = daysPastDue(dueDate, today, graceDays, isGovernment);
+  const overdue = isOverdue(dueDate, balance, today, graceDays, isGovernment);
   return { overdue, days, label: overdue ? `Overdue ${days} day${days === 1 ? "" : "s"}` : null };
 }
 
@@ -107,8 +108,8 @@ export async function listBillings(filters: BillingListFilters = {}) {
   const rows = await db.billing.findMany({
     where,
     include: {
-      customer: { select: { id: true, name: true } },
-      salesOrder: { select: { id: true, number: true } },
+      customer: { select: { id: true, name: true, withholdingType: true } },
+      salesOrder: { select: { id: true, number: true, iarDate: true } },
       allocations: { where: { collection: { status: "POSTED" } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
@@ -116,22 +117,27 @@ export async function listBillings(filters: BillingListFilters = {}) {
     ...(overdueOnly ? {} : { take: 200 }),
   });
   const mapped = rows.map((b) => {
+    const isGov = b.customer.withholdingType === "GOVERNMENT";
+    const effectiveExpectedDate = b.expectedDate ?? (b.salesOrder?.iarDate ? expectedPaymentDateFromIar(b.salesOrder.iarDate) : null);
     const applied = appliedOf(b.allocations);
     const balance = billingBalance(money(b.amount), applied);
-    const od = overdueInfo(b.dueDate, balance, grace, today);
+    const od = overdueInfo(b.dueDate, balance, grace, today, isGov);
     return {
       id: b.id,
       number: b.number,
       invoiceNo: b.invoiceNo,
       invoiceDate: ymd(b.invoiceDate)!,
       dueDate: ymd(b.dueDate)!,
+      expectedDate: ymd(effectiveExpectedDate),
+      expectedPaymentLabel: effectiveExpectedDate ? formatExpectedPaymentLabel(effectiveExpectedDate) : null,
+      isGovernment: isGov,
       amount: money(b.amount),
       balance,
       status: b.status,
       customer: b.customer,
       salesOrder: b.salesOrder,
       overdue: od,
-      aging: agingBucket(b.dueDate, today) as AgingBucket,
+      aging: agingBucket(b.dueDate, today, isGov) as AgingBucket,
     };
   });
   if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(0, 200);
@@ -144,8 +150,8 @@ export async function getBillingView(id: string) {
   const b = await db.billing.findUnique({
     where: { id },
     include: {
-      customer: { select: { id: true, name: true, tin: true } },
-      salesOrder: { select: { id: true, number: true, terms: true, contractPrice: true, status: true } },
+      customer: { select: { id: true, name: true, tin: true, withholdingType: true } },
+      salesOrder: { select: { id: true, number: true, terms: true, contractPrice: true, status: true, iarDate: true } },
       allocations: {
         where: { collection: { status: "POSTED" } },
         include: { collection: { select: { id: true, number: true, date: true, method: true, receiptNo: true, status: true } } },
@@ -160,15 +166,20 @@ export async function getBillingView(id: string) {
     },
   });
   if (!b) return null;
+  const isGov = b.customer.withholdingType === "GOVERNMENT";
+  const effectiveExpectedDate = b.expectedDate ?? (b.salesOrder?.iarDate ? expectedPaymentDateFromIar(b.salesOrder.iarDate) : null);
   const applied = appliedOf(b.allocations);
   const balance = billingBalance(money(b.amount), applied);
-  const od = overdueInfo(b.dueDate, balance, grace);
+  const od = overdueInfo(b.dueDate, balance, grace, undefined, isGov);
   return {
     id: b.id,
     number: b.number,
     invoiceNo: b.invoiceNo,
     invoiceDate: ymd(b.invoiceDate)!,
     dueDate: ymd(b.dueDate)!,
+    expectedDate: ymd(effectiveExpectedDate),
+    expectedPaymentLabel: effectiveExpectedDate ? formatExpectedPaymentLabel(effectiveExpectedDate) : null,
+    isGovernment: isGov,
     amount: money(b.amount),
     withholdingExpected: money(b.withholdingExpected),
     netExpected: money(b.netExpected),
@@ -484,28 +495,29 @@ export async function arAgingSummary(): Promise<{
   const billings = await db.billing.findMany({
     where: { status: { not: "VOID" } },
     include: {
-      customer: { select: { id: true, name: true } },
+      customer: { select: { id: true, name: true, withholdingType: true } },
       allocations: { where: { collection: { status: "POSTED" } } },
     },
   });
-  const byCustomer = new Map<string, { name: string; rows: { dueDate: Date; balance: string }[]; overdue: bigint }>();
+  const byCustomer = new Map<string, { name: string; rows: { dueDate: Date; balance: string; isGovernment?: boolean }[]; overdue: bigint }>();
   let totalRecv = 0n;
   let totalOverdue = 0n;
   let overdueCount = 0;
   let openCount = 0;
   for (const b of billings) {
+    const isGov = b.customer.withholdingType === "GOVERNMENT";
     const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
     const bal = toScaled(balance, 2);
     if (bal <= 0n) continue;
     openCount += 1;
     totalRecv += bal;
-    const od = isOverdue(b.dueDate, balance, today, grace);
+    const od = isOverdue(b.dueDate, balance, today, grace, isGov);
     if (od) {
       totalOverdue += bal;
       overdueCount += 1;
     }
     const bucket = byCustomer.get(b.customerId) ?? { name: b.customer.name, rows: [], overdue: 0n };
-    bucket.rows.push({ dueDate: b.dueDate, balance });
+    bucket.rows.push({ dueDate: b.dueDate, balance, isGovernment: isGov });
     if (od) bucket.overdue += bal;
     byCustomer.set(b.customerId, bucket);
   }
@@ -623,13 +635,17 @@ export async function customerArSnapshot(customerId: string) {
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
   const today = billingToday();
-  const billings = await db.billing.findMany({
-    where: { customerId, status: { not: "VOID" } },
-    include: { allocations: { where: { collection: { status: "POSTED" } } } },
-  });
+  const [customer, billings] = await Promise.all([
+    db.customer.findUnique({ where: { id: customerId }, select: { withholdingType: true } }),
+    db.billing.findMany({
+      where: { customerId, status: { not: "VOID" } },
+      include: { allocations: { where: { collection: { status: "POSTED" } } } },
+    }),
+  ]);
+  const isGov = customer?.withholdingType === "GOVERNMENT";
   const rows = billings.map((b) => {
     const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
-    return { dueDate: b.dueDate, balance, overdue: isOverdue(b.dueDate, balance, today, grace) };
+    return { dueDate: b.dueDate, balance, isGovernment: isGov, overdue: isOverdue(b.dueDate, balance, today, grace, isGov) };
   });
   const aging = sumAging(rows, today);
   const overdue = fromScaled(

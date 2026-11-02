@@ -270,7 +270,7 @@ async function billingRows(customerId: string, filters: TransactionFilters, take
   const billingWhere: Prisma.BillingWhereInput = { customerId, ...(bStatus ?? {}) };
   const collectionWhere: Prisma.CollectionWhereInput = { customerId, ...(cStatus ?? {}) };
 
-  const [billings, collections, billingCount, collectionCount] = await Promise.all([
+  const [billings, collections, billingCount, collectionCount, customer] = await Promise.all([
     wantBilling
       ? db.billing.findMany({
           where: billingWhere,
@@ -284,17 +284,19 @@ async function billingRows(customerId: string, filters: TransactionFilters, take
       : [],
     wantBilling ? db.billing.count({ where: billingWhere }) : 0,
     wantCollection ? db.collection.count({ where: collectionWhere }) : 0,
+    db.customer.findUnique({ where: { id: customerId }, select: { withholdingType: true } }),
   ]);
 
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
+  const isGov = customer?.withholdingType === "GOVERNMENT";
 
   const rows: Row[] = [
     ...billings.map((b) => {
       const cash = b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
       const wh = b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
       const balance = billingBalance(money(b.amount), { cashApplied: fromScaled(cash, 2), withholdingApplied: fromScaled(wh, 2) });
-      const od = overdueInfo(b.dueDate, balance, grace);
+      const od = overdueInfo(b.dueDate, balance, grace, undefined, isGov);
       const status = od.overdue && b.status !== "VOID" && b.status !== "PAID" ? `${b.status}|OVERDUE` : b.status;
       return {
         kind: "BILLING" as const,

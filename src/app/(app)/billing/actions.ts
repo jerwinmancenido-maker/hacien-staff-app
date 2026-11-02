@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
 import { assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
-import { markBillingChecked, recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
+import { markBillingChecked, recordBilling, updateBilling, updateBillingExpectedDate, voidBilling } from "@/lib/services/billings";
 import { applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
 import { planCreditApplication } from "@/lib/billing/allocations";
 import { unappliedCash } from "@/lib/billing/status";
@@ -67,6 +67,25 @@ export async function updateBillingAction(id: string, _prev: FormState, form: Fo
     refreshBilling(billing.customerId, billing.salesOrderId, billing.id);
     return { ok: true, message: "Billing updated." };
   });
+}
+
+export async function updateBillingExpectedDateAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  const rawDate = str(form, "expectedDate");
+  const expectedDate = rawDate ? new Date(`${rawDate}T00:00:00.000Z`) : null;
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const billing = await updateBillingExpectedDate(id, expectedDate, user);
+    refreshBilling(billing.customerId, billing.salesOrderId, billing.id);
+    return { ok: true, message: "Expected by date updated." };
+  });
+}
+
+export async function updateBillingExpectedDateFormAction(id: string, form: FormData): Promise<void> {
+  const rawDate = str(form, "expectedDate");
+  const expectedDate = rawDate ? new Date(`${rawDate}T00:00:00.000Z`) : null;
+  const user = await requireActionPermission("edit_data");
+  const billing = await updateBillingExpectedDate(id, expectedDate, user);
+  refreshBilling(billing.customerId, billing.salesOrderId, billing.id);
 }
 
 export async function voidBillingAction(id: string, reason: string): Promise<FormState> {

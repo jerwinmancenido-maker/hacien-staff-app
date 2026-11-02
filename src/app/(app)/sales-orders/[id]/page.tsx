@@ -19,7 +19,10 @@ import { SalesOrderActions } from "@/components/docs/QuoteActions";
 import { PoStatusChip, ProgressChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { SoCostMarginTab } from "@/components/purchasing/SoCostMarginTab";
 import { PlusIcon } from "@/components/Icons";
-import { voidSalesOrderAction } from "../actions";
+import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
+import { DeliverySection } from "@/components/sales-orders/DeliverySection";
+import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
+import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -43,10 +46,11 @@ export default async function SalesOrderPage({
   const purchasing = await getSoPurchasing(so.id, user);
   const progress = new Map(purchasing.lines.map((l) => [l.id, l]));
   const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
-  const [billingSummary, billings, costMargin] = await Promise.all([
+  const [billingSummary, billings, costMargin, deliveries] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
+    listSalesOrderDeliveries(so.id),
   ]);
   const money = billingSummary
     ? salesOrderMoney(so.status, billingSummary.contractPrice, [
@@ -59,7 +63,7 @@ export default async function SalesOrderPage({
       ])
     : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
-  const overdueOnSo = billings.find((b) => b.overdue.overdue);
+  const overdueOnSo = billings.find((b) => b.overdue.overdue && !b.isGovernment);
 
   const tab: Tab = so.canSeeCosts && TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const base = `/sales-orders/${id}`;
@@ -161,6 +165,9 @@ export default async function SalesOrderPage({
                   )}
                 </dl>
               </div>
+              {so.customer.withholdingType === "GOVERNMENT" && (
+                <GovernmentDealBox so={so} canEdit={can(user, "edit_data")} />
+              )}
             </div>
             <Activity targets={[{ entityType: "SalesOrder", ids: [so.id] }]} viewer={user} />
           </div>
@@ -221,11 +228,11 @@ export default async function SalesOrderPage({
                           </td>
                           <td className="faint">{b.number}</td>
                           <td>{day(b.invoiceDate)}</td>
-                          <td>{day(b.dueDate)}</td>
+                          <td>{b.expectedPaymentLabel ? b.expectedPaymentLabel : day(b.dueDate)}</td>
                           <td className="num">{formatPeso(b.amount)}</td>
                           <td className="num">{formatPeso(b.balance)}</td>
                           <td>
-                            <BillingStatusChip status={b.status} /> <OverdueBadge label={b.overdue.label} />
+                            <BillingStatusChip status={b.status} /> {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
                           </td>
                         </tr>
                       ))}
@@ -237,7 +244,7 @@ export default async function SalesOrderPage({
                     <li key={b.id}>
                       <Link href={`/billing/billings/${b.id}`}>#{b.invoiceNo}</Link>
                       <span>{day(b.invoiceDate)}</span>
-                      <span>Due {day(b.dueDate)}</span>
+                      <span>{b.expectedPaymentLabel ? b.expectedPaymentLabel : `Due ${day(b.dueDate)}`}</span>
                       <span className="num">{formatPeso(b.amount)}</span>
                     </li>
                   ))}
@@ -309,6 +316,39 @@ export default async function SalesOrderPage({
               </table>
             </div>
           </div>
+          <DeliverySection
+            status={so.status}
+            items={so.items.map((i) => ({
+              id: i.id,
+              description: i.description,
+              unit: i.unit,
+              qty: i.qty,
+              deliveredQty: i.deliveredQty ?? "0.00",
+            }))}
+            deliveries={deliveries.map((d) => ({
+              id: d.id,
+              drNumber: d.drNumber,
+              deliveryDate: d.deliveryDate,
+              receivedBy: d.receivedBy,
+              receivedDate: d.receivedDate,
+              idSightChecked: d.idSightChecked,
+              idCheckedBy: d.idCheckedBy,
+              idCheckedAt: d.idCheckedAt,
+              voidedAt: d.voidedAt,
+              voidReason: d.voidReason,
+              items: d.items.map((di) => ({
+                id: di.id,
+                salesOrderItemId: di.salesOrderItemId,
+                qty: di.qty.toString(),
+                salesOrderItem: di.salesOrderItem,
+              })),
+              attachments: d.attachments,
+            }))}
+            canEdit={can(user, "edit_data")}
+            canVoid={canVoid(user)}
+            action={recordDeliveryAction.bind(null, so.id)}
+            voidAction={voidDeliveryForOrder.bind(null, so.id)}
+          />
         </>
       )}
     </>

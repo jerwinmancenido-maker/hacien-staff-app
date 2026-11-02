@@ -229,6 +229,39 @@ export async function updateBilling(
   );
 }
 
+/** Staff can change the Expected by date on a government billing. */
+export async function updateBillingExpectedDate(
+  id: string,
+  expectedDate: Date | null,
+  actor: BillingActor,
+) {
+  assertCan(actor, "edit_data");
+  return withTxRetry(() =>
+    db.$transaction(async (tx) => {
+      const before = await tx.billing.findUnique({ where: { id } });
+      if (!before) throw new DocRuleError("Billing not found.");
+      if (before.status === "VOID") throw new DocRuleError("This billing is void.");
+
+      const after = await tx.billing.update({
+        where: { id },
+        data: {
+          expectedDate,
+          updatedById: actor.id,
+        },
+      });
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "Billing",
+        entityId: id,
+        action: "update",
+        before: { expectedDate: ymd(before.expectedDate) },
+        after: { expectedDate: ymd(after.expectedDate) },
+      });
+      return after;
+    }, DOC_TX),
+  );
+}
+
 export async function voidBilling(id: string, reason: string, actor: BillingActor) {
   assertManageBilling(actor);
   const parsedReason = voidReasonSchema.safeParse(reason);

@@ -189,6 +189,21 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   contactId: optionalId,
   terms: optionalText(100),
   notes: optionalText(5000),
+  philgepsRef: optionalText(64).optional(),
+  bidNo: optionalText(64).optional(),
+  noaDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(dateOnly("NOA date").optional()),
+  agencyPoNo: optionalText(64).optional(),
+  iarDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(dateOnly("IAR date").optional()),
   /** When true, non-override lines are re-snapshotted from the SO's stored rates / customer pick. */
   reapplyWithholding: z.boolean().optional(),
   /** Optional pick codes when re-applying from the customer's saved pick. */
@@ -198,5 +213,24 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   items,
 });
 export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;
+
+export const govDealInputSchema = z.object({
+  philgepsRef: optionalText(64).optional(),
+  bidNo: optionalText(64).optional(),
+  noaDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(dateOnly("NOA date").optional()),
+  agencyPoNo: optionalText(64).optional(),
+  iarDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(dateOnly("IAR date").optional()),
+});
+export type GovDealInput = z.infer<typeof govDealInputSchema>;
 
 export const voidReasonSchema = z.string().trim().min(3, "Give a reason (at least 3 characters).").max(1000);

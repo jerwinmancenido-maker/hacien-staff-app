@@ -10,7 +10,7 @@ import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry,
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave, rateFromDocWithholding } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
-import { voidReasonSchema, type SalesOrderInput } from "../validation/quotes";
+import { voidReasonSchema, type GovDealInput, type SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
@@ -92,6 +92,11 @@ export function salesOrderAudit(so: SoWithItems) {
     deliveryAddress: so.deliveryAddress,
     terms: so.terms,
     notes: so.notes,
+    philgepsRef: so.philgepsRef,
+    bidNo: so.bidNo,
+    noaDate: ymd(so.noaDate),
+    agencyPoNo: so.agencyPoNo,
+    iarDate: ymd(so.iarDate),
     withholding: withholdingCodes(snapshotList(so.withholding)),
     contractPrice: money(so.contractPrice),
     withholdingTotal: money(so.withholdingTotal),
@@ -189,6 +194,30 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           withholdingAtc: i.withholdingAtc ?? null,
         })),
       };
+      // Delivered qty is authoritative: cannot remove a delivered line or drop
+      // ordered qty below what was already delivered (check before price lock).
+      const beforeById = new Map(before.items.map((i) => [i.id, i]));
+      for (const rid of removedIds) {
+        const prev = beforeById.get(rid);
+        if (prev && toScaled(money(prev.deliveredQty), 2) > 0n) {
+          throw new DocRuleError(
+            "Void deliveries on this line before removing it.",
+            `items.${rid}`,
+          );
+        }
+      }
+      for (const item of items) {
+        if (!item.id) continue;
+        const prev = beforeById.get(item.id);
+        if (!prev) continue;
+        const delivered = toScaled(money(prev.deliveredQty), 2);
+        if (delivered > 0n && toScaled(money(item.qty), 2) < delivered) {
+          throw new DocRuleError(
+            `Ordered quantity cannot be below delivered (${money(prev.deliveredQty).replace(/\.00$/, "")}).`,
+            `items.${item.id}.qty`,
+          );
+        }
+      }
       const lockMsg = salesOrderPriceLockError({
         isAdmin: actor.isAdmin === true,
         reason: priceOverrideReason,
@@ -213,6 +242,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           deliveryAddress: input.deliveryAddress,
           terms: input.terms,
           notes: input.notes,
+          // Government deal fields are owned by updateSalesOrderGovDeal /
+          // GovernmentDealBox. DocumentEditor does not send them — writing
+          // `noaDate`/`iarDate` as null here would wipe IAR (and Expected by).
+          ...(input.philgepsRef !== undefined ? { philgepsRef: input.philgepsRef } : {}),
+          ...(input.bidNo !== undefined ? { bidNo: input.bidNo } : {}),
+          ...(input.noaDate !== undefined ? { noaDate: input.noaDate ?? null } : {}),
+          ...(input.agencyPoNo !== undefined ? { agencyPoNo: input.agencyPoNo } : {}),
+          ...(input.iarDate !== undefined ? { iarDate: input.iarDate ?? null } : {}),
           withholding: preserved.withholding as unknown as Prisma.InputJsonValue,
           ...preserved.totals,
           updatedById: actor.id,
@@ -227,6 +264,52 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         before: salesOrderAudit(before),
         after: { ...salesOrderAudit(after), ...(pricesChanged ? { priceOverrideReason } : {}) },
       });
+      return after;
+    }, DOC_TX),
+  );
+}
+
+/** Update government deal fields on a sales order (staff+). */
+export async function updateSalesOrderGovDeal(id: string, input: GovDealInput, actor: DocActor) {
+  assertCan(actor, "edit_data");
+  return withTxRetry(() =>
+    db.$transaction(async (tx) => {
+      const before = await lockSalesOrder(tx, id);
+      if (before.status === "VOID") throw new DocRuleError("This sales order is void.");
+
+      const after = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          philgepsRef: input.philgepsRef,
+          bidNo: input.bidNo,
+          noaDate: input.noaDate ?? null,
+          agencyPoNo: input.agencyPoNo,
+          iarDate: input.iarDate ?? null,
+          updatedById: actor.id,
+        },
+      });
+
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "SalesOrder",
+        entityId: id,
+        action: "update",
+        before: {
+          philgepsRef: before.philgepsRef,
+          bidNo: before.bidNo,
+          noaDate: ymd(before.noaDate),
+          agencyPoNo: before.agencyPoNo,
+          iarDate: ymd(before.iarDate),
+        },
+        after: {
+          philgepsRef: after.philgepsRef,
+          bidNo: after.bidNo,
+          noaDate: ymd(after.noaDate),
+          agencyPoNo: after.agencyPoNo,
+          iarDate: ymd(after.iarDate),
+        },
+      });
+
       return after;
     }, DOC_TX),
   );
