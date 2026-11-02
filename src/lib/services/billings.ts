@@ -9,11 +9,12 @@ import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
-import { bookletRangeError } from "../billing/booklet";
+import { bookletRangeError, formatBookletNumber } from "../billing/booklet";
 import { netExpected, proRataWithholding, remainingToBill } from "../billing/status";
 import type { BillingInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { claimBookletSerial, lockSiBookletNumber, moveSiBookletClaim } from "./booklet";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -46,7 +47,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
 
   const snap = await getSettingsSnapshot();
-  const range = snap.settings.invoiceBooklet;
+  const range = snap.settings.invoiceBooklet.salesInvoice ?? snap.settings.invoiceBooklet;
   const rangeErr = bookletRangeError(input.invoiceNo, range);
   if (rangeErr) throw new DocRuleError(rangeErr, "invoiceNo");
 
@@ -73,14 +74,17 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
           );
         }
 
-        // Voided numbers stay used: unique on invoiceNo covers all rows.
+        // Voided numbers stay used: unique on invoiceNo + cross-table claim vs spoil.
+        await lockSiBookletNumber(tx, input.invoiceNo);
         const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { id: true, number: true, status: true } });
-        if (taken) {
+        const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
+        if (taken || spoiled) {
           throw new DocRuleError(
-            `Booklet invoice no. ${input.invoiceNo} is already on billing ${taken.number}${taken.status === "VOID" ? " (voided — numbers are never reused)" : ""}.`,
+            `SI no. ${formatBookletNumber(input.invoiceNo)} is already used / marked spoiled.`,
             "invoiceNo",
           );
         }
+        await claimBookletSerial(tx, "SI", input.invoiceNo);
 
         const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
         const net = netExpected(input.amount, withholdingExpected);
@@ -137,7 +141,10 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
   } catch (e) {
     await discardUploads(uploads);
     if (isUniqueViolation(e)) {
-      throw new DocRuleError(`Booklet invoice no. ${input.invoiceNo} was just taken by another billing.`, "invoiceNo");
+      throw new DocRuleError(
+        `SI no. ${formatBookletNumber(input.invoiceNo)} is already used / marked spoiled.`,
+        "invoiceNo",
+      );
     }
     throw e;
   }
@@ -152,81 +159,105 @@ export async function updateBilling(
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
 
   const snap = await getSettingsSnapshot();
-  const rangeErr = bookletRangeError(input.invoiceNo, snap.settings.invoiceBooklet);
+  const range = snap.settings.invoiceBooklet.salesInvoice ?? snap.settings.invoiceBooklet;
+  const rangeErr = bookletRangeError(input.invoiceNo, range);
   if (rangeErr) throw new DocRuleError(rangeErr, "invoiceNo");
 
-  return withTxRetry(() =>
-    db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT \`id\` FROM \`Billing\` WHERE \`id\` = ${id} FOR UPDATE`;
-      const before = await tx.billing.findUnique({ where: { id } });
-      if (!before) throw new DocRuleError("Billing not found.");
-      if (before.status === "VOID") throw new DocRuleError("This billing is void.");
+  try {
+    return await withTxRetry(() =>
+      db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT \`id\` FROM \`Billing\` WHERE \`id\` = ${id} FOR UPDATE`;
+        const before = await tx.billing.findUnique({ where: { id } });
+        if (!before) throw new DocRuleError("Billing not found.");
+        if (before.status === "VOID") throw new DocRuleError("This billing is void.");
 
-      const postedAlloc = await tx.collectionAllocation.count({
-        where: { billingId: id, collection: { status: "POSTED" } },
-      });
-      if (postedAlloc > 0) throw new DocRuleError("This billing has posted collections; void those first before editing.");
+        const postedAlloc = await tx.collectionAllocation.count({
+          where: { billingId: id, collection: { status: "POSTED" } },
+        });
+        if (postedAlloc > 0) throw new DocRuleError("This billing has posted collections; void those first before editing.");
 
-      const so = await lockSalesOrder(tx, before.salesOrderId);
-      if (so.status !== "OPEN") throw new DocRuleError("The sales order is void; this billing can't be edited.");
+        const so = await lockSalesOrder(tx, before.salesOrderId);
+        if (so.status !== "OPEN") throw new DocRuleError("The sales order is void; this billing can't be edited.");
 
-      const others = (await nonVoidBillings(tx, so.id)).filter((b) => b.id !== id);
-      const remaining = remainingToBill(
-        so.contractPrice,
-        others.map((b) => money(b.amount)),
-      );
-      if (toScaled(input.amount, 2) > toScaled(remaining, 2)) {
-        throw new DocRuleError(`Amount exceeds the remaining to bill on ${so.number} (₱${remaining} left).`, "amount");
-      }
-
-      if (input.invoiceNo !== before.invoiceNo) {
-        const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { number: true, status: true } });
-        if (taken) {
-          throw new DocRuleError(
-            `Booklet invoice no. ${input.invoiceNo} is already on billing ${taken.number}${taken.status === "VOID" ? " (voided — numbers are never reused)" : ""}.`,
-            "invoiceNo",
-          );
+        const others = (await nonVoidBillings(tx, so.id)).filter((b) => b.id !== id);
+        const remaining = remainingToBill(
+          so.contractPrice,
+          others.map((b) => money(b.amount)),
+        );
+        if (toScaled(input.amount, 2) > toScaled(remaining, 2)) {
+          throw new DocRuleError(`Amount exceeds the remaining to bill on ${so.number} (₱${remaining} left).`, "amount");
         }
-      }
 
-      const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
-      const net = netExpected(input.amount, withholdingExpected);
-      const after = await tx.billing.update({
-        where: { id },
-        data: {
-          invoiceNo: input.invoiceNo,
-          invoiceDate: input.invoiceDate,
-          dueDate: input.dueDate,
-          amount: input.amount,
-          withholdingExpected,
-          netExpected: net,
-          notes: input.notes,
-          updatedById: actor.id,
-        },
-      });
-      await writeAudit(tx, {
-        userId: actor.id,
-        entityType: "Billing",
-        entityId: id,
-        action: "update",
-        before: {
-          invoiceNo: before.invoiceNo,
-          invoiceDate: ymd(before.invoiceDate),
-          dueDate: ymd(before.dueDate),
-          amount: money(before.amount),
-          notes: before.notes,
-        },
-        after: {
-          invoiceNo: after.invoiceNo,
-          invoiceDate: ymd(after.invoiceDate),
-          dueDate: ymd(after.dueDate),
-          amount: money(after.amount),
-          notes: after.notes,
-        },
-      });
-      return after;
-    }, DOC_TX),
-  );
+        await lockSiBookletNumber(tx, before.invoiceNo);
+        await lockSiBookletNumber(tx, input.invoiceNo);
+        if (input.invoiceNo !== before.invoiceNo) {
+          const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { number: true, status: true } });
+          const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
+          if (taken || spoiled) {
+            throw new DocRuleError(
+              `SI no. ${formatBookletNumber(input.invoiceNo)} is already used / marked spoiled.`,
+              "invoiceNo",
+            );
+          }
+          // Move claim with the billing (old serial becomes free). Void does not move/release.
+          await moveSiBookletClaim(tx, before.invoiceNo, input.invoiceNo);
+        } else {
+          const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
+          if (spoiled) {
+            throw new DocRuleError(
+              `SI no. ${formatBookletNumber(input.invoiceNo)} is already used / marked spoiled.`,
+              "invoiceNo",
+            );
+          }
+        }
+
+        const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
+        const net = netExpected(input.amount, withholdingExpected);
+        const after = await tx.billing.update({
+          where: { id },
+          data: {
+            invoiceNo: input.invoiceNo,
+            invoiceDate: input.invoiceDate,
+            dueDate: input.dueDate,
+            amount: input.amount,
+            withholdingExpected,
+            netExpected: net,
+            notes: input.notes,
+            updatedById: actor.id,
+          },
+        });
+        await writeAudit(tx, {
+          userId: actor.id,
+          entityType: "Billing",
+          entityId: id,
+          action: "update",
+          before: {
+            invoiceNo: before.invoiceNo,
+            invoiceDate: ymd(before.invoiceDate),
+            dueDate: ymd(before.dueDate),
+            amount: money(before.amount),
+            notes: before.notes,
+          },
+          after: {
+            invoiceNo: after.invoiceNo,
+            invoiceDate: ymd(after.invoiceDate),
+            dueDate: ymd(after.dueDate),
+            amount: money(after.amount),
+            notes: after.notes,
+          },
+        });
+        return after;
+      }, DOC_TX),
+    );
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      throw new DocRuleError(
+        `SI no. ${formatBookletNumber(input.invoiceNo)} is already used / marked spoiled.`,
+        "invoiceNo",
+      );
+    }
+    throw e;
+  }
 }
 
 /** Staff can change the Expected by date on a government billing. */

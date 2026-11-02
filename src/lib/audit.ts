@@ -30,7 +30,8 @@ export type AuditEntityType =
   | "Expense"
   | "CashTransfer"
   | "TaxPaidQuarter"
-  | "TaxCalendarCompletion";
+  | "TaxCalendarCompletion"
+  | "SpoiledBookletNumber";
 
 type Plain = Record<string, unknown>;
 

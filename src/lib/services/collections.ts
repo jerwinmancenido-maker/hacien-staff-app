@@ -11,6 +11,7 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
+import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { billingToday } from "../billing/dates";
 import { unappliedCash } from "../billing/status";
 import { assertCashEnabled } from "../cash/features";
@@ -18,6 +19,7 @@ import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from ".
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
+import { claimBookletSerial } from "./booklet";
 
 export type CollectionActor = PermissionUser & { id: string };
 
@@ -316,6 +318,33 @@ export async function recordCollection(input: CollectionInput, actor: Collection
           }
         }
 
+        // Digit-only / DR-prefixed receiptNo is a CR booklet serial (range + used/spoiled).
+        const crSerial = parseBookletSerial(input.receiptNo);
+        let receiptNo = input.receiptNo;
+        if (crSerial != null) {
+          const crRange = snap.settings.invoiceBooklet.collectionReceipt;
+          const crRangeErr = bookletRangeError(crSerial, crRange, "CR");
+          if (crRangeErr) throw new DocRuleError(crRangeErr, "receiptNo");
+          await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = 'CR' AND \`number\` = ${crSerial} FOR UPDATE`;
+          const spoiled = await tx.spoiledBookletNumber.findFirst({
+            where: { type: "CR", number: crSerial },
+            select: { id: true },
+          });
+          const collections = await tx.collection.findMany({
+            where: { receiptNo: { not: null } },
+            select: { receiptNo: true },
+          });
+          const taken = collections.some((c) => parseBookletSerial(c.receiptNo) === crSerial);
+          if (spoiled || taken) {
+            throw new DocRuleError(
+              `CR no. ${formatBookletNumber(crSerial)} is already used / marked spoiled.`,
+              "receiptNo",
+            );
+          }
+          await claimBookletSerial(tx, "CR", crSerial);
+          receiptNo = String(crSerial);
+        }
+
         const collection = await tx.collection.create({
           data: {
             number,
@@ -325,7 +354,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             reference: input.reference,
             checkBank: input.checkBank,
             checkDate: input.checkDate,
-            receiptNo: input.receiptNo,
+            receiptNo,
             amountReceived: input.amountReceived,
             cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,

@@ -6,6 +6,8 @@ import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user
 import { assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { markBillingChecked, recordBilling, updateBilling, updateBillingExpectedDate, voidBilling } from "@/lib/services/billings";
+import { markBookletNumberSpoiled } from "@/lib/services/booklet";
+import type { BookletType } from "@/lib/billing/booklet";
 import { applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
 import { planCreditApplication } from "@/lib/billing/allocations";
 import { unappliedCash } from "@/lib/billing/status";
@@ -275,5 +277,22 @@ export async function mark2307ReceivedAction(id: string, _prev: FormState, form:
     revalidatePath("/billing/2307");
     revalidatePath("/billing", "layout");
     return { ok: true, message: "2307 marked received." };
+  }, values);
+}
+
+export async function markBookletNumberSpoiledAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  const type = (str(form, "type") || "SI") as BookletType;
+  const number = Number(str(form, "number") || 0);
+  const reason = str(form, "reason") || "";
+
+  return runAction(async () => {
+    const user = await requireActionPermission("record_billing");
+    const { files, error } = await formFiles(form);
+    if (error) return { values, fieldErrors: { files: error } };
+    await markBookletNumberSpoiled({ type, number, reason }, user, files);
+    revalidatePath("/billing/booklet");
+    revalidatePath("/");
+    return { ok: true, message: `Marked ${type} no. ${String(number).padStart(3, "0")} spoiled.` };
   }, values);
 }

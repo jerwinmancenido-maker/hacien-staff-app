@@ -4338,6 +4338,7 @@ button.contact-card-add {
 .booklet-free { background: #f7f7f4; color: var(--text-3); }
 .booklet-used { background: #e8f5e9; border-color: #a5d6a7; }
 .booklet-voided { background: #fce8e6; border-color: #f5c2c0; text-decoration: line-through; opacity: 0.85; }
+.booklet-spoiled { background: #fee2e2; border-color: #f87171; text-decoration: line-through; opacity: 0.9; }
 .booklet-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .booklet-swatch {
   display: inline-block;

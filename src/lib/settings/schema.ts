@@ -178,16 +178,112 @@ export const settingsSections = {
     // Business documents (DTI, BIR 2303 …) show "Expires in N days" this many days ahead.
     expiryWarningDays: z.coerce.number().int().min(1, "At least 1 day.").max(365, "At most 365 days."),
   }),
-  // Pre-printed sales-invoice booklet range. The app only *records* these numbers.
+  // Pre-printed booklet settings (ATP) per document type (SI, DR, CR).
   invoiceBooklet: z
     .object({
-      seriesFrom: z.coerce.number().int().min(1, "At least 1."),
-      seriesTo: z.coerce.number().int().min(1, "At least 1."),
+      seriesFrom: z.coerce.number().int().min(1, "At least 1.").default(1),
+      seriesTo: z.coerce.number().int().min(1, "At least 1.").default(500),
       label: z.string().trim().max(100).optional().or(z.literal("")),
+      atpNo: z.string().trim().max(100).default(""),
+      atpDate: z.string().trim().default(""),
+      printer: z.string().trim().max(191).default(""),
+      bookletCount: z.coerce.number().int().min(1).default(10),
+      setsPerBooklet: z.coerce.number().int().min(1).default(50),
+      isNonVat: z.boolean().default(true),
+      salesInvoice: z
+        .object({
+          atpNo: z.string().trim().max(100).default(""),
+          atpDate: z.string().trim().default(""),
+          printer: z.string().trim().max(191).default(""),
+          seriesFrom: z.coerce.number().int().min(1, "At least 1.").default(1),
+          seriesTo: z.coerce.number().int().min(1, "At least 1.").default(500),
+          bookletCount: z.coerce.number().int().min(1, "At least 1.").default(10),
+          setsPerBooklet: z.coerce.number().int().min(1, "At least 1.").default(50),
+          isNonVat: z.boolean().default(true),
+        })
+        .default({
+          atpNo: "",
+          atpDate: "",
+          printer: "",
+          seriesFrom: 1,
+          seriesTo: 500,
+          bookletCount: 10,
+          setsPerBooklet: 50,
+          isNonVat: true,
+        }),
+      deliveryReceipt: z
+        .object({
+          atpNo: z.string().trim().max(100).default(""),
+          atpDate: z.string().trim().default(""),
+          printer: z.string().trim().max(191).default(""),
+          seriesFrom: z.coerce.number().int().min(1, "At least 1.").default(1),
+          seriesTo: z.coerce.number().int().min(1, "At least 1.").default(500),
+          bookletCount: z.coerce.number().int().min(1, "At least 1.").default(10),
+          setsPerBooklet: z.coerce.number().int().min(1, "At least 1.").default(50),
+          isNonVat: z.boolean().default(true),
+        })
+        .default({
+          atpNo: "",
+          atpDate: "",
+          printer: "",
+          seriesFrom: 1,
+          seriesTo: 500,
+          bookletCount: 10,
+          setsPerBooklet: 50,
+          isNonVat: true,
+        }),
+      collectionReceipt: z
+        .object({
+          atpNo: z.string().trim().max(100).default(""),
+          atpDate: z.string().trim().default(""),
+          printer: z.string().trim().max(191).default(""),
+          seriesFrom: z.coerce.number().int().min(1, "At least 1.").default(1),
+          seriesTo: z.coerce.number().int().min(1, "At least 1.").default(500),
+          bookletCount: z.coerce.number().int().min(1, "At least 1.").default(10),
+          setsPerBooklet: z.coerce.number().int().min(1, "At least 1.").default(50),
+          isNonVat: z.boolean().default(true),
+        })
+        .default({
+          atpNo: "",
+          atpDate: "",
+          printer: "",
+          seriesFrom: 1,
+          seriesTo: 500,
+          bookletCount: 10,
+          setsPerBooklet: 50,
+          isNonVat: true,
+        }),
     })
-    .refine((v) => v.seriesTo >= v.seriesFrom, {
-      message: "Series end must be at or after the start.",
-      path: ["seriesTo"],
+    .superRefine((v, ctx) => {
+      if (v.seriesTo < v.seriesFrom) {
+        ctx.addIssue({ code: "custom", message: "Series end must be at or after the start.", path: ["seriesTo"] });
+      }
+      for (const key of ["salesInvoice", "deliveryReceipt", "collectionReceipt"] as const) {
+        const r = v[key];
+        if (r.seriesTo < r.seriesFrom) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Series end must be at or after the start.",
+            path: [key, "seriesTo"],
+          });
+        }
+      }
+    })
+    .transform((v) => {
+      // Synchronize top-level seriesFrom/seriesTo with salesInvoice
+      const si = { ...v.salesInvoice };
+      if (v.seriesFrom !== 1 || v.seriesTo !== 500) {
+        if (si.seriesFrom === 1 && si.seriesTo === 500) {
+          si.seriesFrom = v.seriesFrom;
+          si.seriesTo = v.seriesTo;
+        }
+      }
+      return {
+        ...v,
+        seriesFrom: si.seriesFrom,
+        seriesTo: si.seriesTo,
+        salesInvoice: si,
+      };
     }),
   collections: z.object({
     overdueGraceDays: z.coerce.number().int().min(0, "0 or more.").max(90, "At most 90 days."),

@@ -76,6 +76,7 @@ model User {
   taxCalendarCompletionsUndone TaxCalendarCompletion[]   @relation("TaxCalendarCompletionUndoneBy")
   deliveriesCreated            Delivery[]                @relation("DeliveryCreatedBy")
   deliveryIdsChecked           Delivery[]                @relation("DeliveryIdCheckedBy")
+  spoiledBookletNumbersCreated SpoiledBookletNumber[]    @relation("SpoiledBookletNumberCreatedBy")
 }
 
 model Session {
@@ -957,6 +958,8 @@ model DocumentAttachment {
   expense                   Expense?                 @relation(fields: [expenseId], references: [id])
   deliveryId                String?
   delivery                  Delivery?                @relation(fields: [deliveryId], references: [id])
+  spoiledBookletNumberId    String?
+  spoiledBookletNumber      SpoiledBookletNumber?    @relation(fields: [spoiledBookletNumberId], references: [id])
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int
@@ -976,6 +979,7 @@ model DocumentAttachment {
   @@index([supplierWithholding2307Id])
   @@index([expenseId])
   @@index([deliveryId])
+  @@index([spoiledBookletNumberId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1058,6 +1062,44 @@ model Billing {
   @@index([invoiceNo])
   @@index([invoiceDate])
   @@index([needsAdminCheck])
+}
+
+enum BookletType {
+  SI
+  DR
+  CR
+}
+
+// Cross-table unique claim for a booklet serial (SI/DR/CR). Inserted when a
+// billing, delivery, collection receipt serial, or spoiled row takes the
+// number. Never deleted — voided docs keep the serial used.
+model BookletSerialClaim {
+  type   BookletType
+  number Int
+
+  @@id([type, number])
+}
+
+// Pre-printed BIR booklet numbers marked spoiled (photo required).
+// Stays on record, never reused, never deleted (void/archive only).
+model SpoiledBookletNumber {
+  id          String               @id @default(cuid())
+  type        BookletType
+  number      Int
+  reason      String               @db.Text
+  createdById String
+  createdBy   User                 @relation("SpoiledBookletNumberCreatedBy", fields: [createdById], references: [id])
+  voidedAt    DateTime?
+  voidReason  String?              @db.Text
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  attachments DocumentAttachment[]
+
+  @@unique([type, number])
+  @@index([type])
+  @@index([number])
+  @@index([createdById])
 }
 
 // Internal CR-YYYY-####. A payment (or advance/downpayment) from a customer.

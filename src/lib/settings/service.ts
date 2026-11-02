@@ -54,7 +54,30 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       ...v.data,
       numbering: { ...DEFAULT_SETTINGS.numbering, ...(v.data as Partial<Settings>).numbering },
       approval: { ...DEFAULT_SETTINGS.approval, ...(v.data as Partial<Settings>).approval },
-      invoiceBooklet: { ...DEFAULT_SETTINGS.invoiceBooklet, ...(v.data as Partial<Settings>).invoiceBooklet },
+      invoiceBooklet: (() => {
+        const raw = ((v.data as Partial<Settings>).invoiceBooklet ?? {}) as Record<string, unknown>;
+        const def = DEFAULT_SETTINGS.invoiceBooklet;
+        const rawSi = (raw.salesInvoice as Record<string, unknown> | undefined) ?? {};
+        const si = { ...def.salesInvoice, ...rawSi };
+        if (raw.seriesFrom !== undefined) si.seriesFrom = Number(raw.seriesFrom);
+        if (raw.seriesTo !== undefined) si.seriesTo = Number(raw.seriesTo);
+        if (raw.atpNo !== undefined) si.atpNo = String(raw.atpNo);
+        if (raw.atpDate !== undefined) si.atpDate = String(raw.atpDate);
+        if (raw.printer !== undefined) si.printer = String(raw.printer);
+        const rawDr = (raw.deliveryReceipt as Record<string, unknown> | undefined) ?? {};
+        const dr = { ...def.deliveryReceipt, ...rawDr };
+        const rawCr = (raw.collectionReceipt as Record<string, unknown> | undefined) ?? {};
+        const cr = { ...def.collectionReceipt, ...rawCr };
+        return {
+          ...def,
+          ...raw,
+          seriesFrom: si.seriesFrom,
+          seriesTo: si.seriesTo,
+          salesInvoice: si,
+          deliveryReceipt: dr,
+          collectionReceipt: cr,
+        };
+      })(),
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },

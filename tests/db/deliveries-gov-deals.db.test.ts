@@ -14,6 +14,44 @@ import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
 import { expectedPaymentDateFromIar, isOverdue } from "@/lib/billing/dates";
 import { overdueInfo } from "@/lib/billing/views";
 import { money } from "@/lib/documents/common";
+import { getSettingsSnapshot } from "@/lib/settings";
+
+async function ensureWideDrBooklet(adminId: string) {
+  const typeWide = {
+    atpNo: "",
+    atpDate: "",
+    printer: "",
+    seriesFrom: 1,
+    seriesTo: 9_999_999,
+    bookletCount: 10,
+    setsPerBooklet: 50,
+    isNonVat: true,
+  };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const snap = await getSettingsSnapshot();
+    const ib = snap.settings.invoiceBooklet;
+    if ((ib.deliveryReceipt?.seriesTo ?? 0) >= 9_999_999) return;
+    const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+    try {
+      await db.settingsVersion.create({
+        data: {
+          version: latest.version + 1,
+          data: {
+            ...(latest.data as object),
+            invoiceBooklet: { ...ib, deliveryReceipt: { ...typeWide } },
+          } as never,
+          changedKey: "invoiceBooklet",
+          before: ib,
+          after: { deliveryReceipt: typeWide },
+          createdById: adminId,
+        },
+      });
+      return;
+    } catch {
+      /* version race */
+    }
+  }
+}
 
 async function makeTestSalesOrder(admin: DocActor, qty = "10") {
   const customer = await makeCustomer();
@@ -40,21 +78,28 @@ async function makeTestSalesOrder(admin: DocActor, qty = "10") {
 }
 
 describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)", () => {
+  /** Unique booklet DR serials (shared test DB; voided numbers stay used). */
+  let drSeq = 900_000 + Math.floor(Math.random() * 50_000);
+  const nextDr = () => String(++drSeq);
+
   it("delivered qty can't exceed ordered", async () => {
     const admin = await makeUser("costs");
+    await ensureWideDrBooklet(admin.id);
     const so = await makeTestSalesOrder(admin, "10");
     const soWithItems = await db.salesOrder.findUniqueOrThrow({
       where: { id: so.id },
       include: { items: true },
     });
     const itemId = soWithItems.items[0]!.id;
+    const drA = nextDr();
+    const drB = nextDr();
 
     // Delivering 11 when only 10 ordered should fail
     await expect(
       recordDelivery(
         so.id,
         {
-          drNumber: "DR-001",
+          drNumber: drA,
           deliveryDate: new Date(),
           idSightChecked: false,
           items: [{ salesOrderItemId: itemId, qty: "11.00" }],
@@ -67,7 +112,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     const del1 = await recordDelivery(
       so.id,
       {
-        drNumber: "DR-001",
+        drNumber: drA,
         deliveryDate: new Date(),
         idSightChecked: false,
         items: [{ salesOrderItemId: itemId, qty: "6.00" }],
@@ -80,11 +125,24 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     const voided = await voidDelivery(del1.id, "Entered wrong quantity", admin);
     expect(voided.voidedAt).toBeInstanceOf(Date);
 
-    // Delivering 10 after void succeeds
+    // Voided DR serial stays used — need a fresh booklet number for the next delivery.
+    await expect(
+      recordDelivery(
+        so.id,
+        {
+          drNumber: drA,
+          deliveryDate: new Date(),
+          idSightChecked: false,
+          items: [{ salesOrderItemId: itemId, qty: "10.00" }],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already used \/ marked spoiled/);
+
     const del2 = await recordDelivery(
       so.id,
       {
-        drNumber: "DR-002",
+        drNumber: drB,
         deliveryDate: new Date(),
         idSightChecked: false,
         items: [{ salesOrderItemId: itemId, qty: "10.00" }],
@@ -96,6 +154,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
 
   it("DR number is required", async () => {
     const admin = await makeUser("costs");
+    await ensureWideDrBooklet(admin.id);
     const so = await makeTestSalesOrder(admin, "5");
     const soWithItems = await db.salesOrder.findUniqueOrThrow({
       where: { id: so.id },
@@ -118,6 +177,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
 
   it("sight-check save stores boolean+who+when only", async () => {
     const admin = await makeUser("costs");
+    await ensureWideDrBooklet(admin.id);
     const so = await makeTestSalesOrder(admin, "5");
     const soWithItems = await db.salesOrder.findUniqueOrThrow({
       where: { id: so.id },
@@ -127,7 +187,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     const delivery = await recordDelivery(
       so.id,
       {
-        drNumber: "DR-SC-100",
+        drNumber: nextDr(),
         deliveryDate: new Date("2026-11-05T00:00:00.000Z"),
         receivedBy: "Customer Staff",
         receivedDate: new Date("2026-11-05T00:00:00.000Z"),
@@ -152,6 +212,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
 
   it("refuses ordered qty below delivered; void still works after SO void", async () => {
     const admin = await makeUser("costs");
+    await ensureWideDrBooklet(admin.id);
     const so = await makeTestSalesOrder(admin, "10");
     const soWithItems = await db.salesOrder.findUniqueOrThrow({
       where: { id: so.id },
@@ -162,7 +223,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     await recordDelivery(
       so.id,
       {
-        drNumber: "DR-BELOW",
+        drNumber: nextDr(),
         deliveryDate: new Date(),
         idSightChecked: false,
         items: [{ salesOrderItemId: item.id, qty: "6.00" }],

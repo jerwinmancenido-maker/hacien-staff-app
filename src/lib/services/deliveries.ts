@@ -6,11 +6,14 @@
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanVoid, type PermissionUser } from "../permissions";
+import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { applyDelivery, checkDelivery, type OpenDeliveryLine } from "../sales-orders/delivery";
+import { getSettingsSnapshot } from "../settings";
 import type { DeliveryInput } from "../validation/deliveries";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { claimBookletSerial } from "./booklet";
 
 export type DeliveryActor = PermissionUser & { id: string };
 
@@ -76,6 +79,15 @@ export async function recordDelivery(
   if (!input.drNumber || !input.drNumber.trim()) {
     throw new DocRuleError("DR number is required.", "drNumber");
   }
+  const drRaw = input.drNumber.trim();
+  const drSerial = parseBookletSerial(drRaw);
+  if (drSerial == null) {
+    throw new DocRuleError("Enter a whole booklet DR number (digits, optional DR prefix).", "drNumber");
+  }
+  const snap = await getSettingsSnapshot();
+  const drRange = snap.settings.invoiceBooklet.deliveryReceipt;
+  const drRangeErr = bookletRangeError(drSerial, drRange, "DR");
+  if (drRangeErr) throw new DocRuleError(drRangeErr, "drNumber");
 
   const uploads = await prepareUploads(files);
 
@@ -92,6 +104,22 @@ export async function recordDelivery(
           );
         }
 
+        // Gap-lock spoiled unique key, then refuse any existing DR (incl. voided).
+        await tx.$queryRaw`SELECT \`id\` FROM \`SpoiledBookletNumber\` WHERE \`type\` = 'DR' AND \`number\` = ${drSerial} FOR UPDATE`;
+        const spoiled = await tx.spoiledBookletNumber.findFirst({
+          where: { type: "DR", number: drSerial },
+          select: { id: true },
+        });
+        const deliveries = await tx.delivery.findMany({ select: { drNumber: true } });
+        const taken = deliveries.some((d) => parseBookletSerial(d.drNumber) === drSerial);
+        if (spoiled || taken) {
+          throw new DocRuleError(
+            `DR no. ${formatBookletNumber(drSerial)} is already used / marked spoiled.`,
+            "drNumber",
+          );
+        }
+        await claimBookletSerial(tx, "DR", drSerial);
+
         const now = new Date();
         const idCheckedAt = input.idSightChecked ? now : null;
         const idCheckedById = input.idSightChecked ? actor.id : null;
@@ -99,7 +127,7 @@ export async function recordDelivery(
         const delivery = await tx.delivery.create({
           data: {
             salesOrderId,
-            drNumber: input.drNumber.trim(),
+            drNumber: drRaw,
             deliveryDate: input.deliveryDate,
             receivedBy: input.receivedBy ?? null,
             receivedDate: input.receivedDate ?? null,

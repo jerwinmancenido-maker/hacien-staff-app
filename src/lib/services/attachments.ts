@@ -59,7 +59,8 @@ export type AttachmentOwner =
   | { supplierPaymentId: string }
   | { supplierWithholding2307Id: string }
   | { expenseId: string }
-  | { deliveryId: string };
+  | { deliveryId: string }
+  | { spoiledBookletNumberId: string };
 
 /** Create the attachment rows (inside the document's transaction) with their audit rows. */
 export async function createAttachments(tx: Tx, uploads: readonly PreparedUpload[], owner: AttachmentOwner, actorId: string) {

@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
+import { arAgingSummary, countPending2307Expected, getAllBookletWarnings, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -199,6 +199,7 @@ export type HomeDashboard = {
   auditHref: string | null;
   features: HomeFeatureFlags;
   withCosts: boolean;
+  bookletWarnings: { type: string; warning: string; href: string }[];
 };
 
 const ACTION_LABELS: Record<HomeActionKind, string> = {
@@ -486,6 +487,7 @@ export async function loadHomeDashboard(
       auditHref: can(user, "view_audit") ? auditLogHref() : null,
       features,
       withCosts,
+      bookletWarnings: await getAllBookletWarnings(),
     };
   }
 
@@ -511,6 +513,7 @@ export async function loadHomeDashboard(
     sales,
     recent,
     pipeline,
+    bookletWarnings,
   ] = await Promise.all([
     listQuotesView({ needsApproval: true, now }, user),
     listQuotesView({ noReplyAfterDays: 7, now }, user),
@@ -538,6 +541,7 @@ export async function loadHomeDashboard(
     // Fetch exactly HOME_RECENT_DESKTOP_ROWS; phone CSS hides .home-ra-row-extra.
     listRecentHomeActivity(HOME_RECENT_DESKTOP_ROWS, { withCosts }),
     loadHomePipeline(user),
+    getAllBookletWarnings(),
   ]);
 
   // Same list as /receiving (Awaiting delivery).
@@ -676,6 +680,7 @@ export async function loadHomeDashboard(
     auditHref: can(user, "view_audit") ? auditLogHref() : null,
     features,
     withCosts,
+    bookletWarnings,
   };
 }
 
