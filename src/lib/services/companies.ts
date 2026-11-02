@@ -3,7 +3,7 @@
 import { Prisma, type WithholdingType, type SupplierTaxType } from "@prisma/client";
 import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
-import { extractLast4, maskBankAccountNumber } from "../bank-mask";
+import { extractLast4, isMaskedBankAccountNumber, maskBankAccountNumber, resolveBankAccountNumber } from "../bank-mask";
 import { ForbiddenError } from "../permissions";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
 
@@ -177,7 +177,9 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
         if (!isAdmin && (input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
           throw new CompanyRuleError("Only an Admin can add or edit bank details.", "bankAccountNumber");
         }
-        const created = await tx.supplier.create({ data: input });
+        const created = await tx.supplier.create({
+          data: { ...input, bankAccountNumber: resolveBankAccountNumber(input.bankAccountNumber, null) },
+        });
         const auditAfter = {
           ...created,
           bankAccountNumber: maskBankAccountNumber(created.bankAccountNumber),
@@ -186,9 +188,15 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
         return created;
       }
       const before = await tx.supplier.findUniqueOrThrow({ where: { id } });
+      const submittedNumber = input.bankAccountNumber;
+      // A blank or masked display means "keep the stored number", not a change.
+      const numberChanged =
+        submittedNumber != null &&
+        !isMaskedBankAccountNumber(submittedNumber) &&
+        submittedNumber !== before.bankAccountNumber;
       const bankAltered =
         (input.bankAccountName != null && input.bankAccountName !== before.bankAccountName) ||
-        (input.bankAccountNumber != null && input.bankAccountNumber !== before.bankAccountNumber) ||
+        numberChanged ||
         (input.bankBranch != null && input.bankBranch !== before.bankBranch) ||
         (input.bankNotes != null && input.bankNotes !== before.bankNotes);
 
@@ -204,7 +212,10 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
             bankBranch: before.bankBranch,
             bankNotes: before.bankNotes,
           }
-        : input;
+        : {
+            ...input,
+            bankAccountNumber: resolveBankAccountNumber(submittedNumber, before.bankAccountNumber),
+          };
 
       const after = await tx.supplier.update({ where: { id }, data: finalInput });
       const auditBefore = {

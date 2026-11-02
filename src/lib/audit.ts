@@ -39,6 +39,12 @@ function normalize(value: unknown): unknown {
   return value;
 }
 
+/** Value shown in the activity diff. Bank numbers are last-4 only. */
+export function auditDisplayValue(key: string, value: unknown): unknown {
+  if (key === "bankAccountNumber" && typeof value === "string") return maskBankAccountNumber(value);
+  return value;
+}
+
 function sanitizeAuditPlain(obj: Plain | null | undefined): Plain | null {
   if (!obj) return null;
   const out: Plain = {};

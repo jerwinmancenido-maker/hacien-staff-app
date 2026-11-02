@@ -1,7 +1,17 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { extractLast4, maskBankAccountNumber, maskSupplierForViewer, maskSuppliersForViewer } from "@/lib/bank-mask";
+import {
+  bankNumberDraft,
+  bankViewActivityLabel,
+  extractLast4,
+  maskBankAccountNumber,
+  maskSupplierForViewer,
+  maskSuppliersForViewer,
+  resolveBankAccountNumber,
+} from "@/lib/bank-mask";
 import { ForbiddenError, roleFlags, type PermissionUser, type Role } from "@/lib/permissions";
-import { auditDiff, writeAudit } from "@/lib/audit";
+import { auditDiff, auditDisplayValue, writeAudit } from "@/lib/audit";
 import type { Db } from "@/lib/db";
 
 type Row = Record<string, unknown> & { id: string };
@@ -107,6 +117,27 @@ describe("1. Bank mask helper (src/lib/bank-mask.ts)", () => {
     expect(maskBankAccountNumber("1")).toBe("•••• 1");
   });
 
+  it("does not corrupt an already-masked value, including short numbers", () => {
+    expect(maskBankAccountNumber("•••• 9012")).toBe("•••• 9012");
+    expect(maskBankAccountNumber("•••• 42")).toBe("•••• 42");
+    expect(maskBankAccountNumber("  •••• 1  ")).toBe("•••• 1");
+  });
+
+  it("keeps the edit box empty unless the Admin typed a new number", () => {
+    expect(bankNumberDraft("")).toBe("");
+    expect(bankNumberDraft("•••• 9012")).toBe("");
+    expect(bankNumberDraft(null)).toBe("");
+    expect(bankNumberDraft("123412341234")).toBe("123412341234");
+  });
+
+  it("keeps the stored number when the edit submits blank or a mask", () => {
+    expect(resolveBankAccountNumber("", "998877665544")).toBe("998877665544");
+    expect(resolveBankAccountNumber(null, "998877665544")).toBe("998877665544");
+    expect(resolveBankAccountNumber("•••• 5544", "998877665544")).toBe("998877665544");
+    expect(resolveBankAccountNumber("123412341234", "998877665544")).toBe("123412341234");
+    expect(resolveBankAccountNumber("•••• 5544", null)).toBe(null);
+  });
+
   it("extracts last 4 characters correctly", () => {
     expect(extractLast4("1234567890")).toBe("7890");
     expect(extractLast4("42")).toBe("42");
@@ -153,6 +184,17 @@ describe("2. Masking per role (Staff/Approver/Viewer masked, Admin full via reve
     const staff = user(["STAFF"]);
     const list = maskSuppliersForViewer([rawSupplier], staff);
     expect(list[0]!.bankAccountNumber).toBe("•••• 5544");
+  });
+
+  it("masks the page and list payload for an active Admin (full number is reveal-only)", () => {
+    const admin = user(["ADMIN"], { id: "admin-view" });
+    const view = maskSupplierForViewer(rawSupplier, admin);
+    expect(view.bankAccountNumber).toBe("•••• 5544");
+    expect(JSON.stringify(view)).not.toContain("998877665544");
+
+    const list = maskSuppliersForViewer([rawSupplier], admin);
+    expect(list[0]!.bankAccountNumber).toBe("•••• 5544");
+    expect(JSON.stringify(list)).not.toContain("998877665544");
   });
 
   it("allows only active Admin to reveal full bank account number", async () => {
@@ -252,6 +294,27 @@ describe("3. Non-Admin edit denied & safe saves", () => {
     expect(saved.bankAccountNumber).toBe("112233445566");
     expect(saved.bankBranch).toBe("Makati");
     expect(saved.bankNotes).toBe("Keep intact");
+  });
+
+  it("keeps the stored number when an Admin saves a blank or masked value", async () => {
+    const admin = user(["ADMIN"]);
+    const base = {
+      name: "Existing Hardware",
+      tin: "222-333-444-000",
+      taxType: "VAT" as const,
+      defaultTerms: "30 days",
+      bankAccountName: "Existing HW Inc",
+      bankBranch: "Makati",
+      bankNotes: "Keep intact",
+      notes: "Some notes",
+    };
+
+    const blank = await saveSupplier("sup-200", { ...base, bankAccountNumber: null }, admin);
+    expect(blank.bankAccountNumber).toBe("112233445566");
+
+    const masked = await saveSupplier("sup-200", { ...base, bankAccountNumber: "•••• 5566" }, admin);
+    expect(masked.bankAccountNumber).toBe("112233445566");
+    expect(JSON.stringify(fake.state.audits)).not.toContain("112233445566");
   });
 
   it("allows Admin to update bank details", async () => {
@@ -452,6 +515,95 @@ describe("5. Server actions fail closed", () => {
     expect(after.action).toBe("viewed bank number");
     expect(after.last4).toBe("7777");
     expect(JSON.stringify(audit)).not.toContain("555566667777");
+  });
+
+  it("saveSupplierAction keeps the stored number when an Admin leaves the field blank", async () => {
+    fake.state.currentUser = user(["ADMIN"], { id: "admin-keep" });
+
+    const form = new FormData();
+    form.append("name", "Action Supplier");
+    form.append("taxType", "VAT");
+    form.append("bankAccountName", "Original Bank");
+    form.append("bankAccountNumber", "");
+    form.append("bankBranch", "Ortigas");
+    form.append("bankNotes", "Original notes");
+
+    const result = await saveSupplierAction("sup-action-1", {}, form);
+    expect(result.ok).toBe(true);
+
+    const updated = fake.state.suppliers.find((s) => s.id === "sup-action-1");
+    expect(updated?.bankAccountNumber).toBe("555566667777");
+    expect(JSON.stringify(fake.state.audits)).not.toContain("555566667777");
+  });
+});
+
+describe("6. Activity display and outbound surfaces never include the full number", () => {
+  const FULL = "998877665544";
+
+  it("activity label and diff hide a raw number", () => {
+    const label = bankViewActivityLabel({
+      action: "viewed bank number",
+      bankAccountNumber: FULL,
+      last4: "5544",
+    });
+    expect(label).toBe("viewed bank number");
+    expect(label).not.toContain(FULL);
+
+    const masked = bankViewActivityLabel({
+      action: "viewed bank number",
+      bankAccountNumber: "•••• 5544",
+      last4: "5544",
+    });
+    expect(masked).toBe("viewed bank number •••• 5544");
+    expect(masked).not.toContain(FULL);
+
+    expect(auditDisplayValue("bankAccountNumber", FULL)).toBe("•••• 5544");
+    expect(String(auditDisplayValue("bankAccountNumber", FULL))).not.toContain("9988");
+    expect(auditDisplayValue("name", "Acme")).toBe("Acme");
+  });
+
+  function walk(dir: string, acc: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p, acc);
+      else if (/\.(ts|tsx|mjs)$/.test(name)) acc.push(p);
+    }
+    return acc;
+  }
+
+  it("print, csv, export, and search routes do not reference supplier bank account numbers", () => {
+    const files = [
+      ...walk("src/app/print"),
+      ...walk("src/app/(app)/books"),
+      ...walk("src/app/(app)/cash"),
+      "src/lib/print/views.ts",
+      "src/lib/purchasing/views.ts",
+      "src/lib/payables/views.ts",
+      "src/lib/quotes/views.ts",
+      "src/lib/services/expenses.ts",
+    ];
+    const hits = files.filter((f) => readFileSync(f, "utf8").includes("bankAccountNumber"));
+    expect(hits).toEqual([]);
+
+    const routeHits = walk("src/app").filter(
+      (f) => f.endsWith("route.ts") && readFileSync(f, "utf8").includes("bankAccountNumber"),
+    );
+    expect(routeHits).toEqual([]);
+
+    const listSrc = readFileSync("src/lib/services/companies.ts", "utf8");
+    const listFn = listSrc.slice(listSrc.indexOf("export function listSuppliers"), listSrc.indexOf("export function getSupplier"));
+    expect(listFn).not.toContain("bankAccount");
+    expect(listFn).toContain("name: { contains: q }");
+    expect(listFn).toContain("tin: { contains:");
+  });
+
+  it("the supplier page and edit form do not preload the full number for an Admin", () => {
+    const page = readFileSync("src/app/(app)/suppliers/[id]/page.tsx", "utf8");
+    expect(page).not.toContain("user.isAdmin ? supplier");
+    expect(page).toContain("maskSupplierForViewer");
+    const form = readFileSync("src/app/(app)/suppliers/SupplierForm.tsx", "utf8");
+    expect(form).toContain("bankNumberDraft");
+    expect(form).not.toContain('useState(v("bankAccountNumber"))');
   });
 });
 

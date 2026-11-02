@@ -1,6 +1,7 @@
 // "Activity" section on record pages: audit rows for the record (and its contacts).
 
 import { db } from "@/lib/db";
+import { bankViewActivityLabel } from "@/lib/bank-mask";
 import { formatDateTime } from "@/lib/format";
 import { stripCosts, type PermissionUser } from "@/lib/permissions";
 import { DiffView } from "./DiffView";
@@ -79,8 +80,13 @@ export async function Activity({
               </div>
               <div className="timeline-content">
                 <div className="timeline-heading">
-                  <b>{r.user?.name ?? "System"}</b> {actionLabel(r.action, r.entityType)}{" "}
-                  {targets.length > 1 || !["Quote", "SalesOrder"].includes(r.entityType) ? (ENTITY_LABELS[r.entityType] ?? "") : ""}
+                  <b>{r.user?.name ?? "System"}</b>{" "}
+                  {bankViewActivityLabel(r.after) ?? (
+                    <>
+                      {actionLabel(r.action, r.entityType)}{" "}
+                      {targets.length > 1 || !["Quote", "SalesOrder"].includes(r.entityType) ? (ENTITY_LABELS[r.entityType] ?? "") : ""}
+                    </>
+                  )}
                 </div>
                 <div className="timeline-when">{formatDateTime(r.at)}</div>
                 {(r.action === "update" || r.action === "void") &&

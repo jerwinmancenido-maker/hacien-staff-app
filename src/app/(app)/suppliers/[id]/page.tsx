@@ -44,10 +44,11 @@ export default async function SupplierPage({
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
+  // Masked for every role. Admins load the full number only via the logged reveal.
   const safeSupplier = maskSupplierForViewer(supplier, user);
   const { settings } = await getSettingsSnapshot();
   const canEdit = can(user, "edit_data");
-  const { contacts, ...record } = user.isAdmin ? supplier : safeSupplier;
+  const { contacts, ...record } = safeSupplier;
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "supplier", id } as const;
   const warnDays = await expiryWarningDays();
