@@ -33,7 +33,7 @@ import {
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
 import { recordSupplierPayment as recordSupplierPaymentRaw, voidSupplierPayment, type PayablesActor } from "@/lib/services/supplier-payments";
-import { freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, paymentProof, tag } from "./fixtures";
 
 function recordSupplierPayment(
   input: Parameters<typeof recordSupplierPaymentRaw>[0],
@@ -139,7 +139,8 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-CASH", deliveryAddress: "Manila" }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-CASH", deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     const billing = await recordBilling(

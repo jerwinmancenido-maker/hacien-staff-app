@@ -117,7 +117,7 @@ export async function voidQuoteAction(id: string, reason: string): Promise<FormS
   });
 }
 
-export async function convertQuoteAction(id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }): Promise<FormState> {
+export async function convertQuoteAction(id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }): Promise<FormState> {
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");

@@ -35,7 +35,7 @@ describe("customer validation", () => {
     address: "",
     withholdingType: "GOVERNMENT" as const,
     defaultWithholding: [] as string[],
-    defaultTerms: "",
+    defaultTerms: "Net 30",
     notes: "",
   };
 
@@ -47,15 +47,23 @@ describe("customer validation", () => {
     expect(paths).toContain("withholdingType");
   });
 
-  it("only accepts terms from the list", () => {
+  it("requires payment terms from the list", () => {
+    expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "" }).success).toBe(false);
     expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "Net 90" }).success).toBe(false);
     expect(customerSchema(TERMS).safeParse({ ...base, defaultTerms: "Net 30" }).success).toBe(true);
+  });
+
+  it("lets a customer who has no terms yet keep them blank", () => {
+    const kept = customerSchema(TERMS, undefined, false).safeParse({ ...base, defaultTerms: "  " });
+    expect(kept.success).toBe(true);
+    if (kept.success) expect(kept.data.defaultTerms).toBeNull();
+    expect(customerSchema(TERMS, undefined, false).safeParse({ ...base, defaultTerms: "Net 90" }).success).toBe(false);
   });
 
   it("rejects blank (null) withholding; accepts [] / [codes] from the allowed list", () => {
     const schema = customerSchema(TERMS, ["GOODS_1", "GOV_PT_3"]);
     // S-19: never silently save "not set" as No — null is rejected.
-    expect(schema.safeParse({ name: "TESDA", tin: "", withholdingType: "GOVERNMENT", defaultTerms: "", notes: "" }).success).toBe(false);
+    expect(schema.safeParse({ name: "TESDA", tin: "", withholdingType: "GOVERNMENT", defaultTerms: "Net 30", notes: "" }).success).toBe(false);
     expect(schema.safeParse({ ...base, defaultWithholding: null }).success).toBe(false);
     expect(schema.parse({ ...base, defaultWithholding: [] }).defaultWithholding).toEqual([]);
     expect(schema.parse({ ...base, defaultWithholding: ["GOODS_1", "GOV_PT_3", "GOODS_1"] }).defaultWithholding).toEqual([
@@ -89,6 +97,27 @@ describe("contacts", () => {
     expect(contactSchema(ROLES).safeParse(base).success).toBe(false);
     expect(contactSchema(ROLES).safeParse({ ...base, phone: "0917" }).success).toBe(true);
     expect(contactSchema(ROLES).safeParse({ ...base, name: "", email: "a@example.com" }).success).toBe(false);
+  });
+
+  it("validates phone format: only digits, +, spaces and dashes allowed; refuses abc", () => {
+    const invalid = contactSchema(ROLES).safeParse({ ...base, phone: "abc" });
+    expect(invalid.success).toBe(false);
+    expect(
+      invalid.error?.issues.some(
+        (i) => i.path.includes("phone") && i.message.includes("Only digits, +, spaces and dashes allowed."),
+      ),
+    ).toBe(true);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "+63 917 123-4567" }).success).toBe(true);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "0917-000-0000" }).success).toBe(true);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "(02) 8123-4567" }).success).toBe(false);
+    expect(contactSchema(ROLES).safeParse({ ...base, phone: "0917\t1234567" }).success).toBe(false);
+  });
+
+  it("validates email format", () => {
+    const invalid = contactSchema(ROLES).safeParse({ ...base, email: "not-an-email" });
+    expect(invalid.success).toBe(false);
+    expect(invalid.error?.issues.some((i) => i.path.includes("email"))).toBe(true);
+    expect(contactSchema(ROLES).safeParse({ ...base, email: "ana@example.com" }).success).toBe(true);
   });
 
   it("first active contact becomes main", () => {

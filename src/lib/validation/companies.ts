@@ -35,6 +35,18 @@ export const TAX_TYPE_LABELS: Record<SupplierTaxTypeValue, string> = {
   NO_RECEIPT: "Usually no receipt",
 };
 
+/** Digits, +, spaces and dashes. Tabs and other whitespace are not spaces. */
+export const PHONE_PATTERN = /^[0-9+ -]+$/;
+export const PHONE_FORMAT_MESSAGE = "Only digits, +, spaces and dashes allowed.";
+
+export const phoneField = (max = 64) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Keep this under ${max} characters.`)
+    .refine((v) => !v || PHONE_PATTERN.test(v), PHONE_FORMAT_MESSAGE)
+    .transform((v) => (v ? v : null));
+
 /** Default terms must be one of the options in Settings → Lists (or empty). */
 function termsField(allowedTerms: readonly string[]) {
   return z
@@ -42,6 +54,15 @@ function termsField(allowedTerms: readonly string[]) {
     .trim()
     .refine((v) => !v || allowedTerms.includes(v), "Pick terms from the list.")
     .transform((v) => (v ? v : null));
+}
+
+/** Payment terms must be one of the options in Settings → Lists. */
+function requiredTermsField(allowedTerms: readonly string[]) {
+  return z
+    .string()
+    .trim()
+    .min(1, "Payment terms are required.")
+    .refine((v) => allowedTerms.includes(v), "Pick terms from the list.");
 }
 
 /**
@@ -53,7 +74,15 @@ function termsField(allowedTerms: readonly string[]) {
  *   []    = explicit none
  *   [codes] = saved picks
  */
-export function customerSchema(allowedTerms: readonly string[], allowedWithholdingCodes?: readonly string[]) {
+/**
+ * `termsRequired` is false only when updating a customer who still has no terms,
+ * so staff can edit that record without inventing terms. New customers always require them.
+ */
+export function customerSchema(
+  allowedTerms: readonly string[],
+  allowedWithholdingCodes?: readonly string[],
+  termsRequired = true,
+) {
   return z
     .object({
       name: z.string().trim().min(1, "Name is required.").max(191),
@@ -72,7 +101,7 @@ export function customerSchema(allowedTerms: readonly string[], allowedWithholdi
             .transform((codes) => [...new Set(codes)]),
         ])
         .optional(),
-      defaultTerms: termsField(allowedTerms),
+      defaultTerms: termsRequired ? requiredTermsField(allowedTerms) : termsField(allowedTerms),
       notes: optionalText(5000),
     })
     .superRefine((v, ctx) => {
@@ -125,7 +154,7 @@ export function contactSchema(allowedRoles: readonly string[]) {
         .max(191)
         .refine((v) => !v || z.email().safeParse(v).success, "Enter a valid email.")
         .transform((v) => (v ? v.toLowerCase() : null)),
-      phone: optionalText(64),
+      phone: phoneField(64),
       isMain: z.boolean(),
     })
     .superRefine((v, ctx) => {

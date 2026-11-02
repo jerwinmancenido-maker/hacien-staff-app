@@ -1336,7 +1336,7 @@ export function QuoteEditor({
         </div>
       </form>
 
-      <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} />
+      <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} terms={termsOptions} />
 
       <ConfirmDialog
         open={costConfirmOpen}

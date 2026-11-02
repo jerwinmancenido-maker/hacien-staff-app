@@ -36,7 +36,7 @@ describe.skipIf(!hasDb)("quote add-customer create path (MySQL)", () => {
         tin: null,
         withholdingType: "NONE",
         defaultWithholding: [],
-        defaultTerms: null,
+        defaultTerms: "Net 30",
         notes: null,
       },
       actorId,

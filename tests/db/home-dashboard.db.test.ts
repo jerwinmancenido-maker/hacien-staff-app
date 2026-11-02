@@ -37,7 +37,7 @@ import {
 } from "@/lib/services/purchase-orders";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, markQuoteSent, type DocActor } from "@/lib/services/quotes";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
-import { freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
+import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
   let admin: DocActor;
@@ -119,7 +119,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddress: "Manila" }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, supplier, so, quote: q, year };

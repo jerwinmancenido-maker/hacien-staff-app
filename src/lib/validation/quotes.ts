@@ -173,14 +173,15 @@ export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" 
 };
 
 export const convertInputSchema = z.object({
-  buyerPoNo: optionalText(64),
+  buyerPoNo: optionalText(64).optional(),
   buyerPoDate: z
     .string()
     .trim()
     .optional()
     .transform((v) => v || undefined)
     .pipe(dateOnly("Buyer PO date").optional()),
-  deliveryAddress: optionalText(1000),
+  deliveryAddressId: optionalText(64).optional(),
+  deliveryAddress: optionalText(1000).optional(),
 });
 export type ConvertInput = z.infer<typeof convertInputSchema>;
 
