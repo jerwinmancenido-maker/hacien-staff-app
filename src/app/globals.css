@@ -6833,7 +6833,7 @@ button.contact-card-add {
   min-width: 0;
   width: 100%;
 }
-.quote-drawer-body .field input,
+.quote-drawer-body .field input:not([type="checkbox"]),
 .quote-drawer-body .field select,
 .quote-drawer-body .field textarea {
   width: 100%;
@@ -7226,14 +7226,35 @@ button.contact-card-add {
     flex: 1;
     justify-content: center;
   }
-  /* Keep TIN/Type and Contact/Position as equal pairs inside the drawer. */
+  /* Contact / Position stay a pair. TIN / Type stack (see .quote-drawer-tin-type). */
   .quote-drawer-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
-/* Manual withholding picks (brief 10) — pick field + internal WH panel */
+/* TIN and Type each take a full row. The drawer is at most 400px, so a 2-col
+   pair clips "Yes, Government office" at 390 and on the desktop drawer too. */
+.quote-drawer-row.quote-drawer-tin-type {
+  grid-template-columns: 1fr;
+}
+
+/* Manual withholding picks (brief 10) — pick field + internal WH panel.
+   Checkbox stays left of the label; the label wraps the input so the row toggles. */
 .wh-pick-list { display: flex; flex-direction: column; gap: 6px; }
-.wh-pick-row { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
+.field label.wh-pick-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}
+.wh-pick-row input[type="checkbox"] {
+  width: auto;
+  height: auto;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+  padding: 0;
+}
 .wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: 12px; margin-top: 12px; background: var(--bg-muted, #f7f7f5); }
 .wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; }

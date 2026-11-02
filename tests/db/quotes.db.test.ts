@@ -31,7 +31,9 @@ import {
   type DocActor,
 } from "@/lib/services/quotes";
 import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
+import { saveCustomer } from "@/lib/services/companies";
 import { listWithholdingRates, saveWithholdingRates, snapshotList } from "@/lib/services/withholding";
+import { defaultWithholdingPickFor } from "@/lib/quotes/withholding-defaults";
 import { getQuotePrint, getQuoteView, getSalesOrderPrint, getSalesOrderView, listQuotesView } from "@/lib/quotes/views";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
 import { saveSettings } from "@/lib/settings";
@@ -159,6 +161,77 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("withholding", () => {
+    it("new government default pick → goods WI640 1%, services WI157 2%, centavo total, no 3%", async () => {
+      const pick = defaultWithholdingPickFor("GOVERNMENT");
+      expect(pick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+      const customer = await makeCustomer(pick, "GOVERNMENT");
+      const q = await createQuote(
+        quoteInput(customer.id, await freshYear(), {
+          items: [
+            { id: null, description: "Sample goods", kind: "GOODS", qty: "1", unit: "pc", supplierId: null, supplierUnitCost: "0", unitPrice: "100.50" },
+            { id: null, description: "Sample service", kind: "SERVICES", qty: "1", unit: "lot", supplierId: null, supplierUnitCost: "0", unitPrice: "1.25" },
+          ],
+        }),
+        costUser,
+      );
+      const goods = q.items.find((i) => i.kind === "GOODS")!;
+      const services = q.items.find((i) => i.kind === "SERVICES")!;
+      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0100");
+      expect(goods.withholdingAtc).toBe("WI640");
+      expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0200");
+      expect(services.withholdingAtc).toBe("WI157");
+      // 100.50 × 1% = 1.01; 1.25 × 2% = 0.03
+      expect(q.withholdingTotal.toFixed(2)).toBe("1.04");
+      expect(q.contractPrice.toFixed(2)).toBe("101.75");
+      expect(q.netReceived.toFixed(2)).toBe("100.71");
+      expect(q.withholdingPick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+      expect(JSON.stringify(q.withholding)).not.toContain("WB080");
+      expect(JSON.stringify(q.withholding)).not.toContain("GOV_PT_3");
+    });
+
+    it("an old government customer's saved 3% pick is not replaced on save or on a new quote", async () => {
+      const customer = await makeCustomer(["GOV_PT_3"], "GOVERNMENT");
+      const saved = await saveCustomer(
+        customer.id,
+        {
+          name: `Old Gov ${tag()}`,
+          tin: customer.tin,
+          withholdingType: "GOVERNMENT",
+          defaultWithholding: ["GOV_PT_3"],
+          defaultTerms: customer.defaultTerms,
+          notes: customer.notes,
+        },
+        { id: costUser.id, isAdmin: true },
+      );
+      expect(saved.defaultWithholding).toEqual(["GOV_PT_3"]);
+      const again = await db.customer.findUniqueOrThrow({ where: { id: customer.id } });
+      expect(again.defaultWithholding).toEqual(["GOV_PT_3"]);
+      const q = await createQuote(quoteInput(customer.id, await freshYear()), costUser);
+      for (const i of q.items) {
+        expect(Number(i.withholdingRate).toFixed(4)).toBe("0.0300");
+        expect(i.withholdingAtc).toBe("WB080");
+      }
+      expect(q.withholdingTotal.toFixed(2)).toBe("16200.00");
+      expect(q.withholdingPick).toEqual(["GOV_PT_3"]);
+    });
+
+    it("saving a new government customer with an explicit null pick does not fill defaults", async () => {
+      const created = await saveCustomer(
+        null,
+        {
+          name: `Unset Gov ${tag()}`,
+          tin: null,
+          withholdingType: "GOVERNMENT",
+          defaultWithholding: null,
+          defaultTerms: null,
+          notes: null,
+        },
+        { id: costUser.id, isAdmin: false },
+      );
+      expect(created.withholdingType).toBe("GOVERNMENT");
+      expect(created.defaultWithholding).toBeNull();
+    });
+
     it("Government customer with nothing picked (null) → 0 WH; pick stays not set", async () => {
       const customer = await makeCustomer(null, "GOVERNMENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
