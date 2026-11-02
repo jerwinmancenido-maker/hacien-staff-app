@@ -218,4 +218,53 @@ describe.skipIf(!env.hasDb)("tax calendar (MySQL)", () => {
     expect(JSON.stringify(undoAudit?.after)).toContain("undo_filed");
     expect(JSON.stringify(undoAudit?.after)).toContain("Wrong ref");
   });
+
+  it("Admin mark-filed replaces an active staff mark-as-done note (keeps note as void history)", async () => {
+    const year = 2500 + (parseInt(tag().slice(0, 3), 16) % 400);
+    const key = `1701q|${year}-Q3`;
+
+    const note = await markTaxCalendarDone(
+      {
+        occurrenceKey: key,
+        doneDateYmd: `${year}-11-01`,
+        note: "Staff note only — not a filing",
+        dueYmd: `${year}-11-15`,
+      },
+      admin,
+    );
+
+    const { id } = await markTaxCalendarFiled(
+      {
+        occurrenceKey: key,
+        filedDateYmd: `${year}-11-03`,
+        referenceNo: "TEST-REF-UPGRADE",
+        file: {
+          name: "efps_confirmation.pdf",
+          size: 15,
+          bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xd0, 0xd4, 0xc5, 0xd8, 0x0a]),
+        },
+      },
+      admin,
+    );
+    expect(id).not.toBe(note.id);
+
+    const oldNote = await db.taxCalendarCompletion.findUnique({ where: { id: note.id } });
+    expect(oldNote?.undoneAt).toBeTruthy();
+    expect(oldNote?.voidedAt).toBeTruthy();
+    expect(oldNote?.voidReason).toMatch(/Replaced by Admin income tax filing/i);
+
+    const filed = await db.taxCalendarCompletion.findUnique({
+      where: { id },
+      include: { attachments: true },
+    });
+    expect(filed?.referenceNo).toBe("TEST-REF-UPGRADE");
+    expect(filed?.undoneAt).toBeNull();
+    expect(filed?.attachments).toHaveLength(1);
+
+    const replaceAudit = await db.auditLog.findFirst({
+      where: { entityType: "TaxCalendarCompletion", entityId: note.id, action: "void" },
+      orderBy: { at: "desc" },
+    });
+    expect(JSON.stringify(replaceAudit?.after)).toContain("replace_note_with_filed");
+  });
 });

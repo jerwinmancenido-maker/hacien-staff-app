@@ -32,9 +32,6 @@ function IncomeTaxFilingRow({
 
   // Manila calendar day — never UTC (wrong after ~08:00 PHT).
   const todayIso = isoDate(manilaToday());
-  // Hide forms on success without setState-in-effect (refresh picks up new RSC props).
-  const markOpen = showMark && !mark.state.ok;
-  const undoOpen = showUndo && !undo.state.ok;
 
   useEffect(() => {
     if (mark.state.ok || undo.state.ok) router.refresh();
@@ -110,7 +107,7 @@ function IncomeTaxFilingRow({
 
         {isAdmin ? (
           <div style={{ display: "flex", gap: 6 }}>
-            {!item.isFiled && !markOpen ? (
+            {!item.isFiled && !showMark ? (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -119,7 +116,7 @@ function IncomeTaxFilingRow({
                 Record that you filed
               </button>
             ) : null}
-            {item.isFiled && !undoOpen ? (
+            {item.isFiled && !showUndo ? (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -132,7 +129,7 @@ function IncomeTaxFilingRow({
         ) : null}
       </div>
 
-      {markOpen ? (
+      {showMark ? (
         <form
           noValidate
           onSubmit={mark.onSubmit}
@@ -246,7 +243,7 @@ function IncomeTaxFilingRow({
         </form>
       ) : null}
 
-      {undoOpen ? (
+      {showUndo ? (
         <form
           noValidate
           onSubmit={undo.onSubmit}
@@ -373,10 +370,18 @@ export function IncomeTaxFilingsCard({
       {/* Filings rows */}
       <div className="income-tax-filings-list">
         {filings?.q1701 ? (
-          <IncomeTaxFilingRow item={filings.q1701} isAdmin={isAdmin} />
+          <IncomeTaxFilingRow
+            key={`${filings.q1701.occurrenceKey}-${filings.q1701.isFiled}-${filings.q1701.referenceNo ?? ""}`}
+            item={filings.q1701}
+            isAdmin={isAdmin}
+          />
         ) : null}
         {filings?.a1701 ? (
-          <IncomeTaxFilingRow item={filings.a1701} isAdmin={isAdmin} />
+          <IncomeTaxFilingRow
+            key={`${filings.a1701.occurrenceKey}-${filings.a1701.isFiled}-${filings.a1701.referenceNo ?? ""}`}
+            item={filings.a1701}
+            isAdmin={isAdmin}
+          />
         ) : null}
         {!filings?.q1701 && !filings?.a1701 ? (
           <div className="muted small" style={{ padding: "12px 14px" }}>

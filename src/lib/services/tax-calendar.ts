@@ -7,7 +7,12 @@ import { db } from "../db";
 import { DOC_TX, DocRuleError, withTxRetry } from "../documents/common";
 import { isoDate, manilaToday } from "../format";
 import { assertCan, ForbiddenError, type PermissionUser } from "../permissions";
-import { createAttachments, prepareUploads, type UploadFile } from "./attachments";
+import {
+  createAttachments,
+  discardUploads,
+  prepareUploads,
+  type UploadFile,
+} from "./attachments";
 import { getSettingsSnapshot } from "../settings";
 import {
   buildTaxCalendarRows,
@@ -374,52 +379,89 @@ export async function markTaxCalendarFiled(
 
   const prepared = await prepareUploads([input.file]);
 
-  return withTxRetry(async () =>
-    db.$transaction(async (tx) => {
-      const existing = await tx.taxCalendarCompletion.findFirst({
-        where: { occurrenceKey: input.occurrenceKey, undoneAt: null },
-      });
-      if (existing) {
-        throw new DocRuleError("This item is already marked filed. Undo it first to change.");
-      }
+  try {
+    return await withTxRetry(async () =>
+      db.$transaction(async (tx) => {
+        const existing = await tx.taxCalendarCompletion.findFirst({
+          where: { occurrenceKey: input.occurrenceKey, undoneAt: null },
+        });
+        if (existing?.referenceNo?.trim()) {
+          throw new DocRuleError("This item is already marked filed. Undo it first to change.");
+        }
+        // Staff "Mark as done" notes (no BIR ref) must not block Admin mark-filed.
+        // Soft-void the note and keep it as history, then create the filing row.
+        if (existing) {
+          const now = new Date();
+          await tx.taxCalendarCompletion.update({
+            where: { id: existing.id },
+            data: {
+              undoneAt: now,
+              undoneById: actor.id,
+              voidedAt: now,
+              voidReason: "Replaced by Admin income tax filing record",
+            },
+          });
+          await writeAudit(tx, {
+            userId: actor.id,
+            entityType: "TaxCalendarCompletion",
+            entityId: existing.id,
+            action: "void",
+            before: {
+              occurrenceKey: existing.occurrenceKey,
+              doneDate: isoDate(existing.doneDate),
+              note: existing.note,
+              referenceNo: existing.referenceNo,
+            },
+            after: {
+              occurrenceKey: existing.occurrenceKey,
+              kind: "replace_note_with_filed",
+              voidReason: "Replaced by Admin income tax filing record",
+            },
+            diff: false,
+          });
+        }
 
-      const row = await tx.taxCalendarCompletion.create({
-        data: {
-          obligationKey,
-          periodKey,
-          occurrenceKey: input.occurrenceKey,
-          dueDate: input.dueYmd ? ymdToDate(input.dueYmd) : null,
-          doneDate: ymdToDate(filedDateYmd),
-          referenceNo,
-          note,
-          createdById: actor.id,
-        },
-      });
+        const row = await tx.taxCalendarCompletion.create({
+          data: {
+            obligationKey,
+            periodKey,
+            occurrenceKey: input.occurrenceKey,
+            dueDate: input.dueYmd ? ymdToDate(input.dueYmd) : null,
+            doneDate: ymdToDate(filedDateYmd),
+            referenceNo,
+            note,
+            createdById: actor.id,
+          },
+        });
 
-      await createAttachments(tx, prepared, { taxCalendarCompletionId: row.id }, actor.id);
+        await createAttachments(tx, prepared, { taxCalendarCompletionId: row.id }, actor.id);
 
-      await writeAudit(tx, {
-        userId: actor.id,
-        entityType: "TaxCalendarCompletion",
-        entityId: row.id,
-        action: "create",
-        before: null,
-        after: {
-          occurrenceKey: row.occurrenceKey,
-          obligationKey: row.obligationKey,
-          periodKey: row.periodKey,
-          dueDate: input.dueYmd ?? null,
-          doneDate: filedDateYmd,
-          referenceNo,
-          note,
-          attachmentFileName: prepared[0]?.fileName ?? input.file.name,
-          kind: "mark_filed",
-        },
-      });
+        await writeAudit(tx, {
+          userId: actor.id,
+          entityType: "TaxCalendarCompletion",
+          entityId: row.id,
+          action: "create",
+          before: null,
+          after: {
+            occurrenceKey: row.occurrenceKey,
+            obligationKey: row.obligationKey,
+            periodKey: row.periodKey,
+            dueDate: input.dueYmd ?? null,
+            doneDate: filedDateYmd,
+            referenceNo,
+            note,
+            attachmentFileName: prepared[0]?.fileName ?? input.file.name,
+            kind: "mark_filed",
+          },
+        });
 
-      return { id: row.id };
-    }, DOC_TX),
-  );
+        return { id: row.id };
+      }, DOC_TX),
+    );
+  } catch (e) {
+    await discardUploads(prepared);
+    throw e;
+  }
 }
 
 export type UndoTaxCalendarFiledInput = {
