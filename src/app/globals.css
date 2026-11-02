@@ -816,6 +816,32 @@ a.tracker-card:hover {
 .table-wrap table.list {
   min-width: 640px; /* wider than 360px phone so .table-wrap scrolls sideways */
 }
+.so-bill-phone {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.so-bill-phone li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.so-bill-phone li .num {
+  grid-column: 2;
+  text-align: right;
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  .so-bill-desk {
+    display: none;
+  }
+  .so-bill-phone {
+    display: block;
+  }
+}
 /* Keep wide payment lists inside the card; scroll the wrap, not the page. */
 .payments-table-card {
   max-width: 100%;
@@ -5677,6 +5703,14 @@ button.contact-card-add {
   margin-top: auto;
   white-space: nowrap;
   overflow: hidden;
+}
+.home-ks.home-ks-paid {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 0;
+  white-space: normal;
+  overflow: visible;
 }
 .home-ks-bar {
   gap: 8px;

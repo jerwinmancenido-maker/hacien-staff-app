@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived } from "../billing/views";
+import { arAgingSummary, countPending2307Expected, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -150,7 +150,12 @@ export type HomeKpis = {
   collectedThisMonth: {
     /** e.g. "Collected (Oct)". */
     label: string;
+    /** Cash collected + 2307 received. */
     amount: string;
+    /** Posted collection receipts (amount received). */
+    cashCollected: string;
+    /** 2307 credited on those collections. */
+    received2307: string;
     /** Legacy muted line when there is no MTD chip (e.g. both ₱0). */
     caption: string;
     change: HomeKpiChange;
@@ -301,24 +306,33 @@ function buildKpis(opts: {
   openCount: number;
   collected: string;
   collectedPriorSameDays: string;
+  received2307: string;
+  received2307PriorSameDays: string;
   nonVat: HomeNonVat;
   now: Date;
 }): HomeKpis {
-  const { sales, owedAmount, overdueCount, openCount, collected, collectedPriorSameDays, nonVat, now } =
-    opts;
+  const {
+    sales,
+    owedAmount,
+    overdueCount,
+    openCount,
+    collected,
+    collectedPriorSameDays,
+    received2307,
+    received2307PriorSameDays,
+    nonVat,
+    now,
+  } = opts;
+  const totalPaid = sumPesoAmounts([collected, received2307]);
+  const totalPaidPrior = sumPesoAmounts([collectedPriorSameDays, received2307PriorSameDays]);
   const lastKey = shiftMonthKey(manilaMonthKey(now), -1);
-  const collectedNum = Number(collected);
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const day = sales.mtdDay;
   const billedChip = sales.mtdChip;
-  const collectedChip = mtdVsSameDaysChip(collected, collectedPriorSameDays, lastKey, day);
+  const collectedChip = mtdVsSameDaysChip(totalPaid, totalPaidPrior, lastKey, day);
   const collectedCaption =
-    collectedChip != null
-      ? ""
-      : !Number.isFinite(collectedNum) || collectedNum <= 0
-        ? "No payments yet"
-        : `Posted collections in ${mon}`;
+    collectedChip != null ? "" : toScaled(totalPaid, 2) <= 0n ? "No payments yet" : `Posted collections in ${mon}`;
 
   const billingCount = openCount;
   const billingCountLabel =
@@ -342,7 +356,9 @@ function buildKpis(opts: {
     },
     collectedThisMonth: {
       label: `Collected (${mon})`,
-      amount: collected,
+      amount: totalPaid,
+      cashCollected: collected,
+      received2307,
       caption: collectedCaption,
       change: collectedChip?.change ?? { label: "—", tone: "none" },
       vsCaption: collectedChip?.vsCaption ?? "",
@@ -463,6 +479,8 @@ export async function loadHomeDashboard(
             openCount: 0,
             collected: "0.00",
             collectedPriorSameDays: "0.00",
+            received2307: "0.00",
+            received2307PriorSameDays: "0.00",
             nonVat,
             now,
           })
@@ -495,6 +513,8 @@ export async function loadHomeDashboard(
     pending2307Count,
     collected,
     collectedPriorSameDays,
+    received2307,
+    received2307Prior,
     nonVatSnap,
     sales,
     recent,
@@ -511,6 +531,12 @@ export async function loadHomeDashboard(
     countPending2307Expected(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     sumCollectionsReceived({
+      status: "POSTED",
+      fromYmd: priorSameDaysFrom,
+      toYmd: priorSameDaysTo,
+    }),
+    sumWithholdingCredited({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
+    sumWithholdingCredited({
       status: "POSTED",
       fromYmd: priorSameDaysFrom,
       toYmd: priorSameDaysTo,
@@ -598,6 +624,8 @@ export async function loadHomeDashboard(
           openCount: ar.openCount,
           collected,
           collectedPriorSameDays,
+          received2307,
+          received2307PriorSameDays: received2307Prior,
           nonVat,
           now,
         })

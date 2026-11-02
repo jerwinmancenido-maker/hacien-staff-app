@@ -216,7 +216,7 @@ export const settingsSections = {
       inventory_list: taxCalendarObligationSettings,
     }),
   }),
-  // Print / PDF letterhead, paper size, payment instructions, and tax disclaimer toggle.
+  // Print / PDF letterhead, paper size, and payment instructions.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
     /** Stored so older snapshots still parse. The input-tax line is no longer gated by this flag. */

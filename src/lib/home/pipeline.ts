@@ -93,7 +93,7 @@ export function buildHomePipeline(opts: {
         label: "Open sales orders",
         count: opts.salesOrdersCount,
         amount: opts.salesOrdersUnbilled,
-        caption: pipelineOpenCaption(opts.salesOrdersCount, opts.salesOrdersUnbilled),
+        caption: `${pipelineOpenCaption(opts.salesOrdersCount, opts.salesOrdersUnbilled)} left to bill`,
         href: openSalesOrdersHref(),
       }
     : null;

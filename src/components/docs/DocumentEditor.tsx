@@ -12,13 +12,17 @@
 // Staff can override a line (flag + note). Changing the pick re-applies to
 // non-override lines. Draft save is never blocked by a null (not set) pick.
 
-import { useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import {
+  COST_NOT_SET_LABEL,
   docTotals,
   lineAmounts,
+  linesMissingSupplierCost,
   ratePctLabel,
+  supplierCostMissing,
   toScaled,
   withholdingSnapshotFromLines,
   type ItemKind,
@@ -168,6 +172,9 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
 
 export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
+  const formRef = useRef<HTMLFormElement>(null);
+  const skipCostWarn = useRef(false);
+  const [costConfirmOpen, setCostConfirmOpen] = useState(false);
   const withCosts = suppliers !== null;
   const rates = visibleRates(allRates);
   const [customerList, setCustomerList] = useState(customersProp);
@@ -372,8 +379,25 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const itemErrors = Object.entries(e).filter(([k]) => k.startsWith("items"));
   const notSet = pick == null;
 
+  function onSubmitMaybeWarn(e: FormEvent<HTMLFormElement>) {
+    if (withCosts && !skipCostWarn.current && linesMissingSupplierCost(items)) {
+      e.preventDefault();
+      setCostConfirmOpen(true);
+      return;
+    }
+    skipCostWarn.current = false;
+    onSubmit(e);
+  }
+
+  function confirmCostAnyway() {
+    setCostConfirmOpen(false);
+    skipCostWarn.current = true;
+    formRef.current?.requestSubmit();
+  }
+
   return (
-    <form onSubmit={onSubmit} noValidate>
+    <>
+    <form ref={formRef} onSubmit={onSubmitMaybeWarn} noValidate>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
@@ -621,7 +645,9 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                     </td>
                     <td className="num strong col-money">{formatPeso(a.total)}</td>
                     {withCosts && (
-                      <td className={`num col-money${toScaled(a.margin, 2) < 0n ? " neg" : ""}`}>{formatPeso(a.margin)}</td>
+                      <td className={`num col-money${supplierCostMissing(i.supplierUnitCost) || toScaled(a.margin, 2) >= 0n ? "" : " neg"}`}>
+                        {supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : formatPeso(a.margin)}
+                      </td>
                     )}
                     <td className="num col-wh">
                       <input
@@ -713,5 +739,15 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} />
       )}
     </form>
+    <ConfirmDialog
+      open={costConfirmOpen}
+      title={COST_NOT_SET_LABEL}
+      body="One or more lines have no supplier cost. Margin will show Cost not set until you enter it. Save anyway?"
+      confirmLabel="Save anyway"
+      cancelLabel="Go back"
+      onCancel={() => setCostConfirmOpen(false)}
+      onConfirm={confirmCostAnyway}
+    />
+    </>
   );
 }

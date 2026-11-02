@@ -122,7 +122,11 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CartIcon size={14} />
           {kpis.collectedThisMonth.label}
         </div>
-        <div className="home-kv num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</div>
+        <div className="home-ks home-ks-paid" aria-label="Cash collected and 2307 received">
+          <div>Cash collected <b className="num">{formatPesoWhole(kpis.collectedThisMonth.cashCollected)}</b></div>
+          <div>2307 received <b className="num">{formatPesoWhole(kpis.collectedThisMonth.received2307)}</b></div>
+          <div>Total paid <b className="num">{formatPesoWhole(kpis.collectedThisMonth.amount)}</b></div>
+        </div>
         <KpiMtdFoot
           change={kpis.collectedThisMonth.change}
           vsCaption={kpis.collectedThisMonth.vsCaption}

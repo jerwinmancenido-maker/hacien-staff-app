@@ -6,11 +6,13 @@ import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listBillings } from "@/lib/billing/views";
+import { salesOrderMoney } from "@/lib/billing/status";
 import { soBillingSummary } from "@/lib/services/billings";
+import { toScaled } from "@/lib/quotes/calc";
 import { Activity } from "@/components/Activity";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PillTabs } from "@/components/PillTabs";
-import { PageHeader } from "@/components/ui";
+import { Chip, PageHeader } from "@/components/ui";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { SalesOrderActions } from "@/components/docs/QuoteActions";
@@ -46,7 +48,17 @@ export default async function SalesOrderPage({
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
   ]);
-  const canBill = can(user, "manage_billing") && so.status === "OPEN" && billingSummary && Number(billingSummary.remainingToBill) > 0;
+  const money = billingSummary
+    ? salesOrderMoney(so.status, billingSummary.contractPrice, [
+        {
+          status: "OPEN",
+          amount: billingSummary.billed,
+          cashApplied: billingSummary.cashCollected,
+          withholdingApplied: billingSummary.withholdingCollected,
+        },
+      ])
+    : null;
+  const canBill = can(user, "manage_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
   const overdueOnSo = billings.find((b) => b.overdue.overdue);
 
   const tab: Tab = so.canSeeCosts && TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
@@ -59,7 +71,7 @@ export default async function SalesOrderPage({
         title={
           <>
             {so.number}
-            <SoStatusChip status={so.status} />
+            {money?.completed ? <Chip tone="grey">Completed</Chip> : <SoStatusChip status={so.status} />}
           </>
         }
         subtitle={
@@ -169,15 +181,26 @@ export default async function SalesOrderPage({
             <div className="card" aria-label="Billing">
               <div className="card-head">
                 <h2>Billing</h2>
-                <div className="right small muted">
-                  Billed {formatPeso(billingSummary.billed)} · Remaining {formatPeso(billingSummary.remainingToBill)} · Collected{" "}
-                  {formatPeso(billingSummary.collected)} · Balance {formatPeso(billingSummary.balance)}
-                </div>
               </div>
+              {money && (
+                <dl className="kv kv-grid" aria-label="Sales order money">
+                  <dt>Left to bill</dt>
+                  <dd className="num">{formatPeso(money.leftToBill)}</dd>
+                  <dt>Unpaid billed</dt>
+                  <dd className="num">{formatPeso(money.unpaidBilled)}</dd>
+                  <dt>Cash collected</dt>
+                  <dd className="num">{formatPeso(money.cashCollected)}</dd>
+                  <dt>2307 received</dt>
+                  <dd className="num">{formatPeso(money.received2307)}</dd>
+                  <dt>Total paid</dt>
+                  <dd className="num strong">{formatPeso(money.totalPaid)}</dd>
+                </dl>
+              )}
               {billings.length === 0 ? (
                 <p className="faint">No billings yet. Write the booklet invoice number you issued.</p>
               ) : (
-                <div className="table-wrap">
+                <>
+                <div className="table-wrap so-bill-desk">
                   <table className="list" aria-label="Billings on this SO">
                     <thead>
                       <tr>
@@ -209,6 +232,17 @@ export default async function SalesOrderPage({
                     </tbody>
                   </table>
                 </div>
+                <ul className="so-bill-phone" aria-label="Billings on this SO">
+                  {billings.map((b) => (
+                    <li key={b.id}>
+                      <Link href={`/billing/billings/${b.id}`}>#{b.invoiceNo}</Link>
+                      <span>{day(b.invoiceDate)}</span>
+                      <span>Due {day(b.dueDate)}</span>
+                      <span className="num">{formatPeso(b.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+                </>
               )}
             </div>
           )}
@@ -216,7 +250,7 @@ export default async function SalesOrderPage({
             <div className="card-head">
               <h2>Purchasing progress</h2>
               <div className="right small muted">
-                {purchasing.received} of {purchasing.total} line{purchasing.total === 1 ? "" : "s"} received · {purchasing.ordered} ordered
+                {purchasing.received} of {purchasing.total} received
                 {so.canSeeCosts && (
                   <>
                     {" · "}

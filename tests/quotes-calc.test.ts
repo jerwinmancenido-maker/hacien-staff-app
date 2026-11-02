@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalReasons, docTotals, fromScaled, lineAmounts, pctToRate, ratePctLabel, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { approvalReasons, COST_NOT_SET_LABEL, docTotals, fromScaled, lineAmounts, linesMissingSupplierCost, pctToRate, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import { planItems } from "@/lib/quotes/items";
 import { buildWithholdingSnapshot } from "@/lib/services/withholding";
 import { formatDocNumber, seriesYear } from "@/lib/documents/series";
@@ -147,9 +147,28 @@ describe("document totals (per-line rates)", () => {
 
   it("handles an empty quote and negative margins", () => {
     expect(docTotals([]).netMarginPct).toBe("0.00");
+    expect(docTotals([]).supplierCostState).toBe("none");
     const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "150" }]);
     expect(t.netMargin).toBe("-50.00");
     expect(t.netMarginPct).toBe("-50.00");
+    expect(t.supplierCostState).toBe("full");
+  });
+
+  it("keeps netMarginPct at 100.00 when supplier cost is blank, and labels that state none", () => {
+    const t = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "500000", supplierUnitCost: "0" }]);
+    expect(t.netMargin).toBe("500000.00");
+    expect(t.netMarginPct).toBe("100.00");
+    expect(t.supplierCostState).toBe("none");
+    expect(COST_NOT_SET_LABEL).toBe("Cost not set");
+    expect(linesMissingSupplierCost([{ supplierUnitCost: "" }, { supplierUnitCost: "0.00" }])).toBe(true);
+    expect(linesMissingSupplierCost([{ supplierUnitCost: "0.01" }])).toBe(false);
+    expect(supplierCostStateFromSupplierTotals(["0.00", "10.00"])).toBe("partial");
+    const mixed = docTotals([
+      { kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "0" },
+      { kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "40" },
+    ]);
+    expect(mixed.supplierCostState).toBe("partial");
+    expect(mixed.netMarginPct).toBe("80.00");
   });
 
   it("matches the design brief example (₱510,000 / ₱450,000 → 11.76%)", () => {
@@ -233,9 +252,26 @@ describe("planItems re-apply respects overrides", () => {
 describe("approval flag", () => {
   const approval = { marginBelowPct: 18, totalAbove: 500_000 };
   it("flags low margin and big totals", () => {
-    expect(approvalReasons({ contractPrice: "540000.00", netMarginPct: "11.78" }, approval)).toHaveLength(2);
-    expect(approvalReasons({ contractPrice: "100000.00", netMarginPct: "18.00" }, approval)).toEqual([]);
-    expect(approvalReasons({ contractPrice: "500000.00", netMarginPct: "17.99" }, approval)).toEqual(["Margin is below 18%"]);
+    expect(approvalReasons({ contractPrice: "540000.00", netMarginPct: "11.78", supplierCostState: "full" }, approval)).toHaveLength(2);
+    expect(approvalReasons({ contractPrice: "100000.00", netMarginPct: "18.00", supplierCostState: "full" }, approval)).toEqual([]);
+    expect(approvalReasons({ contractPrice: "500000.00", netMarginPct: "17.99", supplierCostState: "full" }, approval)).toEqual(["Margin is below 18%"]);
+  });
+  it("a blank or ₱0.00 supplier cost needs approval; an entered cost uses the margin rule", () => {
+    const blank = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "" }]);
+    expect(blank.netMarginPct).toBe("100.00");
+    expect(approvalReasons(blank, approval)).toEqual(["Cost not set"]);
+
+    const zero = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "0.00" }]);
+    expect(zero.supplierCostState).toBe("none");
+    expect(approvalReasons(zero, approval)).toEqual(["Cost not set"]);
+
+    const entered = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "800" }]);
+    expect(entered.supplierCostState).toBe("full");
+    expect(entered.netMarginPct).toBe("20.00");
+    expect(approvalReasons(entered, approval)).toEqual([]);
+
+    const low = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "900" }]);
+    expect(approvalReasons(low, approval)).toEqual(["Margin is below 18%"]);
   });
 });
 

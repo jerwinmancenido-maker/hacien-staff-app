@@ -85,6 +85,59 @@ describe("warnings helpers", () => {
   });
 });
 
+describe("cost state", () => {
+  it("shows no incurred cost when the only figure is a PO total", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "100000.00",
+      plannedCost: "0.00",
+      uncoveredLineCount: 0,
+      pos: [po({ poTotal: "80000.00" })],
+    });
+    expect(summary.costState).toBe("none");
+    expect(summary.incurredCost).toBe("0.00");
+    expect(summary.marginLabel).toBe("Actual margin");
+    expect(summary.totalCost).toBe("80000.00");
+  });
+
+  it("labels margin so far while only some POs have a bill or a receipt", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "100000.00",
+      plannedCost: "50000.00",
+      uncoveredLineCount: 0,
+      pos: [
+        po({ hasBills: true, billedAmount: "10000.00", poTotal: "20000.00" }),
+        po({ id: "b", poTotal: "30000.00" }),
+      ],
+    });
+    expect(summary.costState).toBe("partial");
+    expect(summary.marginLabel).toBe("Margin so far");
+    expect(summary.incurredCost).toBe("10000.00");
+    expect(summary.actual).toEqual({ margin: "90000.00", marginPct: "90.00" });
+  });
+
+  it("stays partial when a line still needs a PO", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "100.00",
+      plannedCost: "40.00",
+      uncoveredLineCount: 1,
+      pos: [po({ hasReceipts: true, receivedValue: "40.00", poTotal: "40.00" })],
+    });
+    expect(summary.costState).toBe("partial");
+  });
+
+  it("is full when every PO is incurred and lines are covered", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "100.00",
+      plannedCost: "40.00",
+      uncoveredLineCount: 0,
+      pos: [po({ hasBills: true, billedAmount: "40.00", poTotal: "40.00" })],
+    });
+    expect(summary.costState).toBe("full");
+    expect(summary.marginLabel).toBe("Actual margin");
+    expect(summary.incurredCost).toBe("40.00");
+  });
+});
+
 describe("buildCostMarginSummary", () => {
   it("sums row costs by basis; Planned and Actual both use contract − cost", () => {
     const summary = buildCostMarginSummary({
@@ -123,8 +176,10 @@ describe("buildCostMarginSummary", () => {
     expect(summary.afterWithholding).toEqual({
       netReceived: "99305.00",
       margin: "59305.00",
-      marginPct: "59.72", // 59305 / 99305
+      marginPct: "59.31", // 59305 / 100000 contract, not / net received
     });
+    expect(summary.costState).toBe("full");
+    expect(summary.marginLabel).toBe("Actual margin");
   });
 
   it("emits both warnings with hints; void docs are simply never passed in", () => {

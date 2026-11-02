@@ -18,6 +18,7 @@ import {
   openingCreditAsOf,
   proRataWithholding,
   remainingToBill,
+  salesOrderMoney,
   unappliedCash,
   unappliedCashAsOf,
 } from "@/lib/billing/status";
@@ -104,6 +105,77 @@ describe("billing amounts & status", () => {
   it("pro-rata withholding and net", () => {
     expect(proRataWithholding("500.00", "1000.00", "20.00")).toBe("10.00");
     expect(netExpected("500.00", "10.00")).toBe("490.00");
+  });
+  it("sales order money keeps cash and 2307 apart, in centavos", () => {
+    expect(
+      salesOrderMoney("OPEN", "500000.00", [
+        { status: "OPEN", amount: "500000.00", cashApplied: "200000.00", withholdingApplied: "0.00" },
+      ]).completed,
+    ).toBe(false);
+    const partial = salesOrderMoney("OPEN", "500000.00", [
+      { status: "OPEN", amount: "500000.00", cashApplied: "200000.00", withholdingApplied: "0.00" },
+    ]);
+    expect(partial.unpaidBilled).toBe("300000.00");
+    expect(partial.leftToBill).toBe("0.00");
+    expect(partial.totalPaid).toBe("200000.00");
+
+    const paid = salesOrderMoney("OPEN", "500000.00", [
+      { status: "PAID", amount: "500000.00", cashApplied: "476000.00", withholdingApplied: "24000.00" },
+    ]);
+    expect(paid).toMatchObject({
+      cashCollected: "476000.00",
+      received2307: "24000.00",
+      totalPaid: "500000.00",
+      unpaidBilled: "0.00",
+      leftToBill: "0.00",
+      completed: true,
+    });
+
+    const half = salesOrderMoney("OPEN", "500000.00", [
+      { status: "PAID", amount: "250000.00", cashApplied: "250000.00", withholdingApplied: "0.00" },
+    ]);
+    expect(half.leftToBill).toBe("250000.00");
+    expect(half.unpaidBilled).toBe("0.00");
+    expect(half.completed).toBe(false);
+
+    const withVoid = salesOrderMoney("OPEN", "500000.00", [
+      { status: "VOID", amount: "500000.00", cashApplied: "500000.00", withholdingApplied: "10000.00" },
+      { status: "OPEN", amount: "250000.00", cashApplied: "100000.00", withholdingApplied: "0.00" },
+    ]);
+    expect(withVoid.billed).toBe("250000.00");
+    expect(withVoid.leftToBill).toBe("250000.00");
+    expect(withVoid.cashCollected).toBe("100000.00");
+    expect(withVoid.received2307).toBe("0.00");
+    expect(withVoid.unpaidBilled).toBe("150000.00");
+    expect(withVoid.completed).toBe(false);
+
+    const cents = salesOrderMoney("OPEN", "100.10", [
+      { status: "OPEN", amount: "33.33", cashApplied: "0.00", withholdingApplied: "0.00" },
+      { status: "OPEN", amount: "33.33", cashApplied: "0.10", withholdingApplied: "0.20" },
+    ]);
+    expect(cents.leftToBill).toBe("33.44");
+    expect(cents.unpaidBilled).toBe("66.36");
+    const one = salesOrderMoney("OPEN", "10.10", [
+      { status: "OPEN", amount: "10.10", cashApplied: "0.10", withholdingApplied: "0.20" },
+    ]);
+    expect(one.unpaidBilled).toBe("9.80");
+    expect(one.totalPaid).toBe("0.30");
+
+    expect(
+      salesOrderMoney("VOID", "100.00", [
+        { status: "PAID", amount: "100.00", cashApplied: "100.00", withholdingApplied: "0.00" },
+      ]).completed,
+    ).toBe(false);
+  });
+  it("voiding a billing or a collection drops Completed back to Open", () => {
+    const paid = { status: "PAID", amount: "500000.00", cashApplied: "476000.00", withholdingApplied: "24000.00" };
+    expect(salesOrderMoney("OPEN", "500000.00", [paid]).completed).toBe(true);
+    // Voided billing is ignored, so the order is no longer fully billed.
+    expect(salesOrderMoney("OPEN", "500000.00", [{ ...paid, status: "VOID" }]).completed).toBe(false);
+    // Voided collection drops its posted cash and 2307; the billing stays.
+    expect(
+      salesOrderMoney("OPEN", "500000.00", [{ ...paid, cashApplied: "0.00", withholdingApplied: "0.00" }]).completed,
+    ).toBe(false);
   });
   it("balance and status derivation", () => {
     expect(billingBalance("100.00", { cashApplied: "40.00", withholdingApplied: "10.00" })).toBe("50.00");
