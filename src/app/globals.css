@@ -4881,6 +4881,69 @@ button.contact-card-add {
     padding: 16px !important;
     box-sizing: border-box;
   }
+  /* Header stacks; money columns stay inside the page (Amount is not clipped). */
+  .pp-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .pp-letterhead {
+    max-width: 100%;
+  }
+  .pp-letterhead-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .pp-logo {
+    width: 36mm;
+    max-width: 100%;
+  }
+  .pp-title-block {
+    text-align: left;
+    max-width: 100%;
+  }
+  .pp-title-block h1 {
+    justify-content: flex-start;
+    font-size: 14pt;
+    flex-wrap: wrap;
+  }
+  .pp-title-block .pp-meta,
+  .pp-meta {
+    margin-left: 0;
+    width: 100%;
+  }
+  .pp-party-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .pp-items {
+    table-layout: fixed;
+    font-size: 8pt;
+  }
+  .pp-items th,
+  .pp-items td {
+    padding: 4px 3px;
+  }
+  .pp-items thead th {
+    letter-spacing: 0.02em;
+    font-size: 7pt;
+  }
+  .pp-items .num {
+    font-size: 7.5pt;
+    width: 4.6rem;
+  }
+  .pp-items td.num:last-child,
+  .pp-items th.num:last-child,
+  .pp-items tfoot th.num {
+    width: 5.6rem;
+  }
+  .pp-aging-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pp-signatories {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }
 
 .print-preview-card {

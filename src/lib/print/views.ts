@@ -94,28 +94,26 @@ async function letterhead(settingsVersionId?: string | null) {
   };
 }
 
-function baseFooter(
+async function baseFooter(
   kind: PrintDocKind,
   letter: Awaited<ReturnType<typeof letterhead>>,
-  opts: { thankYou?: boolean; includePayment?: boolean; qr?: boolean } = {},
-): Pick<
-  ProfessionalPrintModel,
-  "taxLines" | "thankYou" | "paymentInstructions" | "contactLine" | "qrSvg" | "termsUrl" | "paperSize"
+  opts: { thankYou?: boolean; includePayment?: boolean } = {},
+): Promise<
+  Pick<
+    ProfessionalPrintModel,
+    "taxLines" | "thankYou" | "paymentInstructions" | "contactLine" | "qrSvg" | "termsUrl" | "paperSize"
+  >
 > {
+  const showQr = letter.print.showTermsQr === true;
   return {
     paperSize: letter.paperSize,
-    taxLines: taxFooterLines(kind, { showInputTaxDisclaimer: letter.print.showInputTaxDisclaimer }),
+    taxLines: taxFooterLines(kind),
     thankYou: opts.thankYou ?? false,
     paymentInstructions: opts.includePayment ? paymentInstructionsFromSettings(letter.print) : undefined,
     contactLine: letter.contactLine,
-    qrSvg: null,
-    termsUrl: opts.qr ? TERMS_URL : null,
+    qrSvg: showQr ? await qrSvg(TERMS_URL) : null,
+    termsUrl: showQr ? TERMS_URL : null,
   };
-}
-
-async function withQr<T extends ProfessionalPrintModel>(doc: T): Promise<T> {
-  if (!doc.termsUrl) return doc;
-  return { ...doc, qrSvg: await qrSvg() };
 }
 
 const itemRow = (
@@ -153,7 +151,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
   const prepared = printablePersonName(q.createdBy.name);
-  const footer = baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
+  const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
   const doc: ProfessionalPrintModel = {
@@ -211,7 +209,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     ...footer,
     thankYou: true,
   };
-  return { doc: await withQr(doc), missing: letter.missing };
+  return { doc, missing: letter.missing };
 }
 
 export async function getSalesOrderPrintModel(id: string): Promise<{ doc: ProfessionalPrintModel; missing: string[] } | null> {
@@ -230,7 +228,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const total = money(so.contractPrice);
   const withholding = snapshotList(so.withholding);
   const prepared = printablePersonName(so.createdBy.name);
-  const footer = baseFooter("sales_order", letter, { thankYou: true, includePayment: true, qr: true });
+  const footer = await baseFooter("sales_order", letter, { thankYou: true, includePayment: true });
   const meta = [
     ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ...(so.buyerPoNo ? [{ label: "Customer PO/ref", value: so.buyerPoNo }] : []),
@@ -283,7 +281,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
     ...footer,
     thankYou: true,
   };
-  return { doc: await withQr(doc), missing: letter.missing };
+  return { doc, missing: letter.missing };
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +307,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     { label: "Total", amount, emphasize: true },
   ];
   const prepared = printablePersonName(b.createdBy.name);
-  const footer = baseFooter("billing", letter, { thankYou: true, includePayment: true });
+  const footer = await baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);
   const deliveryAddress = await suggestedDeliveryAddress(b.customer);
   const doc: ProfessionalPrintModel = {
@@ -380,7 +378,7 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   );
   const totals: PrintMoneyLine[] = [{ label: "Amount received", amount: received, emphasize: true }];
   if (Number(whTotal) > 0) totals.unshift({ label: "EWT (2307) applied", amount: whTotal });
-  const footer = baseFooter("collection", letter, { thankYou: true });
+  const footer = await baseFooter("collection", letter, { thankYou: true });
   const refs = c.allocations.map((a) => `BL ${a.billing.number} / booklet #${a.billing.invoiceNo}`);
   const doc: ProfessionalPrintModel = {
     kind: "collection",
@@ -453,7 +451,7 @@ export async function getPurchaseOrderPrintModel(
   if (!po) return null;
   const letter = await letterhead();
   const total = money(po.subtotal);
-  const footer = baseFooter("supplier_po", letter, {});
+  const footer = await baseFooter("supplier_po", letter, {});
   const doc: ProfessionalPrintModel = {
     kind: "supplier_po",
     title: "Purchase Order",
@@ -540,7 +538,7 @@ export async function getReceivingReportPrintModel(
     });
   });
   const subtotal = items.reduce((a, i) => a + Number(i.amount), 0).toFixed(2);
-  const footer = baseFooter("receiving_report", letter, {});
+  const footer = await baseFooter("receiving_report", letter, {});
   const doc: ProfessionalPrintModel = {
     kind: "receiving_report",
     title: "Receiving Report",
@@ -614,7 +612,7 @@ export async function getSupplierPaymentPrintModel(
   } else {
     totals[0] = { label: "Total", amount: paid, emphasize: true };
   }
-  const footer = baseFooter("supplier_payment", letter, {});
+  const footer = await baseFooter("supplier_payment", letter, {});
   const billRefs = p.allocations.map((a) => `Bill ${a.supplierBill.billNumber}`);
   const doc: ProfessionalPrintModel = {
     kind: "supplier_payment",
@@ -689,7 +687,7 @@ export async function getExpensePrintModel(
     totals[0] = { label: "Total", amount, emphasize: true };
   }
   const payeeName = e.supplier?.name ?? e.payeeText ?? "—";
-  const footer = baseFooter("expense", letter, {});
+  const footer = await baseFooter("expense", letter, {});
   const doc: ProfessionalPrintModel = {
     kind: "expense",
     title: "Expense Voucher",
@@ -748,7 +746,7 @@ export async function getCustomerStatementPrintModel(
   const stmt = await getStatement(customerId, from, to);
   if (!stmt) return null;
   const letter = await letterhead();
-  const footer = baseFooter("customer_statement", letter, { thankYou: true, includePayment: true });
+  const footer = await baseFooter("customer_statement", letter, { thankYou: true, includePayment: true });
   const aging = AGING_BUCKETS.map((b) => ({ label: AGING_BUCKET_LABELS[b], amount: stmt.aging[b] }));
   const doc: ProfessionalPrintModel = {
     kind: "customer_statement",
@@ -875,7 +873,7 @@ export async function getSupplierStatementPrintModel(
   });
 
   const address = supplier.addresses[0] ? formatAddress(supplier.addresses[0]) : supplier.address;
-  const footer = baseFooter("supplier_statement", letter, {});
+  const footer = await baseFooter("supplier_statement", letter, {});
   const closing = running.toFixed(2);
   const doc: ProfessionalPrintModel = {
     kind: "supplier_statement",

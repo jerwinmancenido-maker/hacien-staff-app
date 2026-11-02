@@ -30,6 +30,7 @@ const company: Settings["company"] = {
 const print: Settings["print"] = {
   paperSize: "A4",
   showInputTaxDisclaimer: true,
+  showTermsQr: false,
   showReceivingReportCosts: false,
   quoteTerms: "Net 30",
   deliveryNotes: "Deliver weekdays",
@@ -75,6 +76,8 @@ describe("PrintCompanyForm collapsed sections", () => {
     // Fields from collapsed sections still present for submit.
     expect(html).toContain('name="paperSize"');
     expect(html).toContain('name="showInputTaxDisclaimer"');
+    expect(html).toContain('name="showTermsQr"');
+    expect(html).toContain("Show terms QR on prints");
     expect(html).toContain('name="quoteTerms"');
     expect(html).toContain('name="deliveryNotes"');
     expect(html).toContain('name="warrantyNotes"');
@@ -122,9 +125,12 @@ describe("PrintCompanyForm collapsed sections", () => {
     expect(html).toMatch(/<textarea[^>]*name="warrantyNotes"[^>]*>1 year<\/textarea>/);
     expect(html).not.toMatch(/name="quoteTerms"[^>]*\bdisabled\b/);
 
-    // Select keeps selected option; checkbox stays checked via hidden+checkbox pair.
+    // Select keeps selected option. The old input-tax flag is a hidden value.
+    // The terms QR switch is present and off.
     expect(html).toMatch(/<select[^>]*name="paperSize"[^>]*>[\s\S]*?<option value="A4" selected=""/);
     expect(html).toMatch(/name="showInputTaxDisclaimer"[^>]*value="true"|value="true"[^>]*name="showInputTaxDisclaimer"/);
-    expect(html).toMatch(/id="showInputTaxDisclaimer"[^>]*checked|checked[^>]*id="showInputTaxDisclaimer"/);
+    expect(html).not.toMatch(/id="showInputTaxDisclaimer"/);
+    expect(html).toMatch(/id="showTermsQr"/);
+    expect(html).not.toMatch(/id="showTermsQr"[^>]*\bchecked\b/);
   });
 });

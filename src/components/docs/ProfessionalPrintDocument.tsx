@@ -166,10 +166,12 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
                 <th>Date</th>
                 <td>{doc.date}</td>
               </tr>
-              <tr className={hideStatus ? "pp-status-row no-print" : "pp-status-row"}>
-                <th>Status</th>
-                <td>{doc.status}</td>
-              </tr>
+              {hideStatus ? null : (
+                <tr className="pp-status-row">
+                  <th>Status</th>
+                  <td>{doc.status}</td>
+                </tr>
+              )}
               {doc.meta.map((m) => (
                 <tr key={`${m.label}-${m.value}`}>
                   <th>{m.label}</th>

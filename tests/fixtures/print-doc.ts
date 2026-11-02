@@ -86,7 +86,7 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
       { label: "Prepared by", value: "Jerwin" },
     ],
     validity: "Nov 30, 2026",
-    taxLines: [QUOTATION_NOT_INVOICE],
+    taxLines: [QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER],
     paymentInstructions: [
       { kind: "bank", label: "Sample Bank", accountName: "HACIEN Sample", accountLast4: "1234", accountPrinted: "****1234" },
     ],
@@ -114,7 +114,7 @@ export const salesOrderPrintFixture = (): ProfessionalPrintModel =>
     number: "SO-2026-0001",
     hideStatus: true,
     thankYou: true,
-    taxLines: [SALES_ORDER_NOT_INVOICE],
+    taxLines: [SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER],
     meta: [
       { label: "Prepared by", value: "Jerwin" },
       { label: "Customer PO/ref", value: "PO-CUST-99" },
@@ -233,7 +233,7 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
     items: undefined,
     totals: undefined,
     thankYou: true,
-    taxLines: [STATEMENT_NOT_OFFICIAL],
+    taxLines: [STATEMENT_NOT_OFFICIAL, INPUT_TAX_DISCLAIMER],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "10000.00",

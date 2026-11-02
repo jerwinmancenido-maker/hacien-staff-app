@@ -6,10 +6,11 @@
 export const NON_VAT_LABEL = "NON-VAT" as const;
 
 /**
- * UNVERIFIED BIR rule — Settings toggle (default ON for billing / collection).
+ * Exact customer-print line. Always on for billing, collection, quote, sales
+ * order, and the customer statement. Not gated by Settings.
  * Keep this phrase exact; do not invent variants elsewhere.
  */
-export const INPUT_TAX_DISCLAIMER = "This document is not valid for claim of input tax" as const;
+export const INPUT_TAX_DISCLAIMER = "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX." as const;
 
 /** Required on billing and collection prints. */
 export const NOT_OFFICIAL_INVOICE =
@@ -53,18 +54,40 @@ const CUSTOMER_FACING: ReadonlySet<PrintDocKind> = new Set([
   "customer_statement",
 ]);
 const STATEMENT_KINDS: ReadonlySet<PrintDocKind> = new Set(["customer_statement", "supplier_statement"]);
-/** Customer docs that hide internal status (WON / OPEN / …) on paper. */
-export const HIDE_STATUS_ON_PRINT: ReadonlySet<PrintDocKind> = new Set(["quote", "sales_order", "billing"]);
+/** Outside prints hide internal status (WON / OPEN / SENT / …). */
+export const HIDE_STATUS_ON_PRINT: ReadonlySet<PrintDocKind> = new Set([
+  "quote",
+  "sales_order",
+  "billing",
+  "collection",
+  "customer_statement",
+  "supplier_po",
+  "receiving_report",
+  "supplier_payment",
+  "expense",
+  "supplier_statement",
+]);
+
+/** The five customer prints that always carry the input-tax line. */
+const INPUT_TAX_ALWAYS: ReadonlySet<PrintDocKind> = new Set([
+  "quote",
+  "sales_order",
+  "billing",
+  "collection",
+  "customer_statement",
+]);
 
 /**
  * Legal / tax footer lines for a document kind.
- * `showInputTaxDisclaimer` comes from Settings (default true); only applied to
- * billing and collection when enabled.
+ * `showInputTaxDisclaimer` is accepted and ignored: the input-tax line is
+ * always printed on the five customer prints, even when that old toggle is off.
+ * Supplier statements do not get the line.
  */
 export function taxFooterLines(
   kind: PrintDocKind,
-  opts: { showInputTaxDisclaimer: boolean } = { showInputTaxDisclaimer: true },
+  opts: { showInputTaxDisclaimer?: boolean } = {},
 ): string[] {
+  void opts;
   const lines: string[] = [];
   if (kind === "quote") {
     lines.push(QUOTATION_NOT_INVOICE);
@@ -74,10 +97,12 @@ export function taxFooterLines(
   }
   if (BILLING_COLLECTION.has(kind)) {
     lines.push(NOT_OFFICIAL_INVOICE);
-    if (opts.showInputTaxDisclaimer) lines.push(INPUT_TAX_DISCLAIMER);
   }
   if (STATEMENT_KINDS.has(kind)) {
     lines.push(STATEMENT_NOT_OFFICIAL);
+  }
+  if (INPUT_TAX_ALWAYS.has(kind)) {
+    lines.push(INPUT_TAX_DISCLAIMER);
   }
   return lines;
 }

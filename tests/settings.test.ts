@@ -51,6 +51,22 @@ describe("settings defaults", () => {
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.quote, y, 1)).toBe("QT-2026-0001");
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.salesOrder, y, 1)).toBe("SO-2026-0001");
     expect(formatDocNumber(DEFAULT_SETTINGS.numbering.supplierPo, y, 12)).toBe("PO-2026-0012");
+    expect(DEFAULT_SETTINGS.print.showTermsQr).toBe(false);
+  });
+
+  it("reads a snapshot that has no terms-QR switch as off", async () => {
+    const store = memoryStore();
+    const { showTermsQr: _omit, ...print } = DEFAULT_SETTINGS.print;
+    await store.create({
+      version: 1,
+      data: { ...DEFAULT_SETTINGS, print } as typeof DEFAULT_SETTINGS,
+      changedKey: null,
+      before: null,
+      after: null,
+      createdById: null,
+    });
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.settings.print.showTermsQr).toBe(false);
   });
 });
 

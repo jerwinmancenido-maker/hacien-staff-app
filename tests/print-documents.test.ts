@@ -99,6 +99,25 @@ describe("professional print documents", () => {
     }
   });
 
+  it("prints the exact input-tax line on the five customer prints even when the old toggle is off", () => {
+    expect(INPUT_TAX_DISCLAIMER).toBe("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
+    const five = [
+      ["billing", billingPrintFixture],
+      ["collection", collectionPrintFixture],
+      ["quote", quotePrintFixture],
+      ["sales_order", salesOrderPrintFixture],
+      ["customer_statement", customerStatementFixture],
+    ] as const;
+    for (const [kind, fixture] of five) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: false }), kind).toContain(INPUT_TAX_DISCLAIMER);
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true }), kind).toContain(INPUT_TAX_DISCLAIMER);
+      expect(html(fixture()), kind).toContain(INPUT_TAX_DISCLAIMER);
+    }
+    expect(taxFooterLines("supplier_statement", { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
+    expect(html(supplierStatementFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
+    expect(html(poPrintFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
+  });
+
   it("billing and collection say not an official invoice and include the input-tax note", () => {
     for (const fixture of [billingPrintFixture, collectionPrintFixture]) {
       const markup = html(fixture());
@@ -107,11 +126,17 @@ describe("professional print documents", () => {
     }
   });
 
-  it("customer statement does not include the input-tax disclaimer", () => {
+  it("customer statement includes the official-statement line and the input-tax line", () => {
     const markup = html(customerStatementFixture());
-    expect(markup).not.toContain(INPUT_TAX_DISCLAIMER);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([STATEMENT_NOT_OFFICIAL]);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([STATEMENT_NOT_OFFICIAL]);
+    expect(markup).toContain(INPUT_TAX_DISCLAIMER);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([
+      STATEMENT_NOT_OFFICIAL,
+      INPUT_TAX_DISCLAIMER,
+    ]);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([
+      STATEMENT_NOT_OFFICIAL,
+      INPUT_TAX_DISCLAIMER,
+    ]);
   });
 
   it("keeps tax footer lines in the shared config module", () => {
@@ -119,10 +144,13 @@ describe("professional print documents", () => {
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
     ]);
-    expect(taxFooterLines("billing", { showInputTaxDisclaimer: false })).toEqual([NOT_OFFICIAL_INVOICE]);
-    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE]);
-    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE]);
-    expect(taxFooterLines("collection", { showInputTaxDisclaimer: true })).toEqual([
+    expect(taxFooterLines("billing", { showInputTaxDisclaimer: false })).toEqual([
+      NOT_OFFICIAL_INVOICE,
+      INPUT_TAX_DISCLAIMER,
+    ]);
+    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(taxFooterLines("collection", { showInputTaxDisclaimer: false })).toEqual([
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
     ]);
@@ -132,18 +160,20 @@ describe("professional print documents", () => {
     const byKind: Record<string, string[]> = {
       quote: taxFooterLines("quote"),
       sales_order: taxFooterLines("sales_order"),
-      billing: taxFooterLines("billing", { showInputTaxDisclaimer: true }),
-      collection: taxFooterLines("collection", { showInputTaxDisclaimer: true }),
-      customer_statement: taxFooterLines("customer_statement"),
+      billing: taxFooterLines("billing", { showInputTaxDisclaimer: false }),
+      collection: taxFooterLines("collection", { showInputTaxDisclaimer: false }),
+      customer_statement: taxFooterLines("customer_statement", { showInputTaxDisclaimer: false }),
       supplier_statement: taxFooterLines("supplier_statement"),
       supplier_po: taxFooterLines("supplier_po"),
       receiving_report: taxFooterLines("receiving_report"),
       supplier_payment: taxFooterLines("supplier_payment"),
       expense: taxFooterLines("expense"),
     };
-    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE]);
-    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE]);
+    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
     expect(byKind.billing).toEqual([NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.customer_statement).toEqual([STATEMENT_NOT_OFFICIAL, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.supplier_statement).toEqual([STATEMENT_NOT_OFFICIAL]);
     expect(html(quotePrintFixture())).toContain(QUOTATION_NOT_INVOICE);
     expect(html(salesOrderPrintFixture())).toContain(SALES_ORDER_NOT_INVOICE);
     expect(html(salesOrderPrintFixture())).not.toContain(QUOTATION_NOT_INVOICE);
@@ -180,16 +210,17 @@ describe("professional print documents", () => {
     expect(html(supplierPaymentPrintFixture())).toContain("BIR Form 2307");
   });
 
-  it("hides internal status on printed quote, SO and billing (screen-only row)", () => {
-    for (const fixture of [quotePrintFixture, salesOrderPrintFixture, billingPrintFixture]) {
+  it("omits the Status row on every outside print", () => {
+    for (const [, fixture] of docs) {
       const markup = html(fixture());
-      expect(markup).toContain('class="pp-status-row no-print"');
-      expect(markup).toContain(`>${fixture().status}<`);
+      expect(markup).not.toContain(">Status<");
+      expect(markup).not.toContain("Status:");
+      expect(markup).not.toContain("pp-status-row");
     }
-    // Supplier PO still prints status.
-    const po = html(poPrintFixture());
-    expect(po).toContain('class="pp-status-row"');
-    expect(po).not.toContain("pp-status-row no-print");
+    expect(html(quotePrintFixture())).not.toContain(">SENT<");
+    expect(html(poPrintFixture())).not.toContain(">OPEN<");
+    expect(html(draftPoFixture())).toContain("DRAFT");
+    expect(html(voidQuoteFixture())).toContain("VOID");
   });
 
   it("shows company email in the letterhead whenever it is set", () => {
@@ -269,6 +300,7 @@ describe("print shell screen-only chrome", () => {
     expect(markup).toContain("no-print");
     expect(markup).toContain("Print / Save PDF");
     expect(markup).toContain("Back");
+    expect(markup).not.toContain(`· ${quotePrintFixture().status} ·`);
     expect(markup).toMatch(/tax-cal-notice[^>]*no-print|no-print[^>]*tax-cal-notice/);
     expect(markup).toContain("Add your TIN and address so they print on documents.");
   });

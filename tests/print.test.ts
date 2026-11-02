@@ -43,6 +43,21 @@ describe("print document", () => {
   it("generates the QR locally for the terms URL", async () => {
     const svg = await qrSvg();
     expect(svg.startsWith("<svg")).toBe(true);
-    expect(TERMS_URL).toBe("https://haciensolutions.com/terms");
+    expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
+  });
+
+  it("prints no QR or terms URL unless the model includes them", () => {
+    const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() }));
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain("haciensolutions.com");
+    expect(html).not.toContain("Terms:");
+  });
+
+  it("prints the policies URL when the terms QR is on", async () => {
+    const doc = { ...quotePrintFixture(), qrSvg: await qrSvg(), termsUrl: TERMS_URL };
+    const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc }));
+    expect(html).toContain("<svg");
+    expect(html).toContain("https://haciensolutions.com/policies");
+    expect(html).not.toContain("haciensolutions.com/terms");
   });
 });
