@@ -194,6 +194,30 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           withholdingAtc: i.withholdingAtc ?? null,
         })),
       };
+      // Delivered qty is authoritative: cannot remove a delivered line or drop
+      // ordered qty below what was already delivered (check before price lock).
+      const beforeById = new Map(before.items.map((i) => [i.id, i]));
+      for (const rid of removedIds) {
+        const prev = beforeById.get(rid);
+        if (prev && toScaled(money(prev.deliveredQty), 2) > 0n) {
+          throw new DocRuleError(
+            "Void deliveries on this line before removing it.",
+            `items.${rid}`,
+          );
+        }
+      }
+      for (const item of items) {
+        if (!item.id) continue;
+        const prev = beforeById.get(item.id);
+        if (!prev) continue;
+        const delivered = toScaled(money(prev.deliveredQty), 2);
+        if (delivered > 0n && toScaled(money(item.qty), 2) < delivered) {
+          throw new DocRuleError(
+            `Ordered quantity cannot be below delivered (${money(prev.deliveredQty).replace(/\.00$/, "")}).`,
+            `items.${item.id}.qty`,
+          );
+        }
+      }
       const lockMsg = salesOrderPriceLockError({
         isAdmin: actor.isAdmin === true,
         reason: priceOverrideReason,

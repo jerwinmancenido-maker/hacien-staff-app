@@ -10,8 +10,10 @@ import { db } from "@/lib/db";
 import { customerDeliveryAddressId, makeCustomer, makeUser, quoteInput } from "./fixtures";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
+import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
 import { expectedPaymentDateFromIar, isOverdue } from "@/lib/billing/dates";
 import { overdueInfo } from "@/lib/billing/views";
+import { money } from "@/lib/documents/common";
 
 async function makeTestSalesOrder(admin: DocActor, qty = "10") {
   const customer = await makeCustomer();
@@ -146,6 +148,62 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     // Verify raw keys in the saved record do not contain any ID type or photo
     const keys = Object.keys(saved);
     expect(keys.some((k) => /idType|idNumber|idPhoto|idCard|idCopy/i.test(k))).toBe(false);
+  });
+
+  it("refuses ordered qty below delivered; void still works after SO void", async () => {
+    const admin = await makeUser("costs");
+    const so = await makeTestSalesOrder(admin, "10");
+    const soWithItems = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      include: { items: true },
+    });
+    const item = soWithItems.items[0]!;
+
+    await recordDelivery(
+      so.id,
+      {
+        drNumber: "DR-BELOW",
+        deliveryDate: new Date(),
+        idSightChecked: false,
+        items: [{ salesOrderItemId: item.id, qty: "6.00" }],
+      },
+      admin,
+    );
+
+    await expect(
+      updateSalesOrder(
+        so.id,
+        {
+          buyerPoNo: so.buyerPoNo,
+          contactId: so.contactId,
+          terms: so.terms,
+          notes: so.notes,
+          deliveryAddress: so.deliveryAddress,
+          items: [
+            {
+              id: item.id,
+              description: item.description,
+              kind: item.kind as "GOODS",
+              qty: "5",
+              unit: item.unit,
+              supplierId: item.supplierId,
+              supplierUnitCost: money(item.supplierUnitCost),
+              unitPrice: money(item.unitPrice),
+            },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/below delivered/);
+
+    const delivery = await db.delivery.findFirstOrThrow({
+      where: { salesOrderId: so.id, voidedAt: null },
+    });
+    await voidSalesOrder(so.id, "Test void after delivery", admin);
+    const voided = await voidDelivery(delivery.id, "Reverse after SO void", admin);
+    expect(voided.voidedAt).toBeInstanceOf(Date);
+    const line = await db.salesOrderItem.findUniqueOrThrow({ where: { id: item.id } });
+    expect(money(line.deliveredQty)).toBe("0.00");
   });
 
   it("Expected-by math (incl. month rollover)", () => {

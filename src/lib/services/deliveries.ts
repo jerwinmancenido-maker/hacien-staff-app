@@ -16,25 +16,54 @@ export type DeliveryActor = PermissionUser & { id: string };
 
 type LockedLine = { id: string; description: string; qty: string; deliveredQty: string };
 
+async function lockSalesOrderRow(
+  tx: Tx,
+  salesOrderId: string,
+): Promise<{ id: string; status: string; number: string }> {
+  const so = await tx.$queryRaw<{ id: string; status: string; number: string }[]>`SELECT \`id\`, \`status\`, \`number\` FROM \`SalesOrder\` WHERE \`id\` = ${salesOrderId} FOR UPDATE`;
+  if (!so[0]) throw new DocRuleError("Sales order not found.");
+  return so[0];
+}
+
+function mapLockedLines(
+  rows: { id: string; description: string; qty: unknown; deliveredQty: unknown }[],
+): LockedLine[] {
+  return rows.map((r) => ({
+    id: r.id,
+    description: r.description,
+    qty: money(String(r.qty)),
+    deliveredQty: money(String(r.deliveredQty ?? 0)),
+  }));
+}
+
+/** Lock live SO lines for recording a delivery (void SOs refused). */
 async function lockForDelivery(
   tx: Tx,
   salesOrderId: string,
 ): Promise<{ status: string; number: string; lines: LockedLine[] }> {
-  const so = await tx.$queryRaw<{ id: string; status: string; number: string }[]>`SELECT \`id\`, \`status\`, \`number\` FROM \`SalesOrder\` WHERE \`id\` = ${salesOrderId} FOR UPDATE`;
-  if (!so[0]) throw new DocRuleError("Sales order not found.");
-  if (so[0].status === "VOID") throw new DocRuleError("Cannot deliver on a void sales order.");
+  const so = await lockSalesOrderRow(tx, salesOrderId);
+  if (so.status === "VOID") throw new DocRuleError("Cannot deliver on a void sales order.");
 
   const rows = await tx.$queryRaw<{ id: string; description: string; qty: unknown; deliveredQty: unknown }[]>`SELECT \`id\`, \`description\`, \`qty\`, \`deliveredQty\` FROM \`SalesOrderItem\` WHERE \`salesOrderId\` = ${salesOrderId} AND \`removedAt\` IS NULL ORDER BY \`sortOrder\` FOR UPDATE`;
-  return {
-    status: so[0].status,
-    number: so[0].number,
-    lines: rows.map((r) => ({
-      id: r.id,
-      description: r.description,
-      qty: money(String(r.qty)),
-      deliveredQty: money(String(r.deliveredQty ?? 0)),
-    })),
-  };
+  return { status: so.status, number: so.number, lines: mapLockedLines(rows) };
+}
+
+/**
+ * Lock the delivery's SO item rows for void — including removed lines, and
+ * even when the sales order is already void (so deliveredQty can still reverse).
+ */
+async function lockLinesForVoidDelivery(
+  tx: Tx,
+  salesOrderId: string,
+  itemIds: readonly string[],
+): Promise<{ status: string; number: string; lines: LockedLine[] }> {
+  const so = await lockSalesOrderRow(tx, salesOrderId);
+  const lines: LockedLine[] = [];
+  for (const itemId of itemIds) {
+    const rows = await tx.$queryRaw<{ id: string; description: string; qty: unknown; deliveredQty: unknown }[]>`SELECT \`id\`, \`description\`, \`qty\`, \`deliveredQty\` FROM \`SalesOrderItem\` WHERE \`id\` = ${itemId} AND \`salesOrderId\` = ${salesOrderId} FOR UPDATE`;
+    if (rows[0]) lines.push(...mapLockedLines(rows));
+  }
+  return { status: so.status, number: so.number, lines };
 }
 
 export async function recordDelivery(
@@ -148,18 +177,20 @@ export async function voidDelivery(id: string, reason: string, actor: DeliveryAc
       if (!delivery) throw new DocRuleError("Delivery record not found.");
       if (delivery.voidedAt) throw new DocRuleError("This delivery is already void.");
 
-      const so = await lockForDelivery(tx, delivery.salesOrderId);
+      const itemIds = delivery.items.map((i) => i.salesOrderItemId);
+      const so = await lockLinesForVoidDelivery(tx, delivery.salesOrderId, itemIds);
       const byId = new Map(so.lines.map((l) => [l.id, l]));
 
       for (const item of delivery.items) {
         const line = byId.get(item.salesOrderItemId);
-        if (line) {
-          line.deliveredQty = applyDelivery(line, money(item.qty), -1);
-          await tx.salesOrderItem.update({
-            where: { id: line.id },
-            data: { deliveredQty: line.deliveredQty },
-          });
+        if (!line) {
+          throw new DocRuleError("A line of this delivery is missing from the sales order.");
         }
+        line.deliveredQty = applyDelivery(line, money(item.qty), -1);
+        await tx.salesOrderItem.update({
+          where: { id: line.id },
+          data: { deliveredQty: line.deliveredQty },
+        });
       }
 
       const now = new Date();
