@@ -15,7 +15,7 @@ import {
   type PermissionUser,
   type Role,
 } from "@/lib/permissions";
-import { PAGE_CSP, pageCsp, securityHeaders } from "../next.config";
+import { PAGE_CSP, pageCsp, securityHeaders } from "../src/lib/security-headers";
 import { voidBilling } from "@/lib/services/billings";
 import { voidCollection } from "@/lib/services/collections";
 import { voidPurchaseOrder } from "@/lib/services/purchase-orders";
