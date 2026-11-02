@@ -4,6 +4,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getSupplier } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { maskSupplierForViewer } from "@/lib/bank-mask";
 import { TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatDate, formatPeso } from "@/lib/format";
 import { db } from "@/lib/db";
@@ -43,9 +44,11 @@ export default async function SupplierPage({
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
+  // Masked for every role. Admins load the full number only via the logged reveal.
+  const safeSupplier = maskSupplierForViewer(supplier, user);
   const { settings } = await getSettingsSnapshot();
   const canEdit = can(user, "edit_data");
-  const { contacts, ...record } = supplier;
+  const { contacts, ...record } = safeSupplier;
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "supplier", id } as const;
   const warnDays = await expiryWarningDays();
@@ -166,9 +169,10 @@ export default async function SupplierPage({
 
       {tab === "overview" && (
         <SupplierOverview
-          supplier={supplier}
+          supplier={safeSupplier}
           contacts={contacts}
           canEdit={canEdit}
+          isAdmin={user.isAdmin}
           lastActivityDate={lastActivityAt}
           addresses={addresses}
           docIds={docIds}
@@ -185,6 +189,7 @@ export default async function SupplierPage({
             terms={settings.lists.paymentTerms}
             action={saveSupplierAction.bind(null, id)}
             canEdit={canEdit}
+            isAdmin={user.isAdmin}
           />
         </div>
       )}

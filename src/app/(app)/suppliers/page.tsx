@@ -7,6 +7,7 @@ import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/b
 import { formatAddress } from "@/lib/addresses/format";
 import { missingBankDetails, SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
+import { maskBankAccountNumber, maskSuppliersForViewer } from "@/lib/bank-mask";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader, type ChipTone } from "@/components/ui";
@@ -35,7 +36,8 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const expiringOnly = s.docs === "expiring";
   const warnDays = await expiryWarningDays();
   const expiringIds = await ownersWithExpiringDocuments("supplier", warnDays);
-  const suppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
+  const rawSuppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
+  const suppliers = maskSuppliersForViewer(rawSuppliers, user);
   const filtered = !!(s.q || tax || expiringOnly);
 
   const filterTabs = [
@@ -84,7 +86,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           label: "Bank",
           value: isMissingBank
             ? "No bank details"
-            : `UnionBank · ${x.bankAccountNumber ?? "Account set"}`,
+            : `UnionBank · ${maskBankAccountNumber(x.bankAccountNumber) || "Account set"}`,
         },
       ],
       amount: {

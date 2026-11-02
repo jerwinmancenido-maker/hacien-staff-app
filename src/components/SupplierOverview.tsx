@@ -6,7 +6,9 @@ import { Avatar, Chip, type ChipTone } from "./ui";
 import { Activity } from "./Activity";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
 import { formatAddress } from "@/lib/addresses/format";
+import { maskBankAccountNumber } from "@/lib/bank-mask";
 import { AlertTriangleIcon, PlusIcon } from "./Icons";
+import { SupplierBankAccount } from "./SupplierBankAccount";
 
 const TONE: Record<SupplierTaxType, ChipTone> = {
   VAT: "green",
@@ -18,6 +20,7 @@ export async function SupplierOverview({
   supplier,
   contacts,
   canEdit,
+  isAdmin,
   lastActivityDate,
   addresses,
   docIds,
@@ -28,6 +31,7 @@ export async function SupplierOverview({
   supplier: Supplier;
   contacts: Contact[];
   canEdit?: boolean;
+  isAdmin?: boolean;
   lastActivityDate?: Date | null;
   addresses: Address[];
   docIds: string[];
@@ -121,7 +125,7 @@ export async function SupplierOverview({
                 Add bank name, account name, and account number in Details so supplier payments and vouchers can be processed.
               </div>
             </div>
-            {canEdit && (
+            {canEdit && isAdmin && (
               <Link className="btn btn-secondary btn-sm" href={`/suppliers/${supplier.id}?tab=details`}>
                 Edit bank info
               </Link>
@@ -148,7 +152,11 @@ export async function SupplierOverview({
             <div>
               <div className="meta-label">Account number</div>
               <div className="meta-val num strong" style={{ textAlign: "left" }}>
-                {supplier.bankAccountNumber}
+                <SupplierBankAccount
+                  supplierId={supplier.id}
+                  initialValue={maskBankAccountNumber(supplier.bankAccountNumber)}
+                  isAdmin={isAdmin}
+                />
               </div>
             </div>
             <div>

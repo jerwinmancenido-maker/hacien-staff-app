@@ -3,6 +3,7 @@
 
 import type { AuditAction, Prisma } from "@prisma/client";
 import type { Tx, Db } from "./db";
+import { maskBankAccountNumber } from "./bank-mask";
 
 export type AuditEntityType =
   | "User"
@@ -38,9 +39,29 @@ function normalize(value: unknown): unknown {
   return value;
 }
 
+/** Value shown in the activity diff. Bank numbers are last-4 only. */
+export function auditDisplayValue(key: string, value: unknown): unknown {
+  if (key === "bankAccountNumber" && typeof value === "string") return maskBankAccountNumber(value);
+  return value;
+}
+
+function sanitizeAuditPlain(obj: Plain | null | undefined): Plain | null {
+  if (!obj) return null;
+  const out: Plain = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === "bankAccountNumber") {
+      out[k] = typeof v === "string" ? maskBankAccountNumber(v) : v;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 /**
  * Changed fields only. Ignores bookkeeping fields. For creates pass `before = null`,
  * which records every (non-empty) field as "after".
+ * Bank account numbers are always masked (old last 4 -> new last 4).
  */
 export function auditDiff(
   before: Plain | null | undefined,
@@ -53,8 +74,12 @@ export function auditDiff(
   for (const key of keys) {
     if (ignore.has(key)) continue;
     // Missing and null count as the same (a create with tin: null has no tin change).
-    const bv = normalize(before?.[key]) ?? null;
-    const av = normalize(after?.[key]) ?? null;
+    let bv = normalize(before?.[key]) ?? null;
+    let av = normalize(after?.[key]) ?? null;
+    if (key === "bankAccountNumber") {
+      if (typeof bv === "string") bv = maskBankAccountNumber(bv);
+      if (typeof av === "string") av = maskBankAccountNumber(av);
+    }
     if (JSON.stringify(bv) === JSON.stringify(av)) continue;
     if (before) b[key] = bv;
     if (after) a[key] = av;
@@ -80,7 +105,7 @@ export type AuditInput = {
 export async function writeAudit(tx: Tx | Db, input: AuditInput): Promise<void> {
   const { before, after } =
     input.diff === false
-      ? { before: input.before ?? null, after: input.after ?? null }
+      ? { before: sanitizeAuditPlain(input.before), after: sanitizeAuditPlain(input.after) }
       : auditDiff(input.before, input.after);
   await tx.auditLog.create({
     data: {

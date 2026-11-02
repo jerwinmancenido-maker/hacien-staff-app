@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Supplier } from "@prisma/client";
 import { Field } from "@/components/Field";
+import { SupplierBankAccount } from "@/components/SupplierBankAccount";
+import { bankNumberDraft } from "@/lib/bank-mask";
 import { SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -12,20 +14,26 @@ export function SupplierForm({
   terms,
   action,
   canEdit,
+  isAdmin = false,
 }: {
   supplier: Supplier | null;
   terms: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
+  isAdmin?: boolean;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const v = (k: keyof Supplier) => state.values?.[k] ?? (supplier?.[k] as string | null) ?? "";
   const [name, setName] = useState(v("name"));
   const [bankName, setBankName] = useState(v("bankAccountName"));
-  const [bankNumber, setBankNumber] = useState(v("bankAccountNumber"));
+  // Stored number stays masked on the record. The input starts empty so a save
+  // keeps the current number unless an Admin types a replacement.
+  const [bankNumber, setBankNumber] = useState(bankNumberDraft(typeof state.values?.bankAccountNumber === "string" ? state.values.bankAccountNumber : ""));
   const e = state.fieldErrors ?? {};
   const termOptions = supplier?.defaultTerms && !terms.includes(supplier.defaultTerms) ? [...terms, supplier.defaultTerms] : terms;
-  const noBank = !bankName.trim() || !bankNumber.trim();
+  const maskedNumber = (supplier?.bankAccountNumber ?? "").trim();
+  const hasNumber = maskedNumber.length > 0;
+  const noBank = !bankName.trim() || (!hasNumber && !bankNumber.trim());
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -34,7 +42,11 @@ export function SupplierForm({
           {state.message}
         </div>
       )}
-      {noBank && <div className="alert warn">No bank details — add them before paying.</div>}
+      {noBank && (
+        <div className="alert warn">
+          {isAdmin ? "No bank details — add them before paying." : "No bank details recorded."}
+        </div>
+      )}
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
         <div className="form-grid">
           <Field label="Name" name="name" required error={e.name} full>
@@ -62,19 +74,45 @@ export function SupplierForm({
               ))}
             </select>
           </Field>
-          <h3 className="section-title">UnionBank details</h3>
-          <Field label="Account name" name="bankAccountName" error={e.bankAccountName}>
-            <input id="bankAccountName" name="bankAccountName" type="text" value={bankName} onChange={(ev) => setBankName(ev.target.value)} />
-          </Field>
-          <Field label="Account number" name="bankAccountNumber" error={e.bankAccountNumber}>
-            <input id="bankAccountNumber" name="bankAccountNumber" type="text" inputMode="numeric" value={bankNumber} onChange={(ev) => setBankNumber(ev.target.value)} />
-          </Field>
-          <Field label="Bank / branch" name="bankBranch" error={e.bankBranch}>
-            <input id="bankBranch" name="bankBranch" type="text" defaultValue={v("bankBranch")} placeholder="UnionBank – Ortigas" />
-          </Field>
-          <Field label="Bank notes" name="bankNotes" error={e.bankNotes}>
-            <input id="bankNotes" name="bankNotes" type="text" defaultValue={v("bankNotes")} />
-          </Field>
+          {isAdmin && <h3 className="section-title">UnionBank details</h3>}
+          {supplier && (
+            <div className="field full">
+              <div className="label">Account number</div>
+              <div className="field-control-row">
+                <SupplierBankAccount supplierId={supplier.id} initialValue={maskedNumber} isAdmin={isAdmin} />
+              </div>
+            </div>
+          )}
+          {isAdmin && (
+            <>
+              <Field label="Account name" name="bankAccountName" error={e.bankAccountName}>
+                <input id="bankAccountName" name="bankAccountName" type="text" value={bankName} onChange={(ev) => setBankName(ev.target.value)} />
+              </Field>
+              <Field
+                label={hasNumber ? "New account number" : "Account number"}
+                name="bankAccountNumber"
+                error={e.bankAccountNumber}
+                hint={hasNumber ? "Leave blank to keep the current number." : undefined}
+              >
+                <input
+                  id="bankAccountNumber"
+                  name="bankAccountNumber"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={bankNumber}
+                  onChange={(ev) => setBankNumber(ev.target.value)}
+                  placeholder={hasNumber ? "Type a new number" : ""}
+                />
+              </Field>
+              <Field label="Bank / branch" name="bankBranch" error={e.bankBranch}>
+                <input id="bankBranch" name="bankBranch" type="text" defaultValue={v("bankBranch")} placeholder="UnionBank – Ortigas" />
+              </Field>
+              <Field label="Bank notes" name="bankNotes" error={e.bankNotes}>
+                <input id="bankNotes" name="bankNotes" type="text" defaultValue={v("bankNotes")} />
+              </Field>
+            </>
+          )}
           <Field label="Notes" name="notes" error={e.notes} full>
             <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
           </Field>

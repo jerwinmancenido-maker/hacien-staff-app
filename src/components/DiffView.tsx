@@ -1,5 +1,7 @@
 // Renders an audit/settings before → after diff compactly.
 
+import { auditDisplayValue } from "@/lib/audit";
+
 type Json = unknown;
 
 function show(v: Json): string {
@@ -17,8 +19,8 @@ export function DiffView({ before, after }: { before: Json; after: Json }) {
     <div className="diff">
       {keys.map((k) => (
         <div key={k}>
-          {k}: {k in b && <span className="old">{show(b[k])}</span>} {k in b && "→ "}
-          <span>{show(a[k])}</span>
+          {k}: {k in b && <span className="old">{show(auditDisplayValue(k, b[k]))}</span>} {k in b && "→ "}
+          <span>{show(auditDisplayValue(k, a[k]))}</span>
         </div>
       ))}
     </div>
