@@ -59,7 +59,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
         },
         admin,
       ),
-    ).rejects.toThrow("Delivered quantity cannot exceed ordered");
+    ).rejects.toThrow(/Only 10 left to deliver|Delivered quantity cannot exceed ordered/);
 
     // Delivering 6 is valid
     const del1 = await recordDelivery(
