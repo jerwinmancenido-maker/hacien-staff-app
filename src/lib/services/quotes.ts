@@ -171,7 +171,11 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
     ? withholdingFromItems(items, pickSnapshots)
     : withholdingFromItems(items);
   const moneyTotals = usePicks ? totalsData(items, pickSnapshots) : totalsData(items);
-  const validUntil = input.validUntil ?? addDays(input.date, snap.settings.quotes.defaultValidityDays);
+  const validUntil =
+    input.validUntil ??
+    (input.validForDays != null
+      ? addDays(input.date, input.validForDays)
+      : addDays(input.date, snap.settings.quotes.defaultValidityDays));
   const year = input.date.getUTCFullYear();
   const format = snap.settings.numbering.quote;
 
@@ -313,7 +317,9 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           customerId: input.customerId,
           contactId: input.contactId,
           date: input.date,
-          validUntil: input.validUntil ?? before.validUntil,
+          validUntil:
+            input.validUntil ??
+            (input.validForDays != null ? addDays(input.date, input.validForDays) : before.validUntil),
           terms: input.terms,
           notes: input.notes,
           internalNotes: input.internalNotes ?? null,

@@ -20,6 +20,7 @@ import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { remainingToBill } from "../billing/status";
 import { COST_NOT_SET_LABEL, approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { parseWithholdingPick } from "./withholding-defaults";
+import { validityDaysFromDates } from "./validity";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
@@ -232,6 +233,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     isWorkflowApproved: approvalStatus === "APPROVED",
     date: ymd(q.date)!,
     validUntil: ymd(q.validUntil)!,
+    validityDays: validityDaysFromDates(q.date, q.validUntil),
     terms: q.terms,
     notes: q.notes,
     internalNotes: q.internalNotes,

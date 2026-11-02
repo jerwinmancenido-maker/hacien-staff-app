@@ -54,6 +54,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           contactId: quote.contact?.id ?? "",
           date: quote.date,
           validUntil: quote.validUntil,
+          validForDays: quote.validityDays,
           terms: quote.terms ?? "",
           notes: quote.notes ?? "",
           internalNotes: quote.internalNotes ?? "",

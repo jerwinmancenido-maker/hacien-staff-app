@@ -4,6 +4,7 @@ import {
   WITHHOLDING_PERCENT_RANGE_ERROR,
   isWithholdingRateInRange,
 } from "../quotes/withholding-percent";
+import { validityDaysFromDates } from "../quotes/validity";
 
 export const ITEM_KINDS = ["GOODS", "SERVICES"] as const;
 export const ITEM_KIND_LABELS: Record<(typeof ITEM_KINDS)[number], string> = { GOODS: "Goods", SERVICES: "Services" };
@@ -94,6 +95,13 @@ export const quoteInputSchema = z
       .optional()
       .transform((v) => v || undefined)
       .pipe(dateOnly("Valid until").optional()),
+    /** Validity days (minimum 1 day). */
+    validForDays: z
+      .coerce
+      .number()
+      .int("Must be a whole number of days.")
+      .min(1, "At least 1 day.")
+      .optional(),
     terms: optionalText(100),
     /** Customer notes — print on the quote. Existing data maps here. */
     notes: optionalText(5000),
@@ -124,12 +132,21 @@ export const quoteInputSchema = z
     reapplyWithholding: z.boolean().optional(),
     items,
   })
-  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
+  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] })
+  .refine(
+    (v) => {
+      if (!v.validUntil) return true;
+      const days = validityDaysFromDates(v.date, v.validUntil);
+      return days === null || days >= 1;
+    },
+    { message: "At least 1 day.", path: ["validUntil"] },
+  );
 /** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
 export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo"> & {
   internalNotes?: string | null;
   subject?: string | null;
   buyerPoNo?: string | null;
+  validForDays?: number;
 };
 
 export const convertInputSchema = z.object({
