@@ -98,3 +98,7 @@ export async function updateSalesOrderGovDealAction(salesOrderId: string, _prev:
     return { ok: true, message: "Government deal fields saved." };
   }, values);
 }
+
+export async function voidDeliveryForOrder(salesOrderId: string, deliveryId: string, reason: string): Promise<FormState> {
+  return voidDeliveryAction(deliveryId, salesOrderId, reason);
+}

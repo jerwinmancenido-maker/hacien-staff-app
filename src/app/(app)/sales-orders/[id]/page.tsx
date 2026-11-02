@@ -22,7 +22,7 @@ import { PlusIcon } from "@/components/Icons";
 import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
-import { recordDeliveryAction, voidDeliveryAction, voidSalesOrderAction } from "../actions";
+import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -336,13 +336,18 @@ export default async function SalesOrderPage({
               idCheckedAt: d.idCheckedAt,
               voidedAt: d.voidedAt,
               voidReason: d.voidReason,
-              items: d.items,
+              items: d.items.map((di) => ({
+                id: di.id,
+                salesOrderItemId: di.salesOrderItemId,
+                qty: di.qty.toString(),
+                salesOrderItem: di.salesOrderItem,
+              })),
               attachments: d.attachments,
             }))}
             canEdit={can(user, "edit_data")}
             canVoid={canVoid(user)}
             action={recordDeliveryAction.bind(null, so.id)}
-            voidAction={(delId, reason) => voidDeliveryAction(delId, so.id, reason)}
+            voidAction={voidDeliveryForOrder.bind(null, so.id)}
           />
         </>
       )}
