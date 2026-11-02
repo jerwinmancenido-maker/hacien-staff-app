@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireActionPermission } from "@/lib/auth/current-user";
+import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
+import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import {
   approveQuote,
@@ -94,7 +95,9 @@ export async function refreshQuoteCompanyDetailsAction(id: string): Promise<Form
 
 export async function voidQuoteAction(id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await requireActionPermission("edit_data");
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
     await voidQuote(id, parsed.data, user);

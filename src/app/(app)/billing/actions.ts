@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireActionPermission } from "@/lib/auth/current-user";
+import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
+import { assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
-import { recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
-import { applyCustomerCredit, mark2307Received, recordCollection, voidCollection } from "@/lib/services/collections";
+import { markBillingChecked, recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
+import { applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
 import { planCreditApplication } from "@/lib/billing/allocations";
 import { unappliedCash } from "@/lib/billing/status";
 import { money } from "@/lib/documents/common";
@@ -45,7 +46,7 @@ export async function recordBillingAction(_prev: FormState, form: FormData): Pro
   };
   let goTo: string | null = null;
   const result = await runAction(async () => {
-    const user = await requireActionPermission("manage_billing");
+    const user = await requireActionPermission("record_billing");
     const { files, error } = await formFiles(form);
     if (error) return { values: echo, fieldErrors: { files: error } };
     const billing = await recordBilling(parsed.data, user, files);
@@ -96,7 +97,7 @@ export async function recordCollectionAction(_prev: FormState, form: FormData): 
   };
   let goTo: string | null = null;
   const result = await runAction(async () => {
-    const user = await requireActionPermission("manage_billing");
+    const user = await requireActionPermission("record_billing");
     const { files, error } = await formFiles(form);
     if (error) return { values: echo, fieldErrors: { files: error } };
     const collection = await recordCollection(parsed.data, user, files);
@@ -221,6 +222,23 @@ export async function applyCreditAction(_prev: FormState, form: FormData): Promi
     refreshBilling(customerId, null, null);
     return { ok: true, message: "Credit applied." };
   }, values);
+}
+
+export async function markBillingCheckedAction(id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new ForbiddenError();
+  assertCanMarkAdminCheck(user);
+  const billing = await markBillingChecked(id, user);
+  refreshBilling(billing.customerId, billing.salesOrderId, billing.id);
+}
+
+export async function markCollectionCheckedAction(id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new ForbiddenError();
+  assertCanMarkAdminCheck(user);
+  const collection = await markCollectionChecked(id, user);
+  refreshBilling(collection.customerId, null, null);
+  revalidatePath(`/billing/collections/${id}`);
 }
 
 export async function mark2307ReceivedAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {

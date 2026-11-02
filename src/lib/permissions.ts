@@ -16,7 +16,8 @@ export type Permission =
   | "view" // read master data
   | "edit_data" // create/update customers, suppliers, contacts
   | "approve" // approve quotes and supplier POs (S-18)
-  | "manage_billing" // record/void billings & collections, mark 2307 received
+  | "record_billing" // create a billing and record a customer payment, including 2307 lines (S-20)
+  | "manage_billing" // void billings & collections, update a billing, apply credit, mark 2307 received
   | "manage_payables" // record/void supplier payments, mark 2307 issued
   | "manage_cash" // cash accounts, expenses, transfers (Part 7a)
   | "view_books" // read-only Books registers / exports (Part 7b)
@@ -29,9 +30,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // approver is away. The last-approver guard still keeps one Approver role.
   // Admin + Approver may manage billing, payables and cash (Jerwin Oct 30, 2026).
   // view_books: Admin + Approver only (Part 7b).
-  ADMIN: ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "view_books", "manage_settings", "manage_users", "view_audit"],
-  APPROVER: ["view", "edit_data", "approve", "manage_billing", "manage_payables", "manage_cash", "view_books"],
-  STAFF: ["view", "edit_data"],
+  ADMIN: ["view", "edit_data", "approve", "record_billing", "manage_billing", "manage_payables", "manage_cash", "view_books", "manage_settings", "manage_users", "view_audit"],
+  APPROVER: ["view", "edit_data", "approve", "record_billing", "manage_billing", "manage_payables", "manage_cash", "view_books"],
+  STAFF: ["view", "edit_data", "record_billing"],
   VIEWER: ["view"],
 };
 
@@ -152,6 +153,38 @@ export function canApprove(user: PermissionUser | null | undefined): boolean {
 /** Throws ForbiddenError unless the user may approve documents. */
 export function assertCanApprove(user: PermissionUser | null | undefined): void {
   assertCan(user, "approve");
+}
+
+// ---------------------------------------------------------------------------
+// Void and purchase-order maintenance (S-20). Separate from S-18 approve.
+// ---------------------------------------------------------------------------
+
+/** Active Admin or Approver. Staff and Viewer cannot void. */
+export function canVoid(user: PermissionUser | null | undefined): boolean {
+  return !!user && user.active && (user.isAdmin || user.isApprover);
+}
+
+/** Throws ForbiddenError unless the user may void a quote, SO, PO, or receiving report. */
+export function assertCanVoid(user: PermissionUser | null | undefined): void {
+  if (!canVoid(user)) throw new ForbiddenError();
+}
+
+/** Create and edit of supplier POs: active Admin only. Approve stays assertCanApprove. */
+export function assertCanMaintainPurchaseOrder(user: PermissionUser | null | undefined): void {
+  if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();
+}
+
+/**
+ * Staff-made billing or collection (not Admin, not Approver) waits for an Admin check.
+ * Admin and Approver records are not flagged.
+ */
+export function staffNeedsAdminCheck(user: { isAdmin: boolean; isApprover: boolean } | null | undefined): boolean {
+  return !!user && !user.isAdmin && !user.isApprover;
+}
+
+/** Only an active Admin may clear "Needs Admin check". */
+export function assertCanMarkAdminCheck(user: PermissionUser | null | undefined): void {
+  if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();
 }
 
 // ---------------------------------------------------------------------------

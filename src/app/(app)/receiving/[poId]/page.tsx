@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can, canSeeCosts } from "@/lib/permissions";
+import { can, canSeeCosts, canVoid } from "@/lib/permissions";
 import { getReceivingView } from "@/lib/purchasing/views";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { day, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
@@ -88,7 +88,7 @@ export default async function ReceivingPoPage({ params, searchParams }: { params
         {po.receivingReports.length === 0 ? (
           <EmptyState line="Nothing received yet." />
         ) : (
-          <RrTable reports={po.receivingReports} poId={po.id} canEdit={canEdit && po.status !== "CLOSED"} voidAction={voidReceivingReportAction} />
+          <RrTable reports={po.receivingReports} poId={po.id} canVoid={canVoid(user) && po.status !== "CLOSED"} voidAction={voidReceivingReportAction} />
         )}
       </div>
     </>

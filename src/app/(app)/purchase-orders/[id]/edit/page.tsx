@@ -9,6 +9,7 @@ import { savePurchaseOrderAction } from "../../actions";
 
 export default async function EditPurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireCostPage("edit_data");
+  if (!user.isAdmin) redirect("/no-access");
   const { id } = await params;
   const po = await getPurchaseOrderEditData(id, user);
   if (!po) notFound();

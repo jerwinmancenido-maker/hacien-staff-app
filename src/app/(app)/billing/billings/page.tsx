@@ -26,7 +26,7 @@ export default async function BillingsListPage({
   const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
   const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
   const rows = await listBillings({ status, q: sp.q, customerId: sp.customerId, fromYmd, toYmd });
-  const canManage = can(user, "manage_billing");
+  const canRecord = can(user, "record_billing");
 
   return (
     <>
@@ -34,7 +34,7 @@ export default async function BillingsListPage({
         title="Billings"
         subtitle="Records of hand-written booklet invoices (not official invoices)."
         actions={
-          canManage && (
+          canRecord && (
             <Link className="btn" href="/billing/billings/new">
               <PlusIcon /> Record billing
             </Link>

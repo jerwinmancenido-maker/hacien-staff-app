@@ -139,7 +139,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     expect(dashStaff.sales).toBeNull();
     expect(dashStaff.kpis).toBeNull();
     expect(dashStaff.header.newQuoteHref).toBe("/quotes/new");
-    expect(dashStaff.header.newBillingHref).toBeNull();
+    expect(dashStaff.header.newBillingHref).toBe("/billing/billings/new");
 
     const dashAdmin = await loadHomeDashboard(admin, { now });
     expect(dashAdmin.kpis).not.toBeNull();

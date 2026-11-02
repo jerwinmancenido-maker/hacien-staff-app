@@ -10,10 +10,13 @@ function user(roles: Role[]): PermissionUser {
 
 describe("account menu items", () => {
   it("always includes Sign out; Settings only when manage_settings is allowed", () => {
-    expect(accountMenuActionKeys(true)).toEqual(["settings", "signout"]);
-    expect(accountMenuActionKeys(false)).toEqual(["signout"]);
-    expect(accountMenuNavItems(false)).toEqual([]);
-    expect(accountMenuNavItems(true)).toEqual([{ key: "settings", href: "/settings", label: "Settings" }]);
+    expect(accountMenuActionKeys(true)).toEqual(["password", "settings", "signout"]);
+    expect(accountMenuActionKeys(false)).toEqual(["password", "signout"]);
+    expect(accountMenuNavItems(false)).toEqual([{ key: "password", href: "/account/password", label: "Change password" }]);
+    expect(accountMenuNavItems(true)).toEqual([
+      { key: "password", href: "/account/password", label: "Change password" },
+      { key: "settings", href: "/settings", label: "Settings" },
+    ]);
   });
 
   it("gates Settings with the same manage_settings permission as the sidebar", () => {
@@ -22,6 +25,7 @@ describe("account menu items", () => {
     expect(can(user(["VIEWER"]), "manage_settings")).toBe(false);
     expect(accountMenuActionKeys(can(user(["ADMIN"]), "manage_settings"))).toContain("settings");
     expect(accountMenuActionKeys(can(user(["STAFF"]), "manage_settings"))).not.toContain("settings");
+    expect(accountMenuActionKeys(can(user(["STAFF"]), "manage_settings"))).toContain("password");
     expect(accountMenuActionKeys(can(user(["STAFF"]), "manage_settings"))).toContain("signout");
   });
 });

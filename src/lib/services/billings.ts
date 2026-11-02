@@ -4,7 +4,7 @@
 import type { BillingStatus, Prisma } from "@prisma/client";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
@@ -12,6 +12,7 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { bookletRangeError } from "../billing/booklet";
 import { netExpected, proRataWithholding, remainingToBill } from "../billing/status";
 import type { BillingInput } from "../validation/billing";
+import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type BillingActor = PermissionUser & { id: string };
@@ -41,7 +42,7 @@ async function nonVoidBillings(tx: Tx, salesOrderId: string) {
 }
 
 export async function recordBilling(input: BillingInput, actor: BillingActor, files: readonly UploadFile[] = []) {
-  assertManageBilling(actor);
+  assertCan(actor, "record_billing");
   if (toScaled(input.amount, 2) <= 0n) throw new DocRuleError("Amount must be greater than 0.", "amount");
 
   const snap = await getSettingsSnapshot();
@@ -98,6 +99,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             netExpected: net,
             status: "OPEN",
             notes: input.notes,
+            needsAdminCheck: staffNeedsAdminCheck(actor),
             createdById: actor.id,
             updatedById: actor.id,
           },
@@ -229,8 +231,11 @@ export async function updateBilling(
 
 export async function voidBilling(id: string, reason: string, actor: BillingActor) {
   assertManageBilling(actor);
-  const why = reason.trim();
-  if (!why) throw new DocRuleError("A reason is required.", "reason");
+  const parsedReason = voidReasonSchema.safeParse(reason);
+  if (!parsedReason.success) {
+    throw new DocRuleError(parsedReason.error.issues[0]?.message ?? "A reason is required.", "reason");
+  }
+  const why = parsedReason.data;
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -250,7 +255,7 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       // invoiceNo stays set — voided booklet numbers are never reused.
       const after = await tx.billing.update({
         where: { id },
-        data: { status: "VOID" satisfies BillingStatus, voidedAt: now, voidReason: why, updatedById: actor.id },
+        data: { status: "VOID" satisfies BillingStatus, voidedAt: now, voidReason: why, needsAdminCheck: false, updatedById: actor.id },
       });
       await tx.documentVoid.create({
         data: {
@@ -275,6 +280,31 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       return after;
     }, DOC_TX),
   );
+}
+
+/** Admin clears the staff-recorded check flag. Same transaction as the audit row. */
+export async function markBillingChecked(id: string, actor: BillingActor) {
+  assertCanMarkAdminCheck(actor);
+  return db.$transaction(async (tx) => {
+    const before = await tx.billing.findUnique({ where: { id } });
+    if (!before) throw new DocRuleError("Billing not found.");
+    if (!before.needsAdminCheck) return before;
+    const now = new Date();
+    const after = await tx.billing.update({
+      where: { id },
+      data: { needsAdminCheck: false, adminCheckedAt: now, adminCheckedById: actor.id, updatedById: actor.id },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Billing",
+      entityId: id,
+      action: "update",
+      before: { needsAdminCheck: true },
+      after: { needsAdminCheck: false, adminCheckedAt: now.toISOString() },
+      diff: false,
+    });
+    return after;
+  });
 }
 
 /** Recompute and persist a billing's status from its posted allocations. */
