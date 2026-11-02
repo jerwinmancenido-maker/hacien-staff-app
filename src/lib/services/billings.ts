@@ -14,7 +14,7 @@ import { netExpected, proRataWithholding, remainingToBill } from "../billing/sta
 import type { BillingInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
-import { claimBookletSerial, lockSiBookletNumber } from "./booklet";
+import { claimBookletSerial, lockSiBookletNumber, moveSiBookletClaim } from "./booklet";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -188,6 +188,7 @@ export async function updateBilling(
           throw new DocRuleError(`Amount exceeds the remaining to bill on ${so.number} (₱${remaining} left).`, "amount");
         }
 
+        await lockSiBookletNumber(tx, before.invoiceNo);
         await lockSiBookletNumber(tx, input.invoiceNo);
         if (input.invoiceNo !== before.invoiceNo) {
           const taken = await tx.billing.findFirst({ where: { invoiceNo: input.invoiceNo }, select: { number: true, status: true } });
@@ -198,9 +199,8 @@ export async function updateBilling(
               "invoiceNo",
             );
           }
-          // Claim the new serial. The prior serial stays claimed (never reused;
-          // hard-delete of claims is forbidden). Grid treats claims as occupied.
-          await claimBookletSerial(tx, "SI", input.invoiceNo);
+          // Move claim with the billing (old serial becomes free). Void does not move/release.
+          await moveSiBookletClaim(tx, before.invoiceNo, input.invoiceNo);
         } else {
           const spoiled = await tx.spoiledBookletNumber.findFirst({ where: { type: "SI", number: input.invoiceNo }, select: { id: true } });
           if (spoiled) {

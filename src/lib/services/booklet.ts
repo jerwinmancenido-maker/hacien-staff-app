@@ -15,7 +15,7 @@ export type BookletActor = PermissionUser & { id: string };
 /**
  * Cross-table unique claim for SI/DR/CR serials (Billing, Delivery, Collection,
  * Spoiled). Insert wins; unique violation means the serial is already used.
- * Claims are never deleted (voided docs keep the number used).
+ * Void keeps the claim. InvoiceNo edits move the claim (no hard-delete).
  */
 export async function claimBookletSerial(tx: Tx, type: "SI" | "DR" | "CR", number: number) {
   try {
@@ -28,6 +28,28 @@ export async function claimBookletSerial(tx: Tx, type: "SI" | "DR" | "CR", numbe
       );
     }
     throw e;
+  }
+}
+
+/** Move an SI claim from one serial to another (typo edit). No DELETE. */
+export async function moveSiBookletClaim(tx: Tx, from: number, to: number) {
+  if (from === to) return;
+  const targetTaken = await tx.bookletSerialClaim.findUnique({
+    where: { type_number: { type: "SI", number: to } },
+    select: { number: true },
+  });
+  if (targetTaken) {
+    throw new DocRuleError(
+      `SI no. ${formatBookletNumber(to)} is already used / marked spoiled.`,
+      "invoiceNo",
+    );
+  }
+  const moved = await tx.bookletSerialClaim.updateMany({
+    where: { type: "SI", number: from },
+    data: { number: to },
+  });
+  if (moved.count === 0) {
+    await claimBookletSerial(tx, "SI", to);
   }
 }
 

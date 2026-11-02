@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import { recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
+import { bookletLowStockWarning } from "@/lib/billing/booklet";
 import { getBookletView } from "@/lib/billing/views";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
@@ -259,12 +260,21 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     expect(rows).toHaveLength(1);
   });
 
-  it("editing SI invoiceNo keeps the old claim; old serial stays refused", async () => {
+  it("editing SI invoiceNo moves the claim; old serial is free for next-free/low-stock", async () => {
     const year = await freshYear();
     const { so } = await openSo(year);
     const d = new Date(`${year}-06-01T00:00:00.000Z`);
-    const first = nextInvoice();
-    const second = nextInvoice();
+    // Use the start of the ATP range so next-free assertions stay local.
+    const snap = await getSettingsSnapshot();
+    const from = snap.settings.invoiceBooklet.salesInvoice?.seriesFrom ?? snap.settings.invoiceBooklet.seriesFrom;
+    const to = snap.settings.invoiceBooklet.salesInvoice?.seriesTo ?? snap.settings.invoiceBooklet.seriesTo;
+    // Pick two free serials near the high end to avoid colliding with seed spoil fill on the app DB;
+    // on the shared test DB the wide range leaves the top open.
+    const first = Math.min(to - 2, Math.max(from, invoiceSeq + 1));
+    const second = first + 1;
+    invoiceSeq = second;
+
+    const beforeView = await getBookletView("SI");
     const b1 = await recordBilling(
       {
         salesOrderId: so.id,
@@ -287,24 +297,30 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
       },
       admin,
     );
-    expect(await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: first } } })).toBeTruthy();
+
+    expect(await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: first } } })).toBeNull();
     expect(await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: second } } })).toBeTruthy();
-    await expect(
-      recordBilling(
-        {
-          salesOrderId: so.id,
-          amount: "50.00",
-          invoiceNo: first,
-          invoiceDate: d,
-          dueDate: d,
-          notes: null,
-        },
-        admin,
-      ),
-    ).rejects.toThrow(/already used \/ marked spoiled/);
+
     const view = await getBookletView("SI");
-    const slot = view.slots.find((s) => s.invoiceNo === first);
-    expect(slot?.status).not.toBe("free");
+    expect(view.slots.find((s) => s.invoiceNo === first)?.status).toBe("free");
+    expect(view.slots.find((s) => s.invoiceNo === second)?.status).toBe("used");
+    // One serial still occupied (the new one); old is free again.
+    expect(view.freeCount).toBe(beforeView.freeCount - 1);
+    expect(view.nextFree).toBe(beforeView.nextFree);
+    expect(view.warning).toBe(bookletLowStockWarning("Sales Invoice", view.freeCount));
+
+    const reused = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "50.00",
+        invoiceNo: first,
+        invoiceDate: d,
+        dueDate: d,
+        notes: null,
+      },
+      admin,
+    );
+    expect(reused.invoiceNo).toBe(first);
   });
 
   it("refuses duplicate DR serials including after void", async () => {
