@@ -142,7 +142,8 @@ describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-TAX-${tag()}`, deliveryAddress: "Test City" }, admin, {
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-TAX-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
       date: new Date(Date.UTC(year, 0, 16)),
     });
     return { customer, supplier, so, year };

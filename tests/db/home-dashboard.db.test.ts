@@ -119,7 +119,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddress: "Manila" }, admin, {
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, supplier, so, quote: q, year };

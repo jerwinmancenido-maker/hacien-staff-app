@@ -79,6 +79,16 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     ...args: Parameters<typeof convertQuoteToSalesOrderSvc>
   ): ReturnType<typeof convertQuoteToSalesOrderSvc> {
     await ensureApproved(args[0]);
+    if (!args[1].deliveryAddressId) {
+      const q = await db.quote.findUnique({ where: { id: args[0] }, select: { customerId: true } });
+      if (q) {
+        let addr = await db.address.findFirst({ where: { customerId: q.customerId, archivedAt: null } });
+        if (!addr) {
+          addr = await db.address.create({ data: { customerId: q.customerId, kind: "DELIVERY", street: "Test delivery address", isDefault: true } });
+        }
+        args[1] = { ...args[1], deliveryAddressId: addr.id };
+      }
+    }
     return convertQuoteToSalesOrderSvc(...args);
   }
   async function markQuoteSent(...args: Parameters<typeof markQuoteSentSvc>): ReturnType<typeof markQuoteSentSvc> {
@@ -198,7 +208,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
           tin: customer.tin,
           withholdingType: "GOVERNMENT",
           defaultWithholding: ["GOV_PT_3"],
-          defaultTerms: customer.defaultTerms,
+          defaultTerms: customer.defaultTerms ?? "Net 30",
           notes: customer.notes,
         },
         { id: costUser.id, isAdmin: true },
@@ -223,7 +233,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
           tin: null,
           withholdingType: "GOVERNMENT",
           defaultWithholding: null,
-          defaultTerms: null,
+          defaultTerms: "Net 30",
           notes: null,
         },
         { id: costUser.id, isAdmin: false },

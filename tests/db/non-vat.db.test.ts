@@ -95,7 +95,8 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddress: "Manila" }, admin, {
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddressId: delivAddr!.id }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so };

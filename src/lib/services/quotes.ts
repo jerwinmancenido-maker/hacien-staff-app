@@ -19,8 +19,8 @@ import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } fro
 import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
+import { formatAddress } from "../addresses/format";
 import { voidReasonSchema, type ConvertInput, type ItemInput, type QuoteInput } from "../validation/quotes";
-import { suggestedDeliveryAddress } from "./addresses";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
 export type DocActor = PermissionUser & { id: string };
@@ -580,7 +580,17 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
       assertQuoteApproved(quote);
-      const customer = await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });
+      await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });
+      if (!input.deliveryAddressId) {
+        throw new DocRuleError("Pick a delivery address from the customer's saved addresses.", "deliveryAddressId");
+      }
+      const address = await tx.address.findFirst({
+        where: { id: input.deliveryAddressId, customerId: quote.customerId, archivedAt: null },
+      });
+      if (!address) {
+        throw new DocRuleError("That delivery address doesn't belong to this customer.", "deliveryAddressId");
+      }
+      const deliveryAddress = formatAddress(address, { multiline: true });
       const number = await allocateDocNumber(tx, "SALES_ORDER", year, format);
       const so = await tx.salesOrder.create({
         data: {
@@ -592,7 +602,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
           buyerPoNo: input.buyerPoNo,
           buyerPoDate: input.buyerPoDate ?? null,
           // Snapshot of the text: later address edits don't change the SO.
-          deliveryAddress: input.deliveryAddress ?? (await suggestedDeliveryAddress(customer, tx)),
+          deliveryAddress,
           terms: quote.terms,
           notes: quote.notes,
           settingsVersionId: quote.settingsVersionId,

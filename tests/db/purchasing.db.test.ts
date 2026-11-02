@@ -107,7 +107,8 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-1", deliveryAddress: "TESDA, Taguig" }, admin, { date: new Date(Date.UTC(year, 2, 2)) });
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-1", deliveryAddressId: delivAddr!.id }, admin, { date: new Date(Date.UTC(year, 2, 2)) });
     const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id }, orderBy: { sortOrder: "asc" } });
     return { customer, a, b, so, items };
   }

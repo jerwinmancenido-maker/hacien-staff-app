@@ -131,16 +131,31 @@ export async function makeCustomer(defaultWithholding: string[] | null = null, w
     data: {
       name: `Test Customer ${t}`,
       withholdingType: inferred,
+      defaultTerms: "Net 30",
       address: "Test address",
       defaultWithholding: defaultWithholding === null ? Prisma.DbNull : defaultWithholding,
       contacts: { create: [{ name: `Buyer ${t}`, email: `buyer-${t}@test.example.com`, isMain: true }] },
+      addresses: {
+        create: [
+          { kind: "BILLING", street: "Test billing address", isDefault: true },
+          { kind: "DELIVERY", street: "Test delivery address", isDefault: true },
+        ],
+      },
     },
-    include: { contacts: true },
+    include: { contacts: true, addresses: true },
   });
 }
 
 export async function makeSupplier() {
   return db.supplier.create({ data: { name: `Test Supplier ${tag()}`, taxType: "VAT" } });
+}
+
+export async function customerDeliveryAddressId(customerId: string): Promise<string> {
+  let addr = await db.address.findFirst({ where: { customerId, archivedAt: null } });
+  if (!addr) {
+    addr = await db.address.create({ data: { customerId, kind: "DELIVERY", street: "Test delivery address", isDefault: true } });
+  }
+  return addr.id;
 }
 
 export function quoteInput(customerId: string, year: number, extra: Partial<QuoteInput> = {}, supplierId: string | null = null): QuoteInput {

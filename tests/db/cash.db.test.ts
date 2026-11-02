@@ -139,7 +139,8 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-CASH", deliveryAddress: "Manila" }, admin, {
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-CASH", deliveryAddressId: delivAddr!.id }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     const billing = await recordBilling(

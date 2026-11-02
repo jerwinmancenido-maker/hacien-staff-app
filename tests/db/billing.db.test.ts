@@ -113,7 +113,8 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddress: "Manila" }, admin, {
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-AR", deliveryAddressId: delivAddr!.id }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so, year };
@@ -1110,7 +1111,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
           tin: customer.tin,
           withholdingType: "NONE",
           defaultWithholding: [],
-          defaultTerms: customer.defaultTerms,
+          defaultTerms: customer.defaultTerms ?? "Net 30",
           notes: null,
         },
         { id: staff.id, isAdmin: false },
@@ -1125,7 +1126,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
           tin: customer.tin,
           withholdingType: "NONE",
           defaultWithholding: [],
-          defaultTerms: customer.defaultTerms,
+          defaultTerms: customer.defaultTerms ?? "Net 30",
           notes: null,
         },
         { id: admin.id, isAdmin: true },

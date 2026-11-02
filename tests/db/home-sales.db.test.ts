@@ -17,7 +17,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { getGrossSalesYtd, getNonVatMeter } from "@/lib/services/non-vat";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
-import { makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { customerDeliveryAddressId, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
   let admin: DocActor;
@@ -106,7 +106,8 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
       admin,
     );
     await approveQuote(q.id, admin);
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddress: "Manila" }, admin, {
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: `PO-${tag()}`, deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { customer, so };

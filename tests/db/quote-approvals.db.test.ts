@@ -154,7 +154,8 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
 
     const sent = await markQuoteSent(q.id, staff);
     expect(sent.status).toBe("SENT");
-    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, staff);
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddressId: delivAddr!.id }, staff);
     expect(so.quoteId).toBe(q.id);
     const quoteAfter = await db.quote.findUniqueOrThrow({ where: { id: q.id } });
     expect(quoteAfter.status).toBe("WON");
@@ -184,7 +185,8 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     const won = await createQuote(quoteInput(customer.id, year), staff);
     await approveQuote(won.id, approver);
     await markQuoteSent(won.id, staff);
-    await convertQuoteToSalesOrder(won.id, { buyerPoNo: null, deliveryAddress: null }, staff);
+    const delivAddr = customer.addresses.find((a) => a.kind === "DELIVERY") ?? customer.addresses[0];
+    await convertQuoteToSalesOrder(won.id, { buyerPoNo: null, deliveryAddressId: delivAddr!.id }, staff);
     const wonRow = await db.quote.findUniqueOrThrow({ where: { id: won.id } });
     expect(wonRow.status).toBe("WON");
     // WON stays APPROVED; even if forced PENDING it must stay out of the waiting list.

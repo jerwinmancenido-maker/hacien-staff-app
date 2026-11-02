@@ -24,19 +24,25 @@ type Props = {
   onSaved: (customer: CreatedQuoteCustomer) => void;
   /** Active Settings → Withholding rates for the pick field. */
   rates: WithholdingSnapshot[];
+  /** Allowed payment terms list from Settings. */
+  terms?: string[];
 };
+
+const DEFAULT_TERMS = ["COD", "Net 7", "Net 15", "Net 30", "Net 60"];
 
 const empty = {
   name: "",
   tin: "",
   withholdingType: "",
+  defaultTerms: "Net 30",
   address: "",
   contactName: "",
   contactRole: "",
-  emailOrPhone: "",
+  email: "",
+  phone: "",
 };
 
-export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
+export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Props) {
   const titleId = useId();
   const firstRef = useRef<HTMLInputElement>(null);
   const [formKey, setFormKey] = useState(0);
@@ -50,6 +56,7 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
   const pickSnapshots =
     effectivePick == null ? null : rates.filter((r) => effectivePick.includes(r.code));
   const pickHint = customerWithholdingHint(pickSnapshots);
+  const termOptions = terms && terms.length > 0 ? terms : DEFAULT_TERMS;
 
   function onTypeChange(next: string) {
     setV({ ...v, withholdingType: next });
@@ -80,7 +87,6 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // close is stable enough for escape; pending gates the handler.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [open, pending]);
 
@@ -178,9 +184,24 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
           ) : (
             <input type="hidden" name="defaultWithholdingJson" value={v.withholdingType === "NONE" ? "[]" : ""} />
           )}
+          <div className={`field${e.defaultTerms ? " has-error" : ""}`}>
+            <label htmlFor="acq-terms">
+              Payment terms<span className="req"> *</span>
+            </label>
+            <select id="acq-terms" value={v.defaultTerms} onChange={(ev) => setV({ ...v, defaultTerms: ev.target.value })}>
+              <option value="">Pick payment terms…</option>
+              {termOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            {e.defaultTerms && <div className="error">{e.defaultTerms}</div>}
+          </div>
           <div className={`field${e.address ? " has-error" : ""}`}>
             <label htmlFor="acq-address">Address</label>
-            <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} />
+            <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} placeholder="Unit, street, city..." />
+            <div className="hint">Saved as the default billing and delivery address.</div>
           </div>
           <div className="quote-drawer-row">
             <div className={`field${e.contactName ? " has-error" : ""}`}>
@@ -203,22 +224,37 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates }: Props) {
               />
             </div>
           </div>
-          <div className={`field${e.emailOrPhone ? " has-error" : ""}`}>
-            <label htmlFor="acq-email">Email or phone</label>
-            <input
-              id="acq-email"
-              type="text"
-              value={v.emailOrPhone}
-              onChange={(ev) => setV({ ...v, emailOrPhone: ev.target.value })}
-            />
-            {e.emailOrPhone && <div className="error">{e.emailOrPhone}</div>}
+          <div className="quote-drawer-row">
+            <div className={`field${e.email ? " has-error" : ""}`}>
+              <label htmlFor="acq-email">Email</label>
+              <input
+                id="acq-email"
+                type="email"
+                value={v.email}
+                onChange={(ev) => setV({ ...v, email: ev.target.value })}
+                autoComplete="email"
+              />
+              {e.email && <div className="error">{e.email}</div>}
+            </div>
+            <div className={`field${e.phone ? " has-error" : ""}`}>
+              <label htmlFor="acq-phone">Phone</label>
+              <input
+                id="acq-phone"
+                type="tel"
+                value={v.phone}
+                onChange={(ev) => setV({ ...v, phone: ev.target.value })}
+                placeholder="e.g. +63 917 123-4567"
+                autoComplete="tel"
+              />
+              {e.phone && <div className="error">{e.phone}</div>}
+            </div>
           </div>
           <div className="quote-drawer-foot">
             <span className="muted small">Saves and picks this customer</span>
             <button type="button" className="btn btn-secondary" disabled={pending} onClick={close}>
               Cancel
             </button>
-            <button type="submit" className="btn" disabled={pending || !v.name.trim() || !v.withholdingType}>
+            <button type="submit" className="btn" disabled={pending || !v.name.trim() || !v.withholdingType || !v.defaultTerms.trim()}>
               {pending ? "Saving…" : "Save customer"}
             </button>
           </div>

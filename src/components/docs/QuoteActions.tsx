@@ -49,7 +49,7 @@ type Props = {
     confirmNoneAndMarkSent?: (id: string) => Promise<FormState>;
     markLost: (id: string) => Promise<FormState>;
     void: (id: string, reason: string) => Promise<FormState>;
-    convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddress: string }) => Promise<FormState>;
+    convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
     refreshCompanyDetails?: (id: string) => Promise<FormState>;
