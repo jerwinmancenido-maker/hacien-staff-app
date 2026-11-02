@@ -12,6 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Cloud agents work on a **new branch** and open a **PR to `main`**. Do not merge, deploy, run migrations against staging/live, write to any real database, or change env vars or secrets. A separate CTO reviewer reviews and merges — only with the owner's yes. Never force-push or rebase unless asked.
 
+- Don't poll CI, Bugbot or security checks, and don't post interim 'still waiting' or 'already reported' notes. Report once, when checks have settled or when a real finding needs fixing.
+
 HACIEN is separate from PepStack Labs. Keep them apart in code, docs, and PRs.
 
 ## Setup and checks (before every push)
