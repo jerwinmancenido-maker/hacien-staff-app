@@ -156,14 +156,21 @@ function approvalFromSnap(
   contractPrice: string,
   netMarginPct: string,
   withCosts: boolean,
+  supplierCostState: SupplierCostState,
 ) {
-  const reasons = approvalReasons({ contractPrice, netMarginPct }, snap.settings.approval);
+  const reasons = approvalReasons({ contractPrice, netMarginPct, supplierCostState }, snap.settings.approval);
   return withCosts ? { needed: reasons.length > 0, reasons } : { needed: reasons.length > 0 };
 }
 
-async function approvalFor(settingsVersionId: string, contractPrice: string, netMarginPct: string, withCosts: boolean) {
+async function approvalFor(
+  settingsVersionId: string,
+  contractPrice: string,
+  netMarginPct: string,
+  withCosts: boolean,
+  supplierCostState: SupplierCostState,
+) {
   const snap = (await getSettingsVersion(settingsVersionId)) ?? (await getSettingsSnapshot());
-  return approvalFromSnap(snap, contractPrice, netMarginPct, withCosts);
+  return approvalFromSnap(snap, contractPrice, netMarginPct, withCosts, supplierCostState);
 }
 
 const itemsInclude = {
@@ -235,7 +242,13 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     withholdingPick,
     items: q.items.map((i) => itemView(i, withCosts)),
     totals,
-    approval: await approvalFor(q.settingsVersionId, money(q.contractPrice), money(q.netMarginPct), withCosts),
+    approval: await approvalFor(
+      q.settingsVersionId,
+      money(q.contractPrice),
+      money(q.netMarginPct),
+      withCosts,
+      supplierCostStateFromSupplierTotals(q.items.map((i) => money(i.supplierTotal))),
+    ),
     salesOrders: q.salesOrders.map((s) => ({ ...s, date: ymd(s.date)! })),
     createdBy: q.createdBy.name,
     updatedBy: q.updatedBy.name,
@@ -369,7 +382,13 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     withholding,
     items: so.items.map((i) => itemView(i, withCosts)),
     totals: totalsView(so.items, withholding, stored, withCosts),
-    approval: await approvalFor(so.settingsVersionId, money(so.contractPrice), money(so.netMarginPct), withCosts),
+    approval: await approvalFor(
+      so.settingsVersionId,
+      money(so.contractPrice),
+      money(so.netMarginPct),
+      withCosts,
+      supplierCostStateFromSupplierTotals(so.items.map((i) => money(i.supplierTotal))),
+    ),
     createdBy: so.createdBy.name,
     updatedBy: so.updatedBy.name,
     settingsVersionId: so.settingsVersionId,

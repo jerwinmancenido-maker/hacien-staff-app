@@ -199,7 +199,8 @@ export default async function SalesOrderPage({
               {billings.length === 0 ? (
                 <p className="faint">No billings yet. Write the booklet invoice number you issued.</p>
               ) : (
-                <div className="table-wrap">
+                <>
+                <div className="table-wrap so-bill-desk">
                   <table className="list" aria-label="Billings on this SO">
                     <thead>
                       <tr>
@@ -231,6 +232,17 @@ export default async function SalesOrderPage({
                     </tbody>
                   </table>
                 </div>
+                <ul className="so-bill-phone" aria-label="Billings on this SO">
+                  {billings.map((b) => (
+                    <li key={b.id}>
+                      <Link href={`/billing/billings/${b.id}`}>#{b.invoiceNo}</Link>
+                      <span>{day(b.invoiceDate)}</span>
+                      <span>Due {day(b.dueDate)}</span>
+                      <span className="num">{formatPeso(b.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+                </>
               )}
             </div>
           )}

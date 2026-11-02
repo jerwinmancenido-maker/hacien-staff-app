@@ -31,9 +31,10 @@ export function ApprovalChip({
   workflowApproved?: boolean;
 }) {
   if (workflowApproved || !approval.needed) return null;
+  const costNotSet = approval.reasons?.includes(COST_NOT_SET_LABEL);
   return (
     <span title={approval.reasons?.join(" · ")}>
-      <Chip tone="amber">Low margin / over threshold</Chip>
+      <Chip tone="amber">{costNotSet ? COST_NOT_SET_LABEL : "Low margin / over threshold"}</Chip>
     </span>
   );
 }

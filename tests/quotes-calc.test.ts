@@ -252,9 +252,26 @@ describe("planItems re-apply respects overrides", () => {
 describe("approval flag", () => {
   const approval = { marginBelowPct: 18, totalAbove: 500_000 };
   it("flags low margin and big totals", () => {
-    expect(approvalReasons({ contractPrice: "540000.00", netMarginPct: "11.78" }, approval)).toHaveLength(2);
-    expect(approvalReasons({ contractPrice: "100000.00", netMarginPct: "18.00" }, approval)).toEqual([]);
-    expect(approvalReasons({ contractPrice: "500000.00", netMarginPct: "17.99" }, approval)).toEqual(["Margin is below 18%"]);
+    expect(approvalReasons({ contractPrice: "540000.00", netMarginPct: "11.78", supplierCostState: "full" }, approval)).toHaveLength(2);
+    expect(approvalReasons({ contractPrice: "100000.00", netMarginPct: "18.00", supplierCostState: "full" }, approval)).toEqual([]);
+    expect(approvalReasons({ contractPrice: "500000.00", netMarginPct: "17.99", supplierCostState: "full" }, approval)).toEqual(["Margin is below 18%"]);
+  });
+  it("a blank or ₱0.00 supplier cost needs approval; an entered cost uses the margin rule", () => {
+    const blank = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "" }]);
+    expect(blank.netMarginPct).toBe("100.00");
+    expect(approvalReasons(blank, approval)).toEqual(["Cost not set"]);
+
+    const zero = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "0.00" }]);
+    expect(zero.supplierCostState).toBe("none");
+    expect(approvalReasons(zero, approval)).toEqual(["Cost not set"]);
+
+    const entered = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "800" }]);
+    expect(entered.supplierCostState).toBe("full");
+    expect(entered.netMarginPct).toBe("20.00");
+    expect(approvalReasons(entered, approval)).toEqual([]);
+
+    const low = docTotals([{ kind: "GOODS", qty: "1", unitPrice: "1000", supplierUnitCost: "900" }]);
+    expect(approvalReasons(low, approval)).toEqual(["Margin is below 18%"]);
   });
 });
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
 import { formatAddress } from "@/lib/addresses/format";
@@ -119,7 +120,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       )}
       {q.approvalStatus !== "APPROVED" && q.approval.needed && q.approval.reasons && q.status !== "VOID" && (
         <div className="alert warn" role="status">
-          Low margin / over threshold: {q.approval.reasons.join(" · ")}.
+          {q.approval.reasons.includes(COST_NOT_SET_LABEL)
+            ? q.approval.reasons.join(" · ")
+            : `Low margin / over threshold: ${q.approval.reasons.join(" · ")}.`}
         </div>
       )}
       <div className="detail-grid">

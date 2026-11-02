@@ -348,7 +348,8 @@ export function docTotals(lines: LineForDocTotals[], picks?: readonly Withholdin
   const netReceived = contract - withheld;
   // Margin is contract − supplier. Withholding is a tax credit (cash timing), not a cost —
   // it must never shrink margin or make a profitable deal look like a loss.
-  // A blank supplier cost still stores netMarginPct 100.00 so approval does not treat it as a low margin.
+  // A blank supplier cost still stores netMarginPct 100.00. Approval must not
+  // treat that 100 as a pass — approvalReasons adds "Cost not set" instead.
   const netMargin = contract - supplier;
   const pct = contract === 0n ? 0n : divRound(netMargin * 10_000n, contract);
   const supplierTotals = lines.map((raw) => resolveAmounts(raw).supplierTotal);
@@ -387,13 +388,19 @@ export function pctToRate(pct: string): string {
   return fromScaled(toScaled(pct, 2), RATE);
 }
 
-/** "Needs approval" (display only): margin below the setting, or total above it. */
+/**
+ * Needs approval: any line with no supplier cost (blank or ₱0.00), margin below
+ * the setting, or total above it. A missing cost requires approval even when
+ * the stored margin percent is 100.
+ */
 export function approvalReasons(
-  totals: Pick<DocTotals, "contractPrice" | "netMarginPct">,
+  totals: Pick<DocTotals, "contractPrice" | "netMarginPct"> & { supplierCostState?: SupplierCostState },
   approval: { marginBelowPct: number; totalAbove: number },
 ): string[] {
   const reasons: string[] = [];
-  if (toScaled(totals.netMarginPct, 2) < toScaled(String(approval.marginBelowPct), 2)) {
+  const costNotSet = totals.supplierCostState === "none" || totals.supplierCostState === "partial";
+  if (costNotSet) reasons.push(COST_NOT_SET_LABEL);
+  if (!costNotSet && toScaled(totals.netMarginPct, 2) < toScaled(String(approval.marginBelowPct), 2)) {
     reasons.push(`Margin is below ${approval.marginBelowPct}%`);
   }
   if (toScaled(totals.contractPrice, CENTS) > toScaled(String(approval.totalAbove), CENTS)) {

@@ -167,6 +167,16 @@ describe("billing amounts & status", () => {
       ]).completed,
     ).toBe(false);
   });
+  it("voiding a billing or a collection drops Completed back to Open", () => {
+    const paid = { status: "PAID", amount: "500000.00", cashApplied: "476000.00", withholdingApplied: "24000.00" };
+    expect(salesOrderMoney("OPEN", "500000.00", [paid]).completed).toBe(true);
+    // Voided billing is ignored, so the order is no longer fully billed.
+    expect(salesOrderMoney("OPEN", "500000.00", [{ ...paid, status: "VOID" }]).completed).toBe(false);
+    // Voided collection drops its posted cash and 2307; the billing stays.
+    expect(
+      salesOrderMoney("OPEN", "500000.00", [{ ...paid, cashApplied: "0.00", withholdingApplied: "0.00" }]).completed,
+    ).toBe(false);
+  });
   it("balance and status derivation", () => {
     expect(billingBalance("100.00", { cashApplied: "40.00", withholdingApplied: "10.00" })).toBe("50.00");
     expect(deriveBillingStatus("100.00", { cashApplied: "0", withholdingApplied: "0" })).toBe("OPEN");
