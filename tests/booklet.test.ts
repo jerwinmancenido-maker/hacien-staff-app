@@ -7,6 +7,7 @@ import {
   bookletRangeError,
   formatBookletNumber,
   inBookletRange,
+  parseBookletSerial,
   type BookletRange,
 } from "@/lib/billing/booklet";
 import { settingsSchema } from "@/lib/settings/schema";
@@ -186,7 +187,41 @@ describe("BIR pre-printed booklet (ATP) tracking", () => {
     });
   });
 
+  describe("parseBookletSerial", () => {
+    it("accepts plain digits and optional SI/DR/CR prefix", () => {
+      expect(parseBookletSerial("7")).toBe(7);
+      expect(parseBookletSerial("007")).toBe(7);
+      expect(parseBookletSerial("DR-007")).toBe(7);
+      expect(parseBookletSerial("dr 42")).toBe(42);
+      expect(parseBookletSerial("CR001")).toBe(1);
+    });
+
+    it("rejects mixed OR text and collapsed hyphen patterns", () => {
+      expect(parseBookletSerial("12-3")).toBeNull();
+      expect(parseBookletSerial("OR-ABC-12")).toBeNull();
+      expect(parseBookletSerial("DR-SC-100")).toBeNull();
+      expect(parseBookletSerial("DR-2026-0042")).toBeNull();
+      expect(parseBookletSerial("")).toBeNull();
+    });
+  });
+
   describe("Settings schema for invoiceBooklet per doc type", () => {
+    it("rejects nested series where end is before start", () => {
+      const bad = {
+        ...DEFAULT_SETTINGS,
+        invoiceBooklet: {
+          ...DEFAULT_SETTINGS.invoiceBooklet,
+          deliveryReceipt: {
+            ...DEFAULT_SETTINGS.invoiceBooklet.deliveryReceipt,
+            seriesFrom: 100,
+            seriesTo: 50,
+          },
+        },
+      };
+      const parsed = settingsSchema.safeParse(bad);
+      expect(parsed.success).toBe(false);
+    });
+
     it("validates and defaults per document type configuration", () => {
       const parsed = settingsSchema.parse(DEFAULT_SETTINGS);
       expect(parsed.invoiceBooklet.salesInvoice).toBeDefined();

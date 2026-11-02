@@ -7,7 +7,7 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid, BOOKLET_DOC_TYPES, type BookletType } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance } from "../services/collections";
@@ -647,8 +647,8 @@ export async function getBookletView(docType: BookletType = "SI") {
       select: { id: true, drNumber: true, voidedAt: true },
     });
     used = deliveries.flatMap((d) => {
-      const n = parseInt(d.drNumber.replace(/\D/g, ""), 10);
-      if (isNaN(n) || n < range.seriesFrom || n > range.seriesTo) return [];
+      const n = parseBookletSerial(d.drNumber);
+      if (n == null || n < range.seriesFrom || n > range.seriesTo) return [];
       return [{
         invoiceNo: n,
         id: d.id,
@@ -662,13 +662,12 @@ export async function getBookletView(docType: BookletType = "SI") {
       select: { id: true, number: true, receiptNo: true, status: true },
     });
     used = collections.flatMap((c) => {
-      if (!c.receiptNo) return [];
-      const n = parseInt(c.receiptNo.replace(/\D/g, ""), 10);
-      if (isNaN(n) || n < range.seriesFrom || n > range.seriesTo) return [];
+      const n = parseBookletSerial(c.receiptNo);
+      if (n == null || n < range.seriesFrom || n > range.seriesTo) return [];
       return [{
         invoiceNo: n,
         id: c.id,
-        number: c.receiptNo,
+        number: c.receiptNo!,
         status: c.status,
       }];
     });
@@ -691,10 +690,14 @@ export async function getBookletView(docType: BookletType = "SI") {
   };
 }
 
-export async function getAllBookletWarnings(): Promise<string[]> {
+export type BookletWarning = { type: BookletType; warning: string; href: string };
+
+export async function getAllBookletWarnings(): Promise<BookletWarning[]> {
   const types: BookletType[] = ["SI", "DR", "CR"];
   const views = await Promise.all(types.map((t) => getBookletView(t)));
-  return views.map((v) => v.warning).filter((w): w is string => !!w);
+  return views.flatMap((v) =>
+    v.warning ? [{ type: v.docType, warning: v.warning, href: `/billing/booklet?type=${v.docType}` }] : [],
+  );
 }
 
 export async function customerArSnapshot(customerId: string) {

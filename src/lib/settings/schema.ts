@@ -254,9 +254,20 @@ export const settingsSections = {
           isNonVat: true,
         }),
     })
-    .refine((v) => v.seriesTo >= v.seriesFrom, {
-      message: "Series end must be at or after the start.",
-      path: ["seriesTo"],
+    .superRefine((v, ctx) => {
+      if (v.seriesTo < v.seriesFrom) {
+        ctx.addIssue({ code: "custom", message: "Series end must be at or after the start.", path: ["seriesTo"] });
+      }
+      for (const key of ["salesInvoice", "deliveryReceipt", "collectionReceipt"] as const) {
+        const r = v[key];
+        if (r.seriesTo < r.seriesFrom) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Series end must be at or after the start.",
+            path: [key, "seriesTo"],
+          });
+        }
+      }
     })
     .transform((v) => {
       // Synchronize top-level seriesFrom/seriesTo with salesInvoice

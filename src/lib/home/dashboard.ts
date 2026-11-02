@@ -199,7 +199,7 @@ export type HomeDashboard = {
   auditHref: string | null;
   features: HomeFeatureFlags;
   withCosts: boolean;
-  bookletWarnings: string[];
+  bookletWarnings: { type: string; warning: string; href: string }[];
 };
 
 const ACTION_LABELS: Record<HomeActionKind, string> = {

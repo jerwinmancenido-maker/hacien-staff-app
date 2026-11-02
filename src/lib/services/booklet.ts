@@ -7,7 +7,7 @@ import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { DocRuleError, DOC_TX, withTxRetry } from "../documents/common";
-import { bookletRangeError, formatBookletNumber } from "../billing/booklet";
+import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type BookletActor = PermissionUser & { id: string };
@@ -98,10 +98,7 @@ export async function markBookletNumberSpoiled(
           const deliveries = await tx.delivery.findMany({
             select: { drNumber: true },
           });
-          const isTaken = deliveries.some((d) => {
-            const parsed = parseInt(d.drNumber.replace(/\D/g, ""), 10);
-            return !isNaN(parsed) && parsed === input.number;
-          });
+          const isTaken = deliveries.some((d) => parseBookletSerial(d.drNumber) === input.number);
           if (isTaken) {
             throw new DocRuleError(
               `DR no. ${formatBookletNumber(input.number)} is already used / marked spoiled.`,
@@ -113,11 +110,7 @@ export async function markBookletNumberSpoiled(
             where: { receiptNo: { not: null } },
             select: { receiptNo: true },
           });
-          const isTaken = collections.some((c) => {
-            if (!c.receiptNo) return false;
-            const parsed = parseInt(c.receiptNo.replace(/\D/g, ""), 10);
-            return !isNaN(parsed) && parsed === input.number;
-          });
+          const isTaken = collections.some((c) => parseBookletSerial(c.receiptNo) === input.number);
           if (isTaken) {
             throw new DocRuleError(
               `CR no. ${formatBookletNumber(input.number)} is already used / marked spoiled.`,

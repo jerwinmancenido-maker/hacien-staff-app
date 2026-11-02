@@ -127,7 +127,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     const delivery = await recordDelivery(
       so.id,
       {
-        drNumber: "DR-SC-100",
+        drNumber: "DR-100",
         deliveryDate: new Date("2026-11-05T00:00:00.000Z"),
         receivedBy: "Customer Staff",
         receivedDate: new Date("2026-11-05T00:00:00.000Z"),
@@ -162,7 +162,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     await recordDelivery(
       so.id,
       {
-        drNumber: "DR-BELOW",
+        drNumber: "DR-50",
         deliveryDate: new Date(),
         idSightChecked: false,
         items: [{ salesOrderItemId: item.id, qty: "6.00" }],

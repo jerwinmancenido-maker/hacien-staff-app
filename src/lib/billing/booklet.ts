@@ -56,6 +56,21 @@ export function formatBookletNumber(invoiceNo: number): string {
   return String(invoiceNo).padStart(3, "0");
 }
 
+/**
+ * Parse a staff-entered booklet serial. Accepts plain digits (optional leading
+ * zeros) or an optional SI/DR/CR prefix. Rejects mixed OR text and patterns
+ * like "12-3" that would otherwise collapse onto the wrong serial.
+ */
+export function parseBookletSerial(raw: string | null | undefined): number | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  const m = s.match(/^(?:(?:SI|DR|CR)[\s-]*)?(\d{1,9})$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
 export function bookletRangeError(
   invoiceNo: number,
   range: BookletRange,
