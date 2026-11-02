@@ -168,8 +168,7 @@ export type HomeKpis = {
     amount: string;
     barPct: number;
     pctLabel: string;
-    limitLabel: string;
-    /** Phone sub-line: "46.8% of ₱3M limit" from live pct + Non-VAT limit. */
+    /** Same line at both widths, e.g. "0.6% of ₱3M goal". Percent is the live meter. */
     phoneLimitLabel: string;
     href: string;
   };
@@ -265,11 +264,11 @@ function buildTaxDetail(dueYmd: string | null, now: Date): string {
 }
 
 /**
- * Phone Billed-year KPI sub-line from live Non-VAT meter values.
- * e.g. pctLabel "46.8%" + limit 3_000_000 → "46.8% of ₱3M limit".
+ * Billed-year sub-line, same text at both widths.
+ * e.g. pctLabel "0.6%" + 3_000_000 → "0.6% of ₱3M goal".
  */
 export function billedYearPhoneLimitLabel(pctLabel: string, limit: number): string {
-  return `${pctLabel} of ${formatCompactPesoLimit(limit)} limit`;
+  return `${pctLabel} of ${formatCompactPesoLimit(limit)} goal`;
 }
 
 /** Compact phone tax strip: "NOV 16 · 1701Q due in 16 days". */
@@ -369,17 +368,10 @@ function buildKpis(opts: {
       amount: sales.thisYear,
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,
-      limitLabel: `of Non-VAT ${formatCompactLimit(nonVat.limit)}`,
       phoneLimitLabel: billedYearPhoneLimitLabel(nonVat.pctLabel, nonVat.limit),
       href: nonVat.href,
     },
   };
-}
-
-function formatCompactLimit(limit: number): string {
-  if (limit >= 1_000_000 && limit % 1_000_000 === 0) return `₱${limit / 1_000_000}M`;
-  if (limit >= 1_000 && limit % 1_000 === 0) return `₱${limit / 1_000}K`;
-  return `₱${new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 }).format(limit)}`;
 }
 
 function headerActions(user: PermissionUser): HomeHeaderActions {

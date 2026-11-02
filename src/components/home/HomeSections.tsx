@@ -124,10 +124,10 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CartIcon size={14} />
           {kpis.collectedThisMonth.label}
         </div>
+        <div className="home-kv num" aria-label="Total paid">{formatPesoWhole(paid.total)}</div>
         <div className="home-ks home-ks-paid" aria-label="Cash collected and 2307 received">
           <div>Cash collected <b className="num">{formatPesoWhole(paid.cash)}</b></div>
           <div>2307 received <b className="num">{formatPesoWhole(paid.received2307)}</b></div>
-          <div>Total paid <b className="num">{formatPesoWhole(paid.total)}</b></div>
         </div>
         <KpiMtdFoot
           change={kpis.collectedThisMonth.change}
@@ -143,14 +143,10 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
         </div>
         <div className="home-kv num">{formatPesoWhole(kpis.billedThisYear.amount)}</div>
         <div className="home-ks home-ks-bar">
-          {/* Phone hides the Non-VAT mini bar (sidebar meter has it). */}
           <span className="home-mini-bar home-desktop-only" aria-hidden>
             <i style={{ width: `${Math.min(100, Math.max(0, kpis.billedThisYear.barPct))}%` }} />
           </span>
-          <b className="num home-desktop-only">{kpis.billedThisYear.pctLabel}</b>
-          <span className="home-desktop-only">{kpis.billedThisYear.limitLabel}</span>
-          {/* Phone: "46.8% of ₱3M limit" from live pct + Non-VAT limit. */}
-          <span className="num home-phone-only home-ks-phone-limit">{kpis.billedThisYear.phoneLimitLabel}</span>
+          <span className="num home-ks-goal">{kpis.billedThisYear.phoneLimitLabel}</span>
         </div>
       </div>
     </div>

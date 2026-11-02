@@ -265,13 +265,14 @@ describe("home tax phone strip label", () => {
 });
 
 describe("home billed-year phone limit label", () => {
-  it("joins live pctLabel with compact Non-VAT limit (not hard-coded 46.8)", () => {
-    expect(billedYearPhoneLimitLabel("46.8%", 3_000_000)).toBe("46.8% of ₱3M limit");
-    expect(billedYearPhoneLimitLabel("0.0%", 3_000_000)).toBe("0.0% of ₱3M limit");
-    expect(billedYearPhoneLimitLabel("50.0%", 1_500_000)).toBe("50.0% of ₱1.5M limit");
-    // Uses the same compact formatter as the Non-VAT title / sidebar.
+  it("joins the live percent with a compact goal (same words at both widths)", () => {
+    expect(billedYearPhoneLimitLabel("0.6%", 3_000_000)).toBe("0.6% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("46.8%", 3_000_000)).toBe("46.8% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("0.0%", 3_000_000)).toBe("0.0% of ₱3M goal");
+    expect(billedYearPhoneLimitLabel("50.0%", 1_500_000)).toBe("50.0% of ₱1.5M goal");
     expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
     expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).not.toMatch(/^46\.8/);
+    expect(billedYearPhoneLimitLabel("10.0%", 3_000_000)).not.toMatch(/limit|Non-VAT/);
   });
 });
 
