@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { formatPeso } from "@/lib/format";
@@ -209,6 +210,7 @@ export function CollectionForm({
         <div className={`field full${e.files ? " has-error" : ""}`}>
           <label htmlFor="files">Attachment (optional)</label>
           <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <NoIdUploadWarning />
           {e.files && <div className="error">{e.files}</div>}
         </div>
       </div>

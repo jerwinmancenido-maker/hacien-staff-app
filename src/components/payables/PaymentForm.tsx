@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/validation/payables";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -241,6 +242,7 @@ export function PaymentForm({
         <div className="field full">
           <label htmlFor="files">Proof of payment (optional)</label>
           <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple />
+          <NoIdUploadWarning />
           <div className="hint">Bank screenshot or deposit slip — PDF, JPG or PNG, up to 5 files.</div>
           {e.files && <div className="error">{e.files}</div>}
         </div>

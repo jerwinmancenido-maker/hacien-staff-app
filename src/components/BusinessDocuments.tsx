@@ -13,6 +13,7 @@ import { setBusinessDocumentArchivedAction, uploadBusinessDocumentAction } from 
 import type { FormState } from "@/lib/validation/forms";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Field } from "./Field";
+import { NoIdUploadWarning } from "./NoIdUploadWarning";
 import { Chip, EmptyState, type ChipTone } from "./ui";
 import { PlusIcon } from "./Icons";
 import { useFormAction } from "./useFormAction";
@@ -253,6 +254,7 @@ function UploadForm({
               setFileError(f && f.size > maxMb * 1024 * 1024 ? `The file is too big. The limit is ${maxMb} MB.` : null);
             }}
           />
+          <NoIdUploadWarning />
         </Field>
       </div>
       <div className="form-actions">

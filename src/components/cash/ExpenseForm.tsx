@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
 
@@ -180,6 +181,7 @@ export function ExpenseForm({
         <div className={`field full${e.files ? " has-error" : ""}`}>
           <label htmlFor="files">Receipt photo / PDF (optional)</label>
           <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <NoIdUploadWarning />
           {e.files && <div className="error">{e.files}</div>}
         </div>
       </div>

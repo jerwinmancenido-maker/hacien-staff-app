@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { mark2307ReceivedAction } from "@/app/(app)/billing/actions";
 import { Modal } from "@/components/docs/Dialogs";
 
@@ -44,6 +45,7 @@ export function Mark2307Form({ id }: { id: string }) {
               <div className={`field full${e.files ? " has-error" : ""}`}>
                 <label htmlFor={`files-${id}`}>Certificate (PDF/JPG/PNG)</label>
                 <input id={`files-${id}`} name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+                <NoIdUploadWarning />
                 {e.files && <div className="error">{e.files}</div>}
               </div>
             </div>
