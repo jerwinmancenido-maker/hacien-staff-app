@@ -101,7 +101,7 @@ export default async function HomePage() {
             >
               {dash.tax || dash.pipeline ? (
                 <div className="home-bot-left">
-                  {dash.tax ? <HomeTaxDeadline tax={dash.tax} /> : null}
+                  {dash.tax ? <HomeTaxDeadline tax={dash.tax} isAdmin={user.isAdmin} /> : null}
                   {dash.pipeline ? <HomePipelineCard pipeline={dash.pipeline} variant="desktop" /> : null}
                 </div>
               ) : null}

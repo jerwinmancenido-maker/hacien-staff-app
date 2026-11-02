@@ -145,7 +145,7 @@ export const TAX_CALENDAR_OBLIGATIONS: readonly TaxCalendarObligationDef[] = [
     key: "2551q",
     form: "2551Q",
     description: TAX_CALENDAR_PLAIN_NAMES["2551Q"] ?? "Quarterly percentage tax (3%)",
-    defaultEnabled: true,
+    defaultEnabled: false,
     applies: "does_not_apply",
     appliesNote: TAX_CALENDAR_2551Q_NOTE,
     sourceNote: TAX_CALENDAR_2551Q_NOTE,

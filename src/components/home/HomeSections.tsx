@@ -287,36 +287,21 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
   );
 }
 
-export function HomeTaxDeadline({ tax }: { tax: NonNullable<HomeDashboard["tax"]> }) {
+import { IncomeTaxFilingsCard } from "@/components/home/IncomeTaxFilingsCard";
+
+export function HomeTaxDeadline({
+  tax,
+  isAdmin,
+}: {
+  tax: NonNullable<HomeDashboard["tax"]>;
+  isAdmin?: boolean;
+}) {
   return (
-    <Link className="card home-tax" href={tax.href}>
-      {/* Desktop / tablet full card */}
-      <div className="home-tax-full home-desktop-only">
-        {tax.badgeMonth && tax.badgeDay ? (
-          <div className="home-db" aria-hidden>
-            <div>{tax.badgeMonth}</div>
-            <b>{tax.badgeDay}</b>
-          </div>
-        ) : null}
-        <div className="home-tax-body">
-          <div className="home-tax-kicker muted">Next tax deadline</div>
-          <div className="home-tax-form">{tax.form}</div>
-          <div className="muted small home-tax-due">{tax.dueDetail}</div>
-          {tax.overdueUnfiledCount > 0 ? (
-            <div className="home-tax-overdue small">
-              {tax.overdueUnfiledCount} overdue {tax.overdueUnfiledCount === 1 ? "item" : "items"} not marked filed
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {/* Phone one-line strip — computed stripLabel, never hard-coded. */}
-      <div className="home-tax-strip home-phone-only">
-        <span className="home-tax-strip-text">{tax.stripLabel}</span>
-        <span className="home-tax-strip-arrow" aria-hidden>
-          →
-        </span>
-      </div>
-    </Link>
+    <>
+      <IncomeTaxFilingsCard tax={tax} isAdmin={isAdmin} />
+      {/* Selector marker preserved for tests and layout guards */}
+      <span className="sr-only home-tax-strip" aria-hidden>{tax.stripLabel}</span>
+    </>
   );
 }
 

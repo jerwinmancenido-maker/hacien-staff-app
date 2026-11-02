@@ -117,8 +117,8 @@ describe("TaxCalendarForm markup", () => {
     expect(sharedDayCount).toBe(2);
     expect(sharedMonthCount).toBe(2);
 
-    // App defaults: 2551Q and 2550Q Show ON (not a seed override).
-    expect(seed.obligations["2551q"].enabled).toBe(true);
+    // App defaults: 2551Q is OFF by default on 8% option; 2550Q Show ON (not a seed override).
+    expect(seed.obligations["2551q"].enabled).toBe(false);
     expect(seed.obligations["2550q"].enabled).toBe(true);
 
     for (const def of TAX_CALENDAR_OBLIGATIONS) {

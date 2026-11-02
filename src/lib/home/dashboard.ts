@@ -16,7 +16,7 @@ import { listQuotesView, listSalesOrdersView } from "../quotes/views";
 import { listCustomers } from "../services/companies";
 import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
-import { listTaxCalendar } from "../services/tax-calendar";
+import { listTaxCalendar, selectNextIncomeTaxFilings } from "../services/tax-calendar";
 import { fromScaled, toScaled } from "../quotes/calc";
 import {
   HOME_RECENT_DESKTOP_ROWS,
@@ -108,6 +108,30 @@ export type HomeTaxDeadline = {
   badgeDay: string | null;
   overdueUnfiledCount: number;
   href: string;
+  incomeTaxFilings?: HomeIncomeTaxFilings | null;
+};
+
+export type HomeIncomeTaxItem = {
+  form: "1701Q" | "1701A";
+  obligationKey: "1701q" | "1701a";
+  periodKey: string;
+  occurrenceKey: string;
+  periodLabel: string;
+  dueYmd: string | null;
+  dueFormatted: string;
+  isFiled: boolean;
+  filedDateYmd: string | null;
+  filedDateFormatted: string | null;
+  referenceNo: string | null;
+  statusLabel: string;
+  attachmentId: string | null;
+  attachmentFileName: string | null;
+  completionId: string | null;
+};
+
+export type HomeIncomeTaxFilings = {
+  q1701: HomeIncomeTaxItem | null;
+  a1701: HomeIncomeTaxItem | null;
 };
 
 export type HomeNonVat = {
@@ -191,6 +215,7 @@ export type HomeDashboard = {
   header: HomeHeaderActions;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
+  incomeTaxFilings?: HomeIncomeTaxFilings | null;
   /** Open quotes + open unbilled SOs; null when viewer lacks view on both. */
   pipeline: HomePipeline | null;
   nonVat: HomeNonVat;
@@ -628,13 +653,59 @@ export async function loadHomeDashboard(
       : null;
 
   let tax: HomeTaxDeadline | null = null;
+  let incomeTaxFilings: HomeIncomeTaxFilings | null = null;
   if (showTaxDeadline(features, user)) {
     const cal = await listTaxCalendar(user, { view: "upcoming", now });
     const overdueUnfiled = cal.rows.filter((r) => r.status === "overdue" && !r.markedDone).length;
     const next = cal.rows.find(
       (r) => !r.markedDone && r.applies !== "does_not_apply" && r.dueYmd && r.status !== "overdue",
     ) ?? cal.rows.find((r) => !r.markedDone && r.applies !== "does_not_apply");
-    if (next || overdueUnfiled > 0) {
+
+    const calAll = await listTaxCalendar(user, { view: "all", now });
+    const todayYmd = isoDate(manilaToday(now));
+    const { q1701, a1701 } = selectNextIncomeTaxFilings(calAll.rows, todayYmd);
+
+    const mapFiling = (r: typeof q1701, form: "1701Q" | "1701A", key: "1701q" | "1701a"): HomeIncomeTaxItem | null => {
+      if (!r) return null;
+      const isFiled = r.markedDone;
+      const filedDateYmd = r.doneDateYmd ?? null;
+      const filedDateFormatted = filedDateYmd ? formatDate(new Date(`${filedDateYmd}T00:00:00.000Z`)) : null;
+      const referenceNo = r.referenceNo ?? null;
+      let statusLabel = "Not filed yet";
+      if (isFiled) {
+        if (filedDateFormatted && referenceNo) {
+          statusLabel = `Filed ${filedDateFormatted}, ref ${referenceNo}`;
+        } else if (filedDateFormatted) {
+          statusLabel = `Filed ${filedDateFormatted}`;
+        } else {
+          statusLabel = "Filed";
+        }
+      }
+      return {
+        form,
+        obligationKey: key,
+        periodKey: r.periodKey,
+        occurrenceKey: r.occurrenceKey,
+        periodLabel: r.periodLabel,
+        dueYmd: r.dueYmd,
+        dueFormatted: r.dueYmd ? formatDate(new Date(`${r.dueYmd}T00:00:00.000Z`)) : "Date to confirm",
+        isFiled,
+        filedDateYmd,
+        filedDateFormatted,
+        referenceNo,
+        statusLabel,
+        attachmentId: r.attachmentId,
+        attachmentFileName: r.attachmentFileName,
+        completionId: r.completionId,
+      };
+    };
+
+    incomeTaxFilings = {
+      q1701: mapFiling(q1701, "1701Q", "1701q"),
+      a1701: mapFiling(a1701, "1701A", "1701a"),
+    };
+
+    if (next || overdueUnfiled > 0 || incomeTaxFilings.q1701 || incomeTaxFilings.a1701) {
       const dueYmd = next?.dueYmd ?? null;
       const badge = taxBadge(dueYmd);
       const form = next?.form ?? "Tax calendar";
@@ -655,6 +726,7 @@ export async function loadHomeDashboard(
         badgeDay: badge.badgeDay,
         overdueUnfiledCount: overdueUnfiled,
         href: taxCalendarHref(),
+        incomeTaxFilings,
       };
     }
   }
@@ -674,6 +746,7 @@ export async function loadHomeDashboard(
     header,
     money,
     tax,
+    incomeTaxFilings,
     pipeline,
     nonVat,
     recent,

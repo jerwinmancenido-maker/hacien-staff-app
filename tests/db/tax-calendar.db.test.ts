@@ -16,6 +16,8 @@ import {
   listTaxCalendar,
   markTaxCalendarDone,
   undoTaxCalendarDone,
+  markTaxCalendarFiled,
+  undoTaxCalendarFiled,
 } from "@/lib/services/tax-calendar";
 import type { DocActor } from "@/lib/services/quotes";
 import { makeUser, tag } from "./fixtures";
@@ -138,5 +140,74 @@ describe.skipIf(!env.hasDb)("tax calendar (MySQL)", () => {
     });
     expect(provisional).toBe(true);
     expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it("Admin marks filed with reference number and attachment; undo is Admin-only and logged", async () => {
+    const year = 2400 + (parseInt(tag().slice(0, 3), 16) % 500);
+    const key = `1701q|${year}-Q3`;
+
+    // Non-admin (staff) cannot mark filed
+    await expect(
+      markTaxCalendarFiled(
+        {
+          occurrenceKey: key,
+          filedDateYmd: `${year}-11-03`,
+          referenceNo: "TEST-REF-001",
+          file: {
+            name: "efps_confirmation.pdf",
+            size: 15,
+            bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xd0, 0xd4, 0xc5, 0xd8, 0x0a]),
+          },
+        },
+        staff,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Admin can mark filed
+    const { id } = await markTaxCalendarFiled(
+      {
+        occurrenceKey: key,
+        filedDateYmd: `${year}-11-03`,
+        referenceNo: "TEST-REF-001",
+        file: {
+          name: "efps_confirmation.pdf",
+          size: 15,
+          bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xd0, 0xd4, 0xc5, 0xd8, 0x0a]),
+        },
+      },
+      admin,
+    );
+    expect(id).toBeTruthy();
+
+    const row = await db.taxCalendarCompletion.findUnique({
+      where: { id },
+      include: { attachments: true },
+    });
+    expect(row).toBeTruthy();
+    expect(row?.referenceNo).toBe("TEST-REF-001");
+    expect(row?.attachments).toHaveLength(1);
+    expect(row?.attachments[0]?.fileName).toBe("efps_confirmation.pdf");
+
+    // Non-admin cannot undo
+    await expect(
+      undoTaxCalendarFiled({ occurrenceKey: key, reason: "Wrong ref" }, staff),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Admin undoes with reason
+    await undoTaxCalendarFiled({ occurrenceKey: key, reason: "Wrong ref" }, admin);
+
+    const undoneRow = await db.taxCalendarCompletion.findUnique({ where: { id } });
+    expect(undoneRow?.undoneAt).toBeTruthy();
+    expect(undoneRow?.undoneById).toBe(admin.id);
+    expect(undoneRow?.voidedAt).toBeTruthy();
+    expect(undoneRow?.voidReason).toBe("Wrong ref");
+
+    const undoAudit = await db.auditLog.findFirst({
+      where: { entityType: "TaxCalendarCompletion", entityId: id, action: "void" },
+      orderBy: { at: "desc" },
+    });
+    expect(undoAudit).toBeTruthy();
+    expect(JSON.stringify(undoAudit?.after)).toContain("undo_filed");
+    expect(JSON.stringify(undoAudit?.after)).toContain("Wrong ref");
   });
 });

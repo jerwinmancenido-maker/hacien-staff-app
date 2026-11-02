@@ -6,7 +6,8 @@ import { writeAudit } from "../audit";
 import { db } from "../db";
 import { DOC_TX, DocRuleError, withTxRetry } from "../documents/common";
 import { isoDate, manilaToday } from "../format";
-import { assertCan, type PermissionUser } from "../permissions";
+import { assertCan, ForbiddenError, type PermissionUser } from "../permissions";
+import { createAttachments, prepareUploads, type UploadFile } from "./attachments";
 import { getSettingsSnapshot } from "../settings";
 import {
   buildTaxCalendarRows,
@@ -63,12 +64,27 @@ export async function loadTaxCalendarSettings(): Promise<TaxCalendarSettingsShap
 async function loadActiveCompletions(): Promise<CompletionRow[]> {
   const rows = await db.taxCalendarCompletion.findMany({
     where: { undoneAt: null },
-    select: { occurrenceKey: true, doneDate: true, note: true },
+    select: {
+      id: true,
+      occurrenceKey: true,
+      doneDate: true,
+      note: true,
+      referenceNo: true,
+      attachments: {
+        where: { archivedAt: null },
+        select: { id: true, fileName: true },
+        take: 1,
+      },
+    },
   });
   return rows.map((r) => ({
+    id: r.id,
     occurrenceKey: r.occurrenceKey,
     doneDateYmd: isoDate(r.doneDate),
     note: r.note,
+    referenceNo: r.referenceNo,
+    attachmentId: r.attachments[0]?.id ?? null,
+    attachmentFileName: r.attachments[0]?.fileName ?? null,
   }));
 }
 
@@ -300,6 +316,221 @@ export async function undoTaxCalendarDone(
 /** Default done date = Manila today. */
 export function defaultDoneDateYmd(now: Date = new Date()): string {
   return isoDate(manilaToday(now));
+}
+
+function assertCanManageFilings(actor: PermissionUser) {
+  assertCan(actor, "view_books");
+  if (!actor.active || !actor.isAdmin) {
+    throw new ForbiddenError();
+  }
+}
+
+export type MarkTaxCalendarFiledInput = {
+  occurrenceKey: string;
+  filedDateYmd: string;
+  referenceNo: string;
+  file: UploadFile;
+  dueYmd?: string | null;
+  note?: string | null;
+};
+
+/**
+ * Record that an income tax return was filed (Admin only).
+ * Requires date filed, BIR confirmation reference number, and confirmation file attachment.
+ * The app never files or pays anything with BIR: this only records that staff filed externally.
+ */
+export async function markTaxCalendarFiled(
+  input: MarkTaxCalendarFiledInput,
+  actor: PermissionUser & { id: string },
+): Promise<{ id: string }> {
+  assertCanManageFilings(actor);
+  const { obligationKey, periodKey } = parseOccurrenceKey(input.occurrenceKey);
+
+  const filedDateYmd = input.filedDateYmd.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(filedDateYmd)) {
+    throw new DocRuleError("Enter the date you filed.", "filedDate");
+  }
+
+  const referenceNo = input.referenceNo.trim();
+  if (!referenceNo) {
+    throw new DocRuleError("Enter the BIR filing reference number.", "referenceNo");
+  }
+
+  if (!input.file || !input.file.bytes || input.file.bytes.length === 0) {
+    throw new DocRuleError("Attach the eFPS or eBIRForms confirmation.", "file");
+  }
+
+  const note = input.note?.trim() || null;
+  if (note && note.length > 2000) {
+    throw new DocRuleError("Keep the note under 2000 characters.", "note");
+  }
+
+  const prepared = await prepareUploads([input.file]);
+
+  return withTxRetry(async () =>
+    db.$transaction(async (tx) => {
+      const existing = await tx.taxCalendarCompletion.findFirst({
+        where: { occurrenceKey: input.occurrenceKey, undoneAt: null },
+      });
+      if (existing) {
+        throw new DocRuleError("This item is already marked filed. Undo it first to change.");
+      }
+
+      const row = await tx.taxCalendarCompletion.create({
+        data: {
+          obligationKey,
+          periodKey,
+          occurrenceKey: input.occurrenceKey,
+          dueDate: input.dueYmd ? ymdToDate(input.dueYmd) : null,
+          doneDate: ymdToDate(filedDateYmd),
+          referenceNo,
+          note,
+          createdById: actor.id,
+        },
+      });
+
+      await createAttachments(tx, prepared, { taxCalendarCompletionId: row.id }, actor.id);
+
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "TaxCalendarCompletion",
+        entityId: row.id,
+        action: "create",
+        before: null,
+        after: {
+          occurrenceKey: row.occurrenceKey,
+          obligationKey: row.obligationKey,
+          periodKey: row.periodKey,
+          dueDate: input.dueYmd ?? null,
+          doneDate: filedDateYmd,
+          referenceNo,
+          note,
+          attachmentFileName: prepared[0]?.fileName ?? input.file.name,
+          kind: "mark_filed",
+        },
+      });
+
+      return { id: row.id };
+    }, DOC_TX),
+  );
+}
+
+export type UndoTaxCalendarFiledInput = {
+  occurrenceKey: string;
+  reason: string;
+};
+
+/**
+ * Undo a filed record (Admin only).
+ * Requires a reason. Records are never deleted: kept with void history in audit log.
+ */
+export async function undoTaxCalendarFiled(
+  input: UndoTaxCalendarFiledInput,
+  actor: PermissionUser & { id: string },
+): Promise<{ id: string }> {
+  assertCanManageFilings(actor);
+  parseOccurrenceKey(input.occurrenceKey);
+
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new DocRuleError("Provide a reason for undoing this filing.", "reason");
+  }
+
+  return withTxRetry(async () =>
+    db.$transaction(async (tx) => {
+      const existing = await tx.taxCalendarCompletion.findFirst({
+        where: { occurrenceKey: input.occurrenceKey, undoneAt: null },
+      });
+      if (!existing) {
+        throw new DocRuleError("Nothing to undo for this item.");
+      }
+
+      const now = new Date();
+      const row = await tx.taxCalendarCompletion.update({
+        where: { id: existing.id },
+        data: {
+          undoneAt: now,
+          undoneById: actor.id,
+          voidedAt: now,
+          voidReason: reason,
+        },
+      });
+
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "TaxCalendarCompletion",
+        entityId: row.id,
+        action: "void",
+        before: {
+          occurrenceKey: existing.occurrenceKey,
+          doneDate: isoDate(existing.doneDate),
+          referenceNo: existing.referenceNo,
+          undoneAt: null,
+          voidedAt: null,
+        },
+        after: {
+          occurrenceKey: row.occurrenceKey,
+          doneDate: isoDate(row.doneDate),
+          referenceNo: row.referenceNo,
+          undoneAt: row.undoneAt?.toISOString() ?? null,
+          voidedAt: row.voidedAt?.toISOString() ?? null,
+          reason,
+          kind: "undo_filed",
+        },
+        diff: false,
+      });
+
+      return { id: row.id };
+    }, DOC_TX),
+  );
+}
+
+/**
+ * Select the single next filing occurrence for an obligation (e.g. 1701Q or 1701A).
+ * 1. An unfiled occurrence whose due date is in the past (overdue) takes top priority.
+ * 2. Otherwise, the earliest occurrence whose due date is today or later (upcoming cycle).
+ * 3. Fallback to the latest occurrence.
+ */
+export function selectNextFiling(
+  rows: readonly TaxCalendarRow[],
+  obligationKey: "1701q" | "1701a",
+  todayYmd: string,
+): TaxCalendarRow | null {
+  const matching = rows.filter(
+    (r) => r.obligationKey === obligationKey && r.applies !== "does_not_apply",
+  );
+  if (matching.length === 0) return null;
+
+  // 1. Earliest unfiled overdue occurrence
+  const unfiledOverdue = matching
+    .filter((r) => !r.markedDone && r.dueYmd && r.dueYmd < todayYmd)
+    .sort((a, b) => (a.dueYmd!).localeCompare(b.dueYmd!))[0];
+  if (unfiledOverdue) return unfiledOverdue;
+
+  // 2. Earliest upcoming occurrence (due today or in the future)
+  const upcoming = matching
+    .filter((r) => r.dueYmd && r.dueYmd >= todayYmd)
+    .sort((a, b) => (a.dueYmd!).localeCompare(b.dueYmd!))[0];
+  if (upcoming) return upcoming;
+
+  // 3. Fallback to latest
+  return matching[matching.length - 1] ?? null;
+}
+
+/**
+ * Select the next 1701Q and next 1701A filings for the Home "Income tax filings" card.
+ */
+export function selectNextIncomeTaxFilings(
+  rows: readonly TaxCalendarRow[],
+  todayYmd: string,
+): {
+  q1701: TaxCalendarRow | null;
+  a1701: TaxCalendarRow | null;
+} {
+  return {
+    q1701: selectNextFiling(rows, "1701q", todayYmd),
+    a1701: selectNextFiling(rows, "1701a", todayYmd),
+  };
 }
 
 /** Re-export builder for ICS route convenience. */
