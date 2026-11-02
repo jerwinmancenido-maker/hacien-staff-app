@@ -3,6 +3,13 @@ import { TIME_ZONE } from "../format";
 export const MIN_QUOTE_VALIDITY_DAYS = 1;
 export const DEFAULT_QUOTE_VALIDITY_DAYS = 15;
 
+/** Whole days typed in the editor. Null when blank or not an integer (so 1.5 is not saved as 1). */
+export function parseTypedValidityDays(raw: string): number | null {
+  const t = raw.trim();
+  if (!/^-?\d+$/.test(t)) return null;
+  return Number(t);
+}
+
 /**
  * Parse a date input (string YYYY-MM-DD or Date object) into [year, month, day]
  * representing a calendar day in Asia/Manila (PHT, UTC+8).
@@ -101,4 +108,21 @@ export function validateQuoteValidity(
     return { valid: false, error: "At least 1 day." };
   }
   return { valid: true };
+}
+
+/**
+ * An existing quote may be saved with a same-day validUntil only when that
+ * pair is still the stored pair. New quotes, and any edit to the quote date
+ * or valid-until, keep the 1-day minimum.
+ */
+export function isUnchangedLegacyQuoteValidity(
+  raw: { date?: unknown; validUntil?: unknown },
+  stored: { date: string; validUntil: string } | null | undefined,
+): boolean {
+  if (!stored?.date || !stored.validUntil) return false;
+  if (typeof raw.date !== "string" || typeof raw.validUntil !== "string") return false;
+  const date = raw.date.trim();
+  const until = raw.validUntil.trim();
+  if (!date || !until || date !== stored.date || until !== stored.validUntil) return false;
+  return validityDaysFromDates(date, until) === 0;
 }

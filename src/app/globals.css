@@ -6723,6 +6723,12 @@ button.contact-card-add {
 .quote-f {
   min-width: 0;
 }
+.quote-f input,
+.quote-f select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 .quote-f-w2 {
   grid-column: span 2;
 }

@@ -53,7 +53,7 @@ import {
   type EditorInitial,
   type EditorItem,
 } from "./DocumentEditor";
-import { validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
+import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -283,8 +283,8 @@ export function QuoteEditor({
 
   function onValidForDaysChange(val: string) {
     setValidForDays(val);
-    const n = parseInt(val, 10);
-    if (!Number.isNaN(n) && n >= 1 && h.date) {
+    const n = parseTypedValidityDays(val);
+    if (n !== null && h.date) {
       const nextDate = validUntilFromDays(h.date, n);
       if (nextDate) {
         setH((prev) => ({ ...prev, validUntil: nextDate }));
@@ -304,8 +304,8 @@ export function QuoteEditor({
 
   function onDateChange(newDate: string) {
     setH((prev) => {
-      const n = parseInt(validForDays, 10);
-      if (!Number.isNaN(n) && n >= 1 && newDate) {
+      const n = parseTypedValidityDays(validForDays);
+      if (n !== null && newDate) {
         const nextUntil = validUntilFromDays(newDate, n);
         return { ...prev, date: newDate, validUntil: nextUntil ?? prev.validUntil };
       }
@@ -313,11 +313,23 @@ export function QuoteEditor({
     });
   }
 
-  const nDays = parseInt(validForDays, 10);
-  const validityDaysError =
-    !validForDays || Number.isNaN(nDays) || nDays < 1
-      ? "At least 1 day."
-      : null;
+  const nDays = parseTypedValidityDays(validForDays);
+  // Quotes saved before the 1-day rule can still be edited when that same-day
+  // pair is left alone. Changing either date applies the minimum.
+  const legacySameDayUnchanged =
+    !isNew &&
+    validityDaysFromDates(initial.date, initial.validUntil) === 0 &&
+    h.date === initial.date &&
+    h.validUntil === initial.validUntil;
+  const validityDaysError = legacySameDayUnchanged
+    ? null
+    : nDays === null
+      ? validForDays.trim()
+        ? "Must be a whole number of days."
+        : "At least 1 day."
+      : nDays < 1
+        ? "At least 1 day."
+        : null;
   const validUntilError =
     h.validUntil && h.date && h.validUntil < h.date
       ? "Valid until can't be before the quote date."
@@ -325,7 +337,7 @@ export function QuoteEditor({
   const hasValidityError = Boolean(validityDaysError || validUntilError);
 
   const derivedDays =
-    !Number.isNaN(nDays) && nDays >= 1
+    nDays != null && nDays >= 1
       ? nDays
       : h.date && h.validUntil
         ? validityDaysFromDates(h.date, h.validUntil)
@@ -495,7 +507,7 @@ export function QuoteEditor({
     contactId: h.contactId || null,
     date: h.date,
     validUntil: h.validUntil,
-    validForDays: !Number.isNaN(nDays) && nDays >= 1 ? nDays : undefined,
+    validForDays: nDays != null && nDays >= 1 ? nDays : undefined,
     terms: h.terms,
     notes: h.notes,
     internalNotes: h.internalNotes,
@@ -685,7 +697,7 @@ export function QuoteEditor({
               <input
                 id="validForDays"
                 type="number"
-                min={1}
+                min={legacySameDayUnchanged ? 0 : 1}
                 className="input"
                 value={validForDays}
                 onChange={(ev) => onValidForDaysChange(ev.target.value)}
@@ -1225,7 +1237,7 @@ export function QuoteEditor({
               </div>
               <div className="quote-f field">
                 <span className="label">Validity</span>
-                <div>{derivedDays != null && derivedDays >= 1 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
+                <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
               </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>

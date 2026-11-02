@@ -1,14 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultQuoteValidityDays,
+  isUnchangedLegacyQuoteValidity,
   parseManilaYmd,
+  parseTypedValidityDays,
   validUntilFromDays,
   validityDaysFromDates,
   validateQuoteValidity,
   MIN_QUOTE_VALIDITY_DAYS,
 } from "@/lib/quotes/validity";
-import { quoteInputSchema } from "@/lib/validation/quotes";
+import { quoteInputSchema, quoteInputSchemaForSave } from "@/lib/validation/quotes";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
+
+describe("quote validity — typed day count", () => {
+  it("accepts a whole number and rejects blanks and decimals", () => {
+    expect(parseTypedValidityDays("15")).toBe(15);
+    expect(parseTypedValidityDays("0")).toBe(0);
+    expect(parseTypedValidityDays("-2")).toBe(-2);
+    expect(parseTypedValidityDays(" 8 ")).toBe(8);
+    expect(parseTypedValidityDays("")).toBeNull();
+    expect(parseTypedValidityDays("1.5")).toBeNull();
+    expect(parseTypedValidityDays("1e2")).toBeNull();
+  });
+});
 
 describe("quote validity date math — days -> date", () => {
   it("calculates validUntil date from quote date and days (string input)", () => {
@@ -173,6 +187,66 @@ describe("quote validity date math — minimum 1 and validation", () => {
       items: [{ id: null, description: "Item", kind: "GOODS", qty: "1", unit: "pc", unitPrice: "100" }],
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe("quote validity — existing same-day quotes still save when unchanged", () => {
+  const item = { id: null, description: "Item", kind: "GOODS" as const, qty: "1", unit: "pc", unitPrice: "100" };
+
+  function payload(date: string, validUntil: string, extra: Record<string, unknown> = {}) {
+    return {
+      customerId: "cust_1",
+      contactId: null,
+      date,
+      validUntil,
+      terms: "",
+      notes: "Updated note",
+      items: [item],
+      ...extra,
+    };
+  }
+
+  it("treats a stored same-day pair as unchanged only when both dates match", () => {
+    const stored = { date: "2026-11-02", validUntil: "2026-11-02" };
+    expect(isUnchangedLegacyQuoteValidity({ date: "2026-11-02", validUntil: "2026-11-02" }, stored)).toBe(true);
+    expect(isUnchangedLegacyQuoteValidity({ date: "2026-11-03", validUntil: "2026-11-03" }, stored)).toBe(false);
+    expect(isUnchangedLegacyQuoteValidity({ date: "2026-11-02", validUntil: "2026-11-03" }, stored)).toBe(false);
+    expect(isUnchangedLegacyQuoteValidity({ date: "2026-11-02", validUntil: "2026-11-02" }, null)).toBe(false);
+    expect(
+      isUnchangedLegacyQuoteValidity(
+        { date: "2026-11-02", validUntil: "2026-11-01" },
+        { date: "2026-11-02", validUntil: "2026-11-01" },
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts a re-save of an unchanged same-day quote and still rejects a new or edited one", () => {
+    const stored = { date: "2026-11-02", validUntil: "2026-11-02" };
+    const unchanged = quoteInputSchemaForSave(payload("2026-11-02", "2026-11-02"), stored).safeParse(
+      payload("2026-11-02", "2026-11-02"),
+    );
+    expect(unchanged.success).toBe(true);
+
+    const created = quoteInputSchemaForSave(payload("2026-11-02", "2026-11-02"), null).safeParse(
+      payload("2026-11-02", "2026-11-02"),
+    );
+    expect(created.success).toBe(false);
+    if (!created.success) {
+      expect(created.error.issues.find((i) => i.path.includes("validUntil"))?.message).toBe("At least 1 day.");
+    }
+
+    const dateMoved = quoteInputSchemaForSave(payload("2026-11-03", "2026-11-03"), stored).safeParse(
+      payload("2026-11-03", "2026-11-03"),
+    );
+    expect(dateMoved.success).toBe(false);
+    if (!dateMoved.success) {
+      expect(dateMoved.error.issues.find((i) => i.path.includes("validUntil"))?.message).toBe("At least 1 day.");
+    }
+
+    const extended = quoteInputSchemaForSave(payload("2026-11-02", "2026-11-03"), stored).safeParse(
+      payload("2026-11-02", "2026-11-03", { validForDays: 1 }),
+    );
+    expect(extended.success).toBe(true);
   });
 });
 

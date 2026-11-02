@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
+import { db } from "@/lib/db";
+import { isoDate } from "@/lib/format";
 import {
   approveQuote,
   buildQuoteEmailDraft,
@@ -18,7 +20,7 @@ import {
   voidQuote,
   type EmailDraft,
 } from "@/lib/services/quotes";
-import { convertInputSchema, quoteInputSchema, voidReasonSchema } from "@/lib/validation/quotes";
+import { convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
 function readJson(form: FormData, key: string): unknown {
@@ -34,7 +36,15 @@ export async function saveQuoteAction(id: string | null, _prev: FormState, form:
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
-    const parsed = quoteInputSchema.safeParse(readJson(form, "payload"));
+    const raw = readJson(form, "payload");
+    // Same-day validUntil is rejected for new quotes and for any date change.
+    // An existing quote keeps saving when its stored pair is left as-is.
+    let stored: { date: string; validUntil: string } | null = null;
+    if (id) {
+      const existing = await db.quote.findUnique({ where: { id }, select: { date: true, validUntil: true } });
+      if (existing) stored = { date: isoDate(existing.date), validUntil: isoDate(existing.validUntil) };
+    }
+    const parsed = quoteInputSchemaForSave(raw, stored).safeParse(raw);
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
     const quote = id ? await updateQuote(id, parsed.data, user) : await createQuote(parsed.data, user);
     // Mark as sent in this same request. A successful save redirects, so the

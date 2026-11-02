@@ -4,7 +4,7 @@ import {
   WITHHOLDING_PERCENT_RANGE_ERROR,
   isWithholdingRateInRange,
 } from "../quotes/withholding-percent";
-import { validityDaysFromDates } from "../quotes/validity";
+import { isUnchangedLegacyQuoteValidity, validityDaysFromDates } from "../quotes/validity";
 
 export const ITEM_KINDS = ["GOODS", "SERVICES"] as const;
 export const ITEM_KIND_LABELS: Record<(typeof ITEM_KINDS)[number], string> = { GOODS: "Goods", SERVICES: "Services" };
@@ -83,8 +83,7 @@ export type ItemInput = z.infer<typeof itemSchema>;
 
 const items = z.array(itemSchema).min(1, "Add at least one item.").max(200, "At most 200 items.");
 
-export const quoteInputSchema = z
-  .object({
+const quoteInputObject = z.object({
     customerId: z.string().trim().min(1, "Pick a customer."),
     contactId: optionalId,
     date: dateOnly("Date"),
@@ -132,15 +131,39 @@ export const quoteInputSchema = z
     reapplyWithholding: z.boolean().optional(),
     items,
   })
-  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] })
-  .refine(
-    (v) => {
-      if (!v.validUntil) return true;
-      const days = validityDaysFromDates(v.date, v.validUntil);
-      return days === null || days >= 1;
-    },
-    { message: "At least 1 day.", path: ["validUntil"] },
-  );
+  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
+
+/** New quotes, and edits that change the quote date or valid-until. */
+export const quoteInputSchema = quoteInputObject.refine(
+  (v) => {
+    if (!v.validUntil) return true;
+    const days = validityDaysFromDates(v.date, v.validUntil);
+    return days === null || days >= 1;
+  },
+  { message: "At least 1 day.", path: ["validUntil"] },
+);
+
+/**
+ * Update only: the quote already has validUntil on its quote date, and this
+ * save does not change either date. Same-day stays allowed so the quote can
+ * still be saved.
+ */
+export const quoteUnchangedLegacyInputSchema = quoteInputObject;
+
+export function quoteInputSchemaForSave(
+  raw: unknown,
+  stored: { date: string; validUntil: string } | null | undefined,
+) {
+  if (
+    stored &&
+    raw !== null &&
+    typeof raw === "object" &&
+    isUnchangedLegacyQuoteValidity(raw as { date?: unknown; validUntil?: unknown }, stored)
+  ) {
+    return quoteUnchangedLegacyInputSchema;
+  }
+  return quoteInputSchema;
+}
 /** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
 export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo"> & {
   internalNotes?: string | null;
