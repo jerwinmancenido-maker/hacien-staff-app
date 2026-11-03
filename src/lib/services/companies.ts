@@ -101,6 +101,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
     defaultWithholding: defaultWithholdingData(input.defaultWithholding),
     defaultTerms: input.defaultTerms,
     notes: input.notes,
+    orderTextUpdates: input.orderTextUpdates ?? true,
   };
   try {
     return await db.$transaction(async (tx) => {

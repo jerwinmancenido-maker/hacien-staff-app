@@ -296,6 +296,16 @@ export const settingsSections = {
     /** Issue supplier 2307s (withholding agent). OFF — HACIEN is not a withholding agent by default. */
     payables2307Enabled: z.boolean(),
   }),
+  // Q16 S-95: order text updates, Admin toggles on the Messages page.
+  // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,
+  // and the HACIEN sender ID are confirmed. Turning a template on alone does
+  // not send anything while orderTextsEnabled is false.
+  messaging: z.object({
+    orderTextsEnabled: z.boolean(),
+    orderConfirmed: z.boolean(),
+    orderDelivered: z.boolean(),
+    orderPayment: z.boolean(),
+  }),
   // Tax calendar. Owner-only via manage_settings.
   taxCalendar: z.object({
     /** When true, the provisional COR banner may be cleared. Default false. */
@@ -349,6 +359,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   invoiceBooklet: "invoice booklet",
   collections: "collections",
   features: "features",
+  messaging: "order text updates",
   taxCalendar: "tax calendar",
   print: "print & company details",
 };

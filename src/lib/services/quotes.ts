@@ -22,6 +22,7 @@ import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
 import { voidReasonSchema, type ConvertInput, type ItemInput, type QuoteInput } from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
+import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -572,7 +573,9 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
   const format = snap.settings.numbering.salesOrder;
   await ensureSeries(db, "SALES_ORDER", year, format);
 
-  return withTxRetry(() =>
+  // Q16 S-95: order text AFTER the SO transaction commits, never inside it,
+  // so a text failure can never roll back the order.
+  const so = await withTxRetry(() =>
     db.$transaction(async (tx) => {
       const quote = await lockQuote(tx, id);
       if (quote.status === "VOID") throw new DocRuleError("A void quote can't be converted.");
@@ -651,6 +654,8 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       return so;
     }, DOC_TX),
   );
+  await notifyOrderConfirmed(so.id, actor.id);
+  return so;
 }
 
 // ---------------------------------------------------------------------------
