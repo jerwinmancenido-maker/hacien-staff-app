@@ -190,8 +190,7 @@ export function PrintCompanyForm({
                   value={print.showInputTaxDisclaimer ? "true" : "false"}
                 />
                 <p className="hint">
-                  Billing, collection, quote, sales order, and customer statement prints always include: THIS DOCUMENT
-                  IS NOT VALID FOR CLAIM OF INPUT TAX.
+                  Billing and collection prints always include: THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.
                 </p>
                 <div className="field full field-check">
                   <label className="check" htmlFor="showReceivingReportCosts">
