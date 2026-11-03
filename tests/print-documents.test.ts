@@ -111,27 +111,28 @@ describe("professional print documents", () => {
     }
   });
 
-  it("prints the exact input-tax line on the five customer prints even when the old toggle is off", () => {
+  it("prints the input-tax line on billing and collection only (not quote / SO / statement)", () => {
     expect(INPUT_TAX_DISCLAIMER).toBe("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
-    const five = [
+    const withLine = [
       ["billing", billingPrintFixture],
       ["collection", collectionPrintFixture],
+    ] as const;
+    const withoutLine = [
       ["quote", quotePrintFixture],
       ["sales_order", salesOrderPrintFixture],
       ["customer_statement", customerStatementFixture],
+      ["supplier_po", poPrintFixture],
+      ["supplier_statement", supplierStatementFixture],
     ] as const;
-    for (const [kind, fixture] of five) {
+    for (const [kind, fixture] of withLine) {
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: false }), kind).toContain(INPUT_TAX_DISCLAIMER);
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: true }), kind).toContain(INPUT_TAX_DISCLAIMER);
       expect(html(fixture()), kind).toContain(INPUT_TAX_DISCLAIMER);
     }
-    expect(taxFooterLines("supplier_statement", { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
-    expect(html(supplierStatementFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
-    expect(html(poPrintFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
-    const withLine = ["billing", "collection", "quote", "sales_order", "customer_statement"] as const;
-    const withoutLine = ["supplier_po", "supplier_statement", "receiving_report", "supplier_payment", "expense"] as const;
-    expect(withLine.filter((kind) => taxFooterLines(kind).includes(INPUT_TAX_DISCLAIMER))).toEqual([...withLine]);
-    expect(withoutLine.filter((kind) => taxFooterLines(kind, { showInputTaxDisclaimer: true }).includes(INPUT_TAX_DISCLAIMER))).toEqual([]);
+    for (const [kind, fixture] of withoutLine) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true }), kind).not.toContain(INPUT_TAX_DISCLAIMER);
+      expect(html(fixture()), kind).not.toContain(INPUT_TAX_DISCLAIMER);
+    }
   });
 
   it("billing and collection say not an official invoice and include the input-tax note", () => {
@@ -142,17 +143,12 @@ describe("professional print documents", () => {
     }
   });
 
-  it("customer statement includes the official-statement line and the input-tax line", () => {
+  it("customer statement includes the official-statement line and omits the input-tax line", () => {
     const markup = html(customerStatementFixture());
-    expect(markup).toContain(INPUT_TAX_DISCLAIMER);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([
-      STATEMENT_NOT_OFFICIAL,
-      INPUT_TAX_DISCLAIMER,
-    ]);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([
-      STATEMENT_NOT_OFFICIAL,
-      INPUT_TAX_DISCLAIMER,
-    ]);
+    expect(markup).toContain(STATEMENT_NOT_OFFICIAL);
+    expect(markup).not.toContain(INPUT_TAX_DISCLAIMER);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([STATEMENT_NOT_OFFICIAL]);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([STATEMENT_NOT_OFFICIAL]);
   });
 
   it("keeps tax footer lines in the shared config module", () => {
@@ -164,8 +160,8 @@ describe("professional print documents", () => {
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
     ]);
-    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE]);
     expect(taxFooterLines("collection", { showInputTaxDisclaimer: false })).toEqual([
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
@@ -185,10 +181,10 @@ describe("professional print documents", () => {
       supplier_payment: taxFooterLines("supplier_payment"),
       expense: taxFooterLines("expense"),
     };
-    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE]);
     expect(byKind.billing).toEqual([NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(byKind.customer_statement).toEqual([STATEMENT_NOT_OFFICIAL, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.customer_statement).toEqual([STATEMENT_NOT_OFFICIAL]);
     expect(byKind.supplier_statement).toEqual([STATEMENT_NOT_OFFICIAL]);
     expect(html(quotePrintFixture())).toContain(QUOTATION_NOT_INVOICE);
     expect(html(salesOrderPrintFixture())).toContain(SALES_ORDER_NOT_INVOICE);
@@ -270,19 +266,21 @@ describe("professional print documents", () => {
     expect(markup).toContain("Ana Cruz");
   });
 
-  it("shows Valid until on quotes; with WH keeps Total and shows less EWT + net due (no ATC/WHT chips)", () => {
+  it("shows Valid until on quotes; print never shows withholding / WHT / ATC / %", () => {
     expect(html(quotePrintFixture())).toContain("Valid until");
     const markup = html(withholdingQuotePrintFixture());
     const lower = markup.toLowerCase();
     const totalsBlob = (markup.match(/pp-totals[\s\S]*?<\/table>/i)?.[0] ?? "").toLowerCase();
     expect(totalsBlob).toContain("subtotal");
     expect(totalsBlob).toContain("total");
-    expect(totalsBlob).toContain("less 1% ewt");
-    expect(totalsBlob).toContain("net amount due");
+    expect(totalsBlob).not.toContain("less");
+    expect(totalsBlob).not.toContain("net");
     expect(totalsBlob).not.toContain("withholding");
     expect(totalsBlob).not.toContain("wht");
     expect(totalsBlob).not.toContain("atc");
+    expect(totalsBlob).not.toMatch(/%/);
     expect(lower).not.toContain("less: withholding");
+    expect(lower).not.toContain("net amount due");
     expect(lower).not.toContain("withholding tax");
     expect(lower).not.toContain("internal — withholding");
     expect(lower).not.toContain("unit cost");
@@ -321,11 +319,14 @@ describe("print shell screen-only chrome", () => {
 });
 
 describe("Q12 prints legal terms, validity, payment terms, tax line, QR and policies", () => {
-  it("exact tax disclaimer is present on all 5 customer print types and no toggle removes it", () => {
-    const kinds = ["quote", "sales_order", "billing", "collection", "customer_statement"] as const;
-    for (const kind of kinds) {
+  it("input-tax disclaimer is on billing and collection only; absent on quote, SO, statement", () => {
+    for (const kind of ["billing", "collection"] as const) {
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: false })).toContain(INPUT_TAX_DISCLAIMER);
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: true })).toContain(INPUT_TAX_DISCLAIMER);
+    }
+    for (const kind of ["quote", "sales_order", "customer_statement"] as const) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: false })).not.toContain(INPUT_TAX_DISCLAIMER);
     }
   });
 
@@ -341,7 +342,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     }
   });
 
-  it("NON-VAT totals: Total stays contract; less 1% EWT + Net amount due when WH set", () => {
+  it("NON-VAT totals math (subtotal, withholding, total) remains Subtotal + Total only", () => {
     const totals = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "5200.00",
@@ -359,11 +360,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     expect(totals).toEqual([
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
-      { label: "less 1% EWT", amount: "5200.00" },
-      { label: "Net amount due", amount: "514800.00" },
     ]);
-    // ATC must not leak into the customer-facing label.
-    expect(JSON.stringify(totals)).not.toMatch(/WC158|ATC|WHT/i);
   });
 
   it("validity default 15 + override: sentence formatting and date calculation", () => {
@@ -399,7 +396,9 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
   it("QR URL is exactly https://haciensolutions.com/policies and policies constants match specs", () => {
     expect(POLICIES_URL).toBe("https://haciensolutions.com/policies");
     expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
-    expect(POLICY_VERSION_LINE).toBe("Terms v1.1 · Warranty v1.1 · Privacy v2.2");
+    expect(POLICY_VERSION_LINE).toBe(
+      "Terms of Sale v1.1 · Warranty v1.1 · Privacy v2.3 · haciensolutions.com/policies",
+    );
   });
 
   it("version line from constant appears on quote and SO prints", () => {

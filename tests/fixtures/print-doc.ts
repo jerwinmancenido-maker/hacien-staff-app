@@ -86,7 +86,7 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
       { label: "Prepared by", value: "Jerwin" },
     ],
     validity: "Nov 30, 2026",
-    taxLines: [QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [QUOTATION_NOT_INVOICE],
     paymentInstructions: [
       { kind: "bank", label: "Sample Bank", accountName: "HACIEN Sample", accountLast4: "1234", accountPrinted: "****1234" },
     ],
@@ -96,7 +96,7 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
     ],
   });
 
-/** Quote for a customer that withholds — Total stays contract; less EWT + net due. */
+/** Quote for a customer that withholds internally — print still Subtotal+Total only. */
 export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
   base({
     ...quotePrintFixture(),
@@ -104,8 +104,6 @@ export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
     totals: [
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
-      { label: "less 1% EWT", amount: "5200.00" },
-      { label: "Net amount due", amount: "514800.00" },
     ],
   });
 
@@ -116,7 +114,7 @@ export const salesOrderPrintFixture = (): ProfessionalPrintModel =>
     number: "SO-2026-0001",
     hideStatus: true,
     thankYou: true,
-    taxLines: [SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [SALES_ORDER_NOT_INVOICE],
     meta: [
       { label: "Prepared by", value: "Jerwin" },
       { label: "Customer PO/ref", value: "PO-CUST-99" },
@@ -235,7 +233,7 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
     items: undefined,
     totals: undefined,
     thankYou: true,
-    taxLines: [STATEMENT_NOT_OFFICIAL, INPUT_TAX_DISCLAIMER],
+    taxLines: [STATEMENT_NOT_OFFICIAL],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "10000.00",

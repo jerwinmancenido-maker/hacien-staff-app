@@ -6,8 +6,7 @@
 export const NON_VAT_LABEL = "NON-VAT" as const;
 
 /**
- * Exact customer-print line. Always on for billing, collection, quote, sales
- * order, and the customer statement. Not gated by Settings.
+ * Exact input-tax footer. Billing and collection only (see BIR-WORDING.md).
  * Keep this phrase exact; do not invent variants elsewhere.
  */
 export const INPUT_TAX_DISCLAIMER = "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX." as const;
@@ -68,20 +67,14 @@ export const HIDE_STATUS_ON_PRINT: ReadonlySet<PrintDocKind> = new Set([
   "supplier_statement",
 ]);
 
-/** The five customer prints that always carry the input-tax line. */
-const INPUT_TAX_ALWAYS: ReadonlySet<PrintDocKind> = new Set([
-  "quote",
-  "sales_order",
-  "billing",
-  "collection",
-  "customer_statement",
-]);
+/** Billing and collection always carry the input-tax line (not quote / SO / statements). */
+const INPUT_TAX_KINDS: ReadonlySet<PrintDocKind> = BILLING_COLLECTION;
 
 /**
  * Legal / tax footer lines for a document kind.
  * `showInputTaxDisclaimer` is accepted and ignored: the input-tax line is
- * always printed on the five customer prints, even when that old toggle is off.
- * Supplier statements do not get the line.
+ * always printed on billing and collection, even when that old toggle is off.
+ * Quote, SO, and statements do not get the line.
  */
 export function taxFooterLines(
   kind: PrintDocKind,
@@ -101,7 +94,7 @@ export function taxFooterLines(
   if (STATEMENT_KINDS.has(kind)) {
     lines.push(STATEMENT_NOT_OFFICIAL);
   }
-  if (INPUT_TAX_ALWAYS.has(kind)) {
+  if (INPUT_TAX_KINDS.has(kind)) {
     lines.push(INPUT_TAX_DISCLAIMER);
   }
   return lines;
