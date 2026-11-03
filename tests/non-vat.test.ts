@@ -6,13 +6,14 @@ import {
   getGrossSalesYtd,
   getNonVatMeter,
   grossSalesYtdEnd,
+  NON_VAT_MESSAGES,
   nonVatMeter,
   sumGrossSalesAmounts,
   taxYearStart,
   type GrossSalesSource,
 } from "@/lib/services/non-vat";
 
-const taxYear = DEFAULT_SETTINGS.taxYear; // ₱3,000,000, warns at 70% and 90%
+const taxYear = DEFAULT_SETTINGS.taxYear; // ₱3,000,000, milestones at 70% and 90%
 
 /** Test hook: a fake gross-sales source with billings at given instants. */
 function fakeBillings(rows: { at: string; amount: number }[]): GrossSalesSource & { calls: [Date, Date][] } {
@@ -89,7 +90,7 @@ describe("non-VAT threshold meter", () => {
     expect(await getGrossSalesYtd(2027, new Date("2026-06-01T00:00:00Z"), source)).toBe(0);
   });
 
-  it("shows the percentage and warns at the 70% and 90% thresholds from settings", () => {
+  it("shows the percentage and milestones at the 70% and 90% thresholds from settings", () => {
     expect(nonVatMeter(1_500_000, taxYear)).toMatchObject({ pct: 50, pctLabel: "50.0%", level: "ok" });
     expect(nonVatMeter(2_099_999, taxYear)).toMatchObject({ pctLabel: "69.9%", level: "ok" });
     expect(nonVatMeter(2_100_000, taxYear)).toMatchObject({ pctLabel: "70.0%", level: "first" });
@@ -110,5 +111,47 @@ describe("non-VAT threshold meter", () => {
     const source = fakeBillings([{ at: "2026-03-01T00:00:00Z", amount: 2_800_000 }]);
     const meter = await getNonVatMeter(taxYear, new Date("2026-10-30T00:00:00Z"), source);
     expect(meter).toMatchObject({ used: 2_800_000, level: "second", pctLabel: "93.3%" });
+  });
+});
+
+describe("sales milestone messages (Q13 S-46)", () => {
+  it("uses the owner's congratulations wording, never warning wording", () => {
+    expect(NON_VAT_MESSAGES.ok).toBeNull();
+    expect(NON_VAT_MESSAGES.first).toBe("Great progress! You've reached 70% of ₱3M in sales this year.");
+    expect(NON_VAT_MESSAGES.second).toBe(
+      "Almost there! You're at 90% of ₱3M in sales this year. Time to plan for VAT registration.",
+    );
+    expect(NON_VAT_MESSAGES.over).toBe(
+      "Congratulations! You've reached ₱3M in sales this year. Please check VAT registration with your accountant.",
+    );
+    for (const message of Object.values(NON_VAT_MESSAGES)) {
+      if (message) expect(message).not.toMatch(/warn|alarm|getting close|over the limit/i);
+    }
+  });
+
+  it("maps exactly ₱3,000,000, just under and just over to the right milestone", () => {
+    expect(nonVatMeter(2_999_999, taxYear)).toMatchObject({ level: "second" });
+    expect(NON_VAT_MESSAGES[nonVatMeter(2_999_999, taxYear).level]).toBe(NON_VAT_MESSAGES.second);
+    expect(nonVatMeter(3_000_000, taxYear)).toMatchObject({ level: "over", pct: 100 });
+    expect(NON_VAT_MESSAGES[nonVatMeter(3_000_000, taxYear).level]).toBe(NON_VAT_MESSAGES.over);
+    expect(nonVatMeter(3_000_001, taxYear)).toMatchObject({ level: "over" });
+    expect(nonVatMeter(0, taxYear)).toMatchObject({ level: "ok" });
+    expect(NON_VAT_MESSAGES[nonVatMeter(0, taxYear).level]).toBeNull();
+  });
+
+  it("counts a Jan 1 Manila billing toward the new year and a Dec 31 Manila billing toward the old year", async () => {
+    const source = fakeBillings([
+      { at: "2025-12-31T15:59:59Z", amount: 3_000_000 }, // Dec 31 23:59 Manila: last year, not 2026
+      { at: "2025-12-31T16:00:00Z", amount: 3_000_000 }, // Jan 1 00:00 Manila: 2026
+    ]);
+    const meter = await getNonVatMeter(taxYear, new Date("2026-06-01T00:00:00Z"), source);
+    expect(meter).toMatchObject({ used: 3_000_000, level: "over" });
+    expect(NON_VAT_MESSAGES[meter.level]).toBe(NON_VAT_MESSAGES.over);
+  });
+
+  it("shows no milestone message for empty data", async () => {
+    const meter = await getNonVatMeter(taxYear, new Date("2026-06-01T00:00:00Z"), fakeBillings([]));
+    expect(meter).toMatchObject({ used: 0, level: "ok" });
+    expect(NON_VAT_MESSAGES[meter.level]).toBeNull();
   });
 });

@@ -134,9 +134,16 @@ export async function getNonVatMeter(
   return nonVatMeter(await getGrossSalesYtd(taxYear.year, now, source), taxYear);
 }
 
+/**
+ * Sales milestone messages (Q13 S-46, owner wording, Nov 4 2026).
+ * Congratulations only — never a warning, never blocking sales.
+ * The 70% / 90% / 100% wording assumes the ₱3,000,000 limit in
+ * Settings → Tax year; if that limit changes, these strings need
+ * updating too. `ok` (below the first milestone) shows no message.
+ */
 export const NON_VAT_MESSAGES: Record<NonVatLevel, string | null> = {
   ok: null,
-  first: "Getting close to the non-VAT limit.",
-  second: "Almost at the non-VAT limit. Talk to the accountant.",
-  over: "Over the non-VAT limit. Talk to the accountant now.",
+  first: "Great progress! You've reached 70% of ₱3M in sales this year.",
+  second: "Almost there! You're at 90% of ₱3M in sales this year. Time to plan for VAT registration.",
+  over: "Congratulations! You've reached ₱3M in sales this year. Please check VAT registration with your accountant.",
 };
