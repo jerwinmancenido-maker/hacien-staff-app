@@ -11,7 +11,7 @@ import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
-import { ratePctLabel, type WithholdingSnapshot } from "@/lib/quotes/calc";
+import { lineWithholdingAmountCents, ratePctLabel, toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
 import { printablePersonName } from "./signatory";
@@ -37,7 +37,9 @@ function assertCosts(viewer: PermissionUser) {
 
 /**
  * Customer-facing EWT deduction label.
- * Single rate → "less 1% EWT"; mixed rates → "less EWT"; else derive % from money.
+ * Show "less N% EWT" only when the withheld pesos equal N% of the printed Total
+ * (so a goods-only 1% pick on a mixed quote never claims 1% of the face amount).
+ * Otherwise "less EWT".
  */
 export function lessEwtLabel(opts: {
   withholding?: Pick<WithholdingSnapshot, "rate">[];
@@ -51,16 +53,27 @@ export function lessEwtLabel(opts: {
         .filter((r) => Number(r) > 0),
     ),
   ];
-  if (rates.length === 1) return `less ${ratePctLabel(rates[0]!)} EWT`;
+  const whCents = toScaled(opts.withholdingTotal, 2);
+  if (rates.length === 1) {
+    const rate = rates[0]!;
+    if (lineWithholdingAmountCents(opts.baseAmount, rate) === whCents) {
+      return `less ${ratePctLabel(rate)} EWT`;
+    }
+    return "less EWT";
+  }
   if (rates.length > 1) return "less EWT";
+  // No snapshot rates — only show a % when pesos are exactly some clean rate of Total.
   const base = Number(opts.baseAmount);
   const wh = Number(opts.withholdingTotal);
   if (base > 0 && wh > 0) {
     const pct = (wh / base) * 100;
     const rounded = Math.round(pct * 10000) / 10000;
     if (rounded > 0 && rounded <= 15) {
-      const label = String(rounded).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
-      return `less ${label}% EWT`;
+      const asRate = (rounded / 100).toFixed(4);
+      if (lineWithholdingAmountCents(opts.baseAmount, asRate) === whCents) {
+        const label = String(rounded).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
+        return `less ${label}% EWT`;
+      }
     }
   }
   return "less EWT";
@@ -82,9 +95,11 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
 }
 
 /**
- * Totals for customer quotes/SOs/billings:
- * Subtotal + Total (contract / gross — unchanged) and, when EWT applies,
- * "less N% EWT" + "Net amount due". Amount in words matches the Total (gross).
+ * Totals for customer quotes/SOs/billings (Jerwin):
+ * Subtotal + Total (contract / gross — the face obligation) and, when EWT is
+ * set, "less N% EWT" + "Net amount due". Terms point 6 still requires a signed
+ * 2307; without it the withheld amount stays unpaid. Amount in words matches
+ * the Total (gross). Collection acknowledgement totals are separate.
  */
 export function customerMoneyTotals(opts: {
   contractPrice: string;

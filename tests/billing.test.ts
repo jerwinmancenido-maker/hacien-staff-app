@@ -40,6 +40,9 @@ describe("due date from terms", () => {
     expect(dueDateFromTerms(inv, "Net 30").toISOString()).toBe(addDays(inv, 30).toISOString());
     expect(dueDateFromTerms(inv, "net 60").toISOString()).toBe(addDays(inv, 60).toISOString());
   });
+  it("Net 30 (approved accounts only) still adds 30 days", () => {
+    expect(dueDateFromTerms(inv, "Net 30 (approved accounts only)").toISOString()).toBe(addDays(inv, 30).toISOString());
+  });
   it("50/50 defaults to invoice date", () => {
     expect(dueDateFromTerms(inv, "50% down, 50% on delivery").toISOString()).toBe(inv.toISOString());
   });

@@ -33,14 +33,17 @@ export function formatExpectedPaymentLabel(date: Date): string {
 /**
  * Default due date from SO payment terms.
  * - COD / blank / unknown → invoice date
- * - "Net N" → invoice date + N days
+ * - "Net N" (optionally with a trailing note, e.g. "Net 30 (approved accounts only)")
+ *   → invoice date + N days
  * - "50% down, 50% on delivery" (and similar 50/50) → invoice date
  *   (partial billings; due is editable)
+ * - "100% upfront …" → invoice date
  */
 export function dueDateFromTerms(invoiceDate: Date, terms: string | null | undefined): Date {
   const t = (terms ?? "").trim();
   if (!t) return invoiceDate;
-  const net = /^net\s+(\d+)$/i.exec(t);
+  // Allow a note after the number so HACIEN's "Net 30 (approved accounts only)" still adds 30 days.
+  const net = /^net\s+(\d+)\b/i.exec(t);
   if (net) return addDays(invoiceDate, Number(net[1]));
   if (/^cod$/i.test(t)) return invoiceDate;
   if (/50\s*%?\s*down/i.test(t) || /50\s*\/\s*50/i.test(t)) return invoiceDate;

@@ -56,7 +56,7 @@ describe("customerMoneyTotals", () => {
 });
 
 describe("lessEwtLabel", () => {
-  it("formats a single rate as less N% EWT", () => {
+  it("formats a single rate as less N% EWT when pesos match rate × Total", () => {
     expect(
       lessEwtLabel({
         withholding: [{ rate: "0.0100" }],
@@ -64,5 +64,16 @@ describe("lessEwtLabel", () => {
         baseAmount: "10000.00",
       }),
     ).toBe("less 1% EWT");
+  });
+
+  it("omits the percent when a single pick rate does not apply to the full Total", () => {
+    // Goods-only 1% on a mixed quote: WH is not 1% of face Total.
+    expect(
+      lessEwtLabel({
+        withholding: [{ rate: "0.0100" }],
+        withholdingTotal: "5200.00",
+        baseAmount: "540000.00",
+      }),
+    ).toBe("less EWT");
   });
 });

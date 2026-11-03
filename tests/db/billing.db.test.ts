@@ -1075,11 +1075,11 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
 
   it("billing print keeps Total as gross and shows less EWT + Net amount due; words equal Total", async () => {
     const year = await freshYear();
-    const { so } = await openSo(year, { unitPrice: "81500.75" });
+    const { so } = await openSo(year, { unitPrice: "81500.00" });
     const billing = await recordBilling(
       {
         salesOrderId: so.id,
-        amount: "81500.75",
+        amount: "81500.00",
         invoiceNo: nextInvoice(),
         invoiceDate: new Date(Date.UTC(year, 2, 5)),
         dueDate: new Date(Date.UTC(year, 3, 4)),
@@ -1087,20 +1087,20 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       },
       admin,
     );
-    // Force expected EWT (1% of billed amount).
+    // Exact 1% of billed amount so the label can say "less 1% EWT".
     await db.billing.update({
       where: { id: billing.id },
-      data: { withholdingExpected: "815.00", netExpected: "80685.75" },
+      data: { withholdingExpected: "815.00", netExpected: "80685.00" },
     });
     const print = await getBillingPrintModel(billing.id);
     expect(print).not.toBeNull();
     const totals = print!.doc.totals ?? [];
     expect(totals.map((t) => t.label)).toEqual(["Subtotal", "Total", "less 1% EWT", "Net amount due"]);
-    expect(totals.find((t) => t.label === "Total")?.amount).toBe("81500.75");
+    expect(totals.find((t) => t.label === "Total")?.amount).toBe("81500.00");
     expect(totals.find((t) => t.label === "less 1% EWT")?.amount).toBe("815.00");
-    expect(totals.find((t) => t.label === "Net amount due")?.amount).toBe("80685.75");
+    expect(totals.find((t) => t.label === "Net amount due")?.amount).toBe("80685.00");
     // Words still equal the gross Total — not the net.
-    expect(print!.doc.totalInWords).toBe(amountInWords("81500.75"));
+    expect(print!.doc.totalInWords).toBe(amountInWords("81500.00"));
     expect(JSON.stringify(totals)).not.toMatch(/withholding|WHT|ATC/i);
   });
 
