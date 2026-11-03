@@ -38,6 +38,7 @@ const LATER: Item[] = [
 const ADMIN: Item[] = [
   { href: "/settings", label: "Settings", icon: <GearIcon />, adminOnly: true },
   { href: "/audit", label: "Audit log", icon: <ListIcon />, adminOnly: true },
+  { href: "/messages", label: "Messages", icon: <ListIcon />, adminOnly: true },
 ];
 
 type DealsNavFlags = {
@@ -137,6 +138,7 @@ const CRUMB_LABELS: Record<string, string> = {
   settings: "Settings",
   users: "Users",
   audit: "Audit log",
+  messages: "Messages",
   quotes: "Quotes",
   "sales-orders": "Sales Orders",
   "supplier-pos": "Supplier POs",
