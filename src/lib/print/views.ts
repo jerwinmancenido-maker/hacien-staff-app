@@ -29,6 +29,9 @@ import {
   watermarkForStatus,
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
+import { POLICY_VERSION_LINE } from "./policies";
+import { getQuoteSoTermsPoints } from "./terms-block";
+import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
 
@@ -154,6 +157,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
+  const validityDays = validityDaysFromDates(q.date, q.validUntil);
   const doc: ProfessionalPrintModel = {
     kind: "quote",
     title: "QUOTATION",
@@ -200,6 +204,8 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     }),
     totalInWords: amountInWords(total),
     terms: q.terms || letter.print.quoteTerms || null,
+    termsBlock: getQuoteSoTermsPoints(validityDays),
+    versionLine: POLICY_VERSION_LINE,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
     notes: q.notes,
@@ -274,6 +280,8 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
     }),
     totalInWords: amountInWords(total),
     terms: so.terms,
+    termsBlock: getQuoteSoTermsPoints(null),
+    versionLine: POLICY_VERSION_LINE,
     notes: so.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
@@ -451,7 +459,7 @@ export async function getPurchaseOrderPrintModel(
   if (!po) return null;
   const letter = await letterhead();
   const total = money(po.subtotal);
-  const footer = await baseFooter("supplier_po", letter, {});
+  const footer = await baseFooter("supplier_po", letter, { qr: true });
   const doc: ProfessionalPrintModel = {
     kind: "supplier_po",
     title: "Purchase Order",

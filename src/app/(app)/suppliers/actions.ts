@@ -29,18 +29,22 @@ export async function saveSupplierAction(id: string | null, _prev: FormState, fo
     const input: Record<string, unknown> = Object.fromEntries(FIELDS.map((f) => [f, str(form, f)]));
     input.taxType = str(form, "taxType") || undefined;
 
-    // Non-Admin saving other supplier fields must NOT wipe bank fields
-    if (!user.isAdmin && id) {
+    let allowedTerms = settings.lists.paymentTerms;
+    if (id) {
       const existing = await db.supplier.findUnique({ where: { id } });
       if (existing) {
-        input.bankAccountName = existing.bankAccountName ?? "";
-        input.bankAccountNumber = existing.bankAccountNumber ?? "";
-        input.bankBranch = existing.bankBranch ?? "";
-        input.bankNotes = existing.bankNotes ?? "";
+        if (!user.isAdmin) {
+          input.bankAccountName = existing.bankAccountName ?? "";
+          input.bankAccountNumber = existing.bankAccountNumber ?? "";
+          input.bankBranch = existing.bankBranch ?? "";
+          input.bankNotes = existing.bankNotes ?? "";
+        }
+        const current = existing.defaultTerms?.trim() ?? "";
+        if (current && !allowedTerms.includes(current)) allowedTerms = [...allowedTerms, current];
       }
     }
 
-    const parsed = supplierSchema(settings.lists.paymentTerms).safeParse(input);
+    const parsed = supplierSchema(allowedTerms).safeParse(input);
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
     const saved = await saveSupplier(id, parsed.data, { id: user.id, isAdmin: user.isAdmin });
     if (!id) createdId = saved.id;

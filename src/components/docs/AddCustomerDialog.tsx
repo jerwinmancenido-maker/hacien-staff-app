@@ -28,18 +28,22 @@ type Props = {
   terms?: string[];
 };
 
-const DEFAULT_TERMS = ["COD", "Net 7", "Net 15", "Net 30", "Net 60"];
+const DEFAULT_TERMS = [
+  "50% down, 50% on delivery",
+  "100% upfront (software and special orders)",
+  "Net 30 (approved accounts only)",
+];
 
 function termsDefault(list?: string[]) {
   const opts = list && list.length > 0 ? list : DEFAULT_TERMS;
-  return opts.includes("Net 30") ? "Net 30" : (opts[0] ?? "");
+  return opts[0] ?? "";
 }
 
 const empty = {
   name: "",
   tin: "",
   withholdingType: "",
-  defaultTerms: "Net 30",
+  defaultTerms: DEFAULT_TERMS[0],
   address: "",
   contactName: "",
   contactRole: "",

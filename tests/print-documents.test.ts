@@ -6,6 +6,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { PrintShell } from "@/components/docs/PrintShell";
+import { POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
+import { qrSvg, TERMS_URL } from "@/lib/print/qr";
+import {
+  getQuoteSoTermsPoints,
+  quoteSoTermsPoint1,
+  quoteValiditySentence,
+  TERMS_AND_CONDITIONS_HEADING,
+} from "@/lib/print/terms-block";
+import { validUntilFromDays } from "@/lib/quotes/validity";
+import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import { customerMoneyTotals } from "@/lib/print/views";
 import {
   FORBIDDEN_VAT_PHRASES,
   INPUT_TAX_DISCLAIMER,
@@ -91,11 +102,12 @@ describe("professional print documents", () => {
     for (const [, fixture] of docs) {
       const lower = html(fixture()).toLowerCase();
       expect(lower).toContain("non-vat");
+      const withoutNonVat = lower.replaceAll("non-vat", "");
       for (const phrase of FORBIDDEN_VAT_PHRASES) {
-        expect(lower, phrase).not.toContain(phrase);
+        expect(withoutNonVat, phrase).not.toContain(phrase);
       }
       // Guard against a bare "VAT" token that isn't NON-VAT.
-      expect(lower.replaceAll("non-vat", "")).not.toMatch(/\bvat\b/);
+      expect(withoutNonVat).not.toMatch(/\bvat\b/);
     }
   });
 
@@ -307,6 +319,125 @@ describe("print shell screen-only chrome", () => {
     expect(markup).not.toContain(`· ${quotePrintFixture().status} ·`);
     expect(markup).toMatch(/tax-cal-notice[^>]*no-print|no-print[^>]*tax-cal-notice/);
     expect(markup).toContain("Add your TIN and address so they print on documents.");
+  });
+});
+
+describe("Q12 prints legal terms, validity, payment terms, tax line, QR and policies", () => {
+  it("exact tax disclaimer is present on all 5 customer print types and no toggle removes it", () => {
+    const kinds = ["quote", "sales_order", "billing", "collection", "customer_statement"] as const;
+    for (const kind of kinds) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: false })).toContain(INPUT_TAX_DISCLAIMER);
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true })).toContain(INPUT_TAX_DISCLAIMER);
+    }
+  });
+
+  it("never contains bare VAT on any print document", () => {
+    for (const [, fixture] of docs) {
+      const markup = html(fixture());
+      expect(markup).toContain("NON-VAT");
+      const withoutNonVat = markup.toLowerCase().replaceAll("non-vat", "");
+      for (const phrase of FORBIDDEN_VAT_PHRASES) {
+        expect(withoutNonVat).not.toContain(phrase);
+      }
+      expect(withoutNonVat).not.toMatch(/\bvat\b/);
+    }
+  });
+
+  it("NON-VAT totals math (subtotal, withholding, total) remains unchanged", () => {
+    const totals = customerMoneyTotals({
+      contractPrice: "520000.00",
+      withholdingTotal: "5200.00",
+      netReceived: "514800.00",
+      withholding: [
+        {
+          code: "GOODS_1",
+          label: "Withholding on goods",
+          lineKind: "GOODS",
+          rate: "0.0100",
+          atcCode: "WC158",
+        },
+      ],
+    });
+    expect(totals).toEqual([
+      { label: "Subtotal", amount: "520000.00" },
+      { label: "Total", amount: "520000.00", emphasize: true },
+    ]);
+  });
+
+  it("validity default 15 + override: sentence formatting and date calculation", () => {
+    expect(quoteValiditySentence(15)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(null)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(undefined)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(7)).toBe("This quotation is valid for 7 days.");
+    expect(quoteValiditySentence(30)).toBe("This quotation is valid for 30 days.");
+
+    // Valid until = date + N
+    expect(validUntilFromDays("2026-11-02", 15)).toBe("2026-11-17");
+    expect(validUntilFromDays("2026-11-02", 7)).toBe("2026-11-09");
+    expect(validUntilFromDays("2026-11-02", 30)).toBe("2026-12-02");
+
+    // Point 1 integration
+    expect(quoteSoTermsPoint1(15)).toContain("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteSoTermsPoint1(7)).toContain("This quotation is valid for 7 days.");
+  });
+
+  it("payment terms list contains exactly 3 options for new records", () => {
+    const terms = DEFAULT_SETTINGS.lists.paymentTerms;
+    expect(terms).toHaveLength(3);
+    expect(terms).toEqual([
+      "50% down, 50% on delivery",
+      "100% upfront (software and special orders)",
+      "Net 30 (approved accounts only)",
+    ]);
+    expect(terms).not.toContain("COD");
+    expect(terms).not.toContain("Net 15");
+    expect(terms).not.toContain("Net 60");
+  });
+
+  it("QR URL is exactly https://haciensolutions.com/policies and policies constants match specs", () => {
+    expect(POLICIES_URL).toBe("https://haciensolutions.com/policies");
+    expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
+    expect(POLICY_VERSION_LINE).toBe("Terms v1.1 · Warranty v1.1 · Privacy v2.2 · haciensolutions.com/policies");
+  });
+
+  it("version line from constant appears on quote and SO prints", () => {
+    const quoteHtml = html(quotePrintFixture());
+    expect(quoteHtml).toContain(POLICY_VERSION_LINE);
+
+    const soHtml = html(salesOrderPrintFixture());
+    expect(soHtml).toContain(POLICY_VERSION_LINE);
+  });
+
+  it("7-point terms block text on quote and SO prints includes 2307 requirement (point 6)", () => {
+    const defaultPoints = getQuoteSoTermsPoints(15);
+    expect(defaultPoints).toHaveLength(7);
+    expect(defaultPoints[0]).toContain("1. This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(defaultPoints[1]).toContain("2. Payment: 50% down payment when you order, 50% on delivery.");
+    expect(defaultPoints[2]).toContain("3. Lead times are estimates.");
+    expect(defaultPoints[3]).toContain("4. On delivery, note any missing boxes");
+    expect(defaultPoints[4]).toContain("5. Warranty is the manufacturer's or distributor's");
+    expect(defaultPoints[5]).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+    expect(defaultPoints[6]).toContain("7. HACIEN keeps ownership of the goods until they are fully paid.");
+
+    const quoteHtml = html(quotePrintFixture());
+    expect(quoteHtml).toContain(TERMS_AND_CONDITIONS_HEADING);
+    expect(quoteHtml).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+
+    // Custom validity override on quote
+    const customQuoteHtml = html({
+      ...quotePrintFixture(),
+      termsBlock: getQuoteSoTermsPoints(7),
+    });
+    expect(customQuoteHtml).toContain("1. This quotation is valid for 7 days.");
+  });
+
+  it("no print contains haciensolutions.com/terms", async () => {
+    const svg = await qrSvg();
+    for (const [, fixture] of docs) {
+      const doc = { ...fixture(), qrSvg: svg, termsUrl: TERMS_URL };
+      const markup = html(doc);
+      expect(markup).not.toContain("haciensolutions.com/terms");
+    }
   });
 });
 

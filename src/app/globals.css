@@ -4841,11 +4841,28 @@ button.contact-card-add {
   clear: both;
 }
 .pp-notes,
+.pp-terms-block,
 .pp-pay,
 .pp-aging,
 .pp-ewt-note {
   margin-top: 10px;
   font-size: 9.5pt;
+}
+.pp-terms-block {
+  font-size: 7pt;
+  line-height: 1.35;
+  color: var(--pp-muted);
+}
+.pp-terms-block .pp-label {
+  font-weight: 600;
+  margin-bottom: 2px;
+  color: var(--pp-label);
+}
+.pp-terms-item {
+  margin-top: 1.5px;
+}
+.pp-version-line {
+  font-size: 7.5pt;
 }
 .pp-pay ul {
   margin: 4px 0 0;
