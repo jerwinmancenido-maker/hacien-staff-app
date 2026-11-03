@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   BACKUP_FACTS,
   BACKUP_FACTS_AS_OF,
+  BACKUP_NEVER_CLAIM,
   BACKUP_NOT_IN_PLACE,
 } from "@/lib/backups/facts";
 
@@ -30,11 +31,11 @@ describe("backups facts (Q14, S-47)", () => {
       "No off-site copy",
       "No restore test",
     ]);
-    // In-place facts must not, on their own, claim a daily or scheduled backup.
+    // In-place facts must not, on their own, claim any never-claim phrase.
     const inPlace = BACKUP_FACTS.map((f) => `${f.title} ${f.detail}`).join(" ");
-    expect(inPlace).not.toMatch(/daily/i);
-    expect(inPlace).not.toMatch(/scheduled app backup/i);
-    expect(inPlace).not.toMatch(/restore tested/i);
+    for (const phrase of BACKUP_NEVER_CLAIM) {
+      expect(inPlace.toLowerCase()).not.toContain(phrase);
+    }
   });
 
   it("has an Admin-only backups page that states it is facts only", () => {
