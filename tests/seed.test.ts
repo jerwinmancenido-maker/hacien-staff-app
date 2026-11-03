@@ -5,6 +5,7 @@ import {
   seedRefusal,
   demoSeedGuard,
   DEMO_GUARD_MESSAGE,
+  DEMO_PRODUCTION_MESSAGE,
   isDemoRequested,
 } from "@/lib/seed-guard";
 import {
@@ -15,8 +16,9 @@ import {
 } from "@/lib/seed-base";
 
 describe("seed guard", () => {
-  it("refuses sample data in production, even with SEED_SAMPLE=true", () => {
+  it("refuses sample data in production, even with SEED_SAMPLE=true or SEED_DEMO_STAGING=1", () => {
     expect(seedRefusal({ NODE_ENV: "production", SEED_SAMPLE: "true" })).toMatch(/production/);
+    expect(seedRefusal({ NODE_ENV: "production", SEED_DEMO_STAGING: "1" })).toMatch(/production/);
   });
 
   it("refuses unless SEED_SAMPLE=true", () => {
@@ -60,8 +62,14 @@ describe("demo seed guard", () => {
     expect(demoSeedGuard({ SEED_DEMO_STAGING: "staging" })).toBe(DEMO_GUARD_MESSAGE);
   });
 
-  it("allows when SEED_DEMO_STAGING is exactly '1'", () => {
+  it("refuses when NODE_ENV is production even if SEED_DEMO_STAGING is '1'", () => {
+    expect(demoSeedGuard({ NODE_ENV: "production", SEED_DEMO_STAGING: "1" })).toBe(DEMO_PRODUCTION_MESSAGE);
+    expect(demoSeedGuard({ NODE_ENV: "production" })).toBe(DEMO_PRODUCTION_MESSAGE);
+  });
+
+  it("allows when SEED_DEMO_STAGING is exactly '1' and NODE_ENV is not production", () => {
     expect(demoSeedGuard({ SEED_DEMO_STAGING: "1" })).toBeNull();
+    expect(demoSeedGuard({ NODE_ENV: "development", SEED_DEMO_STAGING: "1" })).toBeNull();
   });
 
   it("isDemoRequested is true only for explicit demo opt-ins", () => {
