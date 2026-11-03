@@ -21,6 +21,7 @@ export const demoSeedRefusal = demoSeedGuard;
 
 /**
  * Checks whether demo seeding was requested via env vars or script arguments.
+ * SEED_DEMO_STAGING must be exactly "1" (same as demoSeedGuard); "0"/other values are not a request.
  */
 export function isDemoRequested(env: {
   SEED_DEMO?: string;
@@ -28,7 +29,7 @@ export function isDemoRequested(env: {
   SEED_SAMPLE?: string;
   [key: string]: string | undefined;
 }): boolean {
-  return env.SEED_DEMO === "1" || env.SEED_DEMO_STAGING !== undefined || env.SEED_SAMPLE === "true";
+  return env.SEED_DEMO === "1" || env.SEED_DEMO_STAGING === "1" || env.SEED_SAMPLE === "true";
 }
 
 /** Legacy refusal function for backward compatibility. */

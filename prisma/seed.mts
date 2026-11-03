@@ -17,32 +17,29 @@ export function connect() {
 
 async function main() {
   const demoRequested = isDemoRequested(process.env);
-
-  // If demo seeding is requested, enforce that it runs ONLY on staging with SEED_DEMO_STAGING=1.
-  if (demoRequested) {
-    const demoRefusal = demoSeedGuard(process.env);
-    if (demoRefusal) {
-      console.error(demoRefusal);
-      process.exitCode = 1;
-      return;
-    }
-
-    // Legacy refusal check for backwards compatibility
-    const refusal = seedRefusal(process.env);
-    if (refusal) {
-      console.error(refusal);
-      process.exitCode = 1;
-      return;
-    }
-  }
-
   const db = connect();
   try {
-    // 1. Always run the BASE seed (Settings defaults, withholding catalog, first Admin)
+    // 1. Always run the BASE seed (Settings defaults, withholding catalog, first Admin).
+    // Never skip this when a leftover demo flag is present but refused.
     await seedBase(db);
 
-    // 2. Run demo business seed ONLY when the staging flag is set
+    // 2. Demo business data ONLY when requested AND SEED_DEMO_STAGING=1.
     if (demoRequested) {
+      const demoRefusal = demoSeedGuard(process.env);
+      if (demoRefusal) {
+        console.error(demoRefusal);
+        process.exitCode = 1;
+        return;
+      }
+
+      // Legacy refusal check for backwards compatibility
+      const refusal = seedRefusal(process.env);
+      if (refusal) {
+        console.error(refusal);
+        process.exitCode = 1;
+        return;
+      }
+
       await seedDemo(db);
     }
 

@@ -5,6 +5,7 @@ import {
   seedRefusal,
   demoSeedGuard,
   DEMO_GUARD_MESSAGE,
+  isDemoRequested,
 } from "@/lib/seed-guard";
 import {
   BASE_SEED_MODELS,
@@ -32,6 +33,14 @@ describe("seed guard", () => {
     expect(logged.length).toBeGreaterThan(0);
     for (const args of logged) expect(args).not.toMatch(/password/i);
   });
+
+  it("seed.mts runs seedBase before any demo refusal return", () => {
+    const src = readFileSync(path.resolve(__dirname, "../prisma/seed.mts"), "utf8");
+    const baseIdx = src.indexOf("await seedBase(db)");
+    const demoGuardIdx = src.indexOf("demoSeedGuard(process.env)");
+    expect(baseIdx).toBeGreaterThan(-1);
+    expect(demoGuardIdx).toBeGreaterThan(baseIdx);
+  });
 });
 
 describe("demo seed guard", () => {
@@ -53,6 +62,16 @@ describe("demo seed guard", () => {
 
   it("allows when SEED_DEMO_STAGING is exactly '1'", () => {
     expect(demoSeedGuard({ SEED_DEMO_STAGING: "1" })).toBeNull();
+  });
+
+  it("isDemoRequested is true only for explicit demo opt-ins", () => {
+    expect(isDemoRequested({})).toBe(false);
+    expect(isDemoRequested({ SEED_DEMO_STAGING: "0" })).toBe(false);
+    expect(isDemoRequested({ SEED_DEMO_STAGING: "true" })).toBe(false);
+    expect(isDemoRequested({ SEED_DEMO_STAGING: "1" })).toBe(true);
+    expect(isDemoRequested({ SEED_DEMO: "1" })).toBe(true);
+    expect(isDemoRequested({ SEED_SAMPLE: "true" })).toBe(true);
+    expect(isDemoRequested({ SEED_SAMPLE: "1" })).toBe(false);
   });
 
   it("the demo seed script checks the guard and never logs passwords", () => {

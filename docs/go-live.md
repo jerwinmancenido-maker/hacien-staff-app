@@ -30,7 +30,7 @@ npm run db:seed
 ## 4. Log in and verify empty state
 1. Log in as Admin (`jerwin@example.com` or configured admin email).
 2. Check the **Home** dashboard:
-   - Sales / pipeline shows **₱0.00**.
+   - Empty Home shows the getting-started card (“Welcome — let's get started”), not sample sales or pipeline amounts.
    - No customers exist.
    - No quotes exist.
    - No sales orders (SOs) exist.
@@ -42,4 +42,4 @@ Staging environments populate sample business records (TESDA, Sample Corp, demo 
 ```bash
 SEED_DEMO_STAGING=1 npm run db:seed
 ```
-Running demo seeding without `SEED_DEMO_STAGING=1` refuses immediately and writes nothing.
+Running demo seeding without `SEED_DEMO_STAGING=1` refuses the demo path (exit 1) and writes no business records; the base seed still runs.
