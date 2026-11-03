@@ -315,8 +315,8 @@ export const settingsSections = {
   // Print / PDF letterhead, paper size, and payment instructions.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
-    /** Stored so older snapshots still parse. The input-tax line is no longer gated by this flag. */
-    showInputTaxDisclaimer: z.boolean(),
+    /** Stored so older snapshots still parse without error. The input-tax line is always on. */
+    showInputTaxDisclaimer: z.boolean().optional(),
     /**
      * When ON, receiving-report prints may show unit cost / amount — but only
      * for users with cost-view permission. Default OFF (qty-only).

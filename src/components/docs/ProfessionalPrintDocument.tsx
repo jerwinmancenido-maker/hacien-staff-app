@@ -6,6 +6,8 @@ import { formatPeso } from "@/lib/format";
 import { BRAND_LETTERHEAD_LOGO } from "@/lib/print/company";
 import { HIDE_STATUS_ON_PRINT, NON_VAT_LABEL } from "@/lib/print/tax-wording";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
+import { POLICY_VERSION_LINE } from "@/lib/print/policies";
+import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
 import type { ProfessionalPrintModel, PrintSignatory } from "@/lib/print/types";
 
 const qty = (q: string) => q.replace(/\.00$/, "");
@@ -131,6 +133,19 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
 }
 
 export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel }) {
+  const isQuoteOrSo = doc.kind === "quote" || doc.kind === "sales_order";
+  const termsBlock =
+    doc.termsBlock !== undefined
+      ? doc.termsBlock
+      : isQuoteOrSo
+        ? getQuoteSoTermsPoints(null)
+        : null;
+  const versionLine =
+    doc.versionLine !== undefined
+      ? doc.versionLine
+      : isQuoteOrSo
+        ? POLICY_VERSION_LINE
+        : null;
   const unitLabel = doc.unitPriceLabel ?? "Unit price";
   const hideAmounts = !!doc.hideLineAmounts;
   const hideStatus = doc.hideStatus ?? HIDE_STATUS_ON_PRINT.has(doc.kind);
@@ -327,6 +342,19 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
           </section>
         )}
 
+        {termsBlock && termsBlock.length > 0 && (
+          <section className="pp-terms-block" aria-label="Terms and conditions">
+            <div className="pp-label">{TERMS_AND_CONDITIONS_HEADING}</div>
+            <div className="pp-terms-list">
+              {termsBlock.map((point, i) => (
+                <div key={i} className="pp-terms-item">
+                  {point}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {doc.paymentInstructions && doc.paymentInstructions.length > 0 && (
           <section className="pp-pay" aria-label="Payment instructions">
             <div className="pp-label">Bank / e-wallet details</div>
@@ -348,6 +376,7 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
       <footer className="pp-foot">
         <div className="pp-foot-left">
           {doc.thankYou && <span className="pp-thank-you">Thank you for your business</span>}
+          {versionLine && <div className="pp-version-line pp-faint">{versionLine}</div>}
           {doc.termsUrl && <span className="pp-faint">Terms: {doc.termsUrl}</span>}
           {doc.taxLines.map((line) => (
             <div key={line} className="pp-tax-line">

@@ -30,6 +30,6 @@ describe("customerMoneyTotals", () => {
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
     ]);
-    expect(lines.map((l) => l.label).join(" ")).not.toMatch(/Less|Net|withholding|WHT/i);
+    expect(lines.map((l) => l.label).join(" ")).not.toMatch(/Less|Net|withholding|WHT|EWT/i);
   });
 });

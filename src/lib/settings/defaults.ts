@@ -62,7 +62,11 @@ export const DEFAULT_SETTINGS: Settings = {
     logoStorageKey: "",
   },
   lists: {
-    paymentTerms: ["COD", "Net 15", "Net 30", "Net 60", "50% down, 50% on delivery"],
+    paymentTerms: [
+      "50% down, 50% on delivery",
+      "100% upfront (software and special orders)",
+      "Net 30 (approved accounts only)",
+    ],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
   },
   documents: { expiryWarningDays: 30 },

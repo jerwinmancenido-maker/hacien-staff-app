@@ -94,7 +94,7 @@ export default async function PrintIncomeTaxPage({
         <header className="print-header books-register-head">
           <div>
             <div className="print-brand">{company.name || "HACIEN"}</div>
-            <div className="small">NON-VAT · 8% income tax option · TIN {company.tin || "—"}</div>
+            <div className="small">NON-VAT · TIN {company.tin || "—"}</div>
             <div className="small" style={{ whiteSpace: "pre-wrap" }}>
               {company.address || "—"}
             </div>

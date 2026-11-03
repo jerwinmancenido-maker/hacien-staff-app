@@ -108,6 +108,8 @@ export type ProfessionalPrintModel = {
     aging?: { label: string; amount: string }[];
   };
   terms?: string | null;
+  termsBlock?: string[] | null;
+  versionLine?: string | null;
   validity?: string | null;
   notes?: string | null;
   deliveryNotes?: string | null;

@@ -22,9 +22,10 @@ describe("print document", () => {
 
   it("has no costs, margins, or supplier info on customer quote", async () => {
     const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() })).toLowerCase();
-    for (const word of ["supplier", "margin", "unit cost", "net received"]) {
+    for (const word of ["supplier cost", "margin", "unit cost", "net received"]) {
       expect(html, word).not.toContain(word);
     }
+    expect(html).not.toContain("uno computer");
   });
 
   it("never prints withholding on customer quotes (internal estimate only)", () => {
@@ -33,6 +34,7 @@ describe("print document", () => {
     for (const html of [plain, wht]) {
       expect(html).not.toContain("withholding tax (est.)");
       expect(html).not.toContain("net amount due");
+      expect(html).not.toContain("less 1% ewt");
       expect(html).not.toContain("wht");
       expect(html).not.toContain("atc");
       expect(html).toContain("subtotal");

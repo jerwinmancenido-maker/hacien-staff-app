@@ -56,7 +56,7 @@ describe("manual withholding picks (build brief 10)", () => {
       { label: "Total", amount: "540000.00", emphasize: true },
     ]);
     const blob = JSON.stringify(lines).toLowerCase();
-    for (const banned of ["withholding", "wht", "atc", "less", "net amount", "%", "wi640", "wb080"]) {
+    for (const banned of ["withholding", "wht", "atc", "less", "net amount", "%", "wi640", "wb080", "ewt"]) {
       expect(blob, banned).not.toContain(banned);
     }
   });

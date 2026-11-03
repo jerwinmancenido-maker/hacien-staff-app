@@ -130,5 +130,9 @@ describe("PrintCompanyForm collapsed sections", () => {
     expect(html).toMatch(/name="showInputTaxDisclaimer"[^>]*value="true"|value="true"[^>]*name="showInputTaxDisclaimer"/);
     expect(html).not.toMatch(/id="showInputTaxDisclaimer"/);
     expect(html).not.toContain("showTermsQr");
+
+    // Hint matches billing/collection-only input-tax line (not quote / SO / statement).
+    expect(html).toContain("Billing and collection prints always include: THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
+    expect(html).not.toContain("quote, sales order, and customer statement");
   });
 });

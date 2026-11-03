@@ -15,10 +15,6 @@ import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
 import { printablePersonName } from "./signatory";
-
-function assertCosts(viewer: PermissionUser) {
-  if (!canSeeCosts(viewer)) throw new ForbiddenError();
-}
 import {
   companyContactLine,
   mergeCompanyLetterhead,
@@ -29,8 +25,15 @@ import {
   watermarkForStatus,
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
+import { POLICY_VERSION_LINE } from "./policies";
+import { getQuoteSoTermsPoints } from "./terms-block";
+import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
+
+function assertCosts(viewer: PermissionUser) {
+  if (!canSeeCosts(viewer)) throw new ForbiddenError();
+}
 
 /** Split a stored description into title + optional detail line (first newline). */
 function splitDescription(raw: string): { description: string; detail: string | null } {
@@ -48,9 +51,10 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
 }
 
 /**
- * Totals for customer quotes/SOs: Subtotal + Total (contract price) only.
- * Withholding is internal staff math — never printed (no Less/Net/WHT/ATC/%).
+ * Totals for customer quotes/SOs/billings: Subtotal + Total (contract price) only.
+ * Withholding is office math — never printed (no Less/Net/WHT/ATC/%).
  * Amount in words must match this printed Total.
+ * Collection acknowledgements separately list EWT actually applied to cash.
  */
 export function customerMoneyTotals(opts: {
   contractPrice: string;
@@ -58,6 +62,9 @@ export function customerMoneyTotals(opts: {
   netReceived: string;
   withholding: WithholdingSnapshot[];
 }): PrintMoneyLine[] {
+  void opts.withholdingTotal;
+  void opts.netReceived;
+  void opts.withholding;
   const total = opts.contractPrice;
   return [
     { label: "Subtotal", amount: total },
@@ -154,6 +161,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
+  const validityDays = validityDaysFromDates(q.date, q.validUntil);
   const doc: ProfessionalPrintModel = {
     kind: "quote",
     title: "QUOTATION",
@@ -200,6 +208,8 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     }),
     totalInWords: amountInWords(total),
     terms: q.terms || letter.print.quoteTerms || null,
+    termsBlock: getQuoteSoTermsPoints(validityDays),
+    versionLine: POLICY_VERSION_LINE,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
     notes: q.notes,
@@ -274,6 +284,8 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
     }),
     totalInWords: amountInWords(total),
     terms: so.terms,
+    termsBlock: getQuoteSoTermsPoints(null),
+    versionLine: POLICY_VERSION_LINE,
     notes: so.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
@@ -451,7 +463,7 @@ export async function getPurchaseOrderPrintModel(
   if (!po) return null;
   const letter = await letterhead();
   const total = money(po.subtotal);
-  const footer = await baseFooter("supplier_po", letter, {});
+  const footer = await baseFooter("supplier_po", letter, { qr: true });
   const doc: ProfessionalPrintModel = {
     kind: "supplier_po",
     title: "Purchase Order",

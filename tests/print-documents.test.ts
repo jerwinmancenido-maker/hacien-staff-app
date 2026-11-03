@@ -6,6 +6,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { PrintShell } from "@/components/docs/PrintShell";
+import { POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
+import { qrSvg, TERMS_URL } from "@/lib/print/qr";
+import {
+  getQuoteSoTermsPoints,
+  quoteSoTermsPoint1,
+  quoteValiditySentence,
+  TERMS_AND_CONDITIONS_HEADING,
+} from "@/lib/print/terms-block";
+import { validUntilFromDays } from "@/lib/quotes/validity";
+import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import { customerMoneyTotals } from "@/lib/print/views";
 import {
   FORBIDDEN_VAT_PHRASES,
   INPUT_TAX_DISCLAIMER,
@@ -91,35 +102,37 @@ describe("professional print documents", () => {
     for (const [, fixture] of docs) {
       const lower = html(fixture()).toLowerCase();
       expect(lower).toContain("non-vat");
+      const withoutNonVat = lower.replaceAll("non-vat", "");
       for (const phrase of FORBIDDEN_VAT_PHRASES) {
-        expect(lower, phrase).not.toContain(phrase);
+        expect(withoutNonVat, phrase).not.toContain(phrase);
       }
       // Guard against a bare "VAT" token that isn't NON-VAT.
-      expect(lower.replaceAll("non-vat", "")).not.toMatch(/\bvat\b/);
+      expect(withoutNonVat).not.toMatch(/\bvat\b/);
     }
   });
 
-  it("prints the exact input-tax line on the five customer prints even when the old toggle is off", () => {
+  it("prints the input-tax line on billing and collection only (not quote / SO / statement)", () => {
     expect(INPUT_TAX_DISCLAIMER).toBe("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
-    const five = [
+    const withLine = [
       ["billing", billingPrintFixture],
       ["collection", collectionPrintFixture],
+    ] as const;
+    const withoutLine = [
       ["quote", quotePrintFixture],
       ["sales_order", salesOrderPrintFixture],
       ["customer_statement", customerStatementFixture],
+      ["supplier_po", poPrintFixture],
+      ["supplier_statement", supplierStatementFixture],
     ] as const;
-    for (const [kind, fixture] of five) {
+    for (const [kind, fixture] of withLine) {
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: false }), kind).toContain(INPUT_TAX_DISCLAIMER);
       expect(taxFooterLines(kind, { showInputTaxDisclaimer: true }), kind).toContain(INPUT_TAX_DISCLAIMER);
       expect(html(fixture()), kind).toContain(INPUT_TAX_DISCLAIMER);
     }
-    expect(taxFooterLines("supplier_statement", { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
-    expect(html(supplierStatementFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
-    expect(html(poPrintFixture())).not.toContain(INPUT_TAX_DISCLAIMER);
-    const withLine = ["billing", "collection", "quote", "sales_order", "customer_statement"] as const;
-    const withoutLine = ["supplier_po", "supplier_statement", "receiving_report", "supplier_payment", "expense"] as const;
-    expect(withLine.filter((kind) => taxFooterLines(kind).includes(INPUT_TAX_DISCLAIMER))).toEqual([...withLine]);
-    expect(withoutLine.filter((kind) => taxFooterLines(kind, { showInputTaxDisclaimer: true }).includes(INPUT_TAX_DISCLAIMER))).toEqual([]);
+    for (const [kind, fixture] of withoutLine) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true }), kind).not.toContain(INPUT_TAX_DISCLAIMER);
+      expect(html(fixture()), kind).not.toContain(INPUT_TAX_DISCLAIMER);
+    }
   });
 
   it("billing and collection say not an official invoice and include the input-tax note", () => {
@@ -130,17 +143,12 @@ describe("professional print documents", () => {
     }
   });
 
-  it("customer statement includes the official-statement line and the input-tax line", () => {
+  it("customer statement includes the official-statement line and omits the input-tax line", () => {
     const markup = html(customerStatementFixture());
-    expect(markup).toContain(INPUT_TAX_DISCLAIMER);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([
-      STATEMENT_NOT_OFFICIAL,
-      INPUT_TAX_DISCLAIMER,
-    ]);
-    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([
-      STATEMENT_NOT_OFFICIAL,
-      INPUT_TAX_DISCLAIMER,
-    ]);
+    expect(markup).toContain(STATEMENT_NOT_OFFICIAL);
+    expect(markup).not.toContain(INPUT_TAX_DISCLAIMER);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: true })).toEqual([STATEMENT_NOT_OFFICIAL]);
+    expect(taxFooterLines("customer_statement", { showInputTaxDisclaimer: false })).toEqual([STATEMENT_NOT_OFFICIAL]);
   });
 
   it("keeps tax footer lines in the shared config module", () => {
@@ -152,8 +160,8 @@ describe("professional print documents", () => {
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
     ]);
-    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(taxFooterLines("quote")).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(taxFooterLines("sales_order")).toEqual([SALES_ORDER_NOT_INVOICE]);
     expect(taxFooterLines("collection", { showInputTaxDisclaimer: false })).toEqual([
       NOT_OFFICIAL_INVOICE,
       INPUT_TAX_DISCLAIMER,
@@ -173,10 +181,10 @@ describe("professional print documents", () => {
       supplier_payment: taxFooterLines("supplier_payment"),
       expense: taxFooterLines("expense"),
     };
-    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.quote).toEqual([QUOTATION_NOT_INVOICE]);
+    expect(byKind.sales_order).toEqual([SALES_ORDER_NOT_INVOICE]);
     expect(byKind.billing).toEqual([NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER]);
-    expect(byKind.customer_statement).toEqual([STATEMENT_NOT_OFFICIAL, INPUT_TAX_DISCLAIMER]);
+    expect(byKind.customer_statement).toEqual([STATEMENT_NOT_OFFICIAL]);
     expect(byKind.supplier_statement).toEqual([STATEMENT_NOT_OFFICIAL]);
     expect(html(quotePrintFixture())).toContain(QUOTATION_NOT_INVOICE);
     expect(html(salesOrderPrintFixture())).toContain(SALES_ORDER_NOT_INVOICE);
@@ -307,6 +315,130 @@ describe("print shell screen-only chrome", () => {
     expect(markup).not.toContain(`· ${quotePrintFixture().status} ·`);
     expect(markup).toMatch(/tax-cal-notice[^>]*no-print|no-print[^>]*tax-cal-notice/);
     expect(markup).toContain("Add your TIN and address so they print on documents.");
+  });
+});
+
+describe("Q12 prints legal terms, validity, payment terms, tax line, QR and policies", () => {
+  it("input-tax disclaimer is on billing and collection only; absent on quote, SO, statement", () => {
+    for (const kind of ["billing", "collection"] as const) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: false })).toContain(INPUT_TAX_DISCLAIMER);
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true })).toContain(INPUT_TAX_DISCLAIMER);
+    }
+    for (const kind of ["quote", "sales_order", "customer_statement"] as const) {
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: true })).not.toContain(INPUT_TAX_DISCLAIMER);
+      expect(taxFooterLines(kind, { showInputTaxDisclaimer: false })).not.toContain(INPUT_TAX_DISCLAIMER);
+    }
+  });
+
+  it("never contains bare VAT on any print document", () => {
+    for (const [, fixture] of docs) {
+      const markup = html(fixture());
+      expect(markup).toContain("NON-VAT");
+      const withoutNonVat = markup.toLowerCase().replaceAll("non-vat", "");
+      for (const phrase of FORBIDDEN_VAT_PHRASES) {
+        expect(withoutNonVat).not.toContain(phrase);
+      }
+      expect(withoutNonVat).not.toMatch(/\bvat\b/);
+    }
+  });
+
+  it("NON-VAT totals math (subtotal, withholding, total) remains Subtotal + Total only", () => {
+    const totals = customerMoneyTotals({
+      contractPrice: "520000.00",
+      withholdingTotal: "5200.00",
+      netReceived: "514800.00",
+      withholding: [
+        {
+          code: "GOODS_1",
+          label: "Withholding on goods",
+          lineKind: "GOODS",
+          rate: "0.0100",
+          atcCode: "WC158",
+        },
+      ],
+    });
+    expect(totals).toEqual([
+      { label: "Subtotal", amount: "520000.00" },
+      { label: "Total", amount: "520000.00", emphasize: true },
+    ]);
+  });
+
+  it("validity default 15 + override: sentence formatting and date calculation", () => {
+    expect(quoteValiditySentence(15)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(null)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(undefined)).toBe("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteValiditySentence(7)).toBe("This quotation is valid for 7 days.");
+    expect(quoteValiditySentence(30)).toBe("This quotation is valid for 30 days.");
+
+    // Valid until = date + N
+    expect(validUntilFromDays("2026-11-02", 15)).toBe("2026-11-17");
+    expect(validUntilFromDays("2026-11-02", 7)).toBe("2026-11-09");
+    expect(validUntilFromDays("2026-11-02", 30)).toBe("2026-12-02");
+
+    // Point 1 integration
+    expect(quoteSoTermsPoint1(15)).toContain("This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(quoteSoTermsPoint1(7)).toContain("This quotation is valid for 7 days.");
+  });
+
+  it("payment terms list contains exactly 3 options for new records", () => {
+    const terms = DEFAULT_SETTINGS.lists.paymentTerms;
+    expect(terms).toHaveLength(3);
+    expect(terms).toEqual([
+      "50% down, 50% on delivery",
+      "100% upfront (software and special orders)",
+      "Net 30 (approved accounts only)",
+    ]);
+    expect(terms).not.toContain("COD");
+    expect(terms).not.toContain("Net 15");
+    expect(terms).not.toContain("Net 60");
+  });
+
+  it("QR URL is exactly https://haciensolutions.com/policies and policies constants match specs", () => {
+    expect(POLICIES_URL).toBe("https://haciensolutions.com/policies");
+    expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
+    expect(POLICY_VERSION_LINE).toBe(
+      "Terms of Sale v1.1 · Warranty v1.1 · Privacy v2.3 · haciensolutions.com/policies",
+    );
+  });
+
+  it("version line from constant appears on quote and SO prints", () => {
+    const quoteHtml = html(quotePrintFixture());
+    expect(quoteHtml).toContain(POLICY_VERSION_LINE);
+
+    const soHtml = html(salesOrderPrintFixture());
+    expect(soHtml).toContain(POLICY_VERSION_LINE);
+  });
+
+  it("7-point terms block text on quote and SO prints includes 2307 requirement (point 6)", () => {
+    const defaultPoints = getQuoteSoTermsPoints(15);
+    expect(defaultPoints).toHaveLength(7);
+    expect(defaultPoints[0]).toContain("1. This quotation is valid for 15 days unless the quote states otherwise.");
+    expect(defaultPoints[1]).toContain("2. Payment: 50% down payment when you order, 50% on delivery.");
+    expect(defaultPoints[2]).toContain("3. Lead times are estimates.");
+    expect(defaultPoints[3]).toContain("4. On delivery, note any missing boxes");
+    expect(defaultPoints[4]).toContain("5. Warranty is the manufacturer's or distributor's");
+    expect(defaultPoints[5]).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+    expect(defaultPoints[6]).toContain("7. HACIEN keeps ownership of the goods until they are fully paid.");
+
+    const quoteHtml = html(quotePrintFixture());
+    expect(quoteHtml).toContain(TERMS_AND_CONDITIONS_HEADING);
+    expect(quoteHtml).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+
+    // Custom validity override on quote
+    const customQuoteHtml = html({
+      ...quotePrintFixture(),
+      termsBlock: getQuoteSoTermsPoints(7),
+    });
+    expect(customQuoteHtml).toContain("1. This quotation is valid for 7 days.");
+  });
+
+  it("no print contains haciensolutions.com/terms", async () => {
+    const svg = await qrSvg();
+    for (const [, fixture] of docs) {
+      const doc = { ...fixture(), qrSvg: svg, termsUrl: TERMS_URL };
+      const markup = html(doc);
+      expect(markup).not.toContain("haciensolutions.com/terms");
+    }
   });
 });
 
