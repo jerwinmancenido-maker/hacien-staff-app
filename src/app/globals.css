@@ -316,34 +316,14 @@ a.tracker-card:hover {
   color: var(--text);
   font-weight: 600;
 }
-.tracker-warning {
+.tracker-message {
   margin-top: 6px;
   font-weight: 500;
 }
-.tracker-card.level-first {
-  background: var(--amber-bg);
-}
-.tracker-card.level-first .bar > span {
-  background: var(--amber);
-}
-.tracker-card.level-first .tracker-pct,
-.tracker-card.level-first .tracker-warning {
-  color: var(--amber);
-}
-.tracker-card.level-second,
-.tracker-card.level-over {
-  background: var(--red-bg);
-}
-.tracker-card.level-second .bar > span,
-.tracker-card.level-over .bar > span {
-  background: var(--red);
-}
-.tracker-card.level-second .tracker-pct,
-.tracker-card.level-second .tracker-warning,
-.tracker-card.level-over .tracker-pct,
-.tracker-card.level-over .tracker-warning {
-  color: var(--red);
-}
+/* Q13 S-46: sales milestone, congratulations style only. No amber/red at
+   any level — the bar stays the blue accent (.bar > span, below) and the
+   card keeps the default background, so a milestone never looks like an
+   alarm. Level classes are kept on the card for tests/data-level only. */
 .bar {
   height: 6px;
   background: var(--fill);
@@ -353,7 +333,7 @@ a.tracker-card:hover {
 .bar > span {
   display: block;
   height: 100%;
-  /* Non-VAT sidebar meter: brand accent below warn % (level-first/second override). */
+  /* Sales milestone sidebar card: brand accent at every level. */
   background: var(--blue);
   border-radius: 999px;
 }

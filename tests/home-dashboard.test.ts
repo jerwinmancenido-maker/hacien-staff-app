@@ -168,14 +168,11 @@ describe("home Needs action — Withholding not set", () => {
 });
 
 describe("home Non-VAT card copy", () => {
-  it("formats the settings limit compactly in the home title and sidebar label", () => {
+  it("formats the settings limit compactly, and the sidebar label is the owner's Sales Milestone title", () => {
     expect(formatCompactPesoLimit(3_000_000)).toBe("₱3M");
     expect(formatCompactPesoLimit(1_500_000)).toBe("₱1.5M");
-    expect(homeNonVatTitle(3_000_000)).toBe("Non-VAT sales limit (₱3M)");
-    expect(homeNonVatTitle(1_500_000)).toBe("Non-VAT sales limit (₱1.5M)");
-    // Same helper used for the sidebar tracker label.
-    expect(homeNonVatTitle(3_000_000)).toContain(formatCompactPesoLimit(3_000_000));
-    expect(homeNonVatTitle(1_500_000)).toContain(formatCompactPesoLimit(1_500_000));
+    // Q13 S-46: title is fixed, not the limit — the limit still shows in the card body.
+    expect(homeNonVatTitle()).toBe("Sales Milestone");
   });
 
   it("never emits 1000K / 1000M and always keeps the ₱ sign at unit boundaries", () => {
@@ -189,11 +186,12 @@ describe("home Non-VAT card copy", () => {
     }
   });
 
-  it("uses settings-driven warn percents in the helper", () => {
+  it("uses settings-driven milestone percents in the helper, never warning wording", () => {
     expect(homeNonVatHelperLine(70, 90)).toBe(
-      "Estimate based on invoices in this app for this year. Your accountant's books are the official count. Warns at 70% and 90%.",
+      "Estimate based on invoices in this app for this year. Your accountant's books are the official count. Milestones at 70%, 90% and 100%.",
     );
-    expect(homeNonVatHelperLine(50, 80)).toContain("Warns at 50% and 80%.");
+    expect(homeNonVatHelperLine(50, 80)).toContain("Milestones at 50%, 80% and 100%.");
+    expect(homeNonVatHelperLine(70, 90)).not.toMatch(/warn/i);
   });
 });
 
@@ -214,7 +212,10 @@ describe("home Non-VAT bar tone", () => {
     expect(css).toMatch(/--blue:\s*#2563eb;/i);
     expect(css).toMatch(/\.home-nonvat\s+\.aging-bar-fill:not\(\.empty\)\s*\{[^}]*background:\s*var\(--blue\)/s);
     expect(css).toMatch(/\.bar\s*>\s*span\s*\{[^}]*background:\s*var\(--blue\)/s);
-    expect(css).toMatch(/\.tracker-card\.level-first\s+\.bar\s*>\s*span\s*\{[^}]*background:\s*var\(--amber\)/s);
+    // Q13 S-46: the sidebar milestone card never goes amber or red.
+    expect(css).not.toMatch(/\.tracker-card\.level-(first|second|over)[^{]*\{[^}]*var\(--(amber|red)\)/s);
+    expect(css).not.toMatch(/\.tracker-card[^{]*\.tracker-warning/s);
+    expect(css).toMatch(/\.tracker-message\s*\{/s);
     expect(css).toMatch(/\.home-nonvat\s+\.aging-bar-fill\.amber\s*\{[^}]*background:\s*var\(--amber\)/s);
   });
 });

@@ -27,9 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
   // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
   const meter = await getNonVatMeter(settings.taxYear);
-  const warning = NON_VAT_MESSAGES[meter.level];
+  const milestoneMessage = NON_VAT_MESSAGES[meter.level];
   const booksEnabled = await isBooksEnabled();
-  const nonVatTitle = homeNonVatTitle(meter.limit);
+  const milestoneTitle = homeNonVatTitle();
   const canOpenSettings = can(user, "manage_settings");
 
   const sidebar = (
@@ -52,11 +52,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <a
         href="/billing"
         className={`tracker-card level-${meter.level}`}
-        aria-label={nonVatTitle}
+        aria-label={milestoneTitle}
         data-level={meter.level}
       >
         <div className="label tracker-head">
-          <span>{nonVatTitle}</span>
+          <span>{milestoneTitle}</span>
           <b className="num tracker-pct">{meter.pctLabel}</b>
         </div>
         <div className="value" style={{ textAlign: "left" }}>
@@ -66,7 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div
           className="bar"
           role="meter"
-          aria-label="Share of the non-VAT limit used"
+          aria-label="Sales milestone progress"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(meter.barPct)}
@@ -74,13 +74,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         >
           <span style={{ width: `${meter.barPct}%` }} />
         </div>
-        {warning ? (
-          <div className="tracker-warning small" role="status">
-            {warning}
+        {milestoneMessage ? (
+          <div className="tracker-message small" role="status">
+            {milestoneMessage}
           </div>
         ) : (
           <div className="faint small" style={{ marginTop: 6 }}>
-            Warns at {meter.warnFirstPct}% and {meter.warnSecondPct}%
+            Milestones at {meter.warnFirstPct}%, {meter.warnSecondPct}% and 100%
           </div>
         )}
       </a>
