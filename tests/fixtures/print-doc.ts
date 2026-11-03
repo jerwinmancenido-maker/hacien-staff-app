@@ -96,7 +96,7 @@ export const quotePrintFixture = (): ProfessionalPrintModel =>
     ],
   });
 
-/** Quote for a customer that withholds internally — print still Subtotal+Total only. */
+/** Quote for a customer that withholds — Total stays contract; less EWT + net due. */
 export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
   base({
     ...quotePrintFixture(),
@@ -104,6 +104,8 @@ export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
     totals: [
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
+      { label: "less 1% EWT", amount: "5200.00" },
+      { label: "Net amount due", amount: "514800.00" },
     ],
   });
 

@@ -44,7 +44,7 @@ const mixedLines = [
 ];
 
 describe("manual withholding picks (build brief 10)", () => {
-  it("customerMoneyTotals never prints withholding / WHT / ATC / % / Less / Net", () => {
+  it("customerMoneyTotals keeps Total as contract and shows less EWT + Net amount due (no ATC codes)", () => {
     const lines = customerMoneyTotals({
       contractPrice: "540000.00",
       withholdingTotal: "21400.00",
@@ -54,11 +54,16 @@ describe("manual withholding picks (build brief 10)", () => {
     expect(lines).toEqual([
       { label: "Subtotal", amount: "540000.00" },
       { label: "Total", amount: "540000.00", emphasize: true },
+      { label: "less EWT", amount: "21400.00" },
+      { label: "Net amount due", amount: "518600.00" },
     ]);
     const blob = JSON.stringify(lines).toLowerCase();
-    for (const banned of ["withholding", "wht", "atc", "less", "net amount", "%", "wi640", "wb080"]) {
+    // Customer print labels EWT/net clearly; never dumps ATC codes or WHT chips.
+    for (const banned of ["withholding", "wht", "atc", "wi640", "wb080"]) {
       expect(blob, banned).not.toContain(banned);
     }
+    expect(blob).toContain("less ewt");
+    expect(blob).toContain("net amount due");
   });
 
   it("government goods 1% + 3% → goods 4% money / chips WHT 1% WI640 + WHT 3% WB080", () => {

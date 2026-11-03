@@ -28,17 +28,23 @@ describe("print document", () => {
     expect(html).not.toContain("uno computer");
   });
 
-  it("never prints withholding on customer quotes (internal estimate only)", () => {
+  it("plain quote has no EWT lines; withholding quote keeps Total and shows less EWT + net due", () => {
     const plain = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() })).toLowerCase();
+    expect(plain).not.toContain("withholding tax (est.)");
+    expect(plain).not.toContain("net amount due");
+    expect(plain).not.toContain("wht");
+    expect(plain).not.toContain("atc");
+    expect(plain).toContain("subtotal");
+    expect(plain).toContain("total");
+
     const wht = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: withholdingQuotePrintFixture() })).toLowerCase();
-    for (const html of [plain, wht]) {
-      expect(html).not.toContain("withholding tax (est.)");
-      expect(html).not.toContain("net amount due");
-      expect(html).not.toContain("wht");
-      expect(html).not.toContain("atc");
-      expect(html).toContain("subtotal");
-      expect(html).toContain("total");
-    }
+    expect(wht).toContain("less 1% ewt");
+    expect(wht).toContain("net amount due");
+    expect(wht).toContain("₱520,000.00"); // Total stays contract
+    expect(wht).toContain("₱5,200.00");
+    expect(wht).toContain("₱514,800.00");
+    expect(wht).not.toContain("wht");
+    expect(wht).not.toContain("atc");
   });
 
   it("generates the QR locally for the terms URL", async () => {

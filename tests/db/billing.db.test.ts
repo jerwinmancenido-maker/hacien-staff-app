@@ -1073,7 +1073,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(money((await db.withholding2307.findUniqueOrThrow({ where: { id: legacy.id } })).amount)).toBe(beforeAmount);
   });
 
-  it("S-19 billing print shows Subtotal+Total only; words equal Total; no EWT line", async () => {
+  it("billing print keeps Total as gross and shows less EWT + Net amount due; words equal Total", async () => {
     const year = await freshYear();
     const { so } = await openSo(year, { unitPrice: "81500.75" });
     const billing = await recordBilling(
@@ -1087,7 +1087,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       },
       admin,
     );
-    // Force expected EWT so old code would have printed Less: EWT.
+    // Force expected EWT (1% of billed amount).
     await db.billing.update({
       where: { id: billing.id },
       data: { withholdingExpected: "815.00", netExpected: "80685.75" },
@@ -1095,10 +1095,13 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const print = await getBillingPrintModel(billing.id);
     expect(print).not.toBeNull();
     const totals = print!.doc.totals ?? [];
-    expect(totals.map((t) => t.label)).toEqual(["Subtotal", "Total"]);
-    expect(totals.every((t) => t.amount === "81500.75")).toBe(true);
+    expect(totals.map((t) => t.label)).toEqual(["Subtotal", "Total", "less 1% EWT", "Net amount due"]);
+    expect(totals.find((t) => t.label === "Total")?.amount).toBe("81500.75");
+    expect(totals.find((t) => t.label === "less 1% EWT")?.amount).toBe("815.00");
+    expect(totals.find((t) => t.label === "Net amount due")?.amount).toBe("80685.75");
+    // Words still equal the gross Total — not the net.
     expect(print!.doc.totalInWords).toBe(amountInWords("81500.75"));
-    expect(JSON.stringify(totals)).not.toMatch(/EWT|withholding/i);
+    expect(JSON.stringify(totals)).not.toMatch(/withholding|WHT|ATC/i);
   });
 
   it("S-19 Staff cannot change existing customer withholding; Admin can", async () => {

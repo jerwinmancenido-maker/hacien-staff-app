@@ -11,14 +11,10 @@ import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
-import type { WithholdingSnapshot } from "@/lib/quotes/calc";
+import { ratePctLabel, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
 import { printablePersonName } from "./signatory";
-
-function assertCosts(viewer: PermissionUser) {
-  if (!canSeeCosts(viewer)) throw new ForbiddenError();
-}
 import {
   companyContactLine,
   mergeCompanyLetterhead,
@@ -34,6 +30,41 @@ import { getQuoteSoTermsPoints } from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
+
+function assertCosts(viewer: PermissionUser) {
+  if (!canSeeCosts(viewer)) throw new ForbiddenError();
+}
+
+/**
+ * Customer-facing EWT deduction label.
+ * Single rate → "less 1% EWT"; mixed rates → "less EWT"; else derive % from money.
+ */
+export function lessEwtLabel(opts: {
+  withholding?: Pick<WithholdingSnapshot, "rate">[];
+  withholdingTotal: string;
+  baseAmount: string;
+}): string {
+  const rates = [
+    ...new Set(
+      (opts.withholding ?? [])
+        .map((w) => w.rate)
+        .filter((r) => Number(r) > 0),
+    ),
+  ];
+  if (rates.length === 1) return `less ${ratePctLabel(rates[0]!)} EWT`;
+  if (rates.length > 1) return "less EWT";
+  const base = Number(opts.baseAmount);
+  const wh = Number(opts.withholdingTotal);
+  if (base > 0 && wh > 0) {
+    const pct = (wh / base) * 100;
+    const rounded = Math.round(pct * 10000) / 10000;
+    if (rounded > 0 && rounded <= 15) {
+      const label = String(rounded).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
+      return `less ${label}% EWT`;
+    }
+  }
+  return "less EWT";
+}
 
 /** Split a stored description into title + optional detail line (first newline). */
 function splitDescription(raw: string): { description: string; detail: string | null } {
@@ -51,9 +82,9 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
 }
 
 /**
- * Totals for customer quotes/SOs: Subtotal + Total (contract price) only.
- * Withholding is internal staff math — never printed (no Less/Net/WHT/ATC/%).
- * Amount in words must match this printed Total.
+ * Totals for customer quotes/SOs/billings:
+ * Subtotal + Total (contract / gross — unchanged) and, when EWT applies,
+ * "less N% EWT" + "Net amount due". Amount in words matches the Total (gross).
  */
 export function customerMoneyTotals(opts: {
   contractPrice: string;
@@ -62,10 +93,23 @@ export function customerMoneyTotals(opts: {
   withholding: WithholdingSnapshot[];
 }): PrintMoneyLine[] {
   const total = opts.contractPrice;
-  return [
+  const lines: PrintMoneyLine[] = [
     { label: "Subtotal", amount: total },
     { label: "Total", amount: total, emphasize: true },
   ];
+  const wh = money(opts.withholdingTotal);
+  if (Number(wh) > 0) {
+    lines.push({
+      label: lessEwtLabel({
+        withholding: opts.withholding,
+        withholdingTotal: wh,
+        baseAmount: total,
+      }),
+      amount: wh,
+    });
+    lines.push({ label: "Net amount due", amount: money(opts.netReceived) });
+  }
+  return lines;
 }
 
 const day = (ymdStr: string | null | undefined) =>
@@ -301,19 +345,23 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     where: { id },
     include: {
       customer: true,
-      salesOrder: { select: { number: true, terms: true, buyerPoNo: true } },
+      salesOrder: { select: { number: true, terms: true, buyerPoNo: true, withholding: true } },
       createdBy: { select: { name: true } },
     },
   });
   if (!b) return null;
   const letter = await letterhead();
   const amount = money(b.amount);
-  // Customer copy: Subtotal + Total (gross) only — never show EWT / net expected.
-  // withholdingExpected / netExpected stay on the billing record for office use.
-  const totals: PrintMoneyLine[] = [
-    { label: "Subtotal", amount },
-    { label: "Total", amount, emphasize: true },
-  ];
+  // Total stays the billed contract/gross; EWT and net due are separate lines.
+  // Collection print totals (cash received / EWT applied) are unchanged.
+  const whExpected = money(b.withholdingExpected);
+  const soWithholding = snapshotList(b.salesOrder.withholding);
+  const totals = customerMoneyTotals({
+    contractPrice: amount,
+    withholdingTotal: whExpected,
+    netReceived: money(b.netExpected),
+    withholding: soWithholding,
+  });
   const prepared = printablePersonName(b.createdBy.name);
   const footer = await baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);

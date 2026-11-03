@@ -270,21 +270,19 @@ describe("professional print documents", () => {
     expect(markup).toContain("Ana Cruz");
   });
 
-  it("shows Valid until on quotes; print never shows withholding / WHT / ATC / %", () => {
+  it("shows Valid until on quotes; with WH keeps Total and shows less EWT + net due (no ATC/WHT chips)", () => {
     expect(html(quotePrintFixture())).toContain("Valid until");
     const markup = html(withholdingQuotePrintFixture());
     const lower = markup.toLowerCase();
     const totalsBlob = (markup.match(/pp-totals[\s\S]*?<\/table>/i)?.[0] ?? "").toLowerCase();
     expect(totalsBlob).toContain("subtotal");
     expect(totalsBlob).toContain("total");
-    expect(totalsBlob).not.toContain("less");
-    expect(totalsBlob).not.toContain("net");
+    expect(totalsBlob).toContain("less 1% ewt");
+    expect(totalsBlob).toContain("net amount due");
     expect(totalsBlob).not.toContain("withholding");
     expect(totalsBlob).not.toContain("wht");
     expect(totalsBlob).not.toContain("atc");
-    expect(totalsBlob).not.toMatch(/%/);
     expect(lower).not.toContain("less: withholding");
-    expect(lower).not.toContain("net amount due");
     expect(lower).not.toContain("withholding tax");
     expect(lower).not.toContain("internal — withholding");
     expect(lower).not.toContain("unit cost");
@@ -343,7 +341,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     }
   });
 
-  it("NON-VAT totals math (subtotal, withholding, total) remains unchanged", () => {
+  it("NON-VAT totals: Total stays contract; less 1% EWT + Net amount due when WH set", () => {
     const totals = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "5200.00",
@@ -361,7 +359,11 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     expect(totals).toEqual([
       { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
+      { label: "less 1% EWT", amount: "5200.00" },
+      { label: "Net amount due", amount: "514800.00" },
     ]);
+    // ATC must not leak into the customer-facing label.
+    expect(JSON.stringify(totals)).not.toMatch(/WC158|ATC|WHT/i);
   });
 
   it("validity default 15 + override: sentence formatting and date calculation", () => {
@@ -397,7 +399,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
   it("QR URL is exactly https://haciensolutions.com/policies and policies constants match specs", () => {
     expect(POLICIES_URL).toBe("https://haciensolutions.com/policies");
     expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
-    expect(POLICY_VERSION_LINE).toBe("Terms v1.1 · Warranty v1.1 · Privacy v2.2 · haciensolutions.com/policies");
+    expect(POLICY_VERSION_LINE).toBe("Terms v1.1 · Warranty v1.1 · Privacy v2.2");
   });
 
   it("version line from constant appears on quote and SO prints", () => {
