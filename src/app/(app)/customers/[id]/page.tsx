@@ -19,6 +19,7 @@ import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
 import { customerArSnapshot, listBillings, listCollections } from "@/lib/billing/views";
+import { listItemHistory } from "@/lib/items/history";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
 import { PlusIcon } from "@/components/Icons";
@@ -175,6 +176,7 @@ export default async function CustomerPage({
           },
           { key: "transactions", label: "Transactions", href: `/customers/${id}?tab=transactions` },
           { key: "balances", label: "Balances", href: `/customers/${id}?tab=balances` },
+          { key: "prices", label: "Price history", href: `/customers/${id}?tab=prices` },
         ]}
       />
 
@@ -228,7 +230,55 @@ export default async function CustomerPage({
       {tab === "transactions" && <TransactionsTab owner={owner} user={user} contacts={contacts} search={search} />}
 
       {tab === "balances" && <CustomerBalances customerId={id} canManage={can(user, "manage_billing")} />}
+      {tab === "prices" && <CustomerPriceHistory customerId={id} />}
     </>
+  );
+}
+
+/** S-55: prices this customer was last quoted/charged per item. Prices only — never costs. */
+async function CustomerPriceHistory({ customerId }: { customerId: string }) {
+  const rows = await listItemHistory({ customerId });
+  return (
+    <div className="details-stack">
+      <div className="card">
+        <div className="card-head">
+          <h2>Price history</h2>
+        </div>
+        {rows.length === 0 ? (
+          <p className="faint">No quoted prices for this customer yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="list" aria-label="Customer price history">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th className="num">Last price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.key}>
+                    <td>{row.description}</td>
+                    <td className="num">
+                      {row.lastPrice != null ? (
+                        <>
+                          {formatPeso(row.lastPrice)}
+                          <div className="small faint">
+                            {row.lastPriceRef} · {row.lastPriceDate}
+                          </div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

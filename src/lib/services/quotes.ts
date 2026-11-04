@@ -222,6 +222,80 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   );
 }
 
+/**
+ * S-55: Duplicate / New revision. Copies a quote into a fresh DRAFT with a
+ * new number, verbatim lines (prices, costs, withholding), totals and notes.
+ * Approval, sent state and the buyer PO number are NOT carried over — the
+ * copy is a new document that needs its own approval and buyer PO ref.
+ * `revision` is 1 for a duplicate, original + 1 for a new revision.
+ */
+export async function copyQuote(id: string, actor: DocActor, revision: number): Promise<QuoteWithItems> {
+  assertCan(actor, "edit_data");
+  const original = await db.quote.findUnique({
+    where: { id },
+    include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+  });
+  if (!original) throw new DocRuleError("Quote not found.");
+  if (original.status === "VOID") throw new DocRuleError("A void quote cannot be copied.");
+  const snap = await getSettingsSnapshot();
+  const today = manilaToday();
+  const year = today.getUTCFullYear();
+  const format = snap.settings.numbering.quote;
+  await ensureSeries(db, "QUOTE", year, format);
+  return withTxRetry(() =>
+    db.$transaction(async (tx) => {
+      const number = await allocateDocNumber(tx, "QUOTE", year, format);
+      const copy = await tx.quote.create({
+        data: {
+          number,
+          revision,
+          customerId: original.customerId,
+          contactId: original.contactId,
+          date: today,
+          validUntil: addDays(today, snap.settings.quotes.defaultValidityDays),
+          terms: original.terms,
+          notes: original.notes,
+          internalNotes: original.internalNotes,
+          subject: original.subject,
+          buyerPoNo: null,
+          settingsVersionId: snap.versionId,
+          withholding: original.withholding as unknown as Prisma.InputJsonValue,
+          withholdingPick: original.withholdingPick as unknown as Prisma.InputJsonValue,
+          contractPrice: original.contractPrice,
+          withholdingTotal: original.withholdingTotal,
+          netReceived: original.netReceived,
+          supplierCost: original.supplierCost,
+          netMargin: original.netMargin,
+          netMarginPct: original.netMarginPct,
+          createdById: actor.id,
+          updatedById: actor.id,
+          items: {
+            create: original.items.map((item) => ({
+              sortOrder: item.sortOrder,
+              description: item.description,
+              kind: item.kind,
+              qty: item.qty,
+              unit: item.unit,
+              supplierId: item.supplierId,
+              supplierUnitCost: item.supplierUnitCost,
+              unitPrice: item.unitPrice,
+              total: item.total,
+              supplierTotal: item.supplierTotal,
+              margin: item.margin,
+              withholdingRate: item.withholdingRate,
+              withholdingAtc: item.withholdingAtc,
+              withholdingOverride: item.withholdingOverride,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+      await writeAudit(tx, { userId: actor.id, entityType: "Quote", entityId: copy.id, action: "create", after: quoteAudit(copy) });
+      return copy;
+    }, DOC_TX),
+  );
+}
+
 export async function updateQuote(id: string, input: QuoteInput, actor: DocActor): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   const withCosts = canSeeCosts(actor);
