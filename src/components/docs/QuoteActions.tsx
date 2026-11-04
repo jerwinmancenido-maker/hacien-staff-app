@@ -117,7 +117,6 @@ export function QuoteActions({
   const canRefreshCompany = canEdit && status === "DRAFT" && !!actions.refreshCompanyDetails;
   const items: MenuItem[] = [];
   if (canEdit && editable) items.push({ key: "edit", label: "Edit", href: `/quotes/${id}/edit` });
-  if (canEdit && editable) items.push({ key: "edit", label: "Edit", href: `/quotes/${id}/edit` });
   if (canEdit && status !== "VOID" && actions.duplicate) {
     items.push({
       key: "duplicate",
