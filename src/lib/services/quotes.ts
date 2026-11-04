@@ -20,6 +20,7 @@ import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
+import { generateUniqueTrackingRef } from "../tracking-ref";
 import {
   QUOTE_ZERO_TOTAL_ERROR,
   quoteTotalIsPositive,
@@ -689,9 +690,11 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       }
       const deliveryAddress = formatAddress(address, { multiline: true });
       const number = await allocateDocNumber(tx, "SALES_ORDER", year, format);
+      const trackingRef = await generateUniqueTrackingRef(async (ref) => !!(await tx.salesOrder.findUnique({ where: { trackingRef: ref }, select: { id: true } })));
       const so = await tx.salesOrder.create({
         data: {
           number,
+          trackingRef,
           quoteId: quote.id,
           customerId: quote.customerId,
           contactId: quote.contactId,

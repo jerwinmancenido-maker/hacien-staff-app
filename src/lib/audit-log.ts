@@ -14,6 +14,7 @@ export const AUDIT_ENTITIES = [
   "Collection",
   "SupplierBill",
   "ReceivingReport",
+  "SupplierReturn",
   "SupplierPayment",
   "Expense",
   "CashTransfer",
@@ -42,6 +43,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Collection: "Collection",
   SupplierBill: "Supplier bill",
   ReceivingReport: "Receiving report",
+  SupplierReturn: "Supplier return",
   SupplierPayment: "Supplier payment",
   Expense: "Expense",
   CashTransfer: "Cash transfer",
@@ -129,6 +131,7 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
       case "Collection":
       case "SupplierBill":
       case "ReceivingReport":
+      case "SupplierReturn":
       case "SupplierPayment":
       case "Expense":
       case "CashTransfer": {
@@ -140,6 +143,7 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           Collection: db.collection,
           SupplierBill: db.supplierBill,
           ReceivingReport: db.receivingReport,
+          SupplierReturn: db.supplierReturn,
           SupplierPayment: db.supplierPayment,
           Expense: db.expense,
           CashTransfer: db.cashTransfer,

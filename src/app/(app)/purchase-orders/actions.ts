@@ -17,8 +17,9 @@ import {
   type EmailDraft,
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill, voidSupplierBill } from "@/lib/services/supplier-bills";
+import { postSupplierReturn, voidSupplierReturn } from "@/lib/services/returns";
 import { formFiles } from "@/lib/form-files";
-import { billInputSchema, closeReasonSchema, createFromSoSchema, poInputSchema } from "@/lib/validation/purchasing";
+import { billInputSchema, closeReasonSchema, createFromSoSchema, poInputSchema, returnInputSchema } from "@/lib/validation/purchasing";
 import { voidReasonSchema } from "@/lib/validation/quotes";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -151,5 +152,33 @@ export async function voidBillAction(purchaseOrderId: string, billId: string, re
     await voidSupplierBill(billId, parsed.data, user);
     refresh(purchaseOrderId);
     return { ok: true, message: "Bill voided." };
+  });
+}
+
+/** S-50: post a supplier return (RMA) against this PO. */
+export async function postSupplierReturnAction(purchaseOrderId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await requireCostAction("edit_data");
+    assertCanMaintainPurchaseOrder(user);
+    const parsed = returnInputSchema.safeParse(payload(form));
+    if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+    await postSupplierReturn(purchaseOrderId, parsed.data, user);
+    refresh(purchaseOrderId);
+    goTo = `/purchase-orders/${purchaseOrderId}?tab=returns`;
+    return { ok: true };
+  });
+  if (goTo) redirect(goTo);
+  return result;
+}
+
+/** S-50: void a supplier return; the quantities go back on the PO lines. */
+export async function voidSupplierReturnAction(purchaseOrderId: string, id: string, reason: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireCostAction("view");
+    assertCanVoid(user);
+    await voidSupplierReturn(id, reason, user);
+    refresh(purchaseOrderId);
+    return { ok: true, message: "Return voided." };
   });
 }

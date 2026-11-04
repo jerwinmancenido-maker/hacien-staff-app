@@ -97,6 +97,22 @@ export const receiptInputSchema = z.object({
 });
 export type ReceiptInput = z.infer<typeof receiptInputSchema>;
 
+/** S-50: return to supplier (RMA). The credit note is optional and reference-only. */
+export const returnInputSchema = z.object({
+  returnDate: dateOnly("Return date"),
+  reason: optionalText(5000),
+  creditNoteNumber: z.string().trim().max(64).optional().nullable().transform((v) => v || null),
+  creditNoteAmount: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v.replace(/,/g, "") : null))
+    .pipe(z.union([amount("Credit note amount", { positive: true }), z.null()])),
+  lines: z.array(z.object({ lineId: z.string().max(64), qty: z.string().max(20) })).max(500),
+});
+export type ReturnInput = z.infer<typeof returnInputSchema>;
+
 export const billInputSchema = z.object({
   billNumber: z.string().trim().min(1, "Enter the supplier's bill / invoice no.").max(64),
   billDate: dateOnly("Bill date"),

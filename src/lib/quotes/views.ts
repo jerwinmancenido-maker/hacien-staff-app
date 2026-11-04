@@ -381,6 +381,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
   return {
     id: so.id,
     number: so.number,
+    trackingRef: so.trackingRef,
     status: so.status,
     date: ymd(so.date)!,
     buyerPoNo: so.buyerPoNo,

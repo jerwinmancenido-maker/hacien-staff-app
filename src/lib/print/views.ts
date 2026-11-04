@@ -9,6 +9,7 @@ import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/a
 import { formatAddress } from "@/lib/addresses/format";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
@@ -783,6 +784,63 @@ export async function getExpensePrintModel(
 // Statements
 // ---------------------------------------------------------------------------
 
+/**
+ * S-54: a collection's withholding (2307) prints on its own ledger line.
+ * Cash (+ unapplied credit) stays on the Collection line; the 2307 line that
+ * follows it carries only the withheld amount. Running balances still end at
+ * the same closing balance — the cash line's balance is the final balance
+ * plus the withholding back.
+ */
+export type StatementLedgerInput = NonNullable<Awaited<ReturnType<typeof getStatement>>>["lines"][number];
+
+export function statementLedgerLines(lines: readonly StatementLedgerInput[]) {
+  const out: { date: string; description: string; charges: string | null; credits: string | null; balance: string }[] = [];
+  for (const line of lines) {
+    if (line.kind === "billing") {
+      out.push({
+        date: day(line.date),
+        description: `Booklet invoice #${line.invoiceNo} · due ${day(line.dueDate)}`,
+        charges: line.amount,
+        credits: null,
+        balance: line.runningBalance,
+      });
+      continue;
+    }
+    const method = COLLECTION_METHOD_LABELS[line.method as keyof typeof COLLECTION_METHOD_LABELS] ?? line.method;
+    const label = `Collection · ${method}${line.receiptNo ? ` · ${line.receiptNo}` : ""}`;
+    const cashAndUnapplied = fromScaled(toScaled(line.cash, 2) + toScaled(line.unapplied, 2), 2);
+    const wh = line.withholding;
+    if (Number(wh) > 0) {
+      if (Number(cashAndUnapplied) > 0) {
+        out.push({
+          date: day(line.date),
+          description: label,
+          charges: null,
+          credits: cashAndUnapplied,
+          balance: fromScaled(toScaled(line.runningBalance, 2) + toScaled(wh, 2), 2),
+        });
+      }
+      out.push({
+        date: day(line.date),
+        description: `Less: EWT withheld (BIR Form 2307) · ${method}${line.receiptNo ? ` · ${line.receiptNo}` : ""}`,
+        charges: null,
+        credits: wh,
+        balance: line.runningBalance,
+      });
+    } else {
+      out.push({
+        date: day(line.date),
+        description: label,
+        charges: null,
+        credits: cashAndUnapplied,
+        balance: line.runningBalance,
+      });
+    }
+  }
+  return out;
+}
+
+
 export async function getCustomerStatementPrintModel(
   customerId: string,
   from?: Date | null,
@@ -820,26 +878,7 @@ export async function getCustomerStatementPrintModel(
       openingBalance: stmt.openingBalance,
       closingBalance: stmt.closingBalance,
       aging,
-      lines: stmt.lines.map((line) => {
-        if (line.kind === "billing") {
-          return {
-            date: day(line.date),
-            description: `Booklet invoice #${line.invoiceNo} · due ${day(line.dueDate)}`,
-            charges: line.amount,
-            credits: null,
-            balance: line.runningBalance,
-          };
-        }
-        const method = COLLECTION_METHOD_LABELS[line.method as keyof typeof COLLECTION_METHOD_LABELS] ?? line.method;
-        const credit = (Number(line.cash) + Number(line.withholding) + Number(line.unapplied)).toFixed(2);
-        return {
-          date: day(line.date),
-          description: `Collection · ${method}${line.receiptNo ? ` · ${line.receiptNo}` : ""}`,
-          charges: null,
-          credits: credit,
-          balance: line.runningBalance,
-        };
-      }),
+      lines: statementLedgerLines(stmt.lines),
     },
     totalInWords: amountInWords(stmt.closingBalance),
     signatories: [

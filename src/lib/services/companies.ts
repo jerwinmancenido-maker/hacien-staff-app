@@ -109,6 +109,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
     withholdingType: input.withholdingType,
     defaultWithholding: defaultWithholdingData(input.defaultWithholding),
     defaultTerms: input.defaultTerms,
+    creditLimit: input.creditLimit,
     notes: input.notes,
     orderTextUpdates: input.orderTextUpdates ?? true,
   };

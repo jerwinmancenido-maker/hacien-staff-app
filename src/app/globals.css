@@ -1384,6 +1384,58 @@ tr.inactive .cell-primary .sub {
   margin-bottom: 8px;
 }
 
+/* S-85: Settings left list + full-width content. The list stacks above the
+   content on narrow screens; the 2-column field grid is unchanged. */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.settings-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+.settings-nav-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.settings-nav-link:hover {
+  background: var(--grey-100);
+}
+.settings-nav-link.active {
+  background: var(--blue-tint);
+  color: var(--blue-dark);
+  font-weight: 600;
+}
+.settings-layout .settings-page {
+  max-width: none;
+}
+.settings-section-intro {
+  margin-bottom: 14px;
+}
+.settings-section-intro p {
+  margin: 4px 0 0;
+}
+@media (max-width: 768px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+  .settings-nav {
+    position: static;
+  }
+}
+
 /* Settings tabs: fit all 11 at desktop; sideways scroll only below md */
 @media (min-width: 769px) {
   .settings-pill-tabs.pill-tabs-wrap {
@@ -4507,12 +4559,20 @@ button.contact-card-add {
   /*
    * table-layout:fixed ignores min-width — set explicit rem widths so
    * Income/Tax fit ₱22,500.00 / ₱325.00. Customer + TIN yield the space.
-   * Wrap headers/names on spaces only (no mid-word break-word).
+   * S-97: the CUSTOMER header and long single-word names spilled into TIN
+   * at 3.5rem with no mid-word break. The header now fits at 8pt, and
+   * names wrap anywhere inside the column instead of spilling.
    */
-  .books-register-table:has(th.col-status) th.col-customer,
+  .books-register-table:has(th.col-status) th.col-customer {
+    width: 3.5rem;
+    font-size: 8pt;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    hyphens: none;
+  }
   .books-register-table:has(th.col-status) td.col-customer {
     width: 3.5rem;
-    overflow-wrap: normal;
+    overflow-wrap: anywhere;
     word-break: normal;
     hyphens: none;
   }

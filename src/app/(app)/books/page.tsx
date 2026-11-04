@@ -51,6 +51,12 @@ export default async function BooksHomePage({
             );
           })}
           <li style={{ marginBottom: 12 }}>
+            <Link href="/books/profit">
+              <b>Monthly profit</b>
+            </Link>
+            <div className="faint small">Net profit for the month and margin by deal, with CSV export.</div>
+          </li>
+          <li style={{ marginBottom: 12 }}>
             <Link href={TAX_WORKSHEET_PAGES.home.href}>
               <b>{TAX_WORKSHEET_PAGES.home.title}</b>
             </Link>

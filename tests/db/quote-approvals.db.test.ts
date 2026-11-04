@@ -347,5 +347,7 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     await expect(convertQuoteToSalesOrder(blankId, { buyerPoNo: null, deliveryAddress: null }, staff)).rejects.toThrow(
       /waiting for approval/i,
     );
+    // S-101: same confirm-none reject check the zero-cost case above already has.
+    await expect(confirmNoneAndMarkQuoteSent(blankId, staff)).rejects.toThrow(/waiting for approval/i);
   });
 });

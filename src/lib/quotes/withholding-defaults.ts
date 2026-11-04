@@ -60,6 +60,14 @@ export const WITHHOLDING_PICK_RESET_LABEL = "Reset";
 export const WITHHOLDING_PICK_CHANGE_LABEL = "Change";
 
 /**
+ * S-98: withholding rate boxes stay hidden for NONE ("Private") customers —
+ * no withholding applies to them, so there is nothing to pick.
+ */
+export function withholdingPickBoxesHidden(withholdingType: string | null | undefined): boolean {
+  return withholdingType === "NONE";
+}
+
+/**
  * Resolve the pick to persist from the customer type dropdown + checkbox state.
  * "No" (NONE) always saves [] — the boxes are hidden.
  */

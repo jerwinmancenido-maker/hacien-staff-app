@@ -52,6 +52,7 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       withholdingType: type,
       defaultWithholding: pick,
       defaultTerms: str(form, "defaultTerms"),
+      creditLimit: str(form, "creditLimit"),
       notes: str(form, "notes"),
       // Checkbox: absent = unchecked = off. Present (checked) = on.
       orderTextUpdates: bool(form, "orderTextUpdates"),

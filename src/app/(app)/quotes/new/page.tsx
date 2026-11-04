@@ -3,6 +3,8 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
+import { customerArSnapshot } from "@/lib/billing/views";
+import { formatPeso } from "@/lib/format";
 import { editorCustomers, editorRates, editorSuppliers } from "../editor-data";
 import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
@@ -13,11 +15,19 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
   const [customers, rates, suppliers] = await Promise.all([editorCustomers(), editorRates(), editorSuppliers(user)]);
   const today = manilaToday();
   const preset = customers.find((c) => c.id === customerParam);
+  const presetAr = preset ? await customerArSnapshot(preset.id) : null;
+  const presetOverLimit =
+    preset && preset.creditLimit != null && presetAr ? Number(presetAr.balanceDue) > Number(preset.creditLimit) : false;
   const withholdingPick = preset ? preset.defaultWithholding : null;
 
   return (
     <>
       <PageHeader title="New quote" subtitle="Pick the customer, add the lines, and save. The quote number is given on save." />
+      {presetOverLimit && presetAr && (
+        <div className="alert warn" role="status">
+          {preset?.name} is over their credit limit — balance due {formatPeso(presetAr.balanceDue)} vs limit {formatPeso(preset?.creditLimit ?? 0)}. This is a warning only; you can still save the quote.
+        </div>
+      )}
       <QuoteEditor
         isNew
         quoteId={null}

@@ -401,6 +401,11 @@ export function DeliverySection({
                       )}
                     </td>
                     <td className="right">
+                      {!d.voidedAt && (
+                        <a className="btn-link small" href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noreferrer">
+                          Print attachment
+                        </a>
+                      )}{" "}
                       {d.voidedAt ? (
                         <span className="small muted">Void ({d.voidReason})</span>
                       ) : (
