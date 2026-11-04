@@ -57,7 +57,7 @@ describe("home header button permissions", () => {
     expect(can(user(["STAFF"]), "manage_billing")).toBe(false);
     expect(newQuoteHref()).toBe("/quotes/new");
     expect(newBillingHref()).toBe("/billing/billings/new");
-    expect(auditLogHref()).toBe("/audit");
+    expect(auditLogHref()).toBe("/settings?tab=audit"); // S-84: audit log lives in Settings now
 
     const page = readFileSync(path.join(process.cwd(), "src/app/(app)/page.tsx"), "utf8");
     expect(page).toMatch(/newQuoteHref/);
@@ -436,13 +436,13 @@ describe("home concept A layout wiring", () => {
     expect(HOME_RECENT_DESKTOP_ROWS - extras).toBe(HOME_RECENT_PHONE_ROWS);
   });
 
-  it("shows View all → /audit only when view_audit is allowed", () => {
+  it("shows View all → Settings audit tab only when view_audit is allowed", () => {
     expect(can(user(["ADMIN"]), "view_audit")).toBe(true);
     expect(can(user(["APPROVER"]), "view_audit")).toBe(false);
     expect(can(user(["STAFF"]), "view_audit")).toBe(false);
     expect(can(user(["VIEWER"]), "view_audit")).toBe(false);
     expect(dash).toMatch(/can\(user,\s*["']view_audit["']\)/);
-    expect(auditLogHref()).toBe("/audit");
+    expect(auditLogHref()).toBe("/settings?tab=audit"); // S-84: audit log lives in Settings now
 
     const sample = [
       {
@@ -458,7 +458,7 @@ describe("home concept A layout wiring", () => {
       HomeRecentActivity({ rows: sample as never, auditHref: auditLogHref() }),
     );
     expect(withLink).toMatch(/>View all</);
-    expect(withLink).toMatch(/href="\/audit"/);
+    expect(withLink).toMatch(/href="\/settings\?tab=audit"/); // S-84
 
     const noLink = renderToStaticMarkup(
       HomeRecentActivity({ rows: sample as never, auditHref: null }),

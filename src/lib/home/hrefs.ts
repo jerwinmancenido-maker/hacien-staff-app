@@ -97,5 +97,5 @@ export function newBillingHref(): string {
 }
 
 export function auditLogHref(): string {
-  return "/audit";
+  return "/settings?tab=audit";
 }
