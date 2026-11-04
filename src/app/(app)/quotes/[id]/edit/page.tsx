@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
+import { formatDateTime } from "@/lib/format";
 import { canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
@@ -45,6 +46,10 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
         preparedByName={quote.createdBy}
+        preparedByPosition={quote.createdByPosition}
+        preparedSignatureUrl={quote.createdBySignatureUrl}
+        approvedByName={quote.approvedBy}
+        approvedAt={quote.approvedAt ? formatDateTime(quote.approvedAt) : null}
         action={saveQuoteAction.bind(null, id)}
         cancelHref={`/quotes/${id}`}
         markSentAction={markQuoteSentAction}

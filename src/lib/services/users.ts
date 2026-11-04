@@ -9,6 +9,8 @@ import { lastRoleGuard, roleFlags, ROLES, type Role } from "../permissions";
 
 export const userSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(120),
+  // S-70: job position, shown under Prepared by on prints. Empty = none.
+  position: z.string().trim().max(120).optional().transform((v) => v || null),
   email: z.email("Enter a valid email.").trim().toLowerCase().max(191),
   roles: z.array(z.enum(ROLES as [Role, ...Role[]])).min(1, "Pick at least one role."),
   canSeeCosts: z.boolean(),
@@ -63,7 +65,7 @@ export async function createUser(input: UserInput, actorId: string) {
       const existing = await tx.user.findUnique({ where: { email: input.email } });
       if (existing) throw new UserRuleError(DUPLICATE_EMAIL);
       const user = await tx.user.create({
-        data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...roleFlags(input.roles) },
+        data: { name: input.name, email: input.email, position: input.position ?? null, canSeeCosts: input.canSeeCosts, ...roleFlags(input.roles) },
       });
       await writeAudit(tx, { userId: actorId, entityType: "User", entityId: user.id, action: "create", after: auditable(user) });
       const token = await issueToken(tx, user.id, "INVITE");
@@ -97,7 +99,7 @@ export async function updateUser(id: string, input: UserInput, actorId: string) 
       if (clash) throw new UserRuleError(DUPLICATE_EMAIL);
       const after = await tx.user.update({
         where: { id },
-        data: { name: input.name, email: input.email, canSeeCosts: input.canSeeCosts, ...flags },
+        data: { name: input.name, email: input.email, position: input.position ?? null, canSeeCosts: input.canSeeCosts, ...flags },
       });
       await writeAudit(tx, { userId: actorId, entityType: "User", entityId: id, action: "update", before: auditable(before), after: auditable(after) });
       return after;

@@ -80,6 +80,10 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
         const position = printablePosition(s.position);
         return (
           <div key={s.role} className="pp-signatory">
+            {s.signatureUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.signatureUrl} alt="" aria-hidden="true" style={{ maxHeight: 56, marginBottom: 2 }} />
+            ) : null}
             <div className="pp-sign-line" aria-hidden="true" />
             <div className="pp-sign-role">{s.role}</div>
             <div className="pp-sign-name">{name ?? "\u00a0"}</div>
@@ -91,6 +95,7 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
               </>
             )}
             {s.role !== "Conforme" && s.role !== "Prepared by" && <div className="pp-sign-date">Date</div>}
+            {s.date ? <div className="pp-sign-date">{s.date}</div> : null}
           </div>
         );
       })}
@@ -337,6 +342,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         {doc.ewtNote && <p className="pp-ewt-note">{doc.ewtNote}</p>}
 
         {doc.signatories && doc.signatories.length > 0 && <SignatoryBlock signatories={doc.signatories} />}
+        {doc.generatedNote ? <p className="pp-faint" style={{ textAlign: "center", marginTop: 8 }}>{doc.generatedNote}</p> : null}
       </div>
 
       <footer className="pp-foot">

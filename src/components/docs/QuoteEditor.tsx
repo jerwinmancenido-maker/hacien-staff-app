@@ -82,6 +82,11 @@ export type QuoteEditorProps = {
   defaultValidityDays: number;
   printDefaults: { quoteTerms: string; deliveryNotes: string; warrantyNotes: string };
   preparedByName: string;
+  /** S-70: creator position / signature, approver + approval time. */
+  preparedByPosition?: string | null;
+  preparedSignatureUrl?: string | null;
+  approvedByName?: string | null;
+  approvedAt?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
   markSentAction?: (id: string) => Promise<FormState>;
@@ -220,6 +225,10 @@ export function QuoteEditor({
   defaultValidityDays,
   printDefaults,
   preparedByName,
+  preparedByPosition = null,
+  preparedSignatureUrl = null,
+  approvedByName = null,
+  approvedAt = null,
   action,
   cancelHref,
   markSentAction,
@@ -1345,8 +1354,22 @@ export function QuoteEditor({
             <div role="tabpanel" className="quote-fg">
               <div className="quote-f field">
                 <span className="label">Prepared by</span>
+                {preparedSignatureUrl ? (
+                  <div style={{ marginBottom: 4 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={preparedSignatureUrl} alt="Preparer signature" style={{ maxHeight: 56, border: "1px solid var(--border)", background: "#fff" }} />
+                  </div>
+                ) : null}
                 <div className="strong">{preparedByName}</div>
+                {preparedByPosition ? <div className="small muted">{preparedByPosition}</div> : null}
               </div>
+              {approvedByName ? (
+                <div className="quote-f field">
+                  <span className="label">Approved by</span>
+                  <div className="strong">{approvedByName}</div>
+                  {approvedAt ? <div className="small muted">{approvedAt}</div> : null}
+                </div>
+              ) : null}
               <div className="quote-f field">
                 <span className="label">Conforme (customer)</span>
                 <div className="quote-signoff-lines">
@@ -1354,7 +1377,7 @@ export function QuoteEditor({
                   <div className="small faint">Name and signature</div>
                 </div>
               </div>
-              <div className="hint">These print as signature lines on the quote. Editing names is Phase 2.</div>
+              <div className="hint">Names fill in automatically from the staff who prepared and approved this quote. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. Electronically generated, approved in the HACIEN system.</div>
               <p className="right small muted">{totalsSummary}</p>
             </div>
           )}

@@ -46,6 +46,10 @@ export type PrintSignatory = {
   name: string | null;
   /** Job title / position from the user profile when set. */
   position?: string | null;
+  /** S-70: uploaded signature image URL for this signatory, if any. */
+  signatureUrl?: string | null;
+  /** S-70: date/time line under the name (e.g. approval time). */
+  date?: string | null;
 };
 
 /** Statement-style ledger line (SOA). */
@@ -116,6 +120,8 @@ export type ProfessionalPrintModel = {
   warrantyNotes?: string | null;
   paymentInstructions?: PrintPaymentInstruction[];
   signatories?: PrintSignatory[];
+  /** S-70: line printed under the signatures (quote approval note). */
+  generatedNote?: string | null;
   thankYou?: boolean;
   /** Extra legal / tax lines (from tax-wording module). */
   taxLines: string[];

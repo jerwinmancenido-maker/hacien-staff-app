@@ -25,6 +25,12 @@ model User {
   id           String    @id @default(cuid())
   email        String    @unique @db.VarChar(191)
   name         String    @db.VarChar(120)
+  // S-70: job position shown under Prepared by, and an optional uploaded
+  // signature image used on prints. Null = no position / no signature.
+  position            String?   @db.VarChar(120)
+  signatureStorageKey String?   @db.VarChar(191)
+  signatureMimeType   String?   @db.VarChar(100)
+  signatureFileName   String?   @db.VarChar(255)
   // Null until the user sets a password from their invite link.
   passwordHash String?   @db.VarChar(100)
   // S-58: two-step sign-in. Encrypted TOTP secret (see lib/auth/totp.ts);
@@ -673,6 +679,9 @@ model Quote {
   // comes from per-line rates. Internal only — never printed.
   withholdingPick   Json?
 
+  // S-70: uploaded signed conforme files (see DocumentAttachment).
+  attachments    DocumentAttachment[]
+
   contractPrice    Decimal @default(0) @db.Decimal(15, 2)
   withholdingTotal Decimal @default(0) @db.Decimal(15, 2)
   netReceived      Decimal @default(0) @db.Decimal(15, 2)
@@ -1124,6 +1133,8 @@ model DocumentAttachment {
   spoiledBookletNumber      SpoiledBookletNumber?    @relation(fields: [spoiledBookletNumberId], references: [id])
   taxCalendarCompletionId   String?
   taxCalendarCompletion     TaxCalendarCompletion?   @relation(fields: [taxCalendarCompletionId], references: [id])
+  quoteId                   String?
+  quote                       Quote?                         @relation(fields: [quoteId], references: [id])
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int

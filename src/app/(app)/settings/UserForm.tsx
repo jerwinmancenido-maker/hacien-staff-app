@@ -31,6 +31,21 @@ export function UserForm({ user, action }: { user: User | null; action: (s: Form
         <Field label="Email" name="email" required error={e.email}>
           <input id="email" name="email" type="email" defaultValue={state.values?.email ?? user?.email} />
         </Field>
+        <Field label="Position" name="position" error={e.position}>
+          <input id="position" name="position" type="text" defaultValue={state.values?.position ?? user?.position ?? ""} placeholder="e.g. Sales Staff" />
+        </Field>
+        <div className={`field full${e.signature ? " has-error" : ""}`}>
+          <span className="label">Signature image (optional)</span>
+          {user?.signatureStorageKey ? (
+            <div style={{ marginBottom: 8 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/files/user-signature/${user.id}`} alt="Current signature" style={{ maxHeight: 64, border: "1px solid var(--border)", background: "#fff" }} />
+            </div>
+          ) : null}
+          <input id="signature" name="signature" type="file" accept="image/png,image/jpeg,image/webp" />
+          <div className="hint">PNG, JPG or WEBP. Used on printed quotes under Prepared by. Uploading a new one replaces the old.</div>
+          {e.signature && <div className="error">{e.signature}</div>}
+        </div>
         <div className={`field full${e.roles ? " has-error" : ""}`}>
           <span className="label">Roles</span>
           <div style={{ display: "grid", gap: 8 }}>

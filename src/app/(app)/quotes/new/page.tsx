@@ -35,6 +35,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
         preparedByName={user.name}
+        preparedByPosition={user.position ?? null}
+        preparedSignatureUrl={user.signatureStorageKey ? `/files/user-signature/${user.id}` : null}
         action={saveQuoteAction.bind(null, null)}
         cancelHref="/quotes"
         markSentAction={markQuoteSentAction}
