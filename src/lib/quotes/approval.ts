@@ -22,6 +22,24 @@ export function quoteApprovalBackfill(status: QuoteStatus): QuoteApprovalStatus 
   return status === "DRAFT" ? "PENDING" : "APPROVED";
 }
 
+/** What a draft save should do next. Same order as Mark as sent: cost warning wins over the withholding question. */
+export type QuoteSaveGate = "cost-warning" | "withholding-unset" | "save";
+
+/**
+ * S-79: Save draft (and Submit for approval — the same save action: a new
+ * quote is created PENDING, and an edit save resets approval to PENDING) asks
+ * "No withholding on this quote?" when no pick is set, exactly like Mark as sent.
+ * Approval is not a gate here: saving is what submits the quote for approval.
+ */
+export function quoteSaveGate(input: {
+  withholdingUnset: boolean;
+  supplierCostMissing: boolean;
+}): QuoteSaveGate {
+  if (input.supplierCostMissing) return "cost-warning";
+  if (input.withholdingUnset) return "withholding-unset";
+  return "save";
+}
+
 /** What Mark as sent should do next. Cost warning wins over the withholding question. */
 export type QuoteMarkSentGate = "need-approval" | "cost-warning" | "withholding-unset" | "send";
 

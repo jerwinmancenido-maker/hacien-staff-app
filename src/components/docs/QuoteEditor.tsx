@@ -23,7 +23,7 @@ import {
   type ItemKind,
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
-import { quoteMarkSentGate } from "@/lib/quotes/approval";
+import { quoteMarkSentGate, quoteSaveGate } from "@/lib/quotes/approval";
 import {
   lineDiffersFromUsualPicks,
   lineWithholdingChipsFromPicks,
@@ -227,6 +227,8 @@ export function QuoteEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
   const skipCostWarn = useRef(false);
+  /** Set when "Yes, none" is confirmed on a draft save, so the re-submit saves. */
+  const skipWhNoneWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
   /** Cost warning already shown; Yes, none must save the cleared cost in the same request. */
   const sendAfterCostWarn = useRef(false);
@@ -238,6 +240,8 @@ export function QuoteEditor({
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [noneConfirmOpen, setNoneConfirmOpen] = useState(false);
+  /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
+  const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
@@ -572,16 +576,56 @@ export function QuoteEditor({
       e.preventDefault();
       return;
     }
-    if (withCosts && !skipCostWarn.current && linesMissingSupplierCost(items)) {
+    // S-79: same order as Mark as sent — cost warning first, then the
+    // no-withholding question. A cost "Save anyway" re-submits with
+    // skipCostWarn set, so the withholding question still follows it.
+    const gate = quoteSaveGate({
+      withholdingUnset: pick == null,
+      supplierCostMissing: !skipCostWarn.current && withCosts && linesMissingSupplierCost(items),
+    });
+    if (gate === "cost-warning") {
       e.preventDefault();
       if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
       setCostConfirmNext("save");
       setCostConfirmOpen(true);
       return;
     }
+    if (gate === "withholding-unset" && !skipWhNoneWarn.current) {
+      e.preventDefault();
+      setSaveNoneConfirmOpen(true);
+      return;
+    }
     if (!skipCostWarn.current && alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
     skipCostWarn.current = false;
+    skipWhNoneWarn.current = false;
     onSubmit(e);
+  }
+
+  /**
+   * S-79, "Yes, none" on a draft save: save explicit none ([]) in this same
+   * request, exactly like the Mark-as-sent confirm does for its request.
+   * "Pick rates" only closes the dialog — nothing is saved or submitted.
+   * This is also the Submit-for-approval path: the save itself puts a new
+   * quote at PENDING (or resets an edited quote to PENDING).
+   */
+  function confirmSaveNone() {
+    if (!formRef.current) return;
+    setSaveNoneConfirmOpen(false);
+    // Keep local state consistent, and rewrite the payload the form is about
+    // to submit (state has not re-rendered yet when requestSubmit fires).
+    applyPickDefaults([], items);
+    const payloadInput = formRef.current.querySelector<HTMLInputElement>('input[name="payload"]');
+    if (payloadInput) {
+      const data = JSON.parse(payloadInput.value) as { withholdingCodes?: unknown; withholdingExplicitNone?: boolean };
+      data.withholdingCodes = [];
+      data.withholdingExplicitNone = true;
+      payloadInput.value = JSON.stringify(data);
+    }
+    // A draft save never marks sent, even if a cost "sent" path set the flag.
+    if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
+    skipCostWarn.current = true;
+    skipWhNoneWarn.current = true;
+    formRef.current.requestSubmit();
   }
 
   function confirmCostAnyway() {
@@ -1356,6 +1400,17 @@ export function QuoteEditor({
         cancelLabel={WITHHOLDING_NONE_CONFIRM_PICK}
         onCancel={() => setNoneConfirmOpen(false)}
         onConfirm={confirmNoneAndMarkSent}
+      />
+
+      {/* S-79: same prompt, wording and choices as Mark as sent, for Save draft. */}
+      <ConfirmDialog
+        open={saveNoneConfirmOpen}
+        title={WITHHOLDING_NONE_CONFIRM_TITLE}
+        body="No rates are picked. Save as none, or go back and pick rates."
+        confirmLabel={WITHHOLDING_NONE_CONFIRM_YES}
+        cancelLabel={WITHHOLDING_NONE_CONFIRM_PICK}
+        onCancel={() => setSaveNoneConfirmOpen(false)}
+        onConfirm={confirmSaveNone}
       />
     </>
   );
