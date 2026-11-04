@@ -49,11 +49,13 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
         >
           All
         </Link>
+        {/* S-81: this is OPEN orders with money still to bill — not the same
+            as the plain OPEN status chip below, so it gets its own label. */}
         <Link
           className={`filter-chip${openOnly && !needsPo ? " active" : ""}`}
           href={href(s, { status: undefined, needsPo: undefined, open: "1" })}
         >
-          Open
+          Still to bill
         </Link>
         {SALES_ORDER_STATUSES.map((t) => (
           <Link
