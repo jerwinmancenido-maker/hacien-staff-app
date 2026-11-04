@@ -386,7 +386,9 @@ export function QuoteEditor({
   const t = docTotals(lineInputs, hasNonEmptyPicks(pickSnapshots) ? pickSnapshots! : undefined);
   const totals = { ...t, withholding: t.withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) })) };
   const belowCost = withCosts && items.some((i) => toScaled(safeLine(i).margin, 2) < 0n);
-  const notSet = pick == null;
+  // S-67: the "withholding not set" banner must not show before a customer
+  // is picked — with no customer there is nothing to warn about yet.
+  const notSet = pick == null && customer != null;
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const move = (idx: number, by: number) =>
@@ -742,7 +744,7 @@ export function QuoteEditor({
             </div>
           </div>
           <div className="quote-fg">
-            <div className={`quote-f quote-f-w2 field${e.customerId ? " has-error" : ""}`}>
+            <div className={`quote-f field${e.customerId ? " has-error" : ""}`}>
               <label htmlFor="customerId">
                 Customer<span className="req"> *</span>
               </label>
@@ -813,7 +815,7 @@ export function QuoteEditor({
                 <div className="error">{e.validUntil ?? validUntilError}</div>
               ) : null}
             </div>
-            <div className={`quote-f quote-f-w2 field${e.buyerPoNo ? " has-error" : ""}`}>
+            <div className={`quote-f field${e.buyerPoNo ? " has-error" : ""}`}>
               <label htmlFor="buyerPoNo">Customer PO / RFQ no.</label>
               <input id="buyerPoNo" type="text" value={h.buyerPoNo} onChange={(ev) => setH({ ...h, buyerPoNo: ev.target.value })} />
               {e.buyerPoNo && <div className="error">{e.buyerPoNo}</div>}
