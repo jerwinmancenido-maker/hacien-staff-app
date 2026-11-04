@@ -2275,6 +2275,60 @@ pre.json {
   color: var(--text);
   background: var(--hover);
 }
+
+/* S-57: notifications bell. */
+.notif-bell {
+  position: relative;
+}
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--red, #c00);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  max-width: 90vw;
+  padding: 6px 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+.notif-section + .notif-section {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.notif-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.notif-item {
+  display: block;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.notif-item:hover {
+  background: var(--hover);
+}
 /* Desktop: inline search field only (must follow .topbar-icon-btn so display wins). */
 .topbar-search-toggle {
   display: none;
