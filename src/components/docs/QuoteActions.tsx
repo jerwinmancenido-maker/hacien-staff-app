@@ -1,7 +1,8 @@
 "use client";
 
-// Top-right of the quote page: one primary button for the next step, plus
-// Actions ▾ (Edit, Print / Save PDF, Email, Convert to SO, Mark lost, Void).
+// Top-right of the quote page: every action lives in Actions ▾
+// (S-66 — no separate blue main button; Approve, Reject, Mark as sent,
+// Convert to SO and Open sales order are menu items).
 // Viewers only get Print. The server re-checks every action.
 //
 // S-18: Mark as sent / Email / Convert stay hidden until workflow-approved.
@@ -11,7 +12,6 @@
 // "No withholding on this quote?" — Yes, none / Pick rates.
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
 import { ConvertDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
@@ -109,6 +109,10 @@ export function QuoteActions({
 
   const approved = approvalStatus === "APPROVED";
   const editable = status === "DRAFT" || status === "SENT";
+  // S-66: no separate blue main button beside the Actions menu. The
+  // workflow actions that used to sit there (Approve, Reject, Mark as
+  // sent, Open sales order) are menu items below; Convert to SO was
+  // already a menu item, so its duplicate button is gone too.
   /** Sent / WON / LOST / VOID keep a frozen company snapshot. */
   const canRefreshCompany = canEdit && status === "DRAFT" && !!actions.refreshCompanyDetails;
   const items: MenuItem[] = [];
@@ -141,6 +145,13 @@ export function QuoteActions({
   if (canEdit && approved && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
   if (canVoid && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
+  // S-66: former standalone primary buttons, now menu items (same gates).
+  if (status === "WON" && openSalesOrderId) items.push({ key: "open-so", label: "Open sales order", href: `/sales-orders/${openSalesOrderId}` });
+  if (canApproveWorkflow && actions.approve && actions.reject) {
+    items.push({ key: "approve", label: "Approve", onSelect: () => run(() => actions.approve!(id)) });
+    items.push({ key: "reject", label: "Reject", onSelect: () => setDialog("reject") });
+  }
+  if (canEdit && approved && status === "DRAFT") items.push({ key: "mark-sent", label: "Mark as sent", onSelect: onMarkSent });
 
   function onMarkSent() {
     const gate = quoteMarkSentGate({
@@ -163,43 +174,14 @@ export function QuoteActions({
     run(() => actions.markSent(id));
   }
 
-  let primary: React.ReactNode = null;
-  if (status === "WON" && openSalesOrderId) {
-    primary = (
-      <Link className="btn" href={`/sales-orders/${openSalesOrderId}`}>
-        Open sales order
-      </Link>
-    );
-  } else if (canApproveWorkflow && actions.approve && actions.reject) {
-    primary = (
-      <>
-        <button type="button" className="btn secondary" disabled={pending} onClick={() => setDialog("reject")}>
-          Reject
-        </button>
-        <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.approve!(id))}>
-          Approve
-        </button>
-      </>
-    );
-  } else if (!approved && status !== "VOID" && status !== "WON" && status !== "LOST") {
-    primary = (
+  // S-66: the "Waiting for approval" note is status text, not an action,
+  // so it stays beside the menu; every action itself lives in the menu.
+  const waitingNote =
+    !approved && status !== "VOID" && status !== "WON" && status !== "LOST" && !canApproveWorkflow ? (
       <span className="small muted" role="status" style={{ alignSelf: "center" }}>
         Waiting for approval
       </span>
-    );
-  } else if (canEdit && approved && status === "DRAFT") {
-    primary = (
-      <button type="button" className="btn" disabled={pending} onClick={onMarkSent}>
-        Mark as sent
-      </button>
-    );
-  } else if (canEdit && approved && status === "SENT") {
-    primary = (
-      <button type="button" className="btn" onClick={() => setDialog("convert")}>
-        Convert to SO
-      </button>
-    );
-  }
+    ) : null;
 
   return (
     <>
@@ -214,7 +196,7 @@ export function QuoteActions({
         </span>
       )}
       <ActionsMenu items={items} />
-      {primary}
+      {waitingNote}
       {dialog === "void" && (
         <VoidDialog
           docLabel="quote"
@@ -322,10 +304,14 @@ type SoProps = {
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction, billings = [] }: SoProps) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction, billings = [], canBill = false, canCreatePos = false }: SoProps & { canBill?: boolean; canCreatePos?: boolean }) {
   const [voiding, setVoiding] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
+  // S-66: Record billing and Create POs used to sit beside the menu as
+  // separate buttons on the SO page; they are menu items now.
+  if (canBill) items.push({ key: "record-billing", label: "Record billing", href: `/billing/billings/new?salesOrderId=${id}` });
+  if (canCreatePos) items.push({ key: "create-pos", label: "Create POs", href: `/sales-orders/${id}/purchase-orders` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
   // S-87: one "Print billing statement" entry per billing, opening the
   // existing billing-statement print (never a sales invoice — the official
@@ -339,11 +325,6 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAc
   return (
     <>
       <ActionsMenu items={items} />
-      {canEdit && status === "OPEN" && (
-        <Link className="btn" href={`/sales-orders/${id}/edit`}>
-          Edit order
-        </Link>
-      )}
       {voiding && (
         <VoidDialog
           docLabel="sales order"
