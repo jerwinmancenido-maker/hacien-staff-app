@@ -12,6 +12,7 @@ import { isSettingsKey } from "@/lib/settings/schema";
 import { saveWithholdingRates } from "@/lib/services/withholding";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
 import { bool, formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { saveUserSignature, SignatureError } from "@/lib/services/user-signature";
 
 export async function saveSettingsAction(key: string, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);
@@ -105,11 +106,24 @@ export async function saveWithholdingAction(_prev: FormState, form: FormData): P
   });
 }
 
+/** S-70: optional signature image from the user form. Returns a field error, if any. */
+async function maybeSaveSignature(userId: string, form: FormData, actorId: string): Promise<string | null> {
+  const file = form.get("signature");
+  if (!(file instanceof File) || file.size === 0) return null;
+  try {
+    await saveUserSignature(userId, { name: file.name, size: file.size, bytes: new Uint8Array(await file.arrayBuffer()) }, actorId);
+    return null;
+  } catch (e) {
+    return e instanceof SignatureError ? e.message : "Couldn't save the signature image. Try again.";
+  }
+}
+
 function userInput(form: FormData) {
   return userSchema.safeParse({
     name: str(form, "name"),
     email: str(form, "email"),
     roles: form.getAll("roles").filter((r): r is Role => typeof r === "string" && (ROLES as string[]).includes(r)),
+    position: str(form, "position") || undefined,
     canSeeCosts: bool(form, "canSeeCosts"),
   });
 }
@@ -123,6 +137,8 @@ export async function createUserAction(_prev: FormState, form: FormData): Promis
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
     const user = await createUser(parsed.data, actor.id);
     createdId = user.id;
+    const sigErr = await maybeSaveSignature(user.id, form, actor.id);
+    if (sigErr) return { values, fieldErrors: { signature: sigErr } };
     revalidatePath("/settings");
     return { ok: true };
   }, values);
@@ -137,6 +153,8 @@ export async function updateUserAction(id: string, _prev: FormState, form: FormD
     const parsed = userInput(form);
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
     await updateUser(id, parsed.data, actor.id);
+    const sigErr = await maybeSaveSignature(id, form, actor.id);
+    if (sigErr) return { values, fieldErrors: { signature: sigErr } };
     revalidatePath("/settings");
     revalidatePath(`/settings/users/${id}`);
     return { ok: true, message: "Saved." };

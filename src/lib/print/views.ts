@@ -2,7 +2,7 @@
 // Customer docs omit supplier/cost/margin; supplier docs omit customer sell prices.
 
 import { db } from "@/lib/db";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { money, ymd } from "@/lib/documents/common";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -14,7 +14,7 @@ import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissi
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
 import { amountInWords } from "./amount-in-words";
-import { printablePersonName } from "./signatory";
+import { printablePersonName, printablePosition } from "./signatory";
 import {
   companyContactLine,
   mergeCompanyLetterhead,
@@ -41,6 +41,34 @@ function splitDescription(raw: string): { description: string; detail: string | 
   const description = (parts[0] ?? "").trim() || raw;
   const detail = parts.slice(1).join("\n").trim() || null;
   return { description, detail };
+}
+
+/** S-70: quote signatures — Prepared by (name, position, uploaded
+    signature), Approved by (name + approval date/time, only when the
+    quote was actually approved), Conforme stays a blank line. */
+function quoteSignatories(q: {
+  createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
+  approvedBy: { name: string } | null;
+  approvedAt: Date | null;
+  approvalStatus: string;
+}): PrintSignatory[] {
+  const out: PrintSignatory[] = [
+    {
+      role: "Prepared by",
+      name: printablePersonName(q.createdBy.name),
+      position: printablePosition(q.createdBy.position),
+      signatureUrl: q.createdBy.signatureStorageKey ? `/files/user-signature/${q.createdBy.id}` : null,
+    },
+  ];
+  if (q.approvalStatus === "APPROVED" && q.approvedBy) {
+    out.push({
+      role: "Approved by",
+      name: printablePersonName(q.approvedBy.name),
+      date: q.approvedAt ? formatDateTime(q.approvedAt) : null,
+    });
+  }
+  out.push({ role: "Conforme", name: null });
+  return out;
 }
 
 function customerSignatories(preparedName: string | null): PrintSignatory[] {
@@ -150,7 +178,8 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
-      createdBy: { select: { name: true } },
+      createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
+      approvedBy: { select: { name: true } },
     },
   });
   if (!q) return null;
@@ -217,7 +246,9 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
     warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
-    signatories: customerSignatories(q.createdBy.name),
+    signatories: quoteSignatories(q),
+    // S-70: only an approved quote may claim approval on the print.
+    generatedNote: q.approvalStatus === "APPROVED" ? "Electronically generated, approved in the HACIEN system." : null,
     ...footer,
     thankYou: true,
   };

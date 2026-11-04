@@ -13,9 +13,11 @@ import { Activity } from "@/components/Activity";
 import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
+import { ConformeUploadForm } from "@/components/docs/ConformeUploadForm";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import {
+  uploadQuoteConformeAction,
   approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
@@ -226,6 +228,21 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
         <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
+      </div>
+      <div className="card">
+        <h2>Signed conforme</h2>
+        {q.conformeFiles.length === 0 ? (
+          <p className="faint">No signed conforme uploaded yet. Conforme stays a blank line on the print until the customer signs.</p>
+        ) : (
+          <ul className="plain-list">
+            {q.conformeFiles.map((f) => (
+              <li key={f.id}>
+                <a href={f.href}>{f.fileName}</a>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canEdit && q.status !== "VOID" && <ConformeUploadForm action={uploadQuoteConformeAction.bind(null, q.id)} />}
       </div>
       <div className="card">
         <h2>Items</h2>

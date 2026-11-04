@@ -6,6 +6,7 @@ import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user
 import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { db } from "@/lib/db";
+import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
 import { isoDate } from "@/lib/format";
 import {
   approveQuote,
@@ -194,5 +195,25 @@ export async function rejectQuoteAction(id: string, reason: string): Promise<For
     revalidatePath(`/quotes/${id}`);
     revalidatePath("/");
     return { ok: true, message: "Quote rejected." };
+  });
+}
+
+/** S-70: upload a signed conforme scan and save it on the quote. */
+export async function uploadQuoteConformeAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const file = form.get("file");
+    if (!(file instanceof File) || file.size === 0) return { fieldErrors: { file: "Pick a file to upload." } };
+    const uploads = await prepareUploads([{ name: file.name, size: file.size, bytes: new Uint8Array(await file.arrayBuffer()) }]);
+    try {
+      await db.$transaction(async (tx) => {
+        await createAttachments(tx, uploads, { quoteId: id }, user.id);
+      });
+    } catch (e) {
+      await discardUploads(uploads);
+      throw e;
+    }
+    revalidatePath(`/quotes/${id}`);
+    return { ok: true, message: "Signed conforme uploaded." };
   });
 }
