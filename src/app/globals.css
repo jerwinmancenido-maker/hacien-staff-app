@@ -771,33 +771,6 @@ a.tracker-card:hover {
   gap: 8px;
   align-items: center;
 }
-/* S-65: every control in a list toolbar is one row, one height (36px),
-   one font size (13px) and one border radius. Before this, the search
-   box was 36px, filter chips 32px, and the small pill tabs were at least
-   40px tall inside a 46px track, with a 16px bottom margin on the tabs. */
-.toolbar .search-pill {
-  font-size: 13px;
-}
-.toolbar .search-pill input {
-  font-size: 13px;
-}
-.toolbar .filter-chip {
-  height: 36px;
-  font-size: 13px;
-}
-.toolbar .pill-tabs-wrap {
-  margin-bottom: 0;
-}
-.toolbar .pill-tabs-track {
-  height: 36px;
-  box-sizing: border-box;
-}
-.toolbar .pill-tabs-track.track-sm .pill-tab {
-  min-height: 0;
-  height: 30px;
-  padding: 0 12px;
-  font-size: 13px;
-}
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -2273,6 +2246,60 @@ pre.json {
 }
 .topbar-icon-btn:hover {
   color: var(--text);
+  background: var(--hover);
+}
+
+/* S-57: notifications bell. */
+.notif-bell {
+  position: relative;
+}
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--red, #c00);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  max-width: 90vw;
+  padding: 6px 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+.notif-section + .notif-section {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.notif-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.notif-item {
+  display: block;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.notif-item:hover {
   background: var(--hover);
 }
 /* Desktop: inline search field only (must follow .topbar-icon-btn so display wins). */

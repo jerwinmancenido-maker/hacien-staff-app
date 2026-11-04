@@ -16,7 +16,8 @@ import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
-import { BellIcon } from "@/components/Icons";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { getNotifications } from "@/lib/notifications";
 import { TopbarSearch } from "@/components/TopbarSearch";
 
 export const dynamic = "force-dynamic";
@@ -94,12 +95,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </>
   );
 
+  const notifications = await getNotifications(user);
   const topbarRight = (
     <>
       <TopbarSearch />
-      <button type="button" className="topbar-icon-btn" aria-label="Notifications" title="Notifications">
-        <BellIcon size={16} />
-      </button>
+      <NotificationsBell sections={notifications} />
       <AccountMenu
         name={user.name}
         role={roleLabel(user)}
