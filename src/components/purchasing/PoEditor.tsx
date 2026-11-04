@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
-import { formatPeso } from "@/lib/format";
+import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -234,7 +234,7 @@ export function PoEditor({
                     <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
                   </td>
                   <td className="num">
-                    <input aria-label={`Line ${idx + 1} unit cost`} inputMode="decimal" className="w-num" value={i.unitCost} onChange={(ev) => setItem(i.key, { unitCost: ev.target.value })} />
+                    <input aria-label={`Line ${idx + 1} unit cost`} inputMode="decimal" className="w-num" value={i.unitCost} onChange={(ev) => setItem(i.key, { unitCost: formatMoneyInput(ev.target.value) })} />
                   </td>
                   <td className="num strong">{formatPeso(safeTotal(i))}</td>
                   <td className="line-actions">

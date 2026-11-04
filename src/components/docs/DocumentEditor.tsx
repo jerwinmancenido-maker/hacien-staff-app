@@ -40,7 +40,7 @@ import {
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
-import { formatPeso } from "@/lib/format";
+import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
@@ -714,13 +714,13 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                           inputMode="decimal"
                           className="w-num"
                           value={i.supplierUnitCost}
-                          onChange={(ev) => setItem(i.key, { supplierUnitCost: ev.target.value })}
+                          onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
                         />
                       </td>
                     )}
                     {withCosts && <td className="num muted col-money" data-label="Supplier total">{formatPeso(a.supplierTotal)}</td>}
                     <td className="num col-money" data-label="Price">
-                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })} />
+                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })} />
                     </td>
                     <td className="num strong col-money" data-label="Total">{formatPeso(a.total)}</td>
                     {withCosts && (
