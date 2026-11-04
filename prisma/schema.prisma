@@ -250,6 +250,17 @@ model Contact {
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  // Q17 S-96: marketing consent, OFF by default for new and existing
+  // contacts (column defaults). Every change writes a
+  // MarketingConsentHistory row; consent is never implied.
+  marketingEmailConsent Boolean   @default(false)
+  marketingSmsConsent   Boolean   @default(false)
+  // Pending email unsubscribe requested by email (not yet completed):
+  // staff must complete it within 3 business days (Asia/Manila).
+  // Null when there is no pending request.
+  emailUnsubscribeDueAt DateTime?
+
+  consentHistory MarketingConsentHistory[]
 
   quotes         Quote[]
   salesOrders    SalesOrder[]
@@ -396,6 +407,56 @@ model MessageLog {
 
   @@index([channel, createdAt])
   @@index([status])
+}
+
+// Q17 S-96: marketing consent history. Append-only: rows are never
+// updated or deleted (the no-delete extension blocks deletes). One row per
+// consent change, plus one row per completed unsubscribe (consent false,
+// source "unsubscribe link" or "staff-completed email request").
+enum ConsentChannel {
+  email
+  sms
+}
+
+model MarketingConsentHistory {
+  id        String         @id @default(cuid())
+  contactId String
+  contact   Contact        @relation(fields: [contactId], references: [id])
+  channel   ConsentChannel
+  // The consent value AFTER this change.
+  consent   Boolean
+  // e.g. "contact form", "unsubscribe link", "staff-recorded email
+  // request", "staff-completed email request".
+  source    String         @db.VarChar(64)
+  // Staff user id, or "link" for a one-click unsubscribe.
+  changedBy String         @db.VarChar(191)
+  // Privacy Policy version in force when the change was recorded.
+  policyVersion String      @db.VarChar(20)
+  ip        String?        @db.VarChar(64)
+  userAgent String?        @db.VarChar(255)
+  createdAt DateTime       @default(now())
+
+  @@index([contactId, createdAt])
+}
+
+// Q17 S-96: permanent do-not-email suppression. Created by a one-click
+// /unsubscribe or by staff completing an email unsubscribe request.
+// Never deleted: an explicit Admin clear only stamps clearedAt/clearedById,
+// so the audit trail stays. While a row exists for an email with clearedAt
+// null, that email must NOT be opted back in by a plain switch flip —
+// suppression must be cleared explicitly first (see clearEmailSuppression
+// in marketing-consent.ts, Admin-only).
+model EmailSuppression {
+  id        String   @id @default(cuid())
+  // Lower-cased email address. One row per email, across contacts.
+  email     String   @unique @db.VarChar(191)
+  contactId String?  @db.VarChar(191)
+  source    String   @db.VarChar(64)
+  createdAt DateTime @default(now())
+  clearedAt DateTime?
+  clearedById String? @db.VarChar(191)
+
+  @@index([email])
 }
 
 // Q16 S-95: duplicate prevention for order texts. One row per event that

@@ -160,6 +160,10 @@ export function contactSchema(allowedRoles: readonly string[]) {
         .transform((v) => (v ? v.toLowerCase() : null)),
       phone: phoneField(64),
       isMain: z.boolean(),
+      // Q17 S-96: marketing consent, unticked by default. Optional so older
+      // callers (tests, other forms) keep working; the service defaults OFF.
+      marketingEmailConsent: z.boolean().optional(),
+      marketingSmsConsent: z.boolean().optional(),
     })
     .superRefine((v, ctx) => {
       if (!v.email && !v.phone) {

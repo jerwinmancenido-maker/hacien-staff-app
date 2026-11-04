@@ -3,7 +3,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/forgot-password", "/reset-password"];
+const PUBLIC = ["/login", "/forgot-password", "/reset-password", "/unsubscribe"];
 
 /**
  * Exact public asset paths that skip the session gate (favicon, app icons, PWA

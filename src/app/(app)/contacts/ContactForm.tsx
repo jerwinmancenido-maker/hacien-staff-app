@@ -59,6 +59,30 @@ export function ContactForm({
             <input id="phone" name="phone" type="text" inputMode="tel" value={phone} onChange={(ev) => setPhone(ev.target.value)} />
           </Field>
           <div className="field full">
+            <span className="check">
+              <input
+                id="marketingEmailConsent"
+                name="marketingEmailConsent"
+                type="checkbox"
+                defaultChecked={state.values?.marketingEmailConsent === "on" || !!contact?.marketingEmailConsent}
+              />{" "}
+              Marketing emails
+            </span>
+            <span className="check">
+              <input
+                id="marketingSmsConsent"
+                name="marketingSmsConsent"
+                type="checkbox"
+                defaultChecked={state.values?.marketingSmsConsent === "on" || !!contact?.marketingSmsConsent}
+              />{" "}
+              Marketing texts (SMS)
+            </span>
+            <div className="hint">
+              Marketing consent is off by default. A contact who unsubscribed cannot be opted back in
+              here until an Admin clears the do-not-email entry.
+            </div>
+          </div>
+          <div className="field full">
             {isMain ? (
               <>
                 <input type="hidden" name="isMain" value="on" />
