@@ -34,6 +34,7 @@ const LATER: Item[] = [
   { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },
   { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
   { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
+  { href: "/reminders", label: "Reminders", icon: <ListIcon /> },
 ];
 
 const ADMIN: Item[] = [

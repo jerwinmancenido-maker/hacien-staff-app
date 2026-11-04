@@ -13,6 +13,8 @@ import { Activity } from "@/components/Activity";
 import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
+import { RemindMeForm } from "@/components/RemindMeForm";
+import { createReminderAction } from "@/app/(app)/reminders/actions";
 import {
   approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
@@ -241,6 +243,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+      {canEdit && <RemindMeForm entityType="QUOTE" entityId={q.id} action={createReminderAction} />}
     </>
   );
 }

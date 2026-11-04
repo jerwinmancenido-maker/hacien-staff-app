@@ -21,12 +21,15 @@ import { SoCostMarginTab } from "@/components/purchasing/SoCostMarginTab";
 import { PlusIcon } from "@/components/Icons";
 import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
+import { AttachmentsTab } from "@/components/AttachmentsTab";
+import { RemindMeForm } from "@/components/RemindMeForm";
+import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
-const TABS = ["overview", "cost-margin"] as const;
+const TABS = ["overview", "cost-margin", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SalesOrderPage({
@@ -65,7 +68,7 @@ export default async function SalesOrderPage({
   const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
   const overdueOnSo = billings.find((b) => b.overdue.overdue && !b.isGovernment);
 
-  const tab: Tab = so.canSeeCosts && TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+  const tab: Tab = TABS.includes(rawTab as Tab) && (rawTab !== "cost-margin" || so.canSeeCosts) ? (rawTab as Tab) : "overview";
   const base = `/sales-orders/${id}`;
   const costWarnings = costMargin?.warnings.length ?? 0;
 
@@ -110,24 +113,36 @@ export default async function SalesOrderPage({
         </div>
       )}
 
-      {so.canSeeCosts && (
-        <PillTabs
-          active={tab}
-          tabs={[
-            { key: "overview", label: "Overview", href: base },
-            {
-              key: "cost-margin",
-              label: "Cost & margin",
-              count: costWarnings ? undefined : costMargin?.rows.length,
-              chip: costWarnings ? `${costWarnings} warning${costWarnings === 1 ? "" : "s"}` : undefined,
-              chipTone: costWarnings ? "amber" : undefined,
-              href: `${base}?tab=cost-margin`,
-            },
-          ]}
-        />
-      )}
+      <PillTabs
+        active={tab}
+        tabs={[
+          { key: "overview", label: "Overview", href: base },
+          ...(so.canSeeCosts
+            ? [
+                {
+                  key: "cost-margin",
+                  label: "Cost & margin",
+                  count: costWarnings ? undefined : costMargin?.rows.length,
+                  chip: costWarnings ? `${costWarnings} warning${costWarnings === 1 ? "" : "s"}` : undefined,
+                  chipTone: costWarnings ? "amber" : undefined,
+                  href: `${base}?tab=cost-margin`,
+                } as const,
+              ]
+            : []),
+          {
+            key: "attachments",
+            label: "Attachments",
+            count: deliveries.flatMap((d) => d.attachments).length,
+            href: `${base}?tab=attachments`,
+          },
+        ]}
+      />
 
       {tab === "cost-margin" && costMargin && <SoCostMarginTab summary={costMargin} />}
+
+      {tab === "attachments" && (
+        <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
+      )}
 
       {tab === "overview" && (
         <>
@@ -349,7 +364,6 @@ export default async function SalesOrderPage({
                 id: di.id,
                 salesOrderItemId: di.salesOrderItemId,
                 qty: di.qty.toString(),
-                serialNumbers: di.serialNumbers,
                 salesOrderItem: di.salesOrderItem,
               })),
               attachments: d.attachments,
@@ -359,6 +373,7 @@ export default async function SalesOrderPage({
             action={recordDeliveryAction.bind(null, so.id)}
             voidAction={voidDeliveryForOrder.bind(null, so.id)}
           />
+          {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>
       )}
     </>

@@ -67,6 +67,76 @@ export function groupItemHistory(entries: readonly ItemHistoryEntry[]): ItemHist
   return [...rows.values()];
 }
 
+export type SupplierPriceRow = {
+  supplierId: string;
+  supplierName: string;
+  lastCost: string;
+  lastCostDate: string;
+  poNumber: string;
+};
+
+export type SupplierPriceEntry = {
+  supplierId: string;
+  supplierName: string;
+  description: string;
+  date: string;
+  poNumber: string;
+  cost: string;
+};
+
+/** Pure grouping: newest PO line per supplier wins (entries newest-first). */
+export function groupSupplierPrices(entries: readonly SupplierPriceEntry[]): SupplierPriceRow[] {
+  const rows = new Map<string, SupplierPriceRow>();
+  for (const entry of entries) {
+    if (!rows.has(entry.supplierId)) {
+      rows.set(entry.supplierId, {
+        supplierId: entry.supplierId,
+        supplierName: entry.supplierName,
+        lastCost: entry.cost,
+        lastCostDate: entry.date,
+        poNumber: entry.poNumber,
+      });
+    }
+  }
+  return [...rows.values()].sort((a, b) => Number(a.lastCost) - Number(b.lastCost));
+}
+
+/**
+ * S-56: supplier price compare for one item. Matches the normalized
+ * description exactly (a contains-search would also match longer names).
+ */
+export async function listSupplierPriceComparison(description: string): Promise<SupplierPriceRow[]> {
+  const want = normalizeDescription(description);
+  if (!want) return [];
+  const lines = await db.purchaseOrderItem.findMany({
+    where: {
+      description: { contains: description.trim() },
+      purchaseOrder: { status: { not: "VOID" } },
+    },
+    select: {
+      description: true,
+      unitCost: true,
+      purchaseOrder: {
+        select: { number: true, date: true, supplier: { select: { id: true, name: true } } },
+      },
+    },
+    orderBy: [{ purchaseOrder: { date: "desc" } }],
+    take: 1000,
+  });
+  return groupSupplierPrices(
+    lines
+      .filter((l) => normalizeDescription(l.description) === want)
+      .map((l) => ({
+        supplierId: l.purchaseOrder.supplier.id,
+        supplierName: l.purchaseOrder.supplier.name,
+        description: l.description,
+        date: ymd(l.purchaseOrder.date) ?? "",
+        poNumber: l.purchaseOrder.number,
+        cost: String(l.unitCost),
+      })),
+  );
+}
+
 export async function listItemHistory(opts: { q?: string; customerId?: string } = {}): Promise<ItemHistoryRow[]> {
   const { q, customerId } = opts;
   const descFilter = q?.trim() ? { contains: q.trim() } : undefined;
