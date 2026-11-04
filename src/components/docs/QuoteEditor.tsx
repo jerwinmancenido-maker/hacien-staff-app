@@ -19,7 +19,6 @@ import {
   ratePctLabel,
   supplierCostMissing,
   toScaled,
-  withholdingSnapshotFromLines,
   type ItemKind,
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
@@ -59,6 +58,9 @@ export type { EditorCustomer, EditorInitial, EditorItem };
 
 type QuoteEditorInitial = EditorInitial & {
   internalNotes?: string;
+  /** S-69: per-quote delivery/warranty notes; undefined = Settings default. */
+  deliveryNotes?: string | null;
+  warrantyNotes?: string | null;
   subject?: string;
   buyerPoNo?: string;
   validForDays?: number | string | null;
@@ -252,6 +254,8 @@ export function QuoteEditor({
     return {
       ...initial,
       internalNotes: initial.internalNotes ?? "",
+      deliveryNotes: initial.deliveryNotes ?? "",
+      warrantyNotes: initial.warrantyNotes ?? "",
       subject: initial.subject ?? "",
       buyerPoNo: initial.buyerPoNo ?? "",
       withholdingPick: pick,
@@ -372,7 +376,6 @@ export function QuoteEditor({
   // Non-empty pick → whole-total rates appear as own lines and sum == total.
   const t = docTotals(lineInputs, hasNonEmptyPicks(pickSnapshots) ? pickSnapshots! : undefined);
   const totals = { ...t, withholding: t.withholding.map((w) => ({ ...w, pctLabel: ratePctLabel(w.rate) })) };
-  const computedDocRates = withholdingSnapshotFromLines(lineInputs);
   const belowCost = withCosts && items.some((i) => toScaled(safeLine(i).margin, 2) < 0n);
   const notSet = pick == null;
 
@@ -514,6 +517,8 @@ export function QuoteEditor({
     validForDays: nDays != null && nDays >= 1 ? nDays : undefined,
     terms: h.terms,
     notes: h.notes,
+    deliveryNotes: h.deliveryNotes,
+    warrantyNotes: h.warrantyNotes,
     internalNotes: h.internalNotes,
     subject: h.subject,
     buyerPoNo: h.buyerPoNo,
@@ -1272,12 +1277,26 @@ export function QuoteEditor({
                 {e.terms && <div className="error">{e.terms}</div>}
               </div>
               <div className="quote-f quote-f-w2 field">
-                <span className="label">Delivery</span>
-                <div className="quote-readonly-block">{printDefaults.deliveryNotes?.trim() ? printDefaults.deliveryNotes : "—"}</div>
+                <label htmlFor="deliveryNotes">Delivery</label>
+                <textarea
+                  id="deliveryNotes"
+                  rows={2}
+                  value={h.deliveryNotes || printDefaults.deliveryNotes || ""}
+                  onChange={(ev) => setH({ ...h, deliveryNotes: ev.target.value })}
+                />
+                {e.deliveryNotes && <div className="error">{e.deliveryNotes}</div>}
+                <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
               </div>
               <div className="quote-f quote-f-w2 field">
-                <span className="label">Warranty</span>
-                <div className="quote-readonly-block">{printDefaults.warrantyNotes?.trim() ? printDefaults.warrantyNotes : "—"}</div>
+                <label htmlFor="warrantyNotes">Warranty</label>
+                <textarea
+                  id="warrantyNotes"
+                  rows={2}
+                  value={h.warrantyNotes || printDefaults.warrantyNotes || ""}
+                  onChange={(ev) => setH({ ...h, warrantyNotes: ev.target.value })}
+                />
+                {e.warrantyNotes && <div className="error">{e.warrantyNotes}</div>}
+                <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
               </div>
               <div className="quote-f field">
                 <span className="label">Validity</span>
@@ -1288,24 +1307,19 @@ export function QuoteEditor({
                 <textarea readOnly rows={4} value={printDefaults.quoteTerms ?? ""} aria-readonly />
                 <div className="hint">From Settings · Read-only in Phase 1</div>
               </div>
-
-              <div className={`field full${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
-                <span className="label">Withholding (from lines)</span>
-                <div className="wh-computed" role="status">
-                  {computedDocRates.length === 0 ? (
-                    <span className="small faint">None from line rates</span>
-                  ) : (
-                    computedDocRates.map((r) => (
-                      <span key={r.code} className="chip">
-                        {r.label}
-                        {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
-                      </span>
-                    ))
-                  )}
-                </div>
-                {e.withholdingCodes || e.withholding ? <div className="error">{e.withholdingCodes ?? e.withholding}</div> : null}
+              <div className="quote-f field full">
+                <label htmlFor="termsRemarks">Remarks</label>
+                <textarea id="termsRemarks" rows={3} value={h.notes} onChange={(ev) => setH({ ...h, notes: ev.target.value })} />
+                <div className="hint">Customer sees this · Prints on the quote (same as Notes on the Notes tab)</div>
               </div>
-              <p className="right small muted">{totalsSummary}</p>
+              <div className="quote-f field full">
+                <span className="label">Full terms</span>
+                <div>
+                  See the full terms at <a href="https://haciensolutions.com/policies" target="_blank" rel="noopener noreferrer">haciensolutions.com/policies</a> — the printed quote also carries them as a QR code.
+                </div>
+              </div>
+
+
             </div>
           )}
 

@@ -213,8 +213,10 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
     notes: q.notes,
-    deliveryNotes: letter.print.deliveryNotes || null,
-    warrantyNotes: letter.print.warrantyNotes || null,
+    // S-69: a quote's own delivery/warranty notes win; otherwise the
+    // Settings print defaults (the editor shows the same fallback).
+    deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
+    warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
     signatories: customerSignatories(q.createdBy.name),
     ...footer,
     thankYou: true,
