@@ -358,6 +358,42 @@ enum AuditAction {
   download
 }
 
+// ---------------------------------------------------------------------------
+// Messaging (Q15, S-94) — send log for SMS and email
+// ---------------------------------------------------------------------------
+
+enum MessageChannel {
+  sms
+  email
+}
+
+enum MessageStatus {
+  sent
+  not_sent
+  failed
+}
+
+model MessageLog {
+  id                String        @id @default(cuid())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  channel           MessageChannel
+  // Normalized recipient (+639... for SMS, email address for email).
+  // The page only ever renders the masked version (see maskRecipient).
+  recipient         String        @db.VarChar(191)
+  body              String        @db.Text
+  status            MessageStatus
+  provider          String        @db.VarChar(40)
+  providerMessageId String?       @db.VarChar(191)
+  error             String?       @db.Text
+  attempts          Int           @default(1)
+  lastAttemptAt     DateTime      @default(now())
+  sentById          String?       @db.VarChar(191)
+
+  @@index([channel, createdAt])
+  @@index([status])
+}
+
 model AuditLog {
   id         String      @id @default(cuid())
   at         DateTime    @default(now())
