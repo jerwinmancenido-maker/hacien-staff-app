@@ -3,7 +3,7 @@
 // Quote-only editor (Brief 09 Phase 1 + Brief 10 manual withholding picks).
 // Style hooks (CSS added separately):
 // quote-editor, quote-details-card, quote-meta-chip, quote-tabs, quote-tab, quote-tab-on,
-// quote-trow, quote-int2, quote-tbox, quote-sticky-act, quote-fg, quote-f, quote-f-w2, quote-f-w3
+// quote-trow, quote-int2, quote-tbox, edit-topbar, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
 import { useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
@@ -698,6 +698,39 @@ export function QuoteEditor({
           </div>
         )}
 
+        <div className="edit-topbar">
+          <div className="quote-sticky-status">
+            {statusLabel}
+            {customer ? ` · ${customer.name}` : isNew ? " · Pick a customer" : ""}
+          </div>
+          <div className="quote-sticky-buttons">
+            <Link className="btn btn-secondary" href={cancelHref}>
+              Cancel
+            </Link>
+            {quoteId ? (
+              <Link className="btn btn-secondary" href={`/print/quotes/${quoteId}`} target="_blank" rel="noopener noreferrer">
+                Preview print
+              </Link>
+            ) : (
+              <button type="button" className="btn btn-secondary" disabled>
+                Preview print
+              </button>
+            )}
+            <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError}>
+              {pending ? "Saving…" : "Save draft"}
+            </button>
+            {canMarkSent ? (
+              <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError} onClick={submitMarkSent}>
+                {sentPending ? "Sending…" : "Mark as sent"}
+              </button>
+            ) : approvalStatus === "PENDING" || approvalStatus === "REJECTED" ? (
+              <span className="small muted" style={{ alignSelf: "center" }}>
+                {approvalStatus === "REJECTED" ? "Rejected — save edits to wait for approval" : "Waiting for approval"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
         <div className="card quote-details-card">
           <div className="card-head">
             <h2>Quote details</h2>
@@ -1383,38 +1416,6 @@ export function QuoteEditor({
           )}
         </div>
 
-        <div className="quote-sticky-act">
-          <div className="quote-sticky-status">
-            {statusLabel}
-            {customer ? ` · ${customer.name}` : isNew ? " · Pick a customer" : ""}
-          </div>
-          <div className="quote-sticky-buttons">
-            <Link className="btn btn-secondary" href={cancelHref}>
-              Cancel
-            </Link>
-            {quoteId ? (
-              <Link className="btn btn-secondary" href={`/print/quotes/${quoteId}`} target="_blank" rel="noopener noreferrer">
-                Preview print
-              </Link>
-            ) : (
-              <button type="button" className="btn btn-secondary" disabled>
-                Preview print
-              </button>
-            )}
-            <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError}>
-              {pending ? "Saving…" : "Save draft"}
-            </button>
-            {canMarkSent ? (
-              <button type="button" className="btn" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError} onClick={submitMarkSent}>
-                {sentPending ? "Sending…" : "Mark as sent"}
-              </button>
-            ) : approvalStatus === "PENDING" || approvalStatus === "REJECTED" ? (
-              <span className="small muted" style={{ alignSelf: "center" }}>
-                {approvalStatus === "REJECTED" ? "Rejected — save edits to wait for approval" : "Waiting for approval"}
-              </span>
-            ) : null}
-          </div>
-        </div>
       </form>
 
       <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} terms={termsOptions} />

@@ -487,6 +487,19 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         </div>
       )}
 
+      <div className="edit-topbar">
+        <button
+          className="btn"
+          type="submit"
+          disabled={pending || (mode === "quote" && !h.customerId) || Object.keys(whPctErrors).length > 0}
+        >
+          {pending ? "Saving…" : isNew ? "Create quote" : "Save changes"}
+        </button>
+        <a className="btn btn-secondary" href={cancelHref}>
+          Cancel
+        </a>
+      </div>
+
       <div className="card">
         <h2>{mode === "quote" ? "Quote details" : "Order details"}</h2>
         <div className="form-grid">
@@ -816,18 +829,6 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         </div>
       </div>
 
-      <div className="form-actions">
-        <button
-          className="btn"
-          type="submit"
-          disabled={pending || (mode === "quote" && !h.customerId) || Object.keys(whPctErrors).length > 0}
-        >
-          {pending ? "Saving…" : isNew ? "Create quote" : "Save changes"}
-        </button>
-        <a className="btn btn-secondary" href={cancelHref}>
-          Cancel
-        </a>
-      </div>
 
       {mode === "quote" && (
         <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} terms={termsOptions} />

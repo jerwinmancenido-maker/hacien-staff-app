@@ -55,6 +55,15 @@ export function BillingForm({
         </div>
       )}
       <input type="hidden" name="salesOrderId" value={defaults.salesOrderId} />
+      <div className="edit-topbar">
+        <button className="btn" type="submit" disabled={pending}>
+          {pending ? "Saving…" : submitLabel}
+        </button>
+        <Link className="btn btn-secondary" href="/billing/billings">
+          Cancel
+        </Link>
+        <span className="small faint">Printables say “not an official invoice”.</span>
+      </div>
       <div className="form-grid">
         <div className="field full">
           <label>Sales order</label>
@@ -101,15 +110,6 @@ export function BillingForm({
           <NoIdUploadWarning />
           {e.files ? <div className="error">{e.files}</div> : <div className="hint">PDF, JPG or PNG · max 10 MB each</div>}
         </div>
-      </div>
-      <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending}>
-          {pending ? "Saving…" : submitLabel}
-        </button>
-        <Link className="btn btn-secondary" href="/billing/billings">
-          Cancel
-        </Link>
-        <span className="small faint">Printables say “not an official invoice”.</span>
       </div>
     </form>
   );
