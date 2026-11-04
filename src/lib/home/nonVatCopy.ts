@@ -1,7 +1,7 @@
-// Home Non-VAT card copy in one place — wording still waiting on the owner's
-// final OK. Warn thresholds come from Settings → Tax year (warnFirstPct /
-// warnSecondPct); defaults are 70 and 90. The title limit comes from
-// settings.taxYear.nonVatLimit (not a hardcoded ₱3M).
+// Sales milestone card copy in one place (Q13 S-46, owner wording, Nov 4 2026).
+// Milestone thresholds come from Settings → Tax year (warnFirstPct /
+// warnSecondPct); defaults are 70 and 90. The title is the owner's fixed
+// "Sales Milestone" — the limit still shows in the card body, not the title.
 
 /** Round to 1 decimal for compact unit boundaries (avoids ₱1000K). */
 function round1(n: number): number {
@@ -39,15 +39,15 @@ export function formatCompactPesoLimit(limit: number): string {
   return `₱${round1(thousands).toFixed(1).replace(/\.0$/, "")}K`;
 }
 
-/** Card / sidebar title — same string in both places. */
-export function homeNonVatTitle(limit: number): string {
-  return `Non-VAT sales limit (${formatCompactPesoLimit(limit)})`;
+/** Sidebar sales milestone title — owner wording, no limit suffix. */
+export function homeNonVatTitle(): string {
+  return "Sales Milestone";
 }
 
-/** @deprecated Use homeNonVatTitle(limit) — kept for a soft migration of imports. */
-export const HOME_NON_VAT_TITLE = homeNonVatTitle(3_000_000);
+/** @deprecated Use homeNonVatTitle() — kept for a soft migration of imports. */
+export const HOME_NON_VAT_TITLE = homeNonVatTitle();
 
 /** Helper under the meter. `warnFirstPct` / `warnSecondPct` from settings. */
 export function homeNonVatHelperLine(warnFirstPct: number, warnSecondPct: number): string {
-  return `Estimate based on invoices in this app for this year. Your accountant's books are the official count. Warns at ${warnFirstPct}% and ${warnSecondPct}%.`;
+  return `Estimate based on invoices in this app for this year. Your accountant's books are the official count. Milestones at ${warnFirstPct}%, ${warnSecondPct}% and 100%.`;
 }
