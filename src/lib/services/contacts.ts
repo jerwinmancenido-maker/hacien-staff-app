@@ -5,8 +5,55 @@ import type { Contact } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { deactivateContactError, makeMainError, makeMainPlan, newContactIsMain } from "../contacts";
+import { emailOptInBlocked, PRIVACY_POLICY_VERSION, type ConsentChannel } from "../marketing-consent";
 import type { ContactInput } from "../validation/companies";
 import { CompanyRuleError } from "./companies";
+
+export type ConsentRequestMeta = { ip?: string | null; userAgent?: string | null };
+
+/** Write one append-only history row per consent channel that changed. */
+async function writeConsentHistory(
+  tx: Tx,
+  contactId: string,
+  before: Pick<Contact, "marketingEmailConsent" | "marketingSmsConsent">,
+  after: Pick<Contact, "marketingEmailConsent" | "marketingSmsConsent">,
+  actorId: string,
+  meta?: ConsentRequestMeta,
+) {
+  const changes: [ConsentChannel, boolean][] = [];
+  if (before.marketingEmailConsent !== after.marketingEmailConsent) {
+    changes.push(["email", after.marketingEmailConsent]);
+  }
+  if (before.marketingSmsConsent !== after.marketingSmsConsent) {
+    changes.push(["sms", after.marketingSmsConsent]);
+  }
+  for (const [channel, consent] of changes) {
+    await tx.marketingConsentHistory.create({
+      data: {
+        contactId,
+        channel,
+        consent,
+        source: "contact form",
+        changedBy: actorId,
+        policyVersion: PRIVACY_POLICY_VERSION,
+        ip: meta?.ip ?? null,
+        userAgent: meta?.userAgent ?? null,
+      },
+    });
+  }
+}
+
+/** Suppression guard for the contact form: a suppressed email cannot be flipped back on. */
+async function assertEmailOptInAllowed(tx: Tx, email: string | null) {
+  if (!email) return;
+  const suppression = await tx.emailSuppression.findUnique({ where: { email: email.toLowerCase() } });
+  if (emailOptInBlocked(suppression)) {
+    throw new CompanyRuleError(
+      "This email is on the do-not-email list. Clear the suppression explicitly (Admin) before opting it back in.",
+      "marketingEmailConsent",
+    );
+  }
+}
 
 export type ContactOwner = { kind: "customer" | "supplier"; id: string };
 
@@ -32,19 +79,42 @@ async function unsetOtherMains(tx: Tx, o: ContactOwner, newMainId: string, actor
   }
 }
 
-export async function addContact(owner: ContactOwner, input: ContactInput, actorId: string) {
+export async function addContact(
+  owner: ContactOwner,
+  input: ContactInput,
+  actorId: string,
+  meta?: ConsentRequestMeta,
+) {
   return db.$transaction(async (tx) => {
     await lockOwner(tx, owner);
     const existing = await tx.contact.findMany({ where: ownerWhere(owner) });
     const isMain = newContactIsMain(existing, input.isMain);
-    const created = await tx.contact.create({ data: { ...input, isMain, ...ownerWhere(owner) } });
+    const emailConsent = input.marketingEmailConsent ?? false;
+    const smsConsent = input.marketingSmsConsent ?? false;
+    if (emailConsent) await assertEmailOptInAllowed(tx, input.email);
+    const created = await tx.contact.create({
+      data: { ...input, marketingEmailConsent: emailConsent, marketingSmsConsent: smsConsent, isMain, ...ownerWhere(owner) },
+    });
     if (isMain) await unsetOtherMains(tx, owner, created.id, actorId);
     await writeAudit(tx, { userId: actorId, entityType: "Contact", entityId: created.id, action: "create", after: created });
+    await writeConsentHistory(
+      tx,
+      created.id,
+      { marketingEmailConsent: false, marketingSmsConsent: false },
+      created,
+      actorId,
+      meta,
+    );
     return created;
   });
 }
 
-export async function updateContact(id: string, input: ContactInput, actorId: string) {
+export async function updateContact(
+  id: string,
+  input: ContactInput,
+  actorId: string,
+  meta?: ConsentRequestMeta,
+) {
   return db.$transaction(async (tx) => {
     const before = await tx.contact.findUniqueOrThrow({ where: { id } });
     const owner = ownerOf(before);
@@ -56,8 +126,21 @@ export async function updateContact(id: string, input: ContactInput, actorId: st
       if (err) throw new CompanyRuleError(err);
       await unsetOtherMains(tx, owner, id, actorId);
     }
-    const after = await tx.contact.update({ where: { id }, data: { ...input, isMain: before.isMain || becomeMain } });
+    const emailConsent = input.marketingEmailConsent ?? before.marketingEmailConsent;
+    const smsConsent = input.marketingSmsConsent ?? before.marketingSmsConsent;
+    // Suppression guard: a suppressed email cannot be flipped back on here,
+    // and changing the email while consent is ON is treated as a fresh
+    // opt-in for the NEW address (checked against suppression too).
+    const emailChanged = (input.email ?? null)?.toLowerCase() !== (before.email ?? null)?.toLowerCase();
+    if (emailConsent && (!before.marketingEmailConsent || emailChanged)) {
+      await assertEmailOptInAllowed(tx, input.email);
+    }
+    const after = await tx.contact.update({
+      where: { id },
+      data: { ...input, marketingEmailConsent: emailConsent, marketingSmsConsent: smsConsent, isMain: before.isMain || becomeMain },
+    });
     await writeAudit(tx, { userId: actorId, entityType: "Contact", entityId: id, action: "update", before, after });
+    await writeConsentHistory(tx, id, before, after, actorId, meta);
     return after;
   });
 }

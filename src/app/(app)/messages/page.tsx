@@ -54,6 +54,21 @@ export default async function MessagesPage() {
           Save order text toggles
         </button>
       </form>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-head">
+          <h2>Marketing consent export</h2>
+        </div>
+        <p className="faint small">
+          CSV of opted-in contacts only — a contact appears only when marketing email consent is on
+          (with an email on file and no active do-not-email entry) or marketing SMS consent is on.
+          Columns: contact_name, company_name, company_type, email, phone, email_consent,
+          sms_consent, email_suppressed. Hostinger Reach sync is not built yet; use this CSV
+          instead. Marketing email stays blocked until the Hostinger DPA PDF is on file.
+        </p>
+        <a className="btn" href="/messages/export">
+          Download opted-in contacts (CSV)
+        </a>
+      </div>
       {rows.length === 0 ? (
         <EmptyState title="No messages sent yet" line="Every SMS and email sent through the messaging base is logged here." />
       ) : (
