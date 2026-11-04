@@ -258,6 +258,17 @@ export function QuoteEditor({
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
 
+  // S-82: after browser Back to a new quote, the browser can restore typed
+  // values into the DOM while React state is fresh (empty), so the form
+  // looks filled but Save stays greyed out on an empty customer. For a new
+  // quote, reset the form on mount so what you see matches the state
+  // (a preset ?customer= still shows, because reset restores the rendered
+  // defaults, which come from the initial state).
+  useLayoutEffect(() => {
+    if (isNew) formRef.current?.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [h, setH] = useState(() => {
     const pick = resolveInitialPick(initial);
     return {
