@@ -11,6 +11,7 @@ import {
   approveQuote,
   buildQuoteEmailDraft,
   convertQuoteToSalesOrder,
+  copyQuote,
   createQuote,
   markQuoteLost,
   confirmNoneAndMarkQuoteSent,
@@ -22,6 +23,7 @@ import {
   type EmailDraft,
 } from "@/lib/services/quotes";
 import { convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
+import { getQuoteView } from "@/lib/quotes/views";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
 function readJson(form: FormData, key: string): unknown {
@@ -88,6 +90,31 @@ export async function markQuoteLostAction(id: string): Promise<FormState> {
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Marked as lost." };
+  });
+}
+
+/** S-55: copy a quote into a fresh draft (Rev 1). */
+export async function duplicateQuoteAction(id: string): Promise<FormState & { newQuoteId?: string }> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const copy = await copyQuote(id, user, 1);
+    revalidatePath("/quotes");
+    return { ok: true, message: `Duplicated as ${copy.number}.`, newQuoteId: copy.id };
+  });
+}
+
+/** S-55: copy a quote into a fresh draft with revision + 1. The original is left untouched. */
+export async function newRevisionQuoteAction(id: string): Promise<FormState & { newQuoteId?: string }> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const original = await getQuoteView(id, user);
+    if (!original) throw new Error("Quote not found.");
+    if (original.status !== "SENT" && original.status !== "WON") {
+      throw new Error("New revision is for sent or won quotes — a draft is edited in place.");
+    }
+    const copy = await copyQuote(id, user, original.revision + 1);
+    revalidatePath("/quotes");
+    return { ok: true, message: `New revision ${copy.number} (Rev ${copy.revision}) created.`, newQuoteId: copy.id };
   });
 }
 

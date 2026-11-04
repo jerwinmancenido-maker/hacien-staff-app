@@ -9,6 +9,8 @@ export const COMPANY_TABS = [
   "documents",
   "transactions",
   "balances",
+  // S-55: customer-only tab (suppliers simply never link to it).
+  "prices",
 ] as const;
 
 export type CompanyTab = (typeof COMPANY_TABS)[number];

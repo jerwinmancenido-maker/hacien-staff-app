@@ -53,6 +53,10 @@ type Props = {
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
     refreshCompanyDetails?: (id: string) => Promise<FormState>;
+    /** S-55: fresh draft copy, Rev 1. */
+    duplicate?: (id: string) => Promise<FormState & { newQuoteId?: string }>;
+    /** S-55: fresh draft copy with revision + 1 (sent/won quotes). */
+    newRevision?: (id: string) => Promise<FormState & { newQuoteId?: string }>;
     approve?: (id: string) => Promise<FormState>;
     reject?: (id: string, reason: string) => Promise<FormState>;
   };
@@ -86,6 +90,15 @@ export function QuoteActions({
     if (dialog === "reject") rejectReasonRef.current?.focus();
   }, [dialog]);
 
+  /** S-55: like run, but opens the new quote's edit page on success. */
+  const runAndGo = (fn: () => Promise<FormState & { newQuoteId?: string }>) =>
+    startTransition(async () => {
+      const res = await fn();
+      setMessage(res.ok ? null : (res.message ?? "Something went wrong."));
+      setOkMessage(res.ok ? (res.message ?? null) : null);
+      if (res.ok && res.newQuoteId) router.push(`/quotes/${res.newQuoteId}/edit`);
+    });
+
   const run = (fn: () => Promise<FormState & { draft?: EmailDraftView }>) =>
     startTransition(async () => {
       const res = await fn();
@@ -100,6 +113,22 @@ export function QuoteActions({
   const canRefreshCompany = canEdit && status === "DRAFT" && !!actions.refreshCompanyDetails;
   const items: MenuItem[] = [];
   if (canEdit && editable) items.push({ key: "edit", label: "Edit", href: `/quotes/${id}/edit` });
+  if (canEdit && editable) items.push({ key: "edit", label: "Edit", href: `/quotes/${id}/edit` });
+  if (canEdit && status !== "VOID" && actions.duplicate) {
+    items.push({
+      key: "duplicate",
+      label: "Duplicate",
+      onSelect: () =>
+        runAndGo(() => actions.duplicate!(id)),
+    });
+  }
+  if (canEdit && (status === "SENT" || status === "WON") && actions.newRevision) {
+    items.push({
+      key: "new-revision",
+      label: "New revision",
+      onSelect: () => runAndGo(() => actions.newRevision!(id)),
+    });
+  }
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/quotes/${id}`, newTab: true });
   if (canRefreshCompany) {
     items.push({
