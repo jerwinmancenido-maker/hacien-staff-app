@@ -716,6 +716,10 @@ a.tracker-card:hover {
   background: var(--ink);
   color: #fff;
 }
+.chip.blue {
+  background: var(--blue-tint);
+  color: var(--blue-dark);
+}
 
 /* ---------- Toolbar & filter chips ---------- */
 

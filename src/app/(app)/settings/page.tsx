@@ -401,7 +401,7 @@ async function UsersTab() {
         ? [{ label: "Turned off", tone: "red" as const }]
         : u.passwordHash
         ? [{ label: "Active", tone: "green" as const }]
-        : [{ label: "Invited", tone: "amber" as const }]),
+        : [{ label: "Invited", tone: "blue" as const }]),
     ],
     meta: [
       { label: "Role", value: roleLabel(u) },

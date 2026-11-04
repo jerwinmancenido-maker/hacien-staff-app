@@ -4,8 +4,8 @@ import { BILLING_STATUS_LABELS, COLLECTION_STATUS_LABELS } from "@/lib/billing/v
 import { COLLECTION_METHOD_LABELS, type CollectionMethodInput } from "@/lib/validation/billing";
 
 const BILLING_TONES: Record<BillingStatus, ChipTone> = {
-  OPEN: "amber",
-  PARTIALLY_PAID: "amber",
+  OPEN: "blue",
+  PARTIALLY_PAID: "blue",
   PAID: "green",
   VOID: "red",
 };

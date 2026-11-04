@@ -4,8 +4,8 @@ import { PAYMENT_STATUS_LABELS, SUPPLIER_2307_STATUS_LABELS, SUPPLIER_BILL_STATU
 import { PAYMENT_METHOD_LABELS, type PaymentMethodInput } from "@/lib/validation/payables";
 
 const BILL_TONES: Record<SupplierBillStatus, ChipTone> = {
-  RECORDED: "amber",
-  PARTIALLY_PAID: "amber",
+  RECORDED: "blue",
+  PARTIALLY_PAID: "blue",
   PAID: "green",
   VOID: "red",
 };
@@ -23,7 +23,7 @@ export function PaymentMethodLabel({ method }: { method: PaymentMethodInput | st
 }
 
 export function Supplier2307StatusChip({ status }: { status: "TO_ISSUE" | "ISSUED" }) {
-  return <Chip tone={status === "ISSUED" ? "green" : "amber"}>{SUPPLIER_2307_STATUS_LABELS[status]}</Chip>;
+  return <Chip tone={status === "ISSUED" ? "green" : "grey"}>{SUPPLIER_2307_STATUS_LABELS[status]}</Chip>;
 }
 
 /** Record-keeping disclaimer — never call these Official Receipts or Invoices. */
