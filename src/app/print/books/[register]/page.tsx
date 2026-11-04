@@ -15,6 +15,8 @@ import { getBookRegister } from "@/lib/services/books";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
+import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { printCompanyBlock } from "@/lib/print/company";
 
 export const dynamic = "force-dynamic";
 
@@ -72,13 +74,7 @@ export default async function PrintBooksPage({
 
       <article className="print-doc books-register-doc">
         <header className="print-header books-register-head">
-          <div>
-            <div className="print-brand">{company.name || "HACIEN"}</div>
-            <div className="small">NON-VAT · TIN {company.tin || "—"}</div>
-            <div className="small" style={{ whiteSpace: "pre-wrap" }}>
-              {company.address || "—"}
-            </div>
-          </div>
+          <CompanyLetterhead company={printCompanyBlock(company)} />
           <div className="print-doc-title">
             <h1>{config.title}</h1>
             <div className="small muted">{BOOKS_DISCLAIMER}</div>
