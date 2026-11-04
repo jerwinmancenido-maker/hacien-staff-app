@@ -9,6 +9,8 @@ import { getSalesSummaryWorksheet } from "@/lib/services/tax-worksheets";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
+import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { printCompanyBlock } from "@/lib/print/company";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: TAX_WORKSHEET_PAGES.salesSummary.title };
@@ -40,10 +42,7 @@ export default async function PrintSalesSummaryPage({
       </div>
       <article className="print-doc books-register-doc">
         <header className="print-header books-register-head">
-          <div>
-            <div className="print-brand">{company.name || "HACIEN"}</div>
-            <div className="small">NON-VAT · TIN {company.tin || "—"}</div>
-          </div>
+          <CompanyLetterhead company={printCompanyBlock(company)} />
           <div className="print-doc-title">
             <h1>{TAX_WORKSHEET_PAGES.salesSummary.title}</h1>
             <div className="small muted">{TAX_WORKSHEET_DISCLAIMER}</div>

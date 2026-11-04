@@ -3,48 +3,14 @@
 // show customer selling prices. Tax wording comes only from lib/print/tax-wording.
 
 import { formatPeso } from "@/lib/format";
-import { BRAND_LETTERHEAD_LOGO } from "@/lib/print/company";
-import { HIDE_STATUS_ON_PRINT, NON_VAT_LABEL } from "@/lib/print/tax-wording";
+import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
+import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
 import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
 import type { ProfessionalPrintModel, PrintSignatory } from "@/lib/print/types";
 
 const qty = (q: string) => q.replace(/\.00$/, "");
-
-function CompanyLetterhead({ company }: { company: ProfessionalPrintModel["company"] }) {
-  // Prefer registered name for the text line; never treat this as a font stand-in for the logo.
-  const companyLine = company.registeredName.trim() || company.tradeName.trim() || "—";
-  const contactBits = [company.email?.trim(), company.phone?.trim()].filter(Boolean);
-  // Settings upload overrides; otherwise brand kit logo-full.svg (SVG only — never retype HACIEN).
-  const logoSrc = company.logoUrl?.trim() || BRAND_LETTERHEAD_LOGO;
-  const isBrandLogo = logoSrc === BRAND_LETTERHEAD_LOGO || logoSrc.startsWith("/brand/");
-  return (
-    <div className="pp-letterhead">
-      <div className="pp-letterhead-row">
-        <div className="pp-logo-clearspace" title="Clear space = 2× blue square (≈2.2 mm at 45 mm width)">
-          {/* eslint-disable-next-line @next/next/no-img-element -- print/PDF; brand kit SVG as-is */}
-          <img
-            className="pp-logo"
-            src={logoSrc}
-            alt={isBrandLogo ? "HACIEN" : companyLine}
-            data-brand-logo={isBrandLogo ? "full" : "custom"}
-          />
-        </div>
-        <div className="pp-letterhead-text">
-          <div className="pp-company-line">{companyLine}</div>
-          {/* Empty address/TIN: omit the line. Warning lives only in PrintShell toolbar. */}
-          {company.address ? <div className="pp-pre">{company.address}</div> : null}
-          <div className="pp-tin-row">
-            {company.tin ? <span>TIN {company.tin}</span> : null}
-            <span className="pp-nonvat">{NON_VAT_LABEL}</span>
-          </div>
-          {contactBits.length > 0 && <div className="pp-contact-bits">{contactBits.join(" · ")}</div>}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PartyBoxes({ party, kind }: { party: ProfessionalPrintModel["party"]; kind: ProfessionalPrintModel["kind"] }) {
   const customerDoc = kind === "quote" || kind === "sales_order" || kind === "billing" || kind === "collection" || kind === "customer_statement";
