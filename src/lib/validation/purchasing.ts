@@ -83,6 +83,12 @@ export const receiptInputSchema = z.object({
       z.object({
         lineId: z.string().max(64),
         qty: z.string().max(20),
+        // S-49: supplier warranty end date for this line's goods (YYYY-MM-DD or blank).
+        // Preprocess keeps the key optional for callers that omit it entirely.
+        warrantyEndDate: z.preprocess(
+          (v) => (v === "" ? null : v),
+          z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Warranty end date must be YYYY-MM-DD.").nullable().optional(),
+        ),
         // S-48: one serial per unit, typed comma- or newline-separated.
         serialNumbers: z.string().max(2000, "Keep serial numbers under 2000 characters.").optional().nullable(),
       }),

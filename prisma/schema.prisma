@@ -992,6 +992,8 @@ model ReceivingReportItem {
   purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
   qtyReceived         Decimal           @db.Decimal(12, 2)
   note                String?           @db.VarChar(255)
+  // S-49: supplier warranty end date for the goods on this line.
+  warrantyEndDate     DateTime?         @db.Date
   // S-48: serial numbers received on this line, comma-separated.
   serialNumbers       String?           @db.Text
 

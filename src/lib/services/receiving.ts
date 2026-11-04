@@ -51,6 +51,14 @@ async function setPoStatus(tx: Tx, purchaseOrderId: string, from: PoStatus, to: 
   await writeAudit(tx, { userId: actorId, entityType: "PurchaseOrder", entityId: purchaseOrderId, action: "update", before: { status: from }, after: { status: to, reason }, diff: false });
 }
 
+/** S-49: YYYY-MM-DD (or blank) from the form into a Date for Prisma. */
+function toWarrantyEndDate(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const d = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) throw new DocRuleError("Warranty end date is not a real date.");
+  return d;
+}
+
 export async function postReceivingReport(purchaseOrderId: string, input: ReceiptInput, actor: RrActor, files: readonly UploadFile[] = []) {
   assertCan(actor, "edit_data");
   const receiver = await db.user.findUnique({ where: { id: input.receivedById } });
@@ -82,6 +90,8 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
               create: check.entries.map((e) => ({
                 purchaseOrderItemId: e.lineId,
                 qtyReceived: e.qty,
+                // S-49: warranty end travels on the input line, not the checked entry.
+                warrantyEndDate: toWarrantyEndDate(input.lines.find((l) => l.lineId === e.lineId)?.warrantyEndDate),
                 // S-48: serials travel on the input line, not the checked entry.
                 serialNumbers: normalizeSerialNumbers(input.lines.find((l) => l.lineId === e.lineId)?.serialNumbers),
               })),
