@@ -827,6 +827,8 @@ model DeliveryItem {
   salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id])
   qty              Decimal        @db.Decimal(12, 2)
   note             String?        @db.VarChar(255)
+  // S-48: serial numbers delivered on this line, comma-separated.
+  serialNumbers    String?        @db.Text
 
   @@index([deliveryId])
   @@index([salesOrderItemId])
@@ -990,6 +992,8 @@ model ReceivingReportItem {
   purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
   qtyReceived         Decimal           @db.Decimal(12, 2)
   note                String?           @db.VarChar(255)
+  // S-48: serial numbers received on this line, comma-separated.
+  serialNumbers       String?           @db.Text
 
   @@index([receivingReportId])
   @@index([purchaseOrderItemId])

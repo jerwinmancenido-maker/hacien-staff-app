@@ -78,7 +78,16 @@ export const receiptInputSchema = z.object({
   receivedById: z.string().trim().min(1, "Pick who received the items.").max(64),
   deliveryRef: optionalText(64),
   notes: optionalText(5000),
-  lines: z.array(z.object({ lineId: z.string().max(64), qty: z.string().max(20) })).max(500),
+  lines: z
+    .array(
+      z.object({
+        lineId: z.string().max(64),
+        qty: z.string().max(20),
+        // S-48: one serial per unit, typed comma- or newline-separated.
+        serialNumbers: z.string().max(2000, "Keep serial numbers under 2000 characters.").optional().nullable(),
+      }),
+    )
+    .max(500),
 });
 export type ReceiptInput = z.infer<typeof receiptInputSchema>;
 

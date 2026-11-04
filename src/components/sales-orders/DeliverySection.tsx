@@ -38,6 +38,7 @@ type DeliveryRecord = {
     id: string;
     salesOrderItemId: string;
     qty: unknown;
+    serialNumbers: string | null;
     salesOrderItem: { description: string; unit: string };
   }[];
   attachments: { id: string; fileName: string }[];
@@ -62,6 +63,7 @@ export function DeliverySection({
 }) {
   const [showForm, setShowForm] = useState(false);
   const [qtys, setQtys] = useState<Record<string, string>>({});
+  const [serials, setSerials] = useState<Record<string, string>>({});
   const progress = soDeliveryProgress(items);
   const todayYmd = isoDate(manilaToday());
 
@@ -240,6 +242,7 @@ export function DeliverySection({
                     <th className="num">Delivered</th>
                     <th className="num">Remaining</th>
                     <th className="num">Deliver now</th>
+                    <th>Serial numbers</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -270,6 +273,18 @@ export function DeliverySection({
                             readOnly={done}
                             value={done ? "" : (qtys[i.id] ?? "")}
                             onChange={(ev) => setQtys({ ...qtys, [i.id]: ev.target.value })}
+                          />
+                        </td>
+                        <td>
+                          {/* readOnly (not disabled) so itemSerials stays aligned with itemId */}
+                          <input
+                            name="itemSerials"
+                            type="text"
+                            className="input"
+                            placeholder="Comma-separated, if any"
+                            readOnly={done}
+                            value={done ? "" : (serials[i.id] ?? "")}
+                            onChange={(ev) => setSerials({ ...serials, [i.id]: ev.target.value })}
                           />
                         </td>
                       </tr>
@@ -354,6 +369,7 @@ export function DeliverySection({
                         {d.items.map((item) => (
                           <li key={item.id}>
                             {qtyText(String(item.qty))} {item.salesOrderItem.unit} · {item.salesOrderItem.description.split("\n")[0]}
+                            {item.serialNumbers && <div className="faint">Serials: {item.serialNumbers}</div>}
                           </li>
                         ))}
                       </ul>

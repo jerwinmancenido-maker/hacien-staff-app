@@ -11,7 +11,7 @@ export function RrTable({
   canVoid,
   voidAction,
 }: {
-  reports: { id: string; number: string; status: string; receivedDate: string; receivedBy: string; deliveryRef: string | null; notes: string | null; voidReason: string | null; items: { description: string; qty: string }[]; attachments: { id: string; fileName: string; sizeBytes: number }[] }[];
+  reports: { id: string; number: string; status: string; receivedDate: string; receivedBy: string; deliveryRef: string | null; notes: string | null; voidReason: string | null; items: { description: string; qty: string; serialNumbers: string | null }[]; attachments: { id: string; fileName: string; sizeBytes: number }[] }[];
   poId: string;
   canVoid: boolean;
   voidAction: (poId: string, id: string, reason: string) => Promise<FormState>;
@@ -42,6 +42,7 @@ export function RrTable({
                 {r.items.map((x, n) => (
                   <div key={n}>
                     {x.description.split("\n")[0]}: <b>{qtyText(x.qty)}</b>
+                    {x.serialNumbers && <div className="faint">Serials: {x.serialNumbers}</div>}
                   </div>
                 ))}
                 {r.notes && <div className="faint">{r.notes}</div>}

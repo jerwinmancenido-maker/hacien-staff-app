@@ -427,7 +427,17 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const status = needsPo || openUnbilled ? "OPEN" : filter.status;
   const where: Prisma.SalesOrderWhereInput = {
     ...(status ? { status } : {}),
-    ...(q ? { OR: [{ number: { contains: q } }, { buyerPoNo: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+    ...(q
+      ? {
+          OR: [
+            { number: { contains: q } },
+            { buyerPoNo: { contains: q } },
+            { customer: { name: { contains: q } } },
+            // S-48: search by a serial number delivered on this order.
+            { deliveries: { some: { items: { some: { serialNumbers: { contains: q } } } } } },
+          ],
+        }
+      : {}),
   };
 
   if (!needsPo) {
