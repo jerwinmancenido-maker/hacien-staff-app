@@ -27,6 +27,7 @@ export function CustomerForm({
   rates,
   action,
   canEdit,
+  canSeeTin = true,
   canEditWithholding = true,
   addresses,
 }: {
@@ -36,6 +37,8 @@ export function CustomerForm({
   rates: WithholdingSnapshot[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
+  /** S-58: false blanks the TIN field (view-only users). */
+  canSeeTin?: boolean;
   /** Existing customers: only Admin may change withholding type/rates. */
   canEditWithholding?: boolean;
   addresses?: Address[];
@@ -94,7 +97,7 @@ export function CustomerForm({
             <input id="name" name="name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} />
           </Field>
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-000 · branch code optional">
-            <input id="tin" name="tin" type="text" defaultValue={v("tin")} inputMode="numeric" placeholder="000-000-000-000" />
+            <input id="tin" name="tin" type="text" defaultValue={canSeeTin ? v("tin") : ""} inputMode="numeric" placeholder="000-000-000-000" />
           </Field>
           <Field
             label={WITHHOLDING_TYPE_FIELD_LABEL}

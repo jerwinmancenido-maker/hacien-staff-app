@@ -14,12 +14,15 @@ export function SupplierForm({
   terms,
   action,
   canEdit,
+  canSeeTin = true,
   isAdmin = false,
 }: {
   supplier: Supplier | null;
   terms: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   canEdit: boolean;
+  /** S-58: false blanks the TIN field (view-only users). */
+  canSeeTin?: boolean;
   isAdmin?: boolean;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
@@ -53,7 +56,7 @@ export function SupplierForm({
             <input id="name" name="name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} />
           </Field>
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-000 · branch code optional">
-            <input id="tin" name="tin" type="text" defaultValue={v("tin")} inputMode="numeric" placeholder="000-000-000-000" />
+            <input id="tin" name="tin" type="text" defaultValue={canSeeTin ? v("tin") : ""} inputMode="numeric" placeholder="000-000-000-000" />
           </Field>
           <Field label="Tax type" name="taxType" required error={e.taxType}>
             <select id="taxType" name="taxType" defaultValue={v("taxType") || "VAT"}>

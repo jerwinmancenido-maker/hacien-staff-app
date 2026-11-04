@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { addDays, manilaToday } from "@/lib/format";
 import { can, canSeeCosts, type PermissionUser } from "@/lib/permissions";
+import { accessReviewDue } from "@/lib/access-review";
 import { arAgingSummary } from "@/lib/billing/views";
 import { billingBalance } from "@/lib/billing/status";
 import { money } from "@/lib/documents/common";
@@ -16,6 +17,8 @@ export type { NotificationItem, NotificationSection } from "./notification-types
  * - Payment reminders: unpaid billings due in the next 7 days.
  * - Late delivery: sent/partially-received POs past their expected date
  *   (cost viewers only — the PO pages are cost-gated).
+ * - Access review (S-58 sync addition): Admin only, shown when the last
+ *   access review is over 90 Manila days old or never happened.
  */
 
 export async function getNotifications(user: PermissionUser): Promise<NotificationSection[]> {
@@ -116,6 +119,19 @@ export async function getNotifications(user: PermissionUser): Promise<Notificati
         count: lateCount,
         href: "/purchase-orders",
         items: late.map((po) => ({ label: `${po.number} · ${po.supplier.name}`, href: `/purchase-orders/${po.id}` })),
+      });
+    }
+  }
+
+  if (can(user, "manage_settings")) {
+    const last = await db.accessReview.findFirst({ orderBy: { reviewedAt: "desc" }, select: { reviewedAt: true } });
+    if (accessReviewDue(last?.reviewedAt ?? null)) {
+      sections.push({
+        key: "access-review",
+        label: "Access review",
+        count: 1,
+        href: "/settings?tab=users",
+        items: [{ label: "Review who can sign in and with which roles", href: "/settings?tab=users" }],
       });
     }
   }

@@ -22,6 +22,8 @@ export class CompanyRuleError extends Error {
 
 export type CustomerFilter = {
   q?: string;
+  /** S-58: false = the search matches names only, never TINs. */
+  matchTin?: boolean;
   withholding?: WithholdingType;
   /** Customers whose saved pick is still null (not set). Distinct from type NONE / pick []. */
   withholdingPick?: "NOT_SET";
@@ -43,7 +45,14 @@ export function listCustomers(f: CustomerFilter) {
       ...(f.withholding ? { withholdingType: f.withholding } : {}),
       // JSON null only — empty [] (explicit none) and picked codes do not match.
       ...(f.withholdingPick === "NOT_SET" ? { defaultWithholding: { equals: Prisma.DbNull } } : {}),
-      ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
+      ...(q
+        ? {
+            OR:
+              f.matchTin === false
+                ? [{ name: { contains: q } }]
+                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }],
+          }
+        : {}),
     },
     include: mainAddress,
     orderBy: { name: "asc" },
@@ -203,7 +212,7 @@ export async function duplicateCustomer(id: string, actor: CustomerSaveActor | s
 // Suppliers
 // ---------------------------------------------------------------------------
 
-export type SupplierFilter = { q?: string; taxType?: SupplierTaxType; showInactive?: boolean; onlyIds?: string[] };
+export type SupplierFilter = { q?: string; matchTin?: boolean; taxType?: SupplierTaxType; showInactive?: boolean; onlyIds?: string[] };
 
 export function listSuppliers(f: SupplierFilter) {
   const q = f.q?.trim();
@@ -212,7 +221,14 @@ export function listSuppliers(f: SupplierFilter) {
       ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
       ...(f.showInactive ? {} : { active: true }),
       ...(f.taxType ? { taxType: f.taxType } : {}),
-      ...(q ? { OR: [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }] } : {}),
+      ...(q
+        ? {
+            OR:
+              f.matchTin === false
+                ? [{ name: { contains: q } }]
+                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }],
+          }
+        : {}),
     },
     include: mainAddress,
     orderBy: { name: "asc" },

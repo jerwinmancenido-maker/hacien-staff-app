@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { getSupplier } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { maskSupplierForViewer } from "@/lib/bank-mask";
@@ -101,7 +101,7 @@ export default async function SupplierPage({
         }
         subtitle={
           [
-            supplier.tin ? `TIN: ${supplier.tin}` : null,
+            canSeeTin(user) && supplier.tin ? `TIN: ${supplier.tin}` : null,
             main ? `Main contact: ${main.name}` : null,
           ]
             .filter(Boolean)
@@ -169,6 +169,7 @@ export default async function SupplierPage({
 
       {tab === "overview" && (
         <SupplierOverview
+          canSeeTin={canSeeTin(user)}
           supplier={safeSupplier}
           contacts={contacts}
           canEdit={canEdit}
@@ -189,6 +190,7 @@ export default async function SupplierPage({
             terms={settings.lists.paymentTerms}
             action={saveSupplierAction.bind(null, id)}
             canEdit={canEdit}
+            canSeeTin={canSeeTin(user)}
             isAdmin={user.isAdmin}
           />
         </div>

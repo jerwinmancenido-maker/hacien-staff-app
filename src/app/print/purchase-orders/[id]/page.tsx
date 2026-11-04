@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCurrentUser, requireCostPage } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { getPurchaseOrderPrintModel } from "@/lib/print/views";
 import { PrintShell } from "@/components/docs/PrintShell";
 
@@ -30,6 +30,7 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
       doc={result.doc}
       missing={result.missing}
       canManageSettings={can(user, "manage_settings")}
+      hideCounterpartyTin={!canSeeTin(user)}
     />
   );
 }

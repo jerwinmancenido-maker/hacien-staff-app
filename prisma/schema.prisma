@@ -27,6 +27,9 @@ model User {
   name         String    @db.VarChar(120)
   // Null until the user sets a password from their invite link.
   passwordHash String?   @db.VarChar(100)
+  // S-58: two-step sign-in. Encrypted TOTP secret (see lib/auth/totp.ts);
+  // null = two-step off. Presence of a secret means it is on.
+  totpSecret         String?         @db.VarChar(255)
   // Roles (a user may hold several, e.g. Admin + Approver). Stored as flags so
   // removing a role is an update, never a delete.
   isAdmin      Boolean   @default(false)
@@ -61,6 +64,7 @@ model User {
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
+  accessReviewsMade  AccessReview[]
   remindersMade        Reminder[]
   billingsCreated              Billing[]                 @relation("BillingCreatedBy")
   billingsUpdated              Billing[]                 @relation("BillingUpdatedBy")
@@ -369,6 +373,7 @@ enum AuditAction {
   void
   login
   login_failed
+  login_2fa_pending
   settings_change
   email_draft
   download
@@ -473,6 +478,17 @@ model OrderTextSent {
   createdAt    DateTime @default(now())
 
   @@index([salesOrderId])
+}
+
+// S-58: access review log. Append-only — each Admin review adds a row;
+// the latest row is the "last reviewed" date. Never deleted.
+model AccessReview {
+  id           String   @id @default(cuid())
+  reviewedAt   DateTime @default(now())
+  reviewedById String
+  reviewedBy   User     @relation(fields: [reviewedById], references: [id])
+
+  @@index([reviewedAt])
 }
 
 // S-56: personal "Remind me" notes on deal records. Reminders are never

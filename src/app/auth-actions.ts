@@ -6,6 +6,8 @@ import { writeAudit } from "@/lib/audit";
 import { changePasswordSchema, newPasswordSchema, verifyPassword } from "@/lib/auth/password";
 import { checkLoginRateLimit, passwordChangeAttemptEmail, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
 import { createSession, currentTokenHash, destroyCurrentSession, idleRemainingMs as readIdleRemainingMs } from "@/lib/auth/session";
+import { decryptTotpSecret, verifyTotpCode } from "@/lib/auth/totp";
+import { clearPendingCookie, readPendingUserId, setPendingCookie } from "@/lib/auth/two-factor";
 import { getCurrentUser, requestMeta } from "@/lib/auth/current-user";
 import { UserRuleError, changePassword, requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
 import { ACCOUNT_OFF, RESET_SENT, WRONG_CREDENTIALS } from "@/lib/auth/messages";
@@ -55,10 +57,49 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
     return { values, message: ACCOUNT_OFF };
   }
 
+  await db.loginAttempt.create({ data: { email, ip, success: true } });
+  if (user.totpSecret) {
+    // S-58: second step still needed — no session until the code is verified.
+    await db.$transaction(async (tx) => {
+      await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login_2fa_pending", ip, diff: false });
+    });
+    await setPendingCookie(user.id);
+    redirect("/login/verify");
+  }
   await db.$transaction(async (tx) => {
-    await tx.loginAttempt.create({ data: { email, ip, success: true } });
     await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login", ip, diff: false });
   });
+  await createSession(user.id, { ip, userAgent });
+  redirect("/");
+}
+
+/** S-58: second sign-in step — 6-digit code from the user's authenticator app. */
+export async function verifyTwoFactor(_prev: FormState, form: FormData): Promise<FormState> {
+  const code = str(form, "code").trim();
+  if (!/^\d{6}$/.test(code)) return { fieldErrors: { code: "Enter the 6-digit code from your authenticator app." } };
+  const userId = await readPendingUserId();
+  if (!userId) return { message: "Your sign-in expired. Sign in again with your password." };
+  const { ip, userAgent } = await requestMeta();
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user || !user.active || !user.totpSecret) return { message: "Your sign-in expired. Sign in again with your password." };
+  if (await checkLoginRateLimit(db, user.email, ip)) return { message: TOO_MANY_TRIES };
+  let secret: string;
+  try {
+    secret = decryptTotpSecret(user.totpSecret);
+  } catch {
+    return { message: "Two-step sign-in is not set up correctly. Ask an Admin to reset it." };
+  }
+  if (!verifyTotpCode(secret, code)) {
+    await db.$transaction(async (tx) => {
+      await tx.loginAttempt.create({ data: { email: user.email, ip, success: false } });
+      await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login_failed", after: { email: user.email, reason: "wrong two-step code" }, ip, diff: false });
+    });
+    return { message: "That code is not right. Try the current code from your authenticator app." };
+  }
+  await db.$transaction(async (tx) => {
+    await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login", ip, diff: false });
+  });
+  await clearPendingCookie();
   await createSession(user.id, { ip, userAgent });
   redirect("/");
 }

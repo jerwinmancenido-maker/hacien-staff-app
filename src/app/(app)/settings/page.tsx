@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccessReviewCard } from "./AccessReviewCard";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { db } from "@/lib/db";
 import { roleLabel } from "@/lib/permissions";
@@ -374,6 +375,7 @@ async function WithholdingTab({ versionId }: { versionId: string }) {
 
 async function UsersTab() {
   const users = await db.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
+  const lastReview = await db.accessReview.findFirst({ orderBy: { reviewedAt: "desc" } });
   if (!users.length) {
     return (
       <div className="card settings-section">
@@ -416,7 +418,9 @@ async function UsersTab() {
   }));
 
   return (
-    <RecordList
+    <>
+      <AccessReviewCard lastReviewedAt={lastReview?.reviewedAt ?? null} />
+      <RecordList
       listKey="users"
       label="Users"
       items={items}
@@ -427,7 +431,8 @@ async function UsersTab() {
         { key: "status", label: "Status" },
       ]}
       defaultSortKey="name"
-    />
+      />
+    </>
   );
 }
 

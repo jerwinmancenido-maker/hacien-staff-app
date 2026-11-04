@@ -25,6 +25,7 @@ function pickTone(_pick: string[] | null): ChipTone {
 }
 
 export async function CustomerOverview({
+  canSeeTin = true,
   customer,
   contacts,
   canEdit,
@@ -46,6 +47,8 @@ export async function CustomerOverview({
   docStats: OpenDocStats;
   warnDays: number;
   ar?: { aging: AgingAmounts; overdue: string; credit: string; anyOverdue: boolean; balanceDue: string; overdueLabel?: string | null };
+  /** S-58: false hides the TIN row (view-only users). */
+  canSeeTin?: boolean;
 }) {
   const basePath = `/customers/${customer.id}`;
   const activeAddresses = addresses.filter((a) => !a.archivedAt);
@@ -84,12 +87,14 @@ export async function CustomerOverview({
               {ar?.anyOverdue && <OverdueBadge label={ar.overdueLabel ?? "Overdue"} />}
             </div>
             <div className="overview-meta-grid">
-              <div>
-                <div className="meta-label">TIN</div>
-                <div className="meta-val num" style={{ textAlign: "left" }}>
-                  {customer.tin ?? <span className="faint">—</span>}
+              {canSeeTin ? (
+                <div>
+                  <div className="meta-label">TIN</div>
+                  <div className="meta-val num" style={{ textAlign: "left" }}>
+                    {customer.tin ?? <span className="faint">—</span>}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <div>
                 <div className="meta-label">Default terms</div>
                 <div className="meta-val">{customer.defaultTerms ?? <span className="faint">—</span>}</div>

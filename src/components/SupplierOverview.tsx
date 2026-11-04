@@ -17,6 +17,7 @@ const TONE: Record<SupplierTaxType, ChipTone> = {
 };
 
 export async function SupplierOverview({
+  canSeeTin = true,
   supplier,
   contacts,
   canEdit,
@@ -29,6 +30,8 @@ export async function SupplierOverview({
   warnDays,
 }: {
   supplier: Supplier;
+  /** S-58: false hides the TIN row (view-only users). */
+  canSeeTin?: boolean;
   contacts: Contact[];
   canEdit?: boolean;
   isAdmin?: boolean;
@@ -66,12 +69,14 @@ export async function SupplierOverview({
               )}
             </div>
             <div className="overview-meta-grid">
-              <div>
-                <div className="meta-label">TIN</div>
-                <div className="meta-val num" style={{ textAlign: "left" }}>
-                  {supplier.tin ?? <span className="faint">—</span>}
+              {canSeeTin ? (
+                <div>
+                  <div className="meta-label">TIN</div>
+                  <div className="meta-val num" style={{ textAlign: "left" }}>
+                    {supplier.tin ?? <span className="faint">—</span>}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <div>
                 <div className="meta-label">Default terms</div>
                 <div className="meta-val">{supplier.defaultTerms ?? <span className="faint">—</span>}</div>

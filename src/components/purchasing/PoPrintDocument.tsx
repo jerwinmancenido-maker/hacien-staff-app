@@ -14,7 +14,7 @@ export function missingCompanyDetails(company: PoPrintDoc["company"]): string[] 
   return [!company.tin.trim() && "TIN", !company.address.trim() && "address"].filter((v): v is string => !!v);
 }
 
-export function PoPrintDocument({ doc, qrSvg }: { doc: PoPrintDoc; qrSvg: string }) {
+export function PoPrintDocument({ doc, qrSvg, hideCounterpartyTin = false }: { doc: PoPrintDoc; qrSvg: string; /** S-58: true hides the supplier TIN line (view-only users). */ hideCounterpartyTin?: boolean }) {
   return (
     <article className="print-page" aria-label={`Purchase order ${doc.number}`}>
       <header className="print-head">
@@ -63,7 +63,7 @@ export function PoPrintDocument({ doc, qrSvg }: { doc: PoPrintDoc; qrSvg: string
         <div>
           <div className="print-label">Supplier</div>
           <div className="strong">{doc.supplier.name}</div>
-          {doc.supplier.tin && <div>TIN {doc.supplier.tin}</div>}
+          {!hideCounterpartyTin && doc.supplier.tin && <div>TIN {doc.supplier.tin}</div>}
           {doc.supplier.address && <div className="print-pre">{doc.supplier.address}</div>}
         </div>
         <div>

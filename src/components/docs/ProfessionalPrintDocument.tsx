@@ -12,7 +12,7 @@ import type { ProfessionalPrintModel, PrintSignatory } from "@/lib/print/types";
 
 const qty = (q: string) => q.replace(/\.00$/, "");
 
-function PartyBoxes({ party, kind }: { party: ProfessionalPrintModel["party"]; kind: ProfessionalPrintModel["kind"] }) {
+function PartyBoxes({ party, kind, hideCounterpartyTin = false }: { party: ProfessionalPrintModel["party"]; kind: ProfessionalPrintModel["kind"]; hideCounterpartyTin?: boolean }) {
   const customerDoc = kind === "quote" || kind === "sales_order" || kind === "billing" || kind === "collection" || kind === "customer_statement";
   if (!customerDoc) {
     return (
@@ -33,7 +33,7 @@ function PartyBoxes({ party, kind }: { party: ProfessionalPrintModel["party"]; k
             </div>
           )}
           {party.billingAddress && <div className="pp-pre">{party.billingAddress}</div>}
-          {party.tin && <div>TIN {party.tin}</div>}
+          {!hideCounterpartyTin && party.tin && <div>TIN {party.tin}</div>}
         </div>
         <div className="pp-party-box">
           <div className="pp-label">Deliver to</div>
@@ -58,7 +58,7 @@ function PartyBoxes({ party, kind }: { party: ProfessionalPrintModel["party"]; k
           </div>
         )}
         {party.billingAddress && <div className="pp-pre">{party.billingAddress}</div>}
-        {party.tin && <div>TIN {party.tin}</div>}
+        {!hideCounterpartyTin && party.tin && <div>TIN {party.tin}</div>}
       </div>
       <div className="pp-party-box">
         <div className="pp-label">Deliver to</div>
@@ -98,7 +98,7 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
   );
 }
 
-export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel }) {
+export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: { doc: ProfessionalPrintModel; /** S-58: true hides the counterparty TIN line (view-only users). The company's own TIN stays. */ hideCounterpartyTin?: boolean }) {
   const isQuoteOrSo = doc.kind === "quote" || doc.kind === "sales_order";
   const termsBlock =
     doc.termsBlock !== undefined
@@ -164,7 +164,7 @@ export function ProfessionalPrintDocument({ doc }: { doc: ProfessionalPrintModel
         </div>
       </header>
 
-      <PartyBoxes party={doc.party} kind={doc.kind} />
+      <PartyBoxes party={doc.party} kind={doc.kind} hideCounterpartyTin={hideCounterpartyTin} />
 
       {doc.subject?.trim() ? (
         <p className="pp-subject">
