@@ -281,6 +281,21 @@ export async function sumWithholdingCredited(filters: CollectionListFilters = {}
   return fromScaled(cents, 2);
 }
 
+/** S-74: collections posted against this SO's billings (any status). */
+export async function listSalesOrderCollections(salesOrderId: string) {
+  const rows = await db.collection.findMany({
+    where: { allocations: { some: { billing: { salesOrderId } } } },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    number: c.number,
+    date: ymd(c.date)!,
+    amountReceived: money(c.amountReceived),
+    status: c.status,
+  }));
+}
+
 export async function listCollections(filters: CollectionListFilters = {}) {
   const where = collectionsWhere(filters);
   const rows = await db.collection.findMany({
