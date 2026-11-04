@@ -6896,7 +6896,7 @@ button.contact-card-add {
    --------------------------------------------------------------------------- */
 .quote-editor {
   padding-bottom: 88px;
-  max-width: 1000px;
+  max-width: none;
 }
 .quote-details-card .card-head {
   align-items: center;
@@ -6907,9 +6907,11 @@ button.contact-card-add {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* S-67: new-quote details use a tidy 2-column grid — every field one
+   even column, except Subject and Withholding which span the full row. */
 .quote-fg {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 12px;
   padding: 12px 14px 14px;
 }
