@@ -95,7 +95,7 @@ export default async function SalesOrderPage({
                 Create POs
               </Link>
             )}
-            <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} voidAction={voidSalesOrderAction} />
+            <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} voidAction={voidSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} />
           </>
         }
       />
@@ -218,6 +218,7 @@ export default async function SalesOrderPage({
                         <th className="num">Amount</th>
                         <th className="num">Balance</th>
                         <th>Status</th>
+                        <th>Print</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -234,6 +235,11 @@ export default async function SalesOrderPage({
                           <td>
                             <BillingStatusChip status={b.status} /> {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
                           </td>
+                          <td>
+                            <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
+                              Print
+                            </Link>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -246,6 +252,9 @@ export default async function SalesOrderPage({
                       <span>{day(b.invoiceDate)}</span>
                       <span>{b.expectedPaymentLabel ? b.expectedPaymentLabel : `Due ${day(b.dueDate)}`}</span>
                       <span className="num">{formatPeso(b.amount)}</span>
+                      <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
+                        Print
+                      </Link>
                     </li>
                   ))}
                 </ul>
