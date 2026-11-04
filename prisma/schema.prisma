@@ -68,6 +68,7 @@ model User {
   purchaseOrdersApproved PurchaseOrder[]      @relation("PurchaseOrderApprovedBy")
   receivingReportsBy     ReceivingReport[]    @relation("ReceivingReportReceivedBy")
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
+  supplierReturnsMade  SupplierReturn[]     @relation("SupplierReturnCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
   accessReviewsMade  AccessReview[]
@@ -189,6 +190,8 @@ model Customer {
   // Changing this never rewrites existing quotes, SOs or billings.
   defaultWithholding Json?
   defaultTerms       String?         @db.VarChar(100)
+  // S-54: credit limit in pesos; null = no limit. Warnings only, never a block.
+  creditLimit        Decimal?        @db.Decimal(15, 2)
   notes              String?         @db.Text
   // Q16 S-95: per-customer order text updates switch, ON by default.
   // The order texts themselves stay OFF until the go-live gate in Settings
@@ -581,6 +584,7 @@ enum DocType {
   SUPPLIER_PAYMENT
   EXPENSE
   CASH_TRANSFER
+  SUPPLIER_RETURN
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -757,6 +761,9 @@ model QuoteItem {
 model SalesOrder {
   id                String           @id @default(cuid())
   number            String           @unique @db.VarChar(40)
+  // S-93: random tracking reference for new orders (TRK- + 16 base32 chars).
+  // Null on orders created before S-93; the SO number keeps working for those.
+  trackingRef       String?          @unique @db.VarChar(24)
   quoteId           String
   quote             Quote            @relation(fields: [quoteId], references: [id])
   customerId        String
@@ -962,6 +969,7 @@ model PurchaseOrder {
   items            PurchaseOrderItem[]
   receivingReports ReceivingReport[]
   bills            SupplierBill[]
+  supplierReturns  SupplierReturn[]
 
   @@index([supplierId])
   @@index([salesOrderId])
@@ -999,6 +1007,7 @@ model PurchaseOrderItem {
 
   receivingItems ReceivingReportItem[]
   billItems      SupplierBillItem[]
+  returnItems    SupplierReturnItem[]
 
   @@index([purchaseOrderId])
   @@index([salesOrderItemId])
@@ -1047,6 +1056,51 @@ model ReceivingReportItem {
   serialNumbers       String?           @db.Text
 
   @@index([receivingReportId])
+  @@index([purchaseOrderItemId])
+}
+
+// S-50: returns to supplier (RMA). Posting reduces the PO line's receivedQty
+// (same lock pattern as receiving); voiding adds it back. The optional credit
+// note is a reference only — it never changes bill or payment amounts.
+enum SupplierReturnStatus {
+  POSTED
+  VOID
+}
+
+model SupplierReturn {
+  id               String               @id @default(cuid())
+  number           String               @unique @db.VarChar(40)
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id])
+  returnDate       DateTime             @db.Date
+  reason           String?              @db.Text
+  // Supplier's credit note for this return, if any (reference only).
+  creditNoteNumber String?              @db.VarChar(64)
+  creditNoteAmount Decimal?             @db.Decimal(15, 2)
+  status           SupplierReturnStatus @default(POSTED)
+  voidedAt         DateTime?
+  voidReason       String?              @db.Text
+  createdById      String
+  createdBy        User                 @relation("SupplierReturnCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  items SupplierReturnItem[]
+
+  @@index([purchaseOrderId])
+  @@index([status])
+  @@index([returnDate])
+}
+
+model SupplierReturnItem {
+  id                String         @id @default(cuid())
+  supplierReturnId  String
+  supplierReturn    SupplierReturn @relation(fields: [supplierReturnId], references: [id])
+  purchaseOrderItemId String
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
+  qtyReturned       Decimal        @db.Decimal(12, 2)
+
+  @@index([supplierReturnId])
   @@index([purchaseOrderItemId])
 }
 

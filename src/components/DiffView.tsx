@@ -4,9 +4,30 @@ import { auditDisplayValue } from "@/lib/audit";
 
 type Json = unknown;
 
-function show(v: Json): string {
+function humanKey(k: string): string {
+  const words = k
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase();
+  return words.replace(/^./, (c) => c.toUpperCase());
+}
+
+/**
+ * S-101: plain readable lines, never raw JSON. An items array renders as
+ * one "Description: …, Qty: …, …" line per item, joined by "; ".
+ */
+export function readableDiffValue(v: Json): string {
   if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "object") return JSON.stringify(v);
+  if (Array.isArray(v)) {
+    if (!v.length) return "—";
+    return v.map((el) => readableDiffValue(el)).join("; ");
+  }
+  if (typeof v === "object") {
+    const parts = Object.entries(v as Record<string, Json>)
+      .filter(([, val]) => val !== null && val !== undefined && val !== "")
+      .map(([k, val]) => `${humanKey(k)}: ${readableDiffValue(val)}`);
+    return parts.length ? parts.join(", ") : "—";
+  }
   return String(v);
 }
 
@@ -19,8 +40,8 @@ export function DiffView({ before, after }: { before: Json; after: Json }) {
     <div className="diff">
       {keys.map((k) => (
         <div key={k}>
-          {k}: {k in b && <span className="old">{show(auditDisplayValue(k, b[k]))}</span>} {k in b && "→ "}
-          <span>{show(auditDisplayValue(k, a[k]))}</span>
+          {humanKey(k)}: {k in b && <span className="old">{readableDiffValue(auditDisplayValue(k, b[k]))}</span>} {k in b && "→ "}
+          <span>{readableDiffValue(auditDisplayValue(k, a[k]))}</span>
         </div>
       ))}
     </div>

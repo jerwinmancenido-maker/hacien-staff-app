@@ -12,7 +12,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 describe("S-84 audit log in Settings", () => {
   it("Settings has an Audit log tab and the sidebar no longer lists it", () => {
     const settings = read("src/app/(app)/settings/page.tsx");
-    expect(settings).toContain('{ key: "audit", label: "Audit log" }');
+    expect(settings).toContain('key: "audit", label: "Audit log"');
     expect(settings).toContain("AuditLogTab");
     const sidebar = read("src/components/Sidebar.tsx");
     expect(sidebar).not.toContain('href: "/audit"');

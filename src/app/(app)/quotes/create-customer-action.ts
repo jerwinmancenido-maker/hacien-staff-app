@@ -54,6 +54,7 @@ export type CreatedQuoteCustomer = {
   withholdingType: string;
   /** null = not set, [] = none, [codes] = picks. */
   defaultWithholding: string[] | null;
+  creditLimit: string | null;
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 
@@ -236,6 +237,7 @@ export async function createCustomerForQuoteAction(
       defaultTerms: newCustomer.defaultTerms,
       withholdingType: newCustomer.withholdingType,
       defaultWithholding: parseWithholdingPick(newCustomer.defaultWithholding),
+      creditLimit: newCustomer.creditLimit === null ? null : String(newCustomer.creditLimit),
       contacts: newContacts,
     };
     return { ok: true, message: "Customer saved." };

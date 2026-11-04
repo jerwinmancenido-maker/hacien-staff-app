@@ -102,6 +102,14 @@ export function customerSchema(
         ])
         .optional(),
       defaultTerms: termsRequired ? requiredTermsField(allowedTerms) : termsField(allowedTerms),
+      // S-54: blank = no limit; otherwise a non-negative peso amount.
+      creditLimit: z
+        .string()
+        .trim()
+        .transform((v) => v.replace(/,/g, ""))
+        .refine((v) => v === "" || /^\d{1,10}(\.\d{1,2})?$/.test(v), "Credit limit: enter a peso amount with up to 2 decimals.")
+        .transform((v) => (v === "" ? null : v))
+        .optional(),
       notes: optionalText(5000),
       // Q16 S-95: on by default; a missing value (older posts) stays on.
       // Optional on input; saveCustomer defaults it to true (and the DB

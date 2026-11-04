@@ -20,7 +20,7 @@ describe("S-67 new quote page redesign", () => {
     expect(src).toContain('className="wh-collapsed-row"');
     expect(src).toContain("WITHHOLDING_PICK_CHANGE_LABEL");
     // The checkbox field only renders when the user opens it.
-    expect(src).toContain("{whPickOpen ? (");
+    expect(src).toContain("{whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (");
     expect(src).toContain("<WithholdingPickField");
   });
 

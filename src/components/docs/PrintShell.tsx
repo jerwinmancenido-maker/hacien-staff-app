@@ -36,7 +36,7 @@ export function PrintShell({
           <p className="tax-cal-notice-line">
             {warning}{" "}
             {canManageSettings ? (
-              <Link href="/settings?tab=print">Settings → Print &amp; company</Link>
+              <Link href="/settings?tab=company">Settings → Company and letterhead</Link>
             ) : (
               "Ask an admin to fill in Print & company details."
             )}

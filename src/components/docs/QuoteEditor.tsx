@@ -38,6 +38,7 @@ import {
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
   WITHHOLDING_PICK_CHANGE_LABEL,
+  withholdingPickBoxesHidden,
   allowGovVatOption,
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
@@ -207,6 +208,7 @@ function toEditorCustomer(c: EditorCustomer | (Omit<EditorCustomer, "defaultWith
     defaultTerms: c.defaultTerms,
     withholdingType: c.withholdingType,
     defaultWithholding: c.defaultWithholding ?? null,
+    creditLimit: c.creditLimit ?? null,
     contacts: c.contacts,
   };
 }
@@ -841,17 +843,19 @@ export function QuoteEditor({
                 <span className="label">Withholding</span>
                 <div className="wh-collapsed-line">
                   <span>{quotePickHint}</span>
-                  <button
-                    type="button"
-                    className="btn-link"
-                    onClick={() => setWhPickOpen((o) => !o)}
-                    aria-expanded={whPickOpen}
-                  >
-                    {WITHHOLDING_PICK_CHANGE_LABEL}
-                  </button>
+                  {!withholdingPickBoxesHidden(customer?.withholdingType) && (
+                    <button
+                      type="button"
+                      className="btn-link"
+                      onClick={() => setWhPickOpen((o) => !o)}
+                      aria-expanded={whPickOpen}
+                    >
+                      {WITHHOLDING_PICK_CHANGE_LABEL}
+                    </button>
+                  )}
                 </div>
               </div>
-              {whPickOpen ? (
+              {whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (
                 <WithholdingPickField
                   rates={visibleRates(rates)}
                   value={pick}

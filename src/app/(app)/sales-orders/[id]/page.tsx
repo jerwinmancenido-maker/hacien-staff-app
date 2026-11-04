@@ -236,6 +236,8 @@ export default async function SalesOrderPage({
                   <dd>{day(so.buyerPoDate)}</dd>
                   <dt>SO date</dt>
                   <dd>{day(so.date)}</dd>
+                  <dt>Tracking ref</dt>
+                  <dd>{so.trackingRef ?? "—"}</dd>
                   <dt>Contact</dt>
                   <dd>{so.contact ? `${so.contact.name}${so.contact.email ? ` · ${so.contact.email}` : ""}` : "—"}</dd>
                   <dt>Delivery address</dt>

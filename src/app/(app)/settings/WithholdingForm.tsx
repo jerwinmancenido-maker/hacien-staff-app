@@ -59,6 +59,11 @@ export function WithholdingForm({
           setConfirming(true);
         }}
       >
+        <div className="edit-topbar">
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -168,9 +173,6 @@ export function WithholdingForm({
             onClick={() => setRows((rs) => [...rs, { code: "", label: "", lineKind: "GOODS", atcCode: "", ratePct: "", active: true, note: "verify with BIR" }])}
           >
             Add rate
-          </button>
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
           </button>
         </div>
       </form>

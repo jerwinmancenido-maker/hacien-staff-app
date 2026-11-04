@@ -127,6 +127,12 @@ export async function CustomerOverview({
         </div>
       </div>
 
+      {customer.creditLimit != null && ar && Number(ar.balanceDue) > Number(customer.creditLimit) && (
+        <div className="alert warn" role="status">
+          Over credit limit — balance due {formatPeso(ar.balanceDue)} vs limit {formatPeso(customer.creditLimit)}.
+        </div>
+      )}
+
       {/* 2. Stat Cards Grid */}
       <div className="stat-grid">
         <Link className={`card stat stat-link${ar && Number(ar.overdue) > 0 ? " stat-red" : ""}`} href={`${basePath}?tab=balances`}>

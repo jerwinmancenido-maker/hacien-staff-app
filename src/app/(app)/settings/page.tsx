@@ -20,7 +20,6 @@ import {
   incomeTaxMethodSelectYears,
 } from "@/lib/tax/income-tax-method";
 import { RecordList, type RecordItem } from "@/components/RecordList";
-import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
@@ -31,21 +30,36 @@ import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
 import { AuditLogTab } from "./AuditLogTab";
 
-const TABS = [
-  { key: "users", label: "Users" },
-  { key: "approval", label: "Approval rules" },
-  { key: "numbering", label: "Numbering" },
-  { key: "tax", label: "Tax year" },
-  { key: "tax-calendar", label: "Tax calendar" },
-  { key: "withholding", label: "Withholding" },
-  { key: "billing", label: "Billing" },
-  { key: "features", label: "Features" },
-  { key: "print", label: "Print & company" },
-  { key: "lists", label: "Lists" },
-  { key: "changelog", label: "Change log" },
-  { key: "audit", label: "Audit log" },
+// S-85: Settings is a left list of sections. Old ?tab= keys still resolve
+// to their section, so bookmarks and links keep working.
+const SECTIONS = [
+  { key: "company", label: "Company and letterhead", help: "Your company details and the letterhead on every print. Changes apply to new documents only." },
+  { key: "documents", label: "Documents and numbering", help: "How document numbers run, and when business documents warn about expiry." },
+  { key: "quote-terms", label: "Quote terms", help: "Approval limits, quote validity, and the payment terms offered on quotes." },
+  { key: "tax", label: "Tax and BIR", help: "Tax year, BIR calendar, and withholding rates. Check with your accountant when unsure." },
+  { key: "booklet", label: "Invoice booklet", help: "Booklet invoice numbers and how collections are recorded." },
+  { key: "users", label: "Users and roles", help: "Who can sign in, and what each person may do." },
+  { key: "audit", label: "Audit log", help: "Every change, sign-in and settings save, plus past settings versions. Records are never deleted." },
 ] as const;
-type Tab = (typeof TABS)[number]["key"];
+type Section = (typeof SECTIONS)[number]["key"];
+const SECTION_BY_TAB: Record<string, Section> = {
+  company: "company",
+  print: "company",
+  features: "company",
+  documents: "documents",
+  numbering: "documents",
+  "quote-terms": "quote-terms",
+  approval: "quote-terms",
+  lists: "quote-terms",
+  tax: "tax",
+  "tax-calendar": "tax",
+  withholding: "tax",
+  booklet: "booklet",
+  billing: "booklet",
+  users: "users",
+  audit: "audit",
+  changelog: "audit",
+};
 
 function show(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
@@ -57,7 +71,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   await requirePagePermission("manage_settings");
   const allParams = await searchParams;
   const { tab: raw } = allParams;
-  const tab: Tab = TABS.some((t) => t.key === raw) ? (raw as Tab) : "users";
+  const section: Section = SECTION_BY_TAB[raw ?? ""] ?? "company";
   const snap = await getSettingsSnapshot();
   const s = snap.settings;
   const save = (key: string) => saveSettingsAction.bind(null, key);
@@ -68,23 +82,29 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         title="Settings"
         subtitle={`Version ${snap.version} · in effect since ${formatDateTime(snap.effectiveFrom)}. Every save makes a new version; existing documents keep theirs.`}
         actions={
-          tab === "users" && (
+          section === "users" && (
             <Link className="btn" href="/settings/users/new">
               <PlusIcon /> Add user
             </Link>
           )
         }
       />
-      <PillTabs
-        active={tab}
-        size="sm"
-        className="settings-pill-tabs"
-        tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: `/settings?tab=${t.key}` }))}
-      />
-      <div className="settings-page">
-        {tab === "users" && <UsersTab />}
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {SECTIONS.map((t) => (
+            <Link key={t.key} className={`settings-nav-link${section === t.key ? " active" : ""}`} href={`/settings?tab=${t.key}`}>
+              {t.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="settings-page">
+          <div className="card settings-section-intro">
+            <h2 className="settings-section-title">{SECTIONS.find((t) => t.key === section)?.label}</h2>
+            <p className="small muted">{SECTIONS.find((t) => t.key === section)?.help}</p>
+          </div>
+        {section === "users" && <UsersTab />}
 
-        {tab === "approval" && (
+        {section === "quote-terms" && (
           <>
             <SettingsForm
               title="Approval rules"
@@ -114,7 +134,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </>
         )}
 
-        {tab === "numbering" && (
+        {section === "documents" && (
           <NumberingForm
             label={SETTINGS_LABELS.numbering}
             versionId={snap.versionId}
@@ -124,7 +144,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "tax" && (
+        {section === "tax" && (
           <SettingsForm
             title="Tax year"
             label={SETTINGS_LABELS.taxYear}
@@ -198,7 +218,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "tax-calendar" && (
+        {section === "tax" && (
           <TaxCalendarForm
             label={SETTINGS_LABELS.taxCalendar}
             versionId={snap.versionId}
@@ -210,9 +230,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "withholding" && <WithholdingTab versionId={snap.versionId} />}
+        {section === "tax" && <WithholdingTab versionId={snap.versionId} />}
 
-        {tab === "billing" && (
+        {section === "booklet" && (
           <>
             <SettingsForm
               title="Invoice booklet"
@@ -270,7 +290,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </>
         )}
 
-        {tab === "features" && (
+        {section === "company" && (
           <SettingsForm
             title="Features"
             label={SETTINGS_LABELS.features}
@@ -309,7 +329,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "print" && (
+        {section === "company" && (
           <PrintCompanyForm
             company={s.company}
             print={s.print}
@@ -318,7 +338,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "lists" && (
+        {section === "quote-terms" && (
           <SettingsForm
             title="Lists"
             label={SETTINGS_LABELS.lists}
@@ -331,7 +351,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "lists" && (
+        {section === "documents" && (
           <SettingsForm
             title="Business documents"
             label={SETTINGS_LABELS.documents}
@@ -349,21 +369,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {tab === "changelog" && <ChangeLog />}
-
-        {tab === "audit" && (
-          <AuditLogTab
-            search={{
-              entity: allParams.entity,
-              action: allParams.action,
-              user: allParams.user,
-              from: allParams.from,
-              to: allParams.to,
-              page: allParams.page,
-            }}
-          />
+        {section === "audit" && (
+          <>
+            <AuditLogTab
+              search={{
+                entity: allParams.entity,
+                action: allParams.action,
+                user: allParams.user,
+                from: allParams.from,
+                to: allParams.to,
+                page: allParams.page,
+              }}
+            />
+            <ChangeLog />
+          </>
         )}
       </div>
+    </div>
     </div>
   );
 }

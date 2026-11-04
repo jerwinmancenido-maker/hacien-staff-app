@@ -1,7 +1,7 @@
 "use client";
 
 // Top-right of the PO page: the next step as the primary button, plus
-// Actions ▾ (Edit, Print / Save PDF, Email, Receive, Record bill, Close, Void).
+// Actions ▾ (Edit, Print / Save PDF, Email, Receive, Return items, Record bill, Close, Void).
 // The server re-checks every action (permission, cost access, status).
 
 import { useState, useTransition } from "react";
@@ -66,6 +66,7 @@ export function PoActions({
     items.push({ key: "email", label: "Email draft", onSelect: () => run(() => actions.email(id)) });
   }
   if (canEdit && receivable) items.push({ key: "receive", label: "Receive items", href: `/receiving/${id}/new` });
+  if (canEdit && ["SENT", "PARTIALLY_RECEIVED", "RECEIVED"].includes(status)) items.push({ key: "return", label: "Return items", href: `/purchase-orders/${id}/returns/new` });
   if (canEdit && ["SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"].includes(status)) items.push({ key: "bill", label: "Record supplier bill", href: `/purchase-orders/${id}/bill` });
   if (canEdit && (status === "PARTIALLY_RECEIVED" || status === "RECEIVED")) items.push({ key: "close", label: status === "PARTIALLY_RECEIVED" ? "Short-close" : "Close", onSelect: () => setDialog("close") });
   if (canVoid && ["DRAFT", "APPROVED", "SENT"].includes(status) && postedReceipts === 0) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });

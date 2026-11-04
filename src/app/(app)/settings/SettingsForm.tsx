@@ -62,6 +62,12 @@ export function SettingsForm({
           setConfirming(true);
         }}
       >
+        <div className="edit-topbar">
+          {showDocumentsOnlyFooter && (<span className="small faint">Changes apply to new documents only.</span>)}
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -135,14 +141,6 @@ export function SettingsForm({
               </div>
             );
           })}
-        </div>
-        <div className="form-actions settings-form-actions">
-          {showDocumentsOnlyFooter && (
-            <span className="small faint settings-form-footnote">Changes apply to new documents only.</span>
-          )}
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
         </div>
       </form>
       <ConfirmDialog

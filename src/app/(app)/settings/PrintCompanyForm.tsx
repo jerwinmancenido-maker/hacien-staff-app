@@ -122,6 +122,12 @@ export function PrintCompanyForm({
           if (t.name === "paperSize") setLive((prev) => ({ ...prev, paperSize: t.value as "A4" | "Letter" }));
         }}
       >
+        <div className="edit-topbar">
+          <span className="small faint">Changes apply to new documents; current letterhead also feeds PO/statement prints.</span>
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -407,14 +413,6 @@ export function PrintCompanyForm({
           </aside>
         </div>
 
-        <div className="form-actions settings-form-actions">
-          <span className="small faint settings-form-footnote">
-            Changes apply to new documents; current letterhead also feeds PO/statement prints.
-          </span>
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
-        </div>
       </form>
       <ConfirmDialog
         open={confirming}

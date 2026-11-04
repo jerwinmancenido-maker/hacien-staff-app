@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireCostPage } from "@/lib/auth/current-user";
 import { can, canVoid } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
+import { listSupplierReturns } from "@/lib/services/returns";
 import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import { Activity } from "@/components/Activity";
@@ -23,9 +24,10 @@ import {
   markPurchaseOrderSentAction,
   voidBillAction,
   voidPurchaseOrderAction,
+  voidSupplierReturnAction,
 } from "../actions";
 
-const TABS = ["overview", "receiving", "bills", "match", "attachments"] as const;
+const TABS = ["overview", "receiving", "bills", "match", "attachments", "returns"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function PurchaseOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
@@ -36,6 +38,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const po = await getPurchaseOrderView(id, user);
   if (!po) notFound();
+  const returns = await listSupplierReturns(id);
   const canEdit = can(user, "edit_data");
   const canApprove = can(user, "approve") && po.approval.canApprove;
   const base = `/purchase-orders/${id}`;
@@ -92,6 +95,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           { key: "overview", label: "Overview", href: base },
           { key: "receiving", label: "Receiving", count: po.receivingReports.filter((r) => r.status === "POSTED").length, href: `${base}?tab=receiving` },
           { key: "bills", label: "Bills", count: liveBills.length, href: `${base}?tab=bills` },
+          { key: "returns", label: "Returns", count: returns.filter((r) => r.status === "POSTED").length, href: `${base}?tab=returns` },
           {
             key: "attachments",
             label: "Attachments",
@@ -239,6 +243,70 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             <EmptyState line={po.status === "DRAFT" || po.status === "APPROVED" ? "Items can be received once the PO is sent." : "Nothing received yet."} />
           ) : (
             <RrTable reports={po.receivingReports} poId={id} canVoid={canVoid(user) && po.status !== "CLOSED"} voidAction={voidReceivingReportAction} />
+          )}
+        </div>
+      )}
+
+      {tab === "returns" && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Returns to supplier</h2>
+          </div>
+          {returns.length === 0 ? (
+            <EmptyState line="Nothing returned yet." />
+          ) : (
+            <div className="table-wrap">
+              <table className="list" aria-label="Supplier returns">
+                <thead>
+                  <tr>
+                    <th>RMA no.</th>
+                    <th>Returned</th>
+                    <th>Items</th>
+                    <th>Credit note</th>
+                    <th>Status</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {returns.map((r) => (
+                    <tr key={r.id} className={r.status === "VOID" ? "inactive" : undefined}>
+                      <td className="strong">{r.number}</td>
+                      <td>{day(r.returnDate)}</td>
+                      <td className="small">
+                        {r.items.map((x, n) => (
+                          <div key={n}>
+                            {x.description.split("\n")[0]}: <b>{qtyText(x.qty)}</b>
+                          </div>
+                        ))}
+                        {r.reason && <div className="faint">{r.reason}</div>}
+                        {r.voidReason && <div className="faint">Void: {r.voidReason}</div>}
+                      </td>
+                      <td className="small">
+                        {r.creditNoteNumber ? (
+                          <>
+                            {r.creditNoteNumber}
+                            {r.creditNoteAmount && <div className="faint">{formatPeso(r.creditNoteAmount)}</div>}
+                          </>
+                        ) : (
+                          <span className="faint">—</span>
+                        )}
+                      </td>
+                      <td>{r.status === "VOID" ? "Void" : "Posted"}</td>
+                      <td>
+                        {r.status !== "VOID" && canVoid(user) && (
+                          <VoidButton
+                            label="Void"
+                            docLabel="supplier return"
+                            body={`${r.number} will be marked Void and its quantities put back on the PO.`}
+                            onVoid={voidSupplierReturnAction.bind(null, id, r.id)}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

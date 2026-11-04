@@ -156,6 +156,9 @@ export function CustomerForm({
               ))}
             </select>
           </Field>
+          <Field label="Credit limit (₱)" name="creditLimit" error={e.creditLimit} hint="Blank = no limit. Warns when the balance due passes it; never blocks a quote.">
+            <input id="creditLimit" name="creditLimit" type="text" inputMode="decimal" defaultValue={v("creditLimit") == null ? "" : String(v("creditLimit"))} placeholder="e.g. 500000" />
+          </Field>
           <Field label="Notes" name="notes" error={e.notes} full>
             <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
           </Field>

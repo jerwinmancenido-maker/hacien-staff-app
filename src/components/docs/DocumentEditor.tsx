@@ -53,6 +53,8 @@ export type EditorCustomer = {
   withholdingType: string;
   /** null = not set, [] = none, [codes] = picks. */
   defaultWithholding: string[] | null;
+  /** S-54: null = no limit. Money string from Prisma Decimal. */
+  creditLimit: string | null;
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 

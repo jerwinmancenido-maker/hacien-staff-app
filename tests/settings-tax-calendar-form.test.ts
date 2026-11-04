@@ -107,7 +107,7 @@ describe("TaxCalendarForm markup", () => {
     expect(html).toContain(SHARED_DAY);
     expect(html).toContain(UNDATED_HINT);
     expect(html).toContain(QUARTERLY_HINT);
-    expect(html).toContain("settings-form-actions");
+    expect(html).toContain("edit-topbar");
     expect(html).toContain("Save changes");
 
     // Shared default hints appear once in desktop headers + once in the mobile banner
@@ -223,7 +223,7 @@ describe("SettingsForm layout helpers", () => {
     );
     expect(html).toContain("settings-section");
     expect(html).toContain("settings-section-title");
-    expect(html).toContain("settings-form-actions");
+    expect(html).toContain("edit-topbar");
     expect(html).toContain("field-check");
     expect(html).not.toContain("&nbsp;");
     expect(html).toContain('for="marginBelowPct"');

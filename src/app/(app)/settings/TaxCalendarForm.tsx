@@ -68,6 +68,11 @@ export function TaxCalendarForm({
           setConfirming(true);
         }}
       >
+        <div className="edit-topbar">
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -209,11 +214,6 @@ export function TaxCalendarForm({
           </table>
         </div>
 
-        <div className="form-actions settings-form-actions">
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
-        </div>
       </form>
       <ConfirmDialog
         open={confirming}

@@ -30,17 +30,17 @@ import { missingFieldsPrintConfirm, missingFieldsPrintWarning } from "@/lib/prin
 import { quotePrintFixture } from "./fixtures/print-doc";
 
 describe("feature-off page", () => {
-  it("names the feature and points staff to Settings > Features", () => {
+  it("names the feature and points staff to Settings > Company and letterhead", () => {
     expect(featureOffMessage("Books")).toBe(
-      "This part (Books) is turned off. Ask your admin to turn it on in Settings > Features.",
+      "This part (Books) is turned off. Ask your admin to turn it on in Settings > Company and letterhead.",
     );
     expect(featureOffMessage("Cash")).toContain("(Cash)");
     expect(featureOffMessage("Payables")).toContain("(Payables)");
 
     const html = renderToStaticMarkup(createElement(FeatureOffPage, { feature: "Books" }));
     expect(html).toContain("This part (Books) is turned off");
-    expect(html).toContain("Settings &gt; Features");
-    expect(html).toContain('href="/settings?tab=features"');
+    expect(html).toContain("Settings &gt; Company and letterhead");
+    expect(html).toContain('href="/settings?tab=company"');
     expect(html).not.toContain("404");
   });
 });
@@ -124,7 +124,7 @@ describe("print missing-fields warning names only what is missing", () => {
     const { html, alert } = alertText(["TIN"]);
     expect(alert).toBe("Add your TIN so it prints on documents.");
     expect(alert.toLowerCase()).not.toContain("address");
-    expect(html).toContain('href="/settings?tab=print"');
+    expect(html).toContain('href="/settings?tab=company"');
   });
 
   it("address only", () => {

@@ -21,6 +21,7 @@ export async function editorCustomers(where: { id?: string } = {}): Promise<Edit
     defaultTerms: c.defaultTerms,
     withholdingType: c.withholdingType,
     defaultWithholding: parseWithholdingPick(c.defaultWithholding),
+    creditLimit: c.creditLimit === null ? null : String(c.creditLimit),
     contacts: c.contacts.map((k) => ({ id: k.id, name: k.name, isMain: k.isMain })),
   }));
 }

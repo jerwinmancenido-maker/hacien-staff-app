@@ -19,6 +19,11 @@ export function UserForm({ user, action }: { user: User | null; action: (s: Form
   const current = user ? rolesOf(user) : ["STAFF"];
   return (
     <form onSubmit={onSubmit} noValidate>
+        <div className="edit-topbar">
+          <button className="btn" type="submit" disabled={pending}>
+            {pending ? "Saving…" : user ? "Save" : "Add user and send invite"}
+          </button>
+        </div>
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
@@ -68,11 +73,6 @@ export function UserForm({ user, action }: { user: User | null; action: (s: Form
             </span>
           </label>
         </div>
-      </div>
-      <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending}>
-          {pending ? "Saving…" : user ? "Save" : "Add user and send invite"}
-        </button>
       </div>
     </form>
   );
