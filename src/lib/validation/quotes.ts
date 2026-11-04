@@ -5,6 +5,15 @@ import {
   isWithholdingRateInRange,
 } from "../quotes/withholding-percent";
 import { isUnchangedLegacyQuoteValidity, validityDaysFromDates } from "../quotes/validity";
+import { docTotals, toScaled } from "../quotes/calc";
+
+/** Shown when a quote total is ₱0 or less — on save and on mark-as-sent. */
+export const QUOTE_ZERO_TOTAL_ERROR = "A quote total must be more than ₱0.";
+
+/** Contract-price strings have 2 decimals; a total is savable only when above ₱0. */
+export function quoteTotalIsPositive(total: string): boolean {
+  return toScaled(total, 2) > 0n;
+}
 
 export const ITEM_KINDS = ["GOODS", "SERVICES"] as const;
 export const ITEM_KIND_LABELS: Record<(typeof ITEM_KINDS)[number], string> = { GOODS: "Goods", SERVICES: "Services" };
@@ -131,7 +140,13 @@ const quoteInputObject = z.object({
     reapplyWithholding: z.boolean().optional(),
     items,
   })
-  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] });
+  .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] })
+  // S-78: a quote total of ₱0 or less can never be saved (create or edit).
+  // Same math as the service stores (per-line qty × price, rounded to centavos).
+  .refine((v) => quoteTotalIsPositive(docTotals(v.items).contractPrice), {
+    message: QUOTE_ZERO_TOTAL_ERROR,
+    path: ["items"],
+  });
 
 /** New quotes, and edits that change the quote date or valid-until. */
 export const quoteInputSchema = quoteInputObject.refine(
