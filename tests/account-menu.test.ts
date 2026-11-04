@@ -10,11 +10,15 @@ function user(roles: Role[]): PermissionUser {
 
 describe("account menu items", () => {
   it("always includes Sign out; Settings only when manage_settings is allowed", () => {
-    expect(accountMenuActionKeys(true)).toEqual(["password", "settings", "signout"]);
-    expect(accountMenuActionKeys(false)).toEqual(["password", "signout"]);
-    expect(accountMenuNavItems(false)).toEqual([{ key: "password", href: "/account/password", label: "Change password" }]);
+    expect(accountMenuActionKeys(true)).toEqual(["password", "two-step", "settings", "signout"]);
+    expect(accountMenuActionKeys(false)).toEqual(["password", "two-step", "signout"]);
+    expect(accountMenuNavItems(false)).toEqual([
+      { key: "password", href: "/account/password", label: "Change password" },
+      { key: "two-step", href: "/account/two-step", label: "Two-step sign-in" },
+    ]);
     expect(accountMenuNavItems(true)).toEqual([
       { key: "password", href: "/account/password", label: "Change password" },
+      { key: "two-step", href: "/account/two-step", label: "Two-step sign-in" },
       { key: "settings", href: "/settings", label: "Settings" },
     ]);
   });

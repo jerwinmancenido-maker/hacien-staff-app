@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { WithholdingType } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { listCustomers } from "@/lib/services/companies";
 import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
 import { formatAddress } from "@/lib/addresses/format";
@@ -37,8 +37,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const expiringOnly = s.docs === "expiring";
   const warnDays = await expiryWarningDays();
   const expiringIds = await ownersWithExpiringDocuments("customer", warnDays);
+  const showTin = canSeeTin(user);
   const customers = await listCustomers({
     q: s.q,
+    matchTin: showTin,
     withholding: wh,
     withholdingPick: whNotSet ? "NOT_SET" : undefined,
     showInactive,
@@ -63,7 +65,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     inactive: !c.active,
     avatarName: c.name,
     title: c.name,
-    subtitle: c.tin ? (
+    subtitle: showTin && c.tin ? (
       <span className="num" style={{ textAlign: "left" }}>
         {c.tin}
       </span>
@@ -82,7 +84,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       ...(!c.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
     ],
     meta: [
-      { label: "TIN", value: c.tin ?? "—" },
+      ...(showTin ? [{ label: "TIN", value: c.tin ?? "—" }] : []),
       { label: "Terms", value: c.defaultTerms ?? "—" },
       { label: "Address", value: address ?? "—" },
     ],
@@ -99,7 +101,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     ],
     sortValues: {
       name: c.name,
-      tin: c.tin ?? "",
+      tin: showTin ? (c.tin ?? "") : "",
       wh: WITHHOLDING_LABELS[c.withholdingType],
       terms: c.defaultTerms ?? "",
       balance: 0,
@@ -179,7 +181,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         }
         sortColumns={[
           { key: "name", label: "Name" },
-          { key: "tin", label: "TIN" },
+          ...(showTin ? [{ key: "tin", label: "TIN" }] : []),
           { key: "terms", label: "Terms" },
           { key: "balance", label: "Balance", numeric: true },
         ]}

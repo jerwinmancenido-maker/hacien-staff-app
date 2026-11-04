@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { getCustomer } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
@@ -109,7 +109,7 @@ export default async function CustomerPage({
         }
         subtitle={
           [
-            customer.tin ? `TIN: ${customer.tin}` : null,
+            canSeeTin(user) && customer.tin ? `TIN: ${customer.tin}` : null,
             main ? `Main contact: ${main.name}` : null,
           ]
             .filter(Boolean)
@@ -182,6 +182,7 @@ export default async function CustomerPage({
 
       {tab === "overview" && (
         <CustomerOverview
+          canSeeTin={canSeeTin(user)}
           customer={customer}
           contacts={contacts}
           canEdit={canEdit}
@@ -203,6 +204,7 @@ export default async function CustomerPage({
             rates={rates}
             action={saveCustomerAction.bind(null, id)}
             canEdit={canEdit}
+            canSeeTin={canSeeTin(user)}
             canEditWithholding={user.isAdmin}
             addresses={addresses}
           />

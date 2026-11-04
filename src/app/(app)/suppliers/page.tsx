@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { SupplierTaxType } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { listSuppliers } from "@/lib/services/companies";
 import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
 import { formatAddress } from "@/lib/addresses/format";
@@ -36,7 +36,8 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const expiringOnly = s.docs === "expiring";
   const warnDays = await expiryWarningDays();
   const expiringIds = await ownersWithExpiringDocuments("supplier", warnDays);
-  const rawSuppliers = await listSuppliers({ q: s.q, taxType: tax, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
+  const showTin = canSeeTin(user);
+  const rawSuppliers = await listSuppliers({ q: s.q, matchTin: showTin, taxType: tax, showInactive, ...(expiringOnly ? { onlyIds: expiringIds } : {}) });
   const suppliers = maskSuppliersForViewer(rawSuppliers, user);
   const filtered = !!(s.q || tax || expiringOnly);
 
@@ -57,7 +58,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       inactive: !x.active,
       avatarName: x.name,
       title: x.name,
-      subtitle: x.tin ? (
+      subtitle: showTin && x.tin ? (
         <span className="num" style={{ textAlign: "left" }}>
           {x.tin}
         </span>
@@ -79,7 +80,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
         ...(!x.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
       ],
       meta: [
-        { label: "TIN", value: x.tin ?? "—" },
+        ...(showTin ? [{ label: "TIN", value: x.tin ?? "—" }] : []),
         { label: "Terms", value: x.defaultTerms ?? "—" },
         { label: "Address", value: x.addresses[0] ? formatAddress(x.addresses[0]) : "—" },
         {
@@ -102,7 +103,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       ],
       sortValues: {
         name: x.name,
-        tin: x.tin ?? "",
+        tin: showTin ? (x.tin ?? "") : "",
         tax: TAX_TYPE_LABELS[x.taxType],
         terms: x.defaultTerms ?? "",
         owe: 0,
@@ -175,7 +176,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
         }
         sortColumns={[
           { key: "name", label: "Name" },
-          { key: "tin", label: "TIN" },
+          ...(showTin ? [{ key: "tin", label: "TIN" }] : []),
           { key: "tax", label: "Tax type" },
           { key: "terms", label: "Terms" },
           { key: "owe", label: "We owe", numeric: true },

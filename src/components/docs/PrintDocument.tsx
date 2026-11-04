@@ -9,7 +9,7 @@ import { TERMS_URL } from "@/lib/print/qr";
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 const qty = (q: string) => q.replace(/\.00$/, "");
 
-export function PrintDocument({ doc, qrSvg }: { doc: PrintDoc; qrSvg: string }) {
+export function PrintDocument({ doc, qrSvg, hideCounterpartyTin = false }: { doc: PrintDoc; qrSvg: string; /** S-58: true hides the customer TIN line (view-only users). */ hideCounterpartyTin?: boolean }) {
   return (
     <article className="print-page" aria-label={`${doc.title} ${doc.number}`}>
       <header className="print-head">
@@ -59,7 +59,7 @@ export function PrintDocument({ doc, qrSvg }: { doc: PrintDoc; qrSvg: string }) 
         <div>
           <div className="print-label">Customer</div>
           <div className="strong">{doc.customer.name}</div>
-          {doc.customer.tin && <div>TIN {doc.customer.tin}</div>}
+          {!hideCounterpartyTin && doc.customer.tin && <div>TIN {doc.customer.tin}</div>}
           {doc.customer.address && <div className="print-pre">{doc.customer.address}</div>}
         </div>
         <div>

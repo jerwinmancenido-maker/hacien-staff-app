@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeTin } from "@/lib/permissions";
 import { getReceivingReportPrintModel } from "@/lib/print/views";
 import { PrintShell } from "@/components/docs/PrintShell";
 
@@ -24,6 +24,7 @@ export default async function PrintReceivingReportPage({ params }: { params: Pro
       doc={result.doc}
       missing={result.missing}
       canManageSettings={can(user, "manage_settings")}
+      hideCounterpartyTin={!canSeeTin(user)}
     />
   );
 }

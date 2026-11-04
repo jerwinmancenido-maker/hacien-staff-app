@@ -9,11 +9,13 @@ export function PrintShell({
   doc,
   missing,
   canManageSettings,
+  hideCounterpartyTin = false,
 }: {
   backHref: string;
   doc: ProfessionalPrintModel;
   missing: string[];
   canManageSettings?: boolean;
+  hideCounterpartyTin?: boolean;
 }) {
   const warning = missingFieldsPrintWarning(missing);
 
@@ -41,7 +43,7 @@ export function PrintShell({
           </p>
         </aside>
       )}
-      <ProfessionalPrintDocument doc={doc} />
+      <ProfessionalPrintDocument doc={doc} hideCounterpartyTin={hideCounterpartyTin} />
     </div>
   );
 }

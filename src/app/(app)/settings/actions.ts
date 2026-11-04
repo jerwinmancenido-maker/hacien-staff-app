@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
@@ -149,6 +150,27 @@ export async function setUserActiveAction(id: string, active: boolean): Promise<
     revalidatePath("/settings");
     revalidatePath(`/settings/users/${id}`);
     return { ok: true };
+  });
+}
+
+/** S-58: Admin clears a user's two-step secret (lost authenticator). The user re-enrolls from Two-step sign-in. */
+export async function resetTwoFactorAction(id: string): Promise<FormState> {
+  return runAction(async () => {
+    await requireActionPermission("manage_users");
+    await db.user.update({ where: { id }, data: { totpSecret: null } });
+    revalidatePath("/settings");
+    revalidatePath(`/settings/users/${id}`);
+    return { ok: true, message: "Two-step sign-in reset. The user can enroll again." };
+  });
+}
+
+/** S-58: Admin records that user access was reviewed today (who can sign in, and with which roles). */
+export async function markAccessReviewedAction(): Promise<FormState> {
+  return runAction(async () => {
+    const actor = await requireActionPermission("manage_settings");
+    await db.accessReview.create({ data: { reviewedById: actor.id } });
+    revalidatePath("/settings");
+    return { ok: true, message: "Access review recorded for today." };
   });
 }
 

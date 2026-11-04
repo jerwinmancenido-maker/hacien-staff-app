@@ -74,6 +74,11 @@ export function roleLabel(user: RoleFlags): string {
 }
 
 /** Inactive users have no permissions at all. Permissions are the union of the user's roles. */
+/** S-58: counterparty TINs are visible to staff who can edit data. View-only users never see them — not in lists, details, forms or prints. */
+export function canSeeTin(user: PermissionUser | null | undefined): boolean {
+  return can(user, "edit_data");
+}
+
 export function can(user: PermissionUser | null | undefined, permission: Permission): boolean {
   if (!user || !user.active) return false;
   return rolesOf(user).some((role) => ROLE_PERMISSIONS[role].includes(permission));
