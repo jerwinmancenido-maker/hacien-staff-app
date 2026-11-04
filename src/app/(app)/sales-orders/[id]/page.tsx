@@ -18,7 +18,6 @@ import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/componen
 import { SalesOrderActions } from "@/components/docs/QuoteActions";
 import { PoStatusChip, ProgressChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { SoCostMarginTab } from "@/components/purchasing/SoCostMarginTab";
-import { PlusIcon } from "@/components/Icons";
 import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
@@ -87,19 +86,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <>
-            {canBill && (
-              <Link className="btn btn-secondary" href={`/billing/billings/new?salesOrderId=${so.id}`}>
-                <PlusIcon /> Record billing
-              </Link>
-            )}
-            {canCreatePos && (
-              <Link className="btn btn-secondary" href={`/sales-orders/${so.id}/purchase-orders`}>
-                Create POs
-              </Link>
-            )}
-            <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} voidAction={voidSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} />
-          </>
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} voidAction={voidSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} />
         }
       />
       {created && (

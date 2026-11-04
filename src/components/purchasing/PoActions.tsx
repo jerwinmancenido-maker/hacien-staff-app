@@ -5,7 +5,6 @@
 // The server re-checks every action (permission, cost access, status).
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { ActionsMenu, type MenuItem } from "@/components/docs/ActionsMenu";
 import { EmailDialog, VoidDialog, type EmailDraftView } from "@/components/docs/Dialogs";
 import type { FormState } from "@/lib/validation/forms";
@@ -50,7 +49,7 @@ export function PoActions({
   const [dialog, setDialog] = useState<"void" | "close" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const run = (fn: () => Promise<FormState & { draft?: EmailDraftView }>) =>
     startTransition(async () => {
       const res = await fn();
@@ -71,38 +70,15 @@ export function PoActions({
   if (canEdit && (status === "PARTIALLY_RECEIVED" || status === "RECEIVED")) items.push({ key: "close", label: status === "PARTIALLY_RECEIVED" ? "Short-close" : "Close", onSelect: () => setDialog("close") });
   if (canVoid && ["DRAFT", "APPROVED", "SENT"].includes(status) && postedReceipts === 0) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
 
-  let primary: React.ReactNode = null;
-  if (canEdit && status === "DRAFT" && canMarkSentFromDraft) {
-    primary = (
-      <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.markSent(id))}>
-        Mark as sent
-      </button>
-    );
-  } else if (status === "DRAFT" && (canApprove || approveBlockedReason)) {
-    primary = (
-      <button type="button" className="btn" disabled={pending || !canApprove} title={approveBlockedReason ?? undefined} onClick={() => run(() => actions.approve(id))}>
-        Approve PO
-      </button>
-    );
-  } else if (canEdit && status === "APPROVED") {
-    primary = (
-      <button type="button" className="btn" disabled={pending} onClick={() => run(() => actions.markSent(id))}>
-        Mark as sent
-      </button>
-    );
-  } else if (canEdit && receivable) {
-    primary = (
-      <Link className="btn" href={`/receiving/${id}/new`}>
-        Receive items
-      </Link>
-    );
-  } else if (canEdit && status === "RECEIVED") {
-    primary = (
-      <button type="button" className="btn" onClick={() => setDialog("close")}>
-        Close PO
-      </button>
-    );
-  }
+  // S-66: no separate blue main button beside the Actions menu. The
+  // workflow actions that used to sit there are menu items below, with
+  // the same gates; Receive items and Close PO were already menu items,
+  // so their duplicate buttons are gone. Approve PO only appears when
+  // it can actually be approved — the blocked-reason note on the page
+  // still explains a wait.
+  if (canEdit && status === "DRAFT" && canMarkSentFromDraft) items.push({ key: "mark-sent", label: "Mark as sent", onSelect: () => run(() => actions.markSent(id)) });
+  else if (status === "DRAFT" && canApprove) items.push({ key: "approve", label: "Approve PO", onSelect: () => run(() => actions.approve(id)) });
+  else if (canEdit && status === "APPROVED") items.push({ key: "mark-sent", label: "Mark as sent", onSelect: () => run(() => actions.markSent(id)) });
 
   return (
     <>
@@ -117,7 +93,6 @@ export function PoActions({
         </span>
       )}
       <ActionsMenu items={items} />
-      {primary}
       {dialog === "void" && (
         <VoidDialog
           docLabel="PO"
