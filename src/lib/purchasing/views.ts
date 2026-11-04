@@ -217,7 +217,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: lineDesc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), serialNumbers: x.serialNumbers })),
+      items: r.items.map((x) => ({ description: lineDesc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
     bills: po.bills.map((b) => ({
@@ -573,7 +573,7 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
           notes: true,
           voidReason: true,
           receivedBy: { select: { name: true } },
-          items: { select: { purchaseOrderItemId: true, qtyReceived: true, serialNumbers: true } },
+          items: { select: { purchaseOrderItemId: true, qtyReceived: true, warrantyEndDate: true, serialNumbers: true } },
           attachments: attachmentSelect,
         },
       },
@@ -609,7 +609,7 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), serialNumbers: x.serialNumbers })),
+      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
   };
