@@ -103,6 +103,10 @@ export function customerSchema(
         .optional(),
       defaultTerms: termsRequired ? requiredTermsField(allowedTerms) : termsField(allowedTerms),
       notes: optionalText(5000),
+      // Q16 S-95: on by default; a missing value (older posts) stays on.
+      // Optional on input; saveCustomer defaults it to true (and the DB
+      // column defaults to true), so older callers omitting it still pass.
+      orderTextUpdates: z.boolean().optional(),
     })
     .superRefine((v, ctx) => {
       if (v.defaultWithholding == null) {

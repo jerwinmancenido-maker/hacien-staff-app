@@ -13,6 +13,7 @@ import { getSettingsSnapshot } from "../settings";
 import type { DeliveryInput } from "../validation/deliveries";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { notifyOrderDelivered } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
 
 export type DeliveryActor = PermissionUser & { id: string };
@@ -92,7 +93,9 @@ export async function recordDelivery(
   const uploads = await prepareUploads(files);
 
   try {
-    return await withTxRetry(() =>
+    // Q16 S-95: order text AFTER the delivery transaction commits, never
+    // inside it, so a text failure can never roll back the delivery.
+    const delivery = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const so = await lockForDelivery(tx, salesOrderId);
         const check = checkDelivery(so.lines as OpenDeliveryLine[], input.items);
@@ -180,6 +183,8 @@ export async function recordDelivery(
         return delivery;
       }, DOC_TX),
     );
+    await notifyOrderDelivered(salesOrderId, delivery.id, actor.id);
+    return delivery;
   } catch (e) {
     await discardUploads(uploads);
     throw e;

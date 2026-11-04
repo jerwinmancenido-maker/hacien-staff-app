@@ -53,6 +53,8 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       defaultWithholding: pick,
       defaultTerms: str(form, "defaultTerms"),
       notes: str(form, "notes"),
+      // Checkbox: absent = unchecked = off. Present (checked) = on.
+      orderTextUpdates: bool(form, "orderTextUpdates"),
     });
 
     const street = str(form, "street");

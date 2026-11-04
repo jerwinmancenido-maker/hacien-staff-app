@@ -118,6 +118,14 @@ export const DEFAULT_SETTINGS: Settings = {
     booksEnabled: false,
     payables2307Enabled: false,
   },
+  // Q16 S-95: Default chosen — all OFF until UniSMS keys, DPA + DB location,
+  // and HACIEN sender ID are confirmed.
+  messaging: {
+    orderTextsEnabled: false,
+    orderConfirmed: false,
+    orderDelivered: false,
+    orderPayment: false,
+  },
   taxCalendar: {
     corUploadedAndChecked: false,
     obligations: {
