@@ -113,6 +113,13 @@ const quoteInputObject = z.object({
     terms: optionalText(100),
     /** Customer notes — print on the quote. Existing data maps here. */
     notes: optionalText(5000),
+    /** S-69: per-quote delivery / warranty notes. Empty = Settings default. */
+    deliveryNotes: optionalText(1000)
+      .optional()
+      .transform((v) => v ?? null),
+    warrantyNotes: optionalText(1000)
+      .optional()
+      .transform((v) => v ?? null),
     /** Staff-only. Never prints. Never on customer-facing pages. Omitted → null. */
     internalNotes: optionalText(5000)
       .optional()
@@ -180,10 +187,12 @@ export function quoteInputSchemaForSave(
   return quoteInputSchema;
 }
 /** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
-export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo"> & {
+export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo" | "deliveryNotes" | "warrantyNotes"> & {
   internalNotes?: string | null;
   subject?: string | null;
   buyerPoNo?: string | null;
+  deliveryNotes?: string | null;
+  warrantyNotes?: string | null;
   validForDays?: number;
 };
 
