@@ -179,6 +179,10 @@ model Customer {
   defaultWithholding Json?
   defaultTerms       String?         @db.VarChar(100)
   notes              String?         @db.Text
+  // Q16 S-95: per-customer order text updates switch, ON by default.
+  // The order texts themselves stay OFF until the go-live gate in Settings
+  // (messaging.orderTextsEnabled) is turned on — see src/lib/messaging/order-texts.ts.
+  orderTextUpdates   Boolean         @default(true)
   active             Boolean         @default(true)
   archivedAt         DateTime?
   createdAt          DateTime        @default(now())
@@ -392,6 +396,21 @@ model MessageLog {
 
   @@index([channel, createdAt])
   @@index([status])
+}
+
+// Q16 S-95: duplicate prevention for order texts. One row per event that
+// was actually sent (confirmed = SO id, delivered = delivery id that made
+// the SO fully delivered, payment = collection id). A failed / not-sent
+// attempt creates no row, so an Admin retry from the send log is not blocked.
+model OrderTextSent {
+  id           String   @id @default(cuid())
+  eventKey     String   @unique @db.VarChar(191)
+  kind         String   @db.VarChar(20)
+  salesOrderId String   @db.VarChar(191)
+  sourceId     String   @db.VarChar(191)
+  createdAt    DateTime @default(now())
+
+  @@index([salesOrderId])
 }
 
 model AuditLog {

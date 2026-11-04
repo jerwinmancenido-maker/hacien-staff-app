@@ -19,6 +19,7 @@ import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from ".
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
+import { notifyPaymentReceived } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
 
 export type CollectionActor = PermissionUser & { id: string };
@@ -293,7 +294,9 @@ export async function recordCollection(input: CollectionInput, actor: Collection
   const uploads = await prepareUploads(files);
 
   try {
-    return await withTxRetry(() =>
+    // Q16 S-95: order text AFTER the collection transaction commits, never
+    // inside it, so a text failure can never roll back the payment.
+    const collection = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const customer = await lockCustomer(tx, input.customerId);
         const allocInputs: AllocationInput[] = input.allocations.map((a) => ({
@@ -463,6 +466,8 @@ export async function recordCollection(input: CollectionInput, actor: Collection
         return collection;
       }, DOC_TX),
     );
+    await notifyPaymentReceived(collection.id, actor.id);
+    return collection;
   } catch (e) {
     await discardUploads(uploads);
     throw e;

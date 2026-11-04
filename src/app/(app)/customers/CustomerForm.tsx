@@ -156,6 +156,17 @@ export function CustomerForm({
           <Field label="Notes" name="notes" error={e.notes} full>
             <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
           </Field>
+          <div className="field full">
+            <label>
+              <input
+                type="checkbox"
+                name="orderTextUpdates"
+                defaultChecked={customer == null ? true : customer.orderTextUpdates}
+              />{" "}
+              Order text updates
+            </label>
+            <div className="hint">Send order-status texts (confirmed, delivered, payment received) to this customer. Off by default for the whole app until UniSMS is set up — see Messages.</div>
+          </div>
 
           <div className="field full">
             <div className="label">Addresses</div>
