@@ -61,6 +61,7 @@ model User {
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
+  remindersMade        Reminder[]
   billingsCreated              Billing[]                 @relation("BillingCreatedBy")
   billingsUpdated              Billing[]                 @relation("BillingUpdatedBy")
   billingsChecked              Billing[]                 @relation("BillingAdminCheckedBy")
@@ -472,6 +473,25 @@ model OrderTextSent {
   createdAt    DateTime @default(now())
 
   @@index([salesOrderId])
+}
+
+// S-56: personal "Remind me" notes on deal records. Reminders are never
+// deleted — done ones stay listed under Done. No new packages.
+model Reminder {
+  id         String    @id @default(cuid())
+  // QUOTE | SALES_ORDER | PURCHASE_ORDER — the only record types with a
+  // Remind-me form in v1; the page links back to each one.
+  entityType String    @db.VarChar(20)
+  entityId   String    @db.VarChar(191)
+  note       String    @db.VarChar(500)
+  remindAt   DateTime  @db.Date
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  doneAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([createdById, remindAt])
+  @@index([entityType, entityId])
 }
 
 model AuditLog {

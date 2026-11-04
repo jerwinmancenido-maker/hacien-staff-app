@@ -45,13 +45,21 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
               <tr>
                 <th>Item</th>
                 <th className="num">Last price</th>
+                {showCosts ? <th /> : null}
                 {showCosts ? <th className="num">Last cost</th> : null}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.key}>
-                  <td>{row.description}</td>
+                  <td>
+                    {row.description}
+                    {showCosts ? (
+                      <div className="small">
+                        <Link href={`/items/compare?item=${encodeURIComponent(row.description)}`}>Compare suppliers →</Link>
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="num">
                     {row.lastPrice != null ? (
                       <>

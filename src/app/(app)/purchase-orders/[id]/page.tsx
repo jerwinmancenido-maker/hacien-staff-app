@@ -12,6 +12,9 @@ import { PoActions } from "@/components/purchasing/PoActions";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { AttachmentLinks, BillStatusChip, day, MatchChip, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { RrTable } from "@/components/purchasing/RrTable";
+import { AttachmentsTab } from "@/components/AttachmentsTab";
+import { RemindMeForm } from "@/components/RemindMeForm";
+import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
 import {
   approvePurchaseOrderAction,
@@ -22,7 +25,7 @@ import {
   voidPurchaseOrderAction,
 } from "../actions";
 
-const TABS = ["overview", "receiving", "bills", "match"] as const;
+const TABS = ["overview", "receiving", "bills", "match", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function PurchaseOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
@@ -89,6 +92,12 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           { key: "overview", label: "Overview", href: base },
           { key: "receiving", label: "Receiving", count: po.receivingReports.filter((r) => r.status === "POSTED").length, href: `${base}?tab=receiving` },
           { key: "bills", label: "Bills", count: liveBills.length, href: `${base}?tab=bills` },
+          {
+            key: "attachments",
+            label: "Attachments",
+            count: po.receivingReports.flatMap((r) => r.attachments).length + liveBills.flatMap((b) => b.attachments).length,
+            href: `${base}?tab=attachments`,
+          },
           {
             key: "match",
             label: "Match",
@@ -208,7 +217,17 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
               </div>
             </div>
           </div>
+          {canEdit && <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={createReminderAction} />}
         </>
+      )}
+
+      {tab === "attachments" && (
+        <AttachmentsTab
+          sections={[
+            { label: "Receiving reports", files: po.receivingReports.flatMap((r) => r.attachments) },
+            { label: "Supplier bills", files: liveBills.flatMap((b) => b.attachments) },
+          ]}
+        />
       )}
 
       {tab === "receiving" && (
