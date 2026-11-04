@@ -34,6 +34,25 @@ export function formatPesoLimit(amount: number | string | { toString(): string }
 }
 
 /**
+ * S-72: group a money input with commas as it is typed, e.g. "25500.50" →
+ * "25,500.50", so a mistyped price is easier to spot in the price box.
+ * Only the integer part is grouped; the fraction is kept exactly as typed
+ * (including a trailing dot), and invalid input is returned unchanged so
+ * validation still reports it. Safe to store: money parsing (`toScaled`)
+ * and amount validation both strip commas before checking.
+ */
+export function formatMoneyInput(raw: string): string {
+  const stripped = raw.replace(/,/g, "");
+  const match = /^(-?)(\d*)(\.\d*)?$/.exec(stripped);
+  if (!match || match[2] === "") return raw;
+  const sign = match[1] ?? "";
+  const int = match[2] ?? "";
+  const frac = match[3] ?? "";
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${sign}${grouped}${frac}`;
+}
+
+/**
  * Always whole pesos (no centavos), e.g. ₱274,000. Used on Home KPI cards and
  * the Sales chart tooltip; elsewhere keep {@link formatPeso} with cents.
  */

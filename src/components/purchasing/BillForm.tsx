@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
-import { formatPeso } from "@/lib/format";
+import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled } from "@/lib/quotes/calc";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -119,7 +119,7 @@ export function BillForm({ lines, defaultDate, action, cancelHref, maxMb }: { li
                     <input aria-label={`Billed qty: ${l.description}`} inputMode="decimal" className="w-num-s" value={rows[l.id]?.qty ?? ""} onChange={(ev) => set(l.id, { qty: ev.target.value })} />
                   </td>
                   <td className="num">
-                    <input aria-label={`Billed unit price: ${l.description}`} inputMode="decimal" className="w-num" value={rows[l.id]?.unitPrice ?? ""} onChange={(ev) => set(l.id, { unitPrice: ev.target.value })} />
+                    <input aria-label={`Billed unit price: ${l.description}`} inputMode="decimal" className="w-num" value={rows[l.id]?.unitPrice ?? ""} onChange={(ev) => set(l.id, { unitPrice: formatMoneyInput(ev.target.value) })} />
                   </td>
                   <td className="num strong">{formatPeso(safeTotal(rows[l.id]?.qty ?? "", rows[l.id]?.unitPrice ?? ""))}</td>
                 </tr>

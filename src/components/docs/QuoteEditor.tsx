@@ -44,7 +44,7 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
-import { formatPeso } from "@/lib/format";
+import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { QuoteStatusChip } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
@@ -956,7 +956,7 @@ export function QuoteEditor({
                             aria-label={`Line ${idx + 1} HACIEN unit price`}
                             inputMode="decimal"
                             value={i.unitPrice}
-                            onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })}
+                            onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
                           />
                         </div>
                         <div className="quote-ln-total num strong">{formatPeso(a.total)}</div>
@@ -1003,7 +1003,7 @@ export function QuoteEditor({
                               aria-label={`Line ${idx + 1} supplier unit cost`}
                               inputMode="decimal"
                               value={i.supplierUnitCost}
-                              onChange={(ev) => setItem(i.key, { supplierUnitCost: ev.target.value })}
+                              onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
                             />
                           </span>
                           <span className={`quote-cost-field${below ? " neg" : ""}`}>
@@ -1122,7 +1122,7 @@ export function QuoteEditor({
                               inputMode="decimal"
                               value={i.supplierUnitCost}
                               placeholder="Unit cost"
-                              onChange={(ev) => setItem(i.key, { supplierUnitCost: ev.target.value })}
+                              onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
                             />
                           </div>
                         </div>
@@ -1138,7 +1138,7 @@ export function QuoteEditor({
                             inputMode="decimal"
                             value={i.unitPrice}
                             placeholder="Price"
-                            onChange={(ev) => setItem(i.key, { unitPrice: ev.target.value })}
+                            onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
                           />
                         </div>
                         <div className="quote-line-card-total num strong">{formatPeso(a.total)}</div>
