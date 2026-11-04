@@ -29,6 +29,7 @@ import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
+import { AuditLogTab } from "./AuditLogTab";
 
 const TABS = [
   { key: "users", label: "Users" },
@@ -42,6 +43,7 @@ const TABS = [
   { key: "print", label: "Print & company" },
   { key: "lists", label: "Lists" },
   { key: "changelog", label: "Change log" },
+  { key: "audit", label: "Audit log" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -51,9 +53,10 @@ function show(v: unknown): string {
   return String(v);
 }
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string; entity?: string; action?: string; user?: string; from?: string; to?: string; page?: string }> }) {
   await requirePagePermission("manage_settings");
-  const { tab: raw } = await searchParams;
+  const allParams = await searchParams;
+  const { tab: raw } = allParams;
   const tab: Tab = TABS.some((t) => t.key === raw) ? (raw as Tab) : "users";
   const snap = await getSettingsSnapshot();
   const s = snap.settings;
@@ -347,6 +350,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {tab === "changelog" && <ChangeLog />}
+
+        {tab === "audit" && (
+          <AuditLogTab
+            search={{
+              entity: allParams.entity,
+              action: allParams.action,
+              user: allParams.user,
+              from: allParams.from,
+              to: allParams.to,
+              page: allParams.page,
+            }}
+          />
+        )}
       </div>
     </div>
   );
