@@ -5,7 +5,7 @@ import { can, canVoid } from "@/lib/permissions";
 import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listBillings } from "@/lib/billing/views";
+import { listBillings, listSalesOrderCollections } from "@/lib/billing/views";
 import { salesOrderMoney } from "@/lib/billing/status";
 import { soBillingSummary } from "@/lib/services/billings";
 import { toScaled } from "@/lib/quotes/calc";
@@ -28,7 +28,7 @@ import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSal
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
-const TABS = ["overview", "cost-margin", "attachments"] as const;
+const TABS = ["overview", "documents", "cost-margin", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SalesOrderPage({
@@ -48,11 +48,12 @@ export default async function SalesOrderPage({
   const purchasing = await getSoPurchasing(so.id, user);
   const progress = new Map(purchasing.lines.map((l) => [l.id, l]));
   const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
-  const [billingSummary, billings, costMargin, deliveries] = await Promise.all([
+  const [billingSummary, billings, costMargin, deliveries, collections] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
     listSalesOrderDeliveries(so.id),
+    listSalesOrderCollections(so.id),
   ]);
   const money = billingSummary
     ? salesOrderMoney(so.status, billingSummary.contractPrice, [
@@ -67,7 +68,9 @@ export default async function SalesOrderPage({
   const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
   const overdueOnSo = billings.find((b) => b.overdue.overdue && !b.isGovernment);
 
-  const tab: Tab = TABS.includes(rawTab as Tab) && (rawTab !== "cost-margin" || so.canSeeCosts) ? (rawTab as Tab) : "overview";
+  // Linked documents is for everyone; Cost & margin stays cost-users only.
+  const tab: Tab =
+    rawTab === "cost-margin" ? (so.canSeeCosts ? "cost-margin" : "overview") : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const base = `/sales-orders/${id}`;
   const costWarnings = costMargin?.warnings.length ?? 0;
 
@@ -104,6 +107,7 @@ export default async function SalesOrderPage({
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: base },
+          { key: "documents", label: "Linked documents", count: billings.length + collections.length + deliveries.length + 1, href: `${base}?tab=documents` },
           ...(so.canSeeCosts
             ? [
                 {
@@ -127,6 +131,87 @@ export default async function SalesOrderPage({
 
       {tab === "cost-margin" && costMargin && <SoCostMarginTab summary={costMargin} />}
 
+      {tab === "documents" && (
+        <div className="card">
+          <h2>Linked documents</h2>
+          <p className="small muted">Source quote, billings, collections and delivery receipts for this order. POs, receiving and supplier bills stay in the Cost &amp; margin tab.</p>
+          <div className="table-wrap">
+            <table className="list" aria-label="Linked documents">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Number</th>
+                  <th>Date</th>
+                  <th className="num">Amount</th>
+                  <th>Status</th>
+                  <th>Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Source quote</td>
+                  <td className="strong">
+                    <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link>
+                  </td>
+                  <td>{day(so.quote.date)}</td>
+                  <td className="num">{formatPeso(so.quote.contractPrice)}</td>
+                  <td>
+                    <QuoteStatusChip status={so.quote.status} />
+                  </td>
+                  <td>
+                    <Link href={`/quotes/${so.quote.id}`}>Open</Link>
+                  </td>
+                </tr>
+                {billings.map((b) => (
+                  <tr key={b.id}>
+                    <td>Billing</td>
+                    <td className="strong">
+                      <Link href={`/billing/billings/${b.id}`}>{b.number}</Link>
+                    </td>
+                    <td>{day(b.invoiceDate)}</td>
+                    <td className="num">{formatPeso(b.amount)}</td>
+                    <td>
+                      <BillingStatusChip status={b.status} />
+                    </td>
+                    <td>
+                      <Link href={`/billing/billings/${b.id}`}>Open</Link> ·{" "}
+                      <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
+                        Print
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+                {collections.map((c) => (
+                  <tr key={c.id}>
+                    <td>Collection</td>
+                    <td className="strong">
+                      <Link href={`/billing/collections/${c.id}`}>{c.number}</Link>
+                    </td>
+                    <td>{day(c.date)}</td>
+                    <td className="num">{formatPeso(c.amountReceived)}</td>
+                    <td>{c.status}</td>
+                    <td>
+                      <Link href={`/billing/collections/${c.id}`}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
+                {deliveries.map((d) => (
+                  <tr key={d.id}>
+                    <td>Delivery receipt</td>
+                    <td className="strong">{d.drNumber}</td>
+                    <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
+                    <td className="num">—</td>
+                    <td>{d.voidedAt ? "Void" : "Delivered"}</td>
+                    <td>
+                      <Link href={base}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {tab === "attachments" && (
         <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
       )}
