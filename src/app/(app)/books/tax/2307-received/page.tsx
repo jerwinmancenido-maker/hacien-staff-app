@@ -70,7 +70,7 @@ export default async function Customer2307WorksheetPage({
                     <Link href={r.href}>{formatPeso(r.taxWithheld)}</Link>
                   </td>
                   <td>
-                    <Chip tone={r.status === "Received" ? "green" : "amber"}>{r.status}</Chip>
+                    <Chip tone={r.status === "Received" ? "green" : "blue"}>{r.status}</Chip>
                   </td>
                   <td className="small">
                     {r.collectionNumber ? (

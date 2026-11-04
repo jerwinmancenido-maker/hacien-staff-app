@@ -90,7 +90,7 @@ export default async function MessagesPage() {
               channel: row.channel,
               to: maskRecipient(row.channel, row.recipient),
               status: (
-                <Chip tone={row.status === "sent" ? "green" : row.status === "not_sent" ? "amber" : "red"}>
+                <Chip tone={row.status === "sent" ? "green" : row.status === "not_sent" ? "blue" : "red"}>
                   {row.status === "not_sent" ? "not sent: not set up" : row.status}
                 </Chip>
               ),

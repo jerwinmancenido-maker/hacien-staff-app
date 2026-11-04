@@ -5,7 +5,7 @@ import Link from "next/link";
 import { initials } from "@/lib/format";
 import { InboxIcon } from "./Icons";
 
-export type ChipTone = "green" | "amber" | "red" | "grey" | "dark";
+export type ChipTone = "green" | "amber" | "red" | "grey" | "dark" | "blue";
 
 export function Chip({ tone = "grey", children }: { tone?: ChipTone; children: ReactNode }) {
   return <span className={`chip ${tone === "grey" ? "" : tone}`}>{children}</span>;

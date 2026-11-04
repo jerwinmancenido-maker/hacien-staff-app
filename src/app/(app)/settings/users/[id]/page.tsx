@@ -20,7 +20,7 @@ export default async function UserPage({ params, searchParams }: { params: Promi
         title={
           <>
             {user.name}
-            {!user.active ? <Chip tone="red">Turned off</Chip> : !user.passwordHash ? <Chip tone="amber">Invited</Chip> : <Chip tone="green">Active</Chip>}
+            {!user.active ? <Chip tone="red">Turned off</Chip> : !user.passwordHash ? <Chip tone="blue">Invited</Chip> : <Chip tone="green">Active</Chip>}
           </>
         }
         subtitle={`${user.email} · ${roleLabel(user)}`}

@@ -8,8 +8,8 @@ import { LINE_STATUS_LABELS, type LineStatus } from "@/lib/purchasing/match";
 const PO_TONES: Record<PoStatus, ChipTone> = {
   DRAFT: "grey",
   APPROVED: "dark",
-  SENT: "amber",
-  PARTIALLY_RECEIVED: "amber",
+  SENT: "blue",
+  PARTIALLY_RECEIVED: "blue",
   RECEIVED: "green",
   CLOSED: "grey",
   VOID: "red",
@@ -24,19 +24,19 @@ export function RrStatusChip({ status }: { status: string }) {
 }
 
 export function BillStatusChip({ status }: { status: string }) {
-  const tone = status === "VOID" ? "red" : status === "PAID" ? "green" : status === "PARTIALLY_PAID" ? "amber" : "amber";
+  const tone = status === "VOID" ? "red" : status === "PAID" ? "green" : "blue";
   const label =
     status === "VOID" ? "Void" : status === "PAID" ? "Paid" : status === "PARTIALLY_PAID" ? "Partially paid" : "Unpaid";
   return <Chip tone={tone}>{label}</Chip>;
 }
 
-const PROGRESS_TONES: Record<ProgressState, ChipTone> = { NOT_ORDERED: "grey", ORDERED: "dark", PARTIALLY_RECEIVED: "amber", RECEIVED: "green" };
+const PROGRESS_TONES: Record<ProgressState, ChipTone> = { NOT_ORDERED: "grey", ORDERED: "dark", PARTIALLY_RECEIVED: "blue", RECEIVED: "green" };
 
 export function ProgressChip({ state }: { state: ProgressState }) {
   return <Chip tone={PROGRESS_TONES[state]}>{PROGRESS_LABELS[state]}</Chip>;
 }
 
-const MATCH_TONES: Record<LineStatus, ChipTone> = { MATCHED: "green", QTY_MISMATCH: "amber", PRICE_MISMATCH: "red" };
+const MATCH_TONES: Record<LineStatus, ChipTone> = { MATCHED: "green", QTY_MISMATCH: "red", PRICE_MISMATCH: "red" };
 
 export function MatchChip({ status }: { status: LineStatus }) {
   return <Chip tone={MATCH_TONES[status]}>{LINE_STATUS_LABELS[status]}</Chip>;
