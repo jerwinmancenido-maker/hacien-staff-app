@@ -20,9 +20,9 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
         <form className="search-pill" action="/receiving" role="search">
           <SearchIcon />
           <label htmlFor="q" className="sr-only">
-            Search by PO number or supplier
+            Search by PO number, supplier, or serial number
           </label>
-          <input id="q" name="q" defaultValue={s.q} placeholder="Search PO no. or supplier" />
+          <input id="q" name="q" defaultValue={s.q} placeholder="Search PO no., supplier, or serial" />
           {history && <input type="hidden" name="history" value="1" />}
         </form>
         <Link className={`filter-chip${!history ? " active" : ""}`} href="/receiving">

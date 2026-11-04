@@ -12,6 +12,7 @@ import { applyDelivery, checkDelivery, type OpenDeliveryLine } from "../sales-or
 import { getSettingsSnapshot } from "../settings";
 import type { DeliveryInput } from "../validation/deliveries";
 import { voidReasonSchema } from "../validation/quotes";
+import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { notifyOrderDelivered } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
@@ -142,6 +143,8 @@ export async function recordDelivery(
               create: check.entries.map((e) => ({
                 salesOrderItemId: e.salesOrderItemId,
                 qty: e.qty,
+                // S-48: serials travel on the input item, not the checked entry.
+                serialNumbers: normalizeSerialNumbers(input.items.find((i) => i.salesOrderItemId === e.salesOrderItemId)?.serialNumbers),
               })),
             },
           },

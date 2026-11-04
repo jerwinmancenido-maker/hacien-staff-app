@@ -38,9 +38,9 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
         <form className="search-pill" action="/sales-orders" role="search">
           <SearchIcon />
           <label htmlFor="q" className="sr-only">
-            Search by SO number, buyer PO or customer
+            Search by SO number, buyer PO, customer, or serial number
           </label>
-          <input id="q" name="q" defaultValue={s.q} placeholder="Search SO no., buyer PO or customer" />
+          <input id="q" name="q" defaultValue={s.q} placeholder="Search SO no., buyer PO, customer, or serial" />
           {status && <input type="hidden" name="status" value={status} />}
         </form>
         <Link

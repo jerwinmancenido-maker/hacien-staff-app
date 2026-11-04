@@ -349,6 +349,7 @@ export default async function SalesOrderPage({
                 id: di.id,
                 salesOrderItemId: di.salesOrderItemId,
                 qty: di.qty.toString(),
+                serialNumbers: di.serialNumbers,
                 salesOrderItem: di.salesOrderItem,
               })),
               attachments: d.attachments,

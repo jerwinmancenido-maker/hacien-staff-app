@@ -32,9 +32,10 @@ export function ReceiveForm({
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const [qtys, setQtys] = useState<Record<string, string>>({});
+  const [serials, setSerials] = useState<Record<string, string>>({});
   const [h, setH] = useState({ receivedDate: defaultDate, receivedById: defaultUserId, deliveryRef: "", notes: "" });
   const e = state.fieldErrors ?? {};
-  const payload = { ...h, lines: lines.map((l) => ({ lineId: l.id, qty: qtys[l.id] ?? "" })) };
+  const payload = { ...h, lines: lines.map((l) => ({ lineId: l.id, qty: qtys[l.id] ?? "", serialNumbers: serials[l.id] ?? "" })) };
   const fillAll = () => setQtys(Object.fromEntries(lines.map((l) => [l.id, qty(l.remainingQty) === "0" ? "" : qty(l.remainingQty)])));
 
   return (
@@ -63,6 +64,7 @@ export function ReceiveForm({
                 <th className="num">Received</th>
                 <th className="num">Remaining</th>
                 <th className="num">Receive now</th>
+                <th>Serial numbers</th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +95,17 @@ export function ReceiveForm({
                         disabled={done}
                         value={qtys[l.id] ?? ""}
                         onChange={(ev) => setQtys({ ...qtys, [l.id]: ev.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label={`Serial numbers: ${l.description}`}
+                        type="text"
+                        className="input"
+                        placeholder="Comma-separated, if any"
+                        disabled={done}
+                        value={serials[l.id] ?? ""}
+                        onChange={(ev) => setSerials({ ...serials, [l.id]: ev.target.value })}
                       />
                     </td>
                   </tr>

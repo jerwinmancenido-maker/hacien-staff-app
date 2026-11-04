@@ -15,6 +15,8 @@ const optionalYmd = z
 export const deliveryItemInputSchema = z.object({
   salesOrderItemId: z.string().min(1, "Item is required."),
   qty: z.string().trim(),
+  // S-48: one serial per unit, typed comma- or newline-separated.
+  serialNumbers: z.string().max(2000, "Keep serial numbers under 2000 characters.").optional().nullable(),
 });
 
 export const deliveryInputSchema = z.object({
@@ -44,13 +46,15 @@ export function parseDeliveryForm(form: FormData):
   | { ok: false; fieldErrors: Record<string, string>; values: Record<string, string> } {
   const itemIds = form.getAll("itemId").map(String);
   const itemQtys = form.getAll("itemQty").map(String);
+  const itemSerials = form.getAll("itemSerials").map(String);
   const items: DeliveryItemInput[] = [];
 
   for (let i = 0; i < itemIds.length; i++) {
     const itemId = (itemIds[i] ?? "").trim();
     const qty = (itemQtys[i] ?? "").trim();
+    const serialNumbers = itemSerials[i] ?? "";
     if (itemId) {
-      items.push({ salesOrderItemId: itemId, qty });
+      items.push({ salesOrderItemId: itemId, qty, serialNumbers });
     }
   }
 

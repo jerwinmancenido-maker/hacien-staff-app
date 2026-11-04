@@ -15,6 +15,7 @@ import { applyReceipt, checkReceipt, type OpenLine } from "../purchasing/receipt
 import { poActionError, receiptStatus, type PoStatus } from "../purchasing/status";
 import type { ReceiptInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
+import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 
 export type RrActor = PermissionUser & { id: string };
@@ -77,7 +78,14 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
             deliveryRef: input.deliveryRef,
             notes: input.notes,
             createdById: actor.id,
-            items: { create: check.entries.map((e) => ({ purchaseOrderItemId: e.lineId, qtyReceived: e.qty })) },
+            items: {
+              create: check.entries.map((e) => ({
+                purchaseOrderItemId: e.lineId,
+                qtyReceived: e.qty,
+                // S-48: serials travel on the input line, not the checked entry.
+                serialNumbers: normalizeSerialNumbers(input.lines.find((l) => l.lineId === e.lineId)?.serialNumbers),
+              })),
+            },
           },
           include: { items: true },
         });

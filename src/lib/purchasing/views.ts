@@ -217,7 +217,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: lineDesc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived) })),
+      items: r.items.map((x) => ({ description: lineDesc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
     bills: po.bills.map((b) => ({
@@ -507,7 +507,16 @@ export async function listReceivingView(filter: { q?: string; history?: boolean 
   const rows = await db.purchaseOrder.findMany({
     where: {
       status: { in: filter.history ? ["PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"] : RECEIVABLE },
-      ...(q ? { OR: [{ number: { contains: q } }, { supplier: { name: { contains: q } } }] } : {}),
+      ...(q
+        ? {
+            OR: [
+              { number: { contains: q } },
+              { supplier: { name: { contains: q } } },
+              // S-48: search by a serial number received on this PO.
+              { receivingReports: { some: { items: { some: { serialNumbers: { contains: q } } } } } },
+            ],
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -564,7 +573,7 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
           notes: true,
           voidReason: true,
           receivedBy: { select: { name: true } },
-          items: { select: { purchaseOrderItemId: true, qtyReceived: true } },
+          items: { select: { purchaseOrderItemId: true, qtyReceived: true, serialNumbers: true } },
           attachments: attachmentSelect,
         },
       },
@@ -600,7 +609,7 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived) })),
+      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
   };
