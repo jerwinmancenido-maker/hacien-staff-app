@@ -289,13 +289,23 @@ type SoProps = {
   canEdit: boolean;
   canVoid: boolean;
   voidAction: (id: string, reason: string) => Promise<FormState>;
+  /** S-87: billings on this SO, for "Print billing statement" menu entries. */
+  billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction }: SoProps) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction, billings = [] }: SoProps) {
   const [voiding, setVoiding] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
+  // S-87: one "Print billing statement" entry per billing, opening the
+  // existing billing-statement print (never a sales invoice — the official
+  // invoice is the BIR pre-printed booklet; the print itself says
+  // "This is not an official invoice/receipt" and shows the booklet no.).
+  // No entry when the SO has no billings yet.
+  for (const b of billings) {
+    items.push({ key: `print-billing-${b.id}`, label: `Print billing statement ${b.number}`, href: `/print/billings/${b.id}`, newTab: true });
+  }
   if (canVoid && status === "OPEN") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
   return (
     <>
