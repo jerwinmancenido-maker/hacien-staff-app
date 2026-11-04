@@ -87,7 +87,7 @@ export default async function Withholding2307Page({
                     <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td>
-                      <Chip tone={r.status === "RECEIVED" ? "green" : "amber"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
+                      <Chip tone={r.status === "RECEIVED" ? "green" : "blue"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
                     </td>
                     <td>{day(r.receivedAt)}</td>
                     <td>

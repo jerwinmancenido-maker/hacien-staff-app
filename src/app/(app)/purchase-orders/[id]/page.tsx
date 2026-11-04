@@ -139,7 +139,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                       {po.approvedAt ? ` · ${formatDateTime(po.approvedAt)}` : ""}
                     </>
                   ) : po.status === "DRAFT" ? (
-                    <Chip tone="amber">Needs approval</Chip>
+                    <Chip tone="blue">Needs approval</Chip>
                   ) : (
                     "—"
                   )}

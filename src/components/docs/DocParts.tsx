@@ -8,7 +8,7 @@ import { Chip, type ChipTone } from "@/components/ui";
 import { COST_NOT_SET_LABEL, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
-const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "amber", WON: "green", LOST: "red", VOID: "red" };
+const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "blue", WON: "green", LOST: "red", VOID: "red" };
 
 export const SO_STATUS_LABELS: Record<string, string> = { OPEN: "Open", VOID: "Void" };
 const SO_TONES: Record<string, ChipTone> = { OPEN: "green", VOID: "red" };
