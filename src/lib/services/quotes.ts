@@ -20,7 +20,14 @@ import { itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
-import { voidReasonSchema, type ConvertInput, type ItemInput, type QuoteInput } from "../validation/quotes";
+import {
+  QUOTE_ZERO_TOTAL_ERROR,
+  quoteTotalIsPositive,
+  voidReasonSchema,
+  type ConvertInput,
+  type ItemInput,
+  type QuoteInput,
+} from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
 
@@ -172,6 +179,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
     ? withholdingFromItems(items, pickSnapshots)
     : withholdingFromItems(items);
   const moneyTotals = usePicks ? totalsData(items, pickSnapshots) : totalsData(items);
+  // S-78: no API path may save a ₱0 quote — the schema blocks it first, this
+  // guards any caller that bypasses validation.
+  if (!quoteTotalIsPositive(moneyTotals.contractPrice)) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
   const validUntil =
     input.validUntil ??
     (input.validForDays != null
@@ -252,6 +262,8 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const usePicks = pickSnapshots.length > 0 && !hasLineOverride;
       const withholding = usePicks ? withholdingFromItems(items, pickSnapshots) : preserved.withholding;
       const moneyTotals = usePicks ? totalsData(items, pickSnapshots) : preserved.totals;
+      // S-78: re-saving an edit at ₱0 is blocked, same as a new ₱0 quote.
+      if (!quoteTotalIsPositive(moneyTotals.contractPrice)) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
@@ -362,6 +374,8 @@ export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): 
   assertCan(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
+    // S-78: a ₱0 quote (e.g. one saved before this block existed) can't be sent.
+    if (!quoteTotalIsPositive(money(before.contractPrice))) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
     if (before.status !== "DRAFT") throw new DocRuleError("Only a draft quote can be marked as sent.");
     assertQuoteApproved(before);
     const after = await tx.quote.update({
@@ -385,10 +399,12 @@ export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): 
   }, DOC_TX);
 }
 
-async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string, requireApproved = false) {
+async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string, requireApproved = false, requirePositiveTotal = false) {
   assertCan(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
+    // S-78: sending a ₱0 quote is blocked; other status moves (e.g. mark lost) are not.
+    if (requirePositiveTotal && !quoteTotalIsPositive(money(before.contractPrice))) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
     if (!from.includes(before.status)) throw new DocRuleError(message);
     if (requireApproved) assertQuoteApproved(before);
     const after = await tx.quote.update({ where: { id }, data: { status: to, updatedById: actor.id }, include: { items: { where: { removedAt: null } } } });
@@ -398,7 +414,7 @@ async function setStatus(id: string, actor: DocActor, from: readonly Quote["stat
 }
 
 export function markQuoteSent(id: string, actor: DocActor) {
-  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true);
+  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true, true);
 }
 
 /** Approver/Admin: PENDING → APPROVED. */
