@@ -7045,17 +7045,18 @@ button.contact-card-add {
   background: var(--text);
   margin: 28px 0 6px;
 }
-.quote-sticky-act {
+/* S-71: Save/Cancel bar at the top of edit forms, visible while scrolling. */
+.edit-topbar {
   position: sticky;
-  bottom: 0;
+  top: 0;
   z-index: 4;
   background: #fff;
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   display: flex;
   gap: 8px;
   align-items: center;
   padding: 10px 0;
-  margin-top: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 .quote-sticky-status {
@@ -7513,7 +7514,7 @@ button.contact-card-add {
   .quote-int2 {
     width: 100%;
   }
-  .quote-sticky-act {
+  .edit-topbar {
     padding: 8px 0;
   }
   .quote-sticky-status {

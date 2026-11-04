@@ -105,6 +105,14 @@ export function PoEditor({
           This PO is approved. Saving changes returns it to <b>Draft</b>: it needs approval again and its revision goes up.
         </div>
       )}
+      <div className="edit-topbar">
+        <button className="btn" type="submit" disabled={pending || !h.supplierId}>
+          {pending ? "Saving…" : isNew ? "Create PO" : "Save changes"}
+        </button>
+        <a className="btn btn-secondary" href={cancelHref}>
+          Cancel
+        </a>
+      </div>
       <div className="card">
         <h2>PO details</h2>
         <div className="form-grid">
@@ -257,14 +265,6 @@ export function PoEditor({
         </div>
       </div>
 
-      <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending || !h.supplierId}>
-          {pending ? "Saving…" : isNew ? "Create PO" : "Save changes"}
-        </button>
-        <a className="btn btn-secondary" href={cancelHref}>
-          Cancel
-        </a>
-      </div>
     </form>
   );
 }
