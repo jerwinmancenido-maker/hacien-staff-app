@@ -2,6 +2,7 @@
 
 // S-70: upload a signed conforme scan on the quote page.
 import { useFormAction } from "@/components/useFormAction";
+import { FileInput } from "@/components/FileInput";
 import type { FormState } from "@/lib/validation/forms";
 
 export function ConformeUploadForm({ action }: { action: (s: FormState, f: FormData) => Promise<FormState> }) {
@@ -16,7 +17,7 @@ export function ConformeUploadForm({ action }: { action: (s: FormState, f: FormD
       )}
       <div className="field">
         <label htmlFor="conforme-file">Signed conforme file</label>
-        <input id="conforme-file" name="file" type="file" />
+        <FileInput id="conforme-file" name="file" />
         {e.file && <div className="error">{e.file}</div>}
       </div>
       <div className="form-actions">

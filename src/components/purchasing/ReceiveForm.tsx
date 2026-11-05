@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
+import { FileInput } from "@/components/FileInput";
 import type { FormState } from "@/lib/validation/forms";
 
 export type ReceiveLine = { id: string; description: string; unit: string; orderedQty: string; receivedQty: string; remainingQty: string };
@@ -155,7 +156,7 @@ export function ReceiveForm({
           </div>
           <div className={`field${e.files ? " has-error" : ""}`}>
             <label htmlFor="files">Attachments</label>
-            <input id="files" name="files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" />
+            <FileInput id="files" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" />
             <NoIdUploadWarning />
             {e.files ? <div className="error">{e.files}</div> : <div className="hint">Delivery receipt photo or scan. PDF, JPG or PNG, up to {maxMb} MB each.</div>}
           </div>

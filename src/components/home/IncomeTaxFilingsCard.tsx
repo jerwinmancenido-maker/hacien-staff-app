@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormAction } from "@/components/useFormAction";
+import { FileInput } from "@/components/FileInput";
 import {
   markIncomeTaxFiledAction,
   undoIncomeTaxFiledAction,
@@ -183,13 +184,7 @@ function IncomeTaxFilingRow({
 
           <label className="small">
             Confirmation PDF / image <span className="muted">*</span>
-            <input
-              type="file"
-              name="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              required
-              style={{ width: "100%", marginTop: 2 }}
-            />
+            <FileInput name="file" accept=".pdf,.png,.jpg,.jpeg" required />
           </label>
           {mark.state.fieldErrors?.file ? (
             <div className="field-error" style={{ color: "var(--red)", fontSize: "12px" }}>

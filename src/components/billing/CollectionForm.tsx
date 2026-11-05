@@ -9,6 +9,7 @@ import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/b
 import { formatPeso } from "@/lib/format";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
+import { FileInput } from "@/components/FileInput";
 
 export type PrefillCode = { rate: string; atcCode: string | null; amount?: string };
 
@@ -247,7 +248,7 @@ export function CollectionForm({
         </div>
         <div className={`field full${e.files ? " has-error" : ""}`}>
           <label htmlFor="files">Attachment (optional)</label>
-          <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg" multiple />
           <NoIdUploadWarning />
           {e.files && <div className="error">{e.files}</div>}
         </div>

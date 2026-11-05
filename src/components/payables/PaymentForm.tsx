@@ -9,6 +9,7 @@ import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/validation/payable
 import { formatDate, formatPeso } from "@/lib/format";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
+import { FileInput } from "@/components/FileInput";
 import { maskBankAccountNumber } from "@/lib/bank-mask";
 
 export type OpenBillRow = {
@@ -262,7 +263,7 @@ export function PaymentForm({
 
         <div className={`field full${e.files ? " has-error" : ""}`}>
           <label htmlFor="files">Proof</label>
-          <input id="files" name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple />
+          <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple />
           <NoIdUploadWarning />
           <div className="hint">Bank screenshot or deposit slip — PDF, JPG or PNG, up to 5 files (required).</div>
           {e.files && <div className="error">{e.files}</div>}

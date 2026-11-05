@@ -5,6 +5,7 @@
 // Replacing = upload a new file + archive the old one (history stays).
 
 import { useState, useTransition } from "react";
+import { FileInput } from "@/components/FileInput";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BUSINESS_DOC_LABELS, BUSINESS_DOC_TYPES, type BusinessDocTypeValue } from "@/lib/business-docs/types";
@@ -244,13 +245,12 @@ function UploadForm({
           <input id="expiryDate" name="expiryDate" type="date" className="input" defaultValue={state.values?.expiryDate ?? ""} />
         </Field>
         <Field label="File" name="file" required error={e.file ?? fileError ?? undefined} hint={`PDF, JPG or PNG, up to ${maxMb} MB.`} full>
-          <input
+          <FileInput
             id="file"
             name="file"
-            type="file"
             accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-            onChange={(ev) => {
-              const f = ev.target.files?.[0];
+            onFilesChange={(files) => {
+              const f = files[0];
               setFileError(f && f.size > maxMb * 1024 * 1024 ? `The file is too big. The limit is ${maxMb} MB.` : null);
             }}
           />
