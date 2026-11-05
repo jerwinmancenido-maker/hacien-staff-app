@@ -28,7 +28,7 @@ export default async function BillingDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "allocations" || raw === "attachments" || raw === "activity" ? raw : "overview";
+  const tab = raw === "allocations" || raw === "attachments" ? raw : "overview";
   const b = await getBillingView(id);
   if (!b) notFound();
   const canManage = can(user, "manage_billing");
@@ -145,7 +145,7 @@ export default async function BillingDetailPage({
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: `/billing/billings/${id}` },
-          { key: "allocations", label: "Collections", count: b.allocations.length, href: `/billing/billings/${id}?tab=allocations` },
+          { key: "allocations", label: "Allocations", count: b.allocations.length, href: `/billing/billings/${id}?tab=allocations` },
           { key: "attachments", label: "Attachments", count: b.attachments.length, href: `/billing/billings/${id}?tab=attachments` },
         ]}
       />

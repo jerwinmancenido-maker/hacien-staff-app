@@ -28,7 +28,7 @@ export default async function CashAccountDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "edit" || raw === "ledger" ? raw : "overview";
+  const tab = raw === "edit" || raw === "ledger" ? raw : "ledger";
   const account = await db.cashAccount.findUnique({ where: { id } });
   if (!account) notFound();
   const canManage = can(user, "manage_cash");
@@ -90,20 +90,10 @@ export default async function CashAccountDetailPage({
       <PillTabs
         active={tab}
         tabs={[
-          { key: "overview", label: "Overview", href: `/cash/accounts/${id}` },
           { key: "ledger", label: "Recent ledger", href: `/cash/accounts/${id}?tab=ledger` },
           ...(canManage ? [{ key: "edit", label: "Edit", href: `/cash/accounts/${id}?tab=edit` }] : []),
         ]}
       />
-
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">
-            Status and balance are at the top. Use the ledger tab for recent money in and out, or open the full{" "}
-            <Link href={`/cash/ledger?accountId=${id}`}>account ledger</Link>.
-          </p>
-        </div>
-      )}
 
       {tab === "ledger" && (
         <div className="card">

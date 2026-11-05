@@ -95,18 +95,18 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           { key: "overview", label: "Overview", href: base },
           { key: "receiving", label: "Receiving", count: po.receivingReports.filter((r) => r.status === "POSTED").length, href: `${base}?tab=receiving` },
           { key: "bills", label: "Bills", count: liveBills.length, href: `${base}?tab=bills` },
+          {
+            key: "match",
+            label: "Match",
+            dot: m.status === "MISMATCH" ? (m.lines.some((l) => l.status === "PRICE_MISMATCH") ? "red" : "amber") : m.status === "MATCHED" ? "green" : undefined,
+            href: `${base}?tab=match`,
+          },
           { key: "returns", label: "Returns", count: returns.filter((r) => r.status === "POSTED").length, href: `${base}?tab=returns` },
           {
             key: "attachments",
             label: "Attachments",
             count: po.receivingReports.flatMap((r) => r.attachments).length + liveBills.flatMap((b) => b.attachments).length,
             href: `${base}?tab=attachments`,
-          },
-          {
-            key: "match",
-            label: "Match",
-            dot: m.status === "MISMATCH" ? (m.lines.some((l) => l.status === "PRICE_MISMATCH") ? "red" : "amber") : m.status === "MATCHED" ? "green" : undefined,
-            href: `${base}?tab=match`,
           },
         ]}
       />

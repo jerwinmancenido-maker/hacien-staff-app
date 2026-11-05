@@ -9,7 +9,6 @@ import { Activity } from "@/components/Activity";
 import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER, ExpenseStatusChip } from "@/components/cash/CashParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
-import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
 import { voidExpenseAction } from "../../actions";
 
@@ -17,15 +16,11 @@ const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T
 
 export default async function ExpenseDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
 }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
-  const { tab: raw } = await searchParams;
-  const tab = raw === "attachments" ? raw : "overview";
   const e = await getExpense(id);
   if (!e) notFound();
   const canManage = can(user, "manage_cash");
@@ -104,25 +99,8 @@ export default async function ExpenseDetailPage({
         <Activity targets={[{ entityType: "Expense", ids: [id] }]} viewer={user} />
       </div>
 
-      <PillTabs
-        active={tab}
-        tabs={[
-          { key: "overview", label: "Overview", href: `/cash/expenses/${id}` },
-          { key: "attachments", label: "Attachments", count: e.attachments.length, href: `/cash/expenses/${id}?tab=attachments` },
-        ]}
-      />
-
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">
-            Key status and amounts are at the top. This expense is in the{" "}
-            <Link href={`/cash/ledger?accountId=${e.cashAccountId}`}>ledger for {e.cashAccount.name}</Link>.
-          </p>
-        </div>
-      )}
-
-      {tab === "attachments" && (
-        <div className="card">
+      <div className="card">
+        <h2>Attachments</h2>
           {e.attachments.length === 0 ? (
             <p className="faint">No receipt attachments.</p>
           ) : (
@@ -135,7 +113,6 @@ export default async function ExpenseDetailPage({
             </ul>
           )}
         </div>
-      )}
     </>
   );
 }

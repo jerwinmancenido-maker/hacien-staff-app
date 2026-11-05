@@ -25,7 +25,7 @@ export default async function CollectionDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "allocations" || raw === "attachments" ? raw : "overview";
+  const tab = raw === "attachments" ? raw : "allocations";
   const c = await getCollectionView(id);
   if (!c) notFound();
   const canManage = can(user, "manage_billing");
@@ -130,17 +130,10 @@ export default async function CollectionDetailPage({
       <PillTabs
         active={tab}
         tabs={[
-          { key: "overview", label: "Overview", href: `/billing/collections/${id}` },
           { key: "allocations", label: "Allocations", count: c.allocations.length, href: `/billing/collections/${id}?tab=allocations` },
           { key: "attachments", label: "Attachments", count: c.attachments.length, href: `/billing/collections/${id}?tab=attachments` },
         ]}
       />
-
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">Advances before billing stay as credit until applied. Refunds are out of scope.</p>
-        </div>
-      )}
 
       {tab === "allocations" && (
         <div className="card">
