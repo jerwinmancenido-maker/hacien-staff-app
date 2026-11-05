@@ -25,6 +25,7 @@ import {
   QUOTE_ZERO_TOTAL_ERROR,
   quoteTotalIsPositive,
   voidReasonSchema,
+  type AcceptanceInput,
   type ConvertInput,
   type ItemInput,
   type QuoteInput,
@@ -660,6 +661,41 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
  * header, items (with costs), withholding snapshot and settings version. One
  * transaction: if anything fails, neither the SO nor its number exists.
  */
+/** Audit (2026-11-05): record customer acceptance on a quote. The
+ * acceptance (date, name, how) is the evidence conversion to SO checks
+ * when there is no signed conforme file and no buyer PO number. */
+export async function recordQuoteAcceptance(id: string, input: AcceptanceInput, actor: DocActor): Promise<QuoteWithItems> {
+  assertCan(actor, "edit_data");
+  return db.$transaction(async (tx) => {
+    const before = await lockQuote(tx, id);
+    if (before.status === "VOID") throw new DocRuleError("A void quote can't record acceptance.");
+    if (before.status === "WON" || before.status === "LOST") throw new DocRuleError("This quote is already closed.");
+    const after = await tx.quote.update({
+      where: { id },
+      data: {
+        acceptedAt: input.acceptedAt,
+        acceptedBy: input.acceptedBy,
+        acceptedVia: input.acceptedVia,
+        updatedById: actor.id,
+      },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { acceptedAt: before.acceptedAt?.toISOString() ?? null },
+      after: {
+        acceptedAt: input.acceptedAt.toISOString(),
+        acceptedBy: input.acceptedBy,
+        acceptedVia: input.acceptedVia,
+      },
+    });
+    return after;
+  });
+}
+
 export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, actor: DocActor, opts: { date?: Date } = {}) {
   assertCan(actor, "edit_data");
   const snap = await getSettingsSnapshot();
@@ -689,6 +725,22 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         throw new DocRuleError("That delivery address doesn't belong to this customer.", "deliveryAddressId");
       }
       const deliveryAddress = formatAddress(address, { multiline: true });
+      // Audit (2026-11-05): conversion needs customer-acceptance evidence —
+      // a signed conforme file, a buyer PO number, or a recorded acceptance.
+      // Without this the conforme upload is process theatre: nothing ever
+      // checked it. Checked after the address so address errors still read
+      // as address errors.
+      const hasBuyerPo = Boolean(input.buyerPoNo?.trim());
+      const hasRecordedAcceptance = quote.acceptedAt !== null;
+      const conformeCount = await tx.documentAttachment.count({
+        where: { quoteId: quote.id, archivedAt: null },
+      });
+      if (!hasBuyerPo && !hasRecordedAcceptance && conformeCount === 0) {
+        throw new DocRuleError(
+          "Record customer acceptance first — upload a signed conforme, enter the buyer PO number, or record how the customer accepted.",
+          "buyerPoNo",
+        );
+      }
       const number = await allocateDocNumber(tx, "SALES_ORDER", year, format);
       const trackingRef = await generateUniqueTrackingRef(async (ref) => !!(await tx.salesOrder.findUnique({ where: { trackingRef: ref }, select: { id: true } })));
       const so = await tx.salesOrder.create({

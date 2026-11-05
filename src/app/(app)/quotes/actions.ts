@@ -17,13 +17,14 @@ import {
   markQuoteLost,
   confirmNoneAndMarkQuoteSent,
   markQuoteSent,
+  recordQuoteAcceptance,
   refreshQuoteCompanyDetails,
   rejectQuote,
   updateQuote,
   voidQuote,
   type EmailDraft,
 } from "@/lib/services/quotes";
-import { convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
+import { acceptanceInputSchema, convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
 import { getQuoteView } from "@/lib/quotes/views";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
@@ -195,6 +196,22 @@ export async function rejectQuoteAction(id: string, reason: string): Promise<For
     revalidatePath(`/quotes/${id}`);
     revalidatePath("/");
     return { ok: true, message: "Quote rejected." };
+  });
+}
+
+/** Audit (2026-11-05): record customer acceptance (date, name, how) on a quote. */
+export async function recordQuoteAcceptanceAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const parsed = acceptanceInputSchema.safeParse({
+      acceptedAt: str(form, "acceptedAt"),
+      acceptedBy: str(form, "acceptedBy"),
+      acceptedVia: str(form, "acceptedVia"),
+    });
+    if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+    await recordQuoteAcceptance(id, parsed.data, user);
+    revalidatePath(`/quotes/${id}`);
+    return { ok: true, message: "Acceptance recorded." };
   });
 }
 

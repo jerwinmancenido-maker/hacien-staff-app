@@ -43,6 +43,8 @@ type Props = {
   withholdingNotSet?: boolean;
   /** Cost viewer, and at least one line has a blank or ₱0.00 supplier cost. */
   costMissing?: boolean;
+  /** Audit: a conforme file is on file or acceptance is recorded. */
+  hasAcceptance?: boolean;
   actions: {
     markSent: (id: string) => Promise<FormState>;
     /** Saves explicit none then marks sent (Yes, none). */
@@ -75,6 +77,7 @@ export function QuoteActions({
   addressOptions,
   withholdingNotSet = false,
   costMissing = false,
+  hasAcceptance = false,
   actions,
 }: Props) {
   const router = useRouter();
@@ -205,7 +208,7 @@ export function QuoteActions({
         />
       )}
       {dialog === "convert" && (
-        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
+        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
       )}
       <ConfirmDialog
         open={dialog === "lost"}

@@ -87,12 +87,15 @@ export function ConvertDialog({
   number,
   defaultAddress,
   addressOptions = [],
+  hasAcceptance = false,
   onClose,
   onConvert,
 }: {
   number: string;
   defaultAddress: string;
   addressOptions?: AddressOption[];
+  /** Audit: a conforme file is on file or acceptance is recorded. */
+  hasAcceptance?: boolean;
   onClose: () => void;
   onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
 }) {
@@ -106,7 +109,10 @@ export function ConvertDialog({
 
   return (
     <Modal title={`Convert ${number} to a sales order?`} onClose={onClose} labelId="convert-title">
-      <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding. You can fill in the buyer PO later.</p>
+      <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding.</p>
+      {!hasAcceptance && (
+        <p className="faint">No customer acceptance on file yet — enter the buyer PO number below, or record acceptance on the Conforme tab first.</p>
+      )}
       <form
         onSubmit={async (ev) => {
           ev.preventDefault();

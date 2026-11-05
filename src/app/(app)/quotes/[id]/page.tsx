@@ -15,10 +15,12 @@ import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
 import { ConformeUploadForm } from "@/components/docs/ConformeUploadForm";
+import { AcceptanceForm } from "@/components/docs/AcceptanceForm";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import {
   uploadQuoteConformeAction,
+  recordQuoteAcceptanceAction,
   approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
@@ -88,6 +90,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             addressOptions={addressOptions}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
+            hasAcceptance={q.hasAcceptance}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
@@ -153,7 +156,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
         <>
           <p className="small muted">
             Sales orders: {q.salesOrders.length} · <Link href={`/quotes/${id}?tab=sales-orders`}>View →</Link>
-            {" · "}Conforme: {q.conformeFiles.length === 0 ? "missing" : "uploaded"} · <Link href={`/quotes/${id}?tab=conforme`}>View →</Link>
+            {" · "}Conforme: {q.acceptedAt ? "accepted" : q.conformeFiles.length === 0 ? "missing" : "uploaded"} · <Link href={`/quotes/${id}?tab=conforme`}>View →</Link>
           </p>
           <div className="card">
             <dl className="kv kv-grid">
@@ -274,21 +277,39 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
       )}
 
       {tab === "conforme" && (
-        <div className="card">
-          <h2>Signed conforme</h2>
-          {q.conformeFiles.length === 0 ? (
-            <p className="faint">No signed conforme uploaded yet. Conforme stays a blank line on the print until the customer signs.</p>
-          ) : (
-            <ul className="plain-list">
-              {q.conformeFiles.map((f) => (
-                <li key={f.id}>
-                  <a href={f.href}>{f.fileName}</a>
-                </li>
-              ))}
-            </ul>
-          )}
-          {canEdit && q.status !== "VOID" && <ConformeUploadForm action={uploadQuoteConformeAction.bind(null, q.id)} />}
-        </div>
+        <>
+          <div className="card">
+            <h2>Signed conforme</h2>
+            {q.conformeFiles.length === 0 ? (
+              <p className="faint">No signed conforme uploaded yet. Conforme stays a blank line on the print until the customer signs.</p>
+            ) : (
+              <ul className="plain-list">
+                {q.conformeFiles.map((f) => (
+                  <li key={f.id}>
+                    <a href={f.href}>{f.fileName}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canEdit && q.status !== "VOID" && <ConformeUploadForm action={uploadQuoteConformeAction.bind(null, q.id)} />}
+          </div>
+          <div className="card">
+            <h2>Customer acceptance</h2>
+            {q.acceptedAt ? (
+              <p>
+                Accepted by {q.acceptedBy} · {formatDate(q.acceptedAt)} · {q.acceptedViaLabel}
+              </p>
+            ) : (
+              <>
+                <p className="faint">
+                  No acceptance recorded yet. Converting to a sales order needs one of: a signed conforme above, a buyer PO
+                  number, or the record below.
+                </p>
+                {editable && <AcceptanceForm action={recordQuoteAcceptanceAction.bind(null, q.id)} />}
+              </>
+            )}
+          </div>
+        </>
       )}
     </>
   );

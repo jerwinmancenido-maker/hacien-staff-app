@@ -210,7 +210,7 @@ describe.skipIf(!env.hasDb)("addresses, business documents, transactions (MySQL)
       expect((await getQuotePrint(q.id))?.customer.address).toBe("18F Sample Tower\nBrgy. San Antonio, Pasig City\nMetro Manila 1605");
 
       await approveQuote(q.id, admin);
-      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddressId: del.id }, staff, { date: new Date(Date.UTC(year, 3, 1)) });
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddressId: del.id }, staff, { date: new Date(Date.UTC(year, 3, 1)) });
       const expected = "Warehouse 3\nBrgy. Ugong, Pasig City\nMetro Manila 1604";
       expect(so.deliveryAddress).toBe(expected);
       // Later edits don't change the SO's snapshot.
@@ -220,7 +220,7 @@ describe.skipIf(!env.hasDb)("addresses, business documents, transactions (MySQL)
       // A later convert snapshots the address as it is now.
       const q2 = await createQuote(quoteInput(c.id, year), admin);
       await approveQuote(q2.id, admin);
-      const so2 = await convertQuoteToSalesOrder(q2.id, { buyerPoNo: null, deliveryAddressId: del.id }, staff, { date: new Date(Date.UTC(year, 3, 2)) });
+      const so2 = await convertQuoteToSalesOrder(q2.id, { buyerPoNo: "PO-1", deliveryAddressId: del.id }, staff, { date: new Date(Date.UTC(year, 3, 2)) });
       expect(so2.deliveryAddress).toBe("Somewhere else\nBrgy. San Antonio, Pasig City\nMetro Manila 1605");
     });
   });
@@ -366,7 +366,7 @@ describe.skipIf(!env.hasDb)("addresses, business documents, transactions (MySQL)
       await voidQuote(q2.id, "Customer cancelled", admin);
       await approveQuote(q1.id, admin);
       const deliveryAddressId = await customerDeliveryAddressId(c.id);
-      const so = await convertQuoteToSalesOrder(q1.id, { buyerPoNo: null, deliveryAddressId }, admin, { date: new Date(Date.UTC(year, 6, 1)) });
+      const so = await convertQuoteToSalesOrder(q1.id, { buyerPoNo: "PO-1", deliveryAddressId }, admin, { date: new Date(Date.UTC(year, 6, 1)) });
       return { c, contact, other, supplier, q1, q2, q3, so };
     }
 

@@ -119,7 +119,7 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
       admin,
     );
     const approved = await approveQuote(quote.id, admin);
-    const so = await convertQuoteToSalesOrder(approved.id, { deliveryAddressId: addressId }, admin);
+    const so = await convertQuoteToSalesOrder(approved.id, { buyerPoNo: "PO-1", deliveryAddressId: addressId }, admin);
     return { customer, so };
   }
 

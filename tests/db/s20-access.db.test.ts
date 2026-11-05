@@ -41,7 +41,7 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     const quote = await createQuote(quoteInput(customer.id, year, { withholdingCodes: ["GOODS_1"] }), admin);
     await approveQuote(quote.id, admin);
     const deliveryAddressId = await customerDeliveryAddressId(customer.id);
-    const so = await convertQuoteToSalesOrder(quote.id, { buyerPoNo: null, deliveryAddressId }, admin, {
+    const so = await convertQuoteToSalesOrder(quote.id, { buyerPoNo: "PO-1", deliveryAddressId }, admin, {
       date: new Date(Date.UTC(year, 2, 2)),
     });
     return { year, customer, quote, so };

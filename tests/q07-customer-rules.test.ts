@@ -14,6 +14,7 @@ const fake = vi.hoisted(() => {
     quotes: [] as Row[],
     salesOrders: [] as Row[],
     audits: [] as Row[],
+    documentAttachments: [] as Row[],
     withholdingRates: [
       { id: "wh_1", code: "GOODS_1", rate: "0.01", label: "Goods 1%", active: true, sortOrder: 1 },
     ] as Row[],
@@ -73,6 +74,11 @@ const fake = vi.hoisted(() => {
     quote: table(() => state.quotes, "quote"),
     salesOrder: table(() => state.salesOrders, "salesOrder"),
     auditLog: table(() => state.audits, "audit"),
+    documentAttachment: {
+      async count({ where }: { where: Record<string, unknown> }) {
+        return state.documentAttachments.filter((r) => matches(r, where)).length;
+      },
+    },
     withholdingRate: table(() => state.withholdingRates, "withholdingRate"),
     series: {
       async upsert() {
@@ -146,6 +152,7 @@ beforeEach(() => {
   fake.state.quotes = [];
   fake.state.salesOrders = [];
   fake.state.audits = [];
+  fake.state.documentAttachments = [];
 });
 
 describe("Q07 S-77: Phone and email format validation", () => {
@@ -338,6 +345,79 @@ describe("Q07 S-76: SO convert requires a delivery address", () => {
         adminUser,
       ),
     ).rejects.toThrow(/That delivery address doesn't belong to this customer/);
+  });
+});
+
+describe("Audit: conversion needs customer-acceptance evidence", () => {
+  const setupQuote = () => {
+    fake.state.customers.push({ id: "cust_1", name: "Cust 1" });
+    fake.state.addresses.push({
+      id: "addr_1",
+      customerId: "cust_1",
+      kind: "DELIVERY",
+      street: "1 Main St",
+      barangay: "B",
+      cityMunicipality: "C",
+      province: "P",
+      zip: "1000",
+      archivedAt: null,
+    });
+    fake.state.quotes.push({
+      id: "q_1",
+      number: "Q-2026-0001",
+      customerId: "cust_1",
+      status: "DRAFT",
+      approvalStatus: "APPROVED",
+      acceptedAt: null,
+      acceptedBy: null,
+      acceptedVia: null,
+      items: [],
+      withholding: [],
+      contractPrice: "0",
+      withholdingTotal: "0",
+      netReceived: "0",
+      supplierCost: "0",
+      netMargin: "0",
+      netMarginPct: "0",
+    });
+  };
+
+  it("throws when there is no conforme, no buyer PO, and no recorded acceptance", async () => {
+    setupQuote();
+    await expect(
+      convertQuoteToSalesOrder("q_1", { buyerPoNo: null, deliveryAddressId: "addr_1" }, adminUser),
+    ).rejects.toThrow(/Record customer acceptance first/);
+  });
+
+  it("converts with a buyer PO number and no other evidence", async () => {
+    setupQuote();
+    const so = await convertQuoteToSalesOrder("q_1", { buyerPoNo: "PO-77", deliveryAddressId: "addr_1" }, adminUser);
+    expect(so.buyerPoNo).toBe("PO-77");
+  });
+
+  it("converts with a recorded acceptance and no buyer PO", async () => {
+    setupQuote();
+    const q = fake.state.quotes[0]!;
+    q.acceptedAt = new Date("2026-11-05T00:00:00.000Z");
+    q.acceptedBy = "Ana Santos";
+    q.acceptedVia = "EMAIL";
+    const so = await convertQuoteToSalesOrder("q_1", { buyerPoNo: null, deliveryAddressId: "addr_1" }, adminUser);
+    expect(so.quoteId).toBe("q_1");
+  });
+
+  it("converts with a signed conforme file and no buyer PO", async () => {
+    setupQuote();
+    fake.state.documentAttachments.push({ id: "att_1", quoteId: "q_1", archivedAt: null, fileName: "conforme.pdf" });
+    const so = await convertQuoteToSalesOrder("q_1", { buyerPoNo: null, deliveryAddressId: "addr_1" }, adminUser);
+    expect(so.quoteId).toBe("q_1");
+  });
+
+  it("an archived conforme file does not count as evidence", async () => {
+    setupQuote();
+    fake.state.documentAttachments.push({ id: "att_1", quoteId: "q_1", archivedAt: new Date(), fileName: "conforme.pdf" });
+    await expect(
+      convertQuoteToSalesOrder("q_1", { buyerPoNo: null, deliveryAddressId: "addr_1" }, adminUser),
+    ).rejects.toThrow(/Record customer acceptance first/);
   });
 });
 

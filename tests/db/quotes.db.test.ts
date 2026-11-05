@@ -119,7 +119,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       const year = await freshYear();
       const a = await createQuote(quoteInput(customer.id, year), costUser);
       const b = await createQuote(quoteInput(customer.id, year), costUser);
-      const order = await convertQuoteToSalesOrder(a.id, { buyerPoNo: null, deliveryAddress: null }, costUser, { date: new Date(Date.UTC(year, 3, 1)) });
+      const order = await convertQuoteToSalesOrder(a.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser, { date: new Date(Date.UTC(year, 3, 1)) });
       const c = await createQuote(quoteInput(customer.id, year), costUser);
       expect([a.number, b.number, c.number]).toEqual([qt(year, 1), qt(year, 2), qt(year, 3)]);
       expect(order.number).toBe(so(year, 1));
@@ -327,7 +327,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     it("changing customer pick does not change existing quotes/SOs (snapshot)", async () => {
       const customer = await makeCustomer(["GOODS_1", "SERVICES_2"], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
-      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       const beforeQ = {
         pick: q.withholdingPick,
         total: Number(q.withholdingTotal).toFixed(2),
@@ -665,7 +665,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     it("legacy NULL line rates on an open SO keep WH amount unchanged on save", async () => {
       const customer = await makeCustomer(["GOODS_1", "SERVICES_2"], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
-      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       const storedWh = Number(so.withholdingTotal).toFixed(2);
       expect(storedWh).not.toBe("0.00");
       await db.salesOrderItem.updateMany({
@@ -712,7 +712,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     it("an issued (Won) document is not recalculated when lines or the customer change", async () => {
       const customer = await makeCustomer(["GOODS_1", "SERVICES_2"], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
-      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       expect(Number(so.withholdingTotal).toFixed(2)).toBe(Number(q.withholdingTotal).toFixed(2));
 
       const won = await db.quote.findUniqueOrThrow({ where: { id: q.id } });
@@ -926,7 +926,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
     it("a Won quote with an open SO can't be voided; voiding the SO returns the quote to Sent", async () => {
       const customer = await makeCustomer();
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
-      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       await expect(voidQuote(q.id, "Changed mind", costUser)).rejects.toThrow("Void the sales order first.");
 
       await voidSalesOrder(order.id, "Buyer cancelled the PO", costUser);
@@ -1131,7 +1131,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(print!.missing).toEqual([]);
       expect(JSON.stringify(print!.doc)).not.toMatch(/\[not set/i);
 
-      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       await db.salesOrder.update({ where: { id: order.id }, data: { settingsVersionId: blank.id } });
       const soPrint = await getSalesOrderPrintModel(order.id);
       expect(soPrint!.doc.company.tin).toBe(filledTin);
@@ -1177,7 +1177,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(print!.doc.company.address).toBe(pinnedAddress);
       expect(print!.doc.company.tin).not.toBe("999-888-777-000");
 
-      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const order = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
       await db.salesOrder.update({ where: { id: order.id }, data: { settingsVersionId: pinned.id } });
       const soPrint = await getSalesOrderPrintModel(order.id);
       expect(soPrint!.doc.company.tin).toBe(pinnedTin);
@@ -1213,7 +1213,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
       const customer = await makeCustomer(["GOODS_1", "SERVICES_2"], "TOP_WITHHOLDING_AGENT");
       const q = await createQuote(quoteInput(customer.id, (await freshYear())), costUser);
-      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: null, deliveryAddress: null }, costUser);
+      const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddress: null }, costUser);
 
       await db.quoteItem.updateMany({ where: { quoteId: q.id }, data: { withholdingRate: null, withholdingAtc: null, withholdingOverride: false } });
       await db.salesOrderItem.updateMany({

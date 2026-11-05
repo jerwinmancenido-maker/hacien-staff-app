@@ -90,7 +90,7 @@ describe.skipIf(!hasDb)("legacy payment terms outside the 3 new options (MySQL)"
     await approveQuote(q.id, admin);
     const so = await convertQuoteToSalesOrder(
       q.id,
-      { buyerPoNo: null, deliveryAddressId: await customerDeliveryAddressId(customer.id) },
+      { buyerPoNo: "PO-1", deliveryAddressId: await customerDeliveryAddressId(customer.id) },
       admin,
     );
     expect(so.terms).toBe(LEGACY);
