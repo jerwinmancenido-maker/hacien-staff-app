@@ -28,7 +28,7 @@ const LATER: Item[] = [
   { href: "/quotes", label: "Quotes", icon: <FileIcon /> },
   { href: "/items", label: "Items", icon: <BoxIcon /> },
   { href: "/sales-orders", label: "Sales Orders", icon: <CartIcon /> },
-  { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon />, costsOnly: true },
+  { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon /> },
   { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
   { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireCostPage } from "@/lib/auth/current-user";
+import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canVoid } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
 import { listSupplierReturns } from "@/lib/services/returns";
@@ -31,13 +31,15 @@ const TABS = ["overview", "receiving", "bills", "match", "returns", "activity", 
 type Tab = (typeof TABS)[number];
 
 export default async function PurchaseOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
-  // Cost data: only users with "Can see costs" (others → /no-access).
-  const user = await requireCostPage("view");
+  // Audit F: every viewer can open a PO; money is stripped in the view and
+  // hidden below when the viewer can't see costs.
+  const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: rawTab } = await searchParams;
-  const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const po = await getPurchaseOrderView(id, user);
   if (!po) notFound();
+  // Bills and Match are money tabs — non-cost viewers land on Overview.
+  const tab: Tab = (rawTab === "bills" || rawTab === "match") && !po.canSeeCosts ? "overview" : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const returns = await listSupplierReturns(id);
   const canEdit = can(user, "edit_data");
   const canApprove = can(user, "approve") && po.approval.canApprove;
@@ -61,12 +63,13 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             id={po.id}
             number={po.number}
             status={po.status}
-            canEdit={canEdit}
+            // Audit F: PO actions are money actions — cost viewers only.
+            canEdit={canEdit && po.canSeeCosts}
             canMaintain={user.isAdmin}
-            canVoid={canVoid(user)}
-            canApprove={canApprove}
+            canVoid={canVoid(user) && po.canSeeCosts}
+            canApprove={canApprove && po.canSeeCosts}
             approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" && po.approval.needsApproval ? "Waiting for an approver." : po.approval.blockedReason}
-            canMarkSentFromDraft={canEdit && po.approval.canMarkSentFromDraft}
+            canMarkSentFromDraft={canEdit && po.canSeeCosts && po.approval.canMarkSentFromDraft}
             postedReceipts={po.postedReceipts}
             actions={{
               approve: approvePurchaseOrderAction,
@@ -94,13 +97,18 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         tabs={[
           { key: "overview", label: "Overview", href: base },
           { key: "receiving", label: "Receiving", count: po.receivingReports.filter((r) => r.status === "POSTED").length, href: `${base}?tab=receiving` },
-          { key: "bills", label: "Bills", count: liveBills.length, href: `${base}?tab=bills` },
-          {
-            key: "match",
-            label: "Match",
-            dot: m.status === "MISMATCH" ? (m.lines.some((l) => l.status === "PRICE_MISMATCH") ? "red" : "amber") : m.status === "MATCHED" ? "green" : undefined,
-            href: `${base}?tab=match`,
-          },
+          // Audit F: Bills and Match are money tabs — hidden from non-cost viewers.
+          ...(po.canSeeCosts
+            ? [
+                { key: "bills", label: "Bills", count: liveBills.length, href: `${base}?tab=bills` },
+                {
+                  key: "match",
+                  label: "Match",
+                  dot: m == null ? undefined : m.status === "MISMATCH" ? (m.lines.some((l) => l.status === "PRICE_MISMATCH") ? "red" : "amber") : m.status === "MATCHED" ? "green" : undefined,
+                  href: `${base}?tab=match`,
+                },
+              ] as const
+            : []),
           { key: "returns", label: "Returns", count: returns.filter((r) => r.status === "POSTED").length, href: `${base}?tab=returns` },
           { key: "activity", label: "Activity", href: `${base}?tab=activity` },
           {
@@ -168,8 +176,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     <th>Description</th>
                     <th className="num">Qty</th>
                     <th>Unit</th>
-                    <th className="num">Unit cost</th>
-                    <th className="num">Total</th>
+                    {po.canSeeCosts && <th className="num">Unit cost</th>}
+                    {po.canSeeCosts && <th className="num">Total</th>}
                     <th className="num">Received</th>
                     <th aria-label="Progress" />
                   </tr>
@@ -190,8 +198,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                       </td>
                       <td className="num">{qtyText(i.qty)}</td>
                       <td>{i.unit}</td>
-                      <td className="num">{formatPeso(i.unitCost)}</td>
-                      <td className="num strong">{formatPeso(i.total)}</td>
+                      {po.canSeeCosts && <td className="num">{formatPeso(i.unitCost!)}</td>}
+                      {po.canSeeCosts && <td className="num strong">{formatPeso(i.total!)}</td>}
                       <td className="num">
                         {qtyText(i.receivedQty)} / {qtyText(i.qty)}
                       </td>
@@ -203,14 +211,16 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                 </tbody>
               </table>
             </div>
-            <div className="totals-wrap">
-              <div className="totals-box" aria-label="Totals">
-                <div className="totals-row strong">
-                  <span>PO total</span>
-                  <span className="num">{formatPeso(po.subtotal)}</span>
+            {po.canSeeCosts && (
+              <div className="totals-wrap">
+                <div className="totals-box" aria-label="Totals">
+                  <div className="totals-row strong">
+                    <span>PO total</span>
+                    <span className="num">{formatPeso(po.subtotal!)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           {canEdit && <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={createReminderAction} />}
         </>
@@ -287,7 +297,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         {r.creditNoteNumber ? (
                           <>
                             {r.creditNoteNumber}
-                            {r.creditNoteAmount && <div className="faint">{formatPeso(r.creditNoteAmount)}</div>}
+                            {po.canSeeCosts && r.creditNoteAmount && <div className="faint">{formatPeso(r.creditNoteAmount)}</div>}
                           </>
                         ) : (
                           <span className="faint">—</span>
@@ -295,7 +305,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                       </td>
                       <td>{r.status === "VOID" ? "Void" : "Posted"}</td>
                       <td>
-                        {r.status !== "VOID" && canVoid(user) && (
+                        {r.status !== "VOID" && canVoid(user) && po.canSeeCosts && (
                           <VoidButton
                             label="Void"
                             docLabel="supplier return"
@@ -313,7 +323,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         </div>
       )}
 
-      {tab === "bills" && (
+      {tab === "bills" && po.canSeeCosts && (
         <div className="card">
           <div className="card-head">
             <h2>Supplier bills</h2>
@@ -388,7 +398,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         </div>
       )}
 
-      {tab === "match" && (
+      {tab === "match" && po.canSeeCosts && m && (
         <div className="card">
           <div className="card-head">
             <h2>3-way match</h2>

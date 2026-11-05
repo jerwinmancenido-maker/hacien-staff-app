@@ -8,12 +8,8 @@ import { runAction } from "@/lib/actions";
 import { markBillingChecked, recordBilling, updateBilling, updateBillingExpectedDate, voidBilling } from "@/lib/services/billings";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import type { BookletType } from "@/lib/billing/booklet";
-import { applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
-import { planCreditApplication } from "@/lib/billing/allocations";
-import { unappliedCash } from "@/lib/billing/status";
-import { money } from "@/lib/documents/common";
-import { db } from "@/lib/db";
-import { fromScaled, toScaled } from "@/lib/quotes/calc";
+import { applyCreditSimple, applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
+import { toScaled } from "@/lib/quotes/calc";
 import {
   applyCreditInputSchema,
   applyCreditSimpleSchema,
@@ -191,55 +187,9 @@ export async function applyCreditAction(_prev: FormState, form: FormData): Promi
         message: "Enter how much credit to apply.",
       };
     }
-
-    const collections = await db.collection.findMany({
-      where: { customerId, status: "POSTED" },
-      include: { allocations: true },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-    });
-    const sources = collections
-      .map((c) => ({
-        collectionId: c.id,
-        unappliedCredit: unappliedCash(
-          money(c.amountReceived),
-          c.allocations.map((a) => money(a.cashApplied)),
-        ),
-      }))
-      .filter((s) => toScaled(s.unappliedCredit, 2) > 0n);
-
-    const totalCredit = fromScaled(
-      sources.reduce((acc, s) => acc + toScaled(s.unappliedCredit, 2), 0n),
-      2,
-    );
-    if (toScaled(amount, 2) > toScaled(totalCredit, 2)) {
-      return {
-        values,
-        fieldErrors: {
-          amount: `Only ₱${totalCredit} credit is available. Lower the amount or record a collection first.`,
-        },
-        message: "Not enough customer credit for that amount.",
-      };
-    }
-
-    let planned;
-    try {
-      planned = planCreditApplication(amount, sources, billingId);
-    } catch (err) {
-      return {
-        values,
-        fieldErrors: { amount: err instanceof Error ? err.message : "Couldn't plan the credit apply." },
-        message: "Fix the amount and try again.",
-      };
-    }
-    if (planned.length === 0) {
-      return {
-        values,
-        fieldErrors: { amount: "No unapplied credit to apply. Record a collection first." },
-        message: "No customer credit available.",
-      };
-    }
-
-    await applyCustomerCredit({ customerId, allocations: planned }, user);
+    // Audit D: the service draws FIFO across collection cash AND return
+    // credit in one transaction; the plan lives there, not in the action.
+    await applyCreditSimple(customerId, billingId, amount, user);
     refreshBilling(customerId, null, null);
     return { ok: true, message: "Credit applied." };
   }, values);

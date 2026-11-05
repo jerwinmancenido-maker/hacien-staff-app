@@ -5,7 +5,7 @@ import { formatDate, formatPeso } from "@/lib/format";
 import { listCollections } from "@/lib/billing/views";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionStatusChip, MethodLabel } from "@/components/billing/BillingParts";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { EmptyState, Chip, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 import type { CollectionStatus } from "@prisma/client";
 
@@ -105,7 +105,7 @@ export default async function CollectionsListPage({
                     <td className="num">{formatPeso(r.cashApplied)}</td>
                     <td className="num">{formatPeso(r.unappliedCredit)}</td>
                     <td>
-                      <CollectionStatusChip status={r.status} />
+                      <CollectionStatusChip status={r.status} /> {r.isDeposit && <Chip tone="blue">Deposit</Chip>}
                     </td>
                   </tr>
                 ))}

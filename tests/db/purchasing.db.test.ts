@@ -521,11 +521,11 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         [{ name: "invoice.png", size: PNG.length, bytes: PNG }],
       );
       const view = (await getPurchaseOrderView(po.id, { ...admin, isAdmin: true }))!;
-      expect(view.match.status).toBe("MISMATCH");
-      expect(view.match.lines[0]!.status).toBe("PRICE_MISMATCH");
-      expect(view.match.lines[0]!.priceDifferenceTotal).toBe("2500.00");
-      expect(view.match.lines[1]!.status).toBe("MATCHED");
-      expect(view.match.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
+      expect(view.match!.status).toBe("MISMATCH");
+      expect(view.match!.lines[0]!.status).toBe("PRICE_MISMATCH");
+      expect(view.match!.lines[0]!.priceDifferenceTotal).toBe("2500.00");
+      expect(view.match!.lines[1]!.status).toBe("MATCHED");
+      expect(view.match!.headerFlags.map((f) => f.code)).toEqual(["BILLED_DIFFERS_FROM_RECEIVED"]);
 
       await expect(
         recordSupplierBill(po.id, { billNumber: billNo.toLowerCase(), billDate: new Date(Date.UTC(year, 3, 6)), amount: "1", notes: null, lines: [] }, buyer),
@@ -540,7 +540,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       const reissued = await recordSupplierBill(po.id, { billNumber: billNo, billDate: new Date(Date.UTC(year, 3, 7)), amount: "455000.00", notes: null, lines: [] }, buyer);
       expect(reissued.status).toBe("RECORDED");
       const matched = (await getPurchaseOrderView(po.id, { ...admin, isAdmin: true }))!;
-      expect(matched.match.headerFlags).toEqual([]);
+      expect(matched.match!.headerFlags).toEqual([]);
       expect(await db.documentVoid.count({ where: { docType: "SUPPLIER_BILL", docId: bill.id } })).toBe(1);
     });
 

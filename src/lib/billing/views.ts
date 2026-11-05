@@ -10,7 +10,7 @@ import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket 
 import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
-import { customerCreditBalance } from "../services/collections";
+import { customerCreditBalance, customerDepositBalance } from "../services/collections";
 import { getNonVatMeter } from "../services/non-vat";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
@@ -35,9 +35,10 @@ export function overdueInfo(dueDate: Date, balance: string, graceDays: number, t
   return { overdue, days, label: overdue ? `Overdue ${days} day${days === 1 ? "" : "s"}` : null };
 }
 
-function appliedOf(allocs: { cashApplied: unknown; withholdingApplied: unknown }[]) {
+function appliedOf(allocs: { cashApplied: unknown; withholdingApplied?: unknown }[]) {
   const cash = allocs.reduce((a, x) => a + toScaled(money(x.cashApplied as never), 2), 0n);
-  const wh = allocs.reduce((a, x) => a + toScaled(money(x.withholdingApplied as never), 2), 0n);
+  // Return-credit applications carry no withholding (cash only).
+  const wh = allocs.reduce((a, x) => a + toScaled(money((x.withholdingApplied ?? 0) as never), 2), 0n);
   return { cashApplied: fromScaled(cash, 2), withholdingApplied: fromScaled(wh, 2) };
 }
 
@@ -111,6 +112,9 @@ export async function listBillings(filters: BillingListFilters = {}) {
       customer: { select: { id: true, name: true, withholdingType: true } },
       salesOrder: { select: { id: true, number: true, iarDate: true } },
       allocations: { where: { collection: { status: "POSTED" } } },
+      // Audit D: return-credit applications reduce the balance too.
+      // Audit D: only POSTED returns count — a voided return un-applies its credit.
+      creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
     // Page after overdue filter (below). Other statuses keep the DB take.
@@ -119,7 +123,7 @@ export async function listBillings(filters: BillingListFilters = {}) {
   const mapped = rows.map((b) => {
     const isGov = b.customer.withholdingType === "GOVERNMENT";
     const effectiveExpectedDate = b.expectedDate ?? (b.salesOrder?.iarDate ? expectedPaymentDateFromIar(b.salesOrder.iarDate) : null);
-    const applied = appliedOf(b.allocations);
+    const applied = appliedOf([...b.allocations, ...b.creditApplications]);
     const balance = billingBalance(money(b.amount), applied);
     const od = overdueInfo(b.dueDate, balance, grace, today, isGov);
     return {
@@ -156,6 +160,11 @@ export async function getBillingView(id: string) {
         where: { collection: { status: "POSTED" } },
         include: { collection: { select: { id: true, number: true, date: true, method: true, receiptNo: true, status: true } } },
       },
+      // Audit D: return-credit applications, with their credit memo number.
+      creditApplications: {
+        where: { customerCredit: { customerReturn: { status: "POSTED" } } },
+        include: { customerCredit: { include: { customerReturn: { select: { number: true, returnDate: true } } } } },
+      },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "desc" } },
       withholdings: {
         orderBy: { createdAt: "desc" },
@@ -168,7 +177,7 @@ export async function getBillingView(id: string) {
   if (!b) return null;
   const isGov = b.customer.withholdingType === "GOVERNMENT";
   const effectiveExpectedDate = b.expectedDate ?? (b.salesOrder?.iarDate ? expectedPaymentDateFromIar(b.salesOrder.iarDate) : null);
-  const applied = appliedOf(b.allocations);
+  const applied = appliedOf([...b.allocations, ...b.creditApplications]);
   const balance = billingBalance(money(b.amount), applied);
   const od = overdueInfo(b.dueDate, balance, grace, undefined, isGov);
   return {
@@ -201,6 +210,14 @@ export async function getBillingView(id: string) {
         ...a.collection,
         date: ymd(a.collection.date)!,
       },
+    })),
+    // Audit D: credit-memo applications on this billing.
+    creditApplications: b.creditApplications.map((a) => ({
+      id: a.id,
+      cashApplied: money(a.cashApplied),
+      appliedOn: ymd(a.appliedOn)!,
+      creditMemo: a.customerCredit.customerReturn.number,
+      creditMemoDate: ymd(a.customerCredit.customerReturn.returnDate)!,
     })),
     attachments: b.attachments.map((a) => ({
       id: a.id,
@@ -325,6 +342,8 @@ export async function listCollections(filters: CollectionListFilters = {}) {
       cashApplied,
       unappliedCredit: credit,
       status: c.status,
+      // Audit E: deposit / advance — money held as customer credit.
+      isDeposit: c.isDeposit,
       customer: c.customer,
     };
   });
@@ -365,6 +384,8 @@ export async function getCollectionView(id: string) {
     unappliedCredit: unappliedCash(money(c.amountReceived), c.allocations.map((a) => money(a.cashApplied))),
     notes: c.notes,
     status: c.status,
+    // Audit E: deposit / advance.
+    isDeposit: c.isDeposit,
     voidReason: c.voidReason,
     needsAdminCheck: c.needsAdminCheck,
     customer: c.customer,
@@ -723,12 +744,17 @@ export async function customerArSnapshot(customerId: string) {
     db.customer.findUnique({ where: { id: customerId }, select: { withholdingType: true } }),
     db.billing.findMany({
       where: { customerId, status: { not: "VOID" } },
-      include: { allocations: { where: { collection: { status: "POSTED" } } } },
+      include: {
+        allocations: { where: { collection: { status: "POSTED" } } },
+        // Audit D: return-credit applications reduce the balance too.
+        // Audit D: only POSTED returns count.
+        creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
+      },
     }),
   ]);
   const isGov = customer?.withholdingType === "GOVERNMENT";
   const rows = billings.map((b) => {
-    const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
+    const balance = billingBalance(money(b.amount), appliedOf([...b.allocations, ...b.creditApplications]));
     return { dueDate: b.dueDate, balance, isGovernment: isGov, overdue: isOverdue(b.dueDate, balance, today, grace, isGov) };
   });
   const aging = sumAging(rows, today);
@@ -737,8 +763,10 @@ export async function customerArSnapshot(customerId: string) {
     2,
   );
   const credit = await customerCreditBalance(customerId);
+  // Audit E: deposits held — unapplied cash on isDeposit collections.
+  const deposits = await customerDepositBalance(customerId);
   const anyOverdue = rows.some((r) => r.overdue);
-  return { aging, overdue, credit, anyOverdue, graceDays: grace, balanceDue: aging.total };
+  return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total };
 }
 
 /** Statement of account data (printable). Title must say it's not an official invoice. */
@@ -764,7 +792,12 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
 
   const billings = await db.billing.findMany({
     where: billingWhere,
-    include: { allocations: { where: { collection: { status: "POSTED" } } } },
+    include: {
+      allocations: { where: { collection: { status: "POSTED" } } },
+      // Audit D: return-credit applications (opening balance below).
+      // Audit D: only POSTED returns count.
+      creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
+    },
     orderBy: [{ invoiceDate: "asc" }, { invoiceNo: "asc" }],
   });
   const collections = await db.collection.findMany({
@@ -778,6 +811,20 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
     include: { allocations: true },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
+  // Audit D: credit memos in range (POSTED returns only).
+  const returnCredits = await db.customerCredit.findMany({
+    where: {
+      customerId,
+      customerReturn: {
+        status: "POSTED",
+        ...(from || to
+          ? { returnDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+    },
+    include: { applications: true, customerReturn: { select: { number: true, returnDate: true } } },
+    orderBy: [{ customerReturn: { returnDate: "asc" } }, { createdAt: "asc" }],
+  });
 
   // Opening balance: billings before `from` still open, minus collections before `from`.
   let opening = 0n;
@@ -785,21 +832,38 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
     const priorBillings = await db.billing.findMany({
       where: { customerId, status: { not: "VOID" }, invoiceDate: { lt: from } },
       // Only applications dated before `from` (not today's full allocation history).
-      include: { allocations: { where: { collection: { status: "POSTED" }, appliedOn: { lt: from } } } },
+      include: {
+        allocations: { where: { collection: { status: "POSTED" }, appliedOn: { lt: from } } },
+        // Audit D: return-credit applications dated before `from`.
+        creditApplications: {
+          where: { appliedOn: { lt: from }, customerCredit: { customerReturn: { status: "POSTED" } } },
+        },
+      },
     });
     for (const b of priorBillings) {
-      opening += toScaled(billingBalance(money(b.amount), appliedOf(b.allocations)), 2);
+      opening += toScaled(billingBalance(money(b.amount), appliedOf([...b.allocations, ...b.creditApplications])), 2);
     }
     // Unapplied credit as of `from`: prior collections minus applications before `from`.
     const priorCols = await db.collection.findMany({
       where: { customerId, status: "POSTED", date: { lt: from } },
       include: { allocations: true },
     });
+    // Audit D: prior return credits minus their applications before `from`.
+    const priorReturnCredits = await db.customerCredit.findMany({
+      where: { customerId, customerReturn: { status: "POSTED", returnDate: { lt: from } } },
+      include: { applications: true },
+    });
     const openingCredit = openingCreditAsOf(
-      priorCols.map((c) => ({
-        amountReceived: money(c.amountReceived),
-        applications: c.allocations.map((a) => ({ cashApplied: money(a.cashApplied), date: a.appliedOn })),
-      })),
+      [
+        ...priorCols.map((c) => ({
+          amountReceived: money(c.amountReceived),
+          applications: c.allocations.map((a) => ({ cashApplied: money(a.cashApplied), date: a.appliedOn })),
+        })),
+        ...priorReturnCredits.map((c) => ({
+          amountReceived: money(String(c.amount)),
+          applications: c.applications.map((a) => ({ cashApplied: money(String(a.cashApplied)), date: a.appliedOn })),
+        })),
+      ],
       from,
     );
     opening -= toScaled(openingCredit, 2);
@@ -816,7 +880,11 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
         withholding: string;
         id: string;
         unapplied: string;
-      };
+        // Audit E: a deposit collection is labelled as a deposit.
+        isDeposit: boolean;
+      }
+    // Audit D: a credit memo reduces what the customer owes.
+    | { kind: "credit"; date: string; number: string; amount: string; id: string };
 
   const lines: Line[] = [];
   for (const b of billings) {
@@ -847,6 +915,19 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
       withholding: wh,
       unapplied: unappliedCash(money(c.amountReceived), c.allocations.map((a) => money(a.cashApplied))),
       id: c.id,
+      isDeposit: c.isDeposit,
+    });
+  }
+  // Audit D: credit memos (full credit amount; applications against billings
+  // are already reflected by the billing lines showing the full amount minus
+  // nothing — the memo line itself is the reduction, so never double-count).
+  for (const cr of returnCredits) {
+    lines.push({
+      kind: "credit",
+      date: ymd(cr.customerReturn.returnDate)!,
+      number: cr.customerReturn.number,
+      amount: money(String(cr.amount)),
+      id: cr.id,
     });
   }
   lines.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
@@ -854,10 +935,13 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
   let running = opening;
   const withBalance = lines.map((line) => {
     if (line.kind === "billing") running += toScaled(line.amount, 2);
-    else {
+    else if (line.kind === "collection") {
       running -= toScaled(line.cash, 2) + toScaled(line.withholding, 2);
       // Unapplied credit still reduces what the customer owes in net terms when shown as credit.
       running -= toScaled(line.unapplied, 2);
+    } else {
+      // Audit D: a credit memo reduces what the customer owes by its full amount.
+      running -= toScaled(line.amount, 2);
     }
     return { ...line, runningBalance: fromScaled(running, 2) };
   });

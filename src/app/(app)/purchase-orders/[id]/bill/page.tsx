@@ -15,10 +15,10 @@ export default async function RecordBillPage({ params }: { params: Promise<{ id:
   if (!po) notFound();
   return (
     <>
-      <PageHeader title={`Record supplier bill · ${po.number}`} subtitle={`${po.supplier.name} · PO total ${po.subtotal}`} />
+      <PageHeader title={`Record supplier bill · ${po.number}`} subtitle={`${po.supplier.name} · PO total ${po.subtotal!}`} />
       {canPo(po.status, "bill") ? (
         <BillForm
-          lines={po.items.map((i) => ({ id: i.id, description: i.description, unit: i.unit, qty: i.qty, unitCost: i.unitCost, receivedQty: i.receivedQty }))}
+          lines={po.items.map((i) => ({ id: i.id, description: i.description, unit: i.unit, qty: i.qty, unitCost: i.unitCost!, receivedQty: i.receivedQty }))}
           defaultDate={isoDate(manilaToday())}
           action={recordBillAction.bind(null, id)}
           cancelHref={`/purchase-orders/${id}?tab=match`}

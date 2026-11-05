@@ -136,7 +136,7 @@ export default async function CashAccountDetailPage({
       )}
 
       {tab === "edit" && canManage && (
-        <div className="card" style={{ maxWidth: 720 }}>
+        <div className="card">
           <AccountForm
             action={updateCashAccountAction.bind(null, id)}
             canEdit

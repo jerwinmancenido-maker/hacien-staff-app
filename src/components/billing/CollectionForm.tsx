@@ -122,6 +122,8 @@ export function CollectionForm({
   );
 
   const [allocs, setAllocs] = useState(initialAlloc);
+  // Audit E: deposit / advance — the full amount stays as customer credit.
+  const [isDeposit, setIsDeposit] = useState(false);
 
   function markTouched(i: number) {
     setTouched((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
@@ -257,9 +259,18 @@ export function CollectionForm({
       <h3 className="section-title" style={{ marginTop: 24 }}>
         Allocate to open billings
       </h3>
+      <label className="check" style={{ marginBottom: 8 }}>
+        <input
+          type="checkbox"
+          name="isDeposit"
+          checked={isDeposit}
+          onChange={(ev) => setIsDeposit(ev.target.checked)}
+        />{" "}
+        Deposit / advance — keep the full amount as customer credit, don&apos;t allocate to any billing.
+      </label>
       <p className="faint small">
         Leave cash unallocated to keep it as customer credit (advances / downpayments). Cash applied cannot exceed amount
-        received. Unapplied: <strong>{formatPeso(unapplied)}</strong> The 2307 split fills in automatically once the amount
+        received. Unapplied: <strong>{formatPeso(isDeposit ? Number(amount) || 0 : unapplied)}</strong> The 2307 split fills in automatically once the amount
         fully covers a billing — clear it if the customer withheld less.
         {!canOverrideRates ? " Rates come from the sales order — only an Admin can override." : ""}
       </p>
@@ -268,7 +279,9 @@ export function CollectionForm({
           {e.allocations}
         </div>
       )}
-      {openBillings.length === 0 ? (
+      {isDeposit ? (
+        <p className="faint">Deposit — the full amount will be kept as customer credit. Apply it to a billing later from Apply credit.</p>
+      ) : openBillings.length === 0 ? (
         <p className="faint">No open billings — the full amount will be kept as customer credit.</p>
       ) : (
         <div className="table-wrap">

@@ -327,6 +327,12 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       if (postedAlloc > 0) {
         throw new DocRuleError("This billing has posted collections. Void those first.");
       }
+      // Audit D: return-credit applications strand the credit if the billing
+      // is voided — reverse the credit first (void the return).
+      const creditApps = await tx.customerCreditApplication.count({ where: { billingId: id } });
+      if (creditApps > 0) {
+        throw new DocRuleError("This billing has return credit applied. Void the credit memo first.");
+      }
 
       const now = new Date();
       // invoiceNo stays set — voided booklet numbers are never reused.
@@ -396,7 +402,15 @@ export async function recomputeBillingStatus(tx: Tx, billingId: string, actorId:
   const allocs = await tx.collectionAllocation.findMany({
     where: { billingId, collection: { status: "POSTED" } },
   });
-  const cash = allocs.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+  // Audit D: return-credit applications reduce the balance just like cash.
+  // Only applications whose return is still POSTED count — voiding a return
+  // un-applies its credit (same pattern as voided collections).
+  const creditApps = await tx.customerCreditApplication.findMany({
+    where: { billingId, customerCredit: { customerReturn: { status: "POSTED" } } },
+  });
+  const cash =
+    allocs.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n) +
+    creditApps.reduce((a, x) => a + toScaled(money(String(x.cashApplied)), 2), 0n);
   const wh = allocs.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
   const amt = toScaled(money(billing.amount), 2);
   let status: BillingStatus = "OPEN";
@@ -419,7 +433,12 @@ export async function soBillingSummary(salesOrderId: string) {
   if (!so) return null;
   const billings = await db.billing.findMany({
     where: { salesOrderId, status: { not: "VOID" } },
-    include: { allocations: { where: { collection: { status: "POSTED" } } } },
+    include: {
+      allocations: { where: { collection: { status: "POSTED" } } },
+      // Audit D: return-credit applications count as cash collected.
+      // Only POSTED returns count — a voided return un-applies its credit.
+      creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
+    },
   });
   const billed = billings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
   let cash = 0n;
@@ -428,6 +447,9 @@ export async function soBillingSummary(salesOrderId: string) {
     for (const al of b.allocations) {
       cash += toScaled(money(al.cashApplied), 2);
       wh += toScaled(money(al.withholdingApplied), 2);
+    }
+    for (const ca of b.creditApplications) {
+      cash += toScaled(money(String(ca.cashApplied)), 2);
     }
   }
   const contract = toScaled(money(so.contractPrice), 2);

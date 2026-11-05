@@ -17,7 +17,7 @@ export default async function NewCashAccountPage() {
     <>
       <PageHeader title="Add cash account" subtitle={CASH_DISCLAIMER} />
       <CashNav active="accounts" />
-      <div className="card" style={{ maxWidth: 720 }}>
+      <div className="card">
         <AccountForm
           action={createCashAccountAction}
           canEdit

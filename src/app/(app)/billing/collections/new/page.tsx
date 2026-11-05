@@ -92,7 +92,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
     <>
       <PageHeader title="Record collection" subtitle={customer.name} />
       <BillingNav active="collections" />
-      <div className="card" style={{ maxWidth: 960 }}>
+      <div className="card">
         <CollectionForm
           action={recordCollectionAction}
           canEdit

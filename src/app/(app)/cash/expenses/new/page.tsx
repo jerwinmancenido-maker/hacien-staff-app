@@ -29,7 +29,7 @@ export default async function NewExpensePage() {
     <>
       <PageHeader title="Record expense" subtitle={CASH_DISCLAIMER} />
       <CashNav active="expenses" />
-      <div className="card" style={{ maxWidth: 800 }}>
+      <div className="card">
         <ExpenseForm
           action={recordExpenseAction}
           canEdit

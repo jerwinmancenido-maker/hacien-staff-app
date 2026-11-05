@@ -329,6 +329,8 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
           </dd>
           <dt>Customer credit</dt>
           <dd className="num">{formatPeso(ar.credit)}</dd>
+          <dt>Deposits held</dt>
+          <dd className="num">{formatPeso(ar.deposits)}</dd>
         </dl>
         {canManage && (
           <div className="form-actions" style={{ marginTop: 12 }}>
@@ -370,6 +372,7 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
             {collections.slice(0, 10).map((c) => (
               <li key={c.id}>
                 <Link href={`/billing/collections/${c.id}`}>{c.number}</Link> · {formatPeso(c.amountReceived)}
+                {c.isDeposit ? " · deposit" : ""}
                 {Number(c.unappliedCredit) > 0 ? ` · credit ${formatPeso(c.unappliedCredit)}` : ""}
               </li>
             ))}
