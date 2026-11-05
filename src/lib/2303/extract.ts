@@ -4,6 +4,7 @@
 // A failure here never blocks creating the customer: callers show the
 // error and staff types manually.
 
+import "./dom-polyfill";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { PDFParse } from "pdf-parse";
