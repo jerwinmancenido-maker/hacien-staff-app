@@ -8,7 +8,7 @@ export default async function NewUserPage() {
   return (
     <>
       <PageHeader title="Add user" subtitle="They'll get an email with a link to set their password." />
-      <div className="card" style={{ maxWidth: 760 }}>
+      <div className="card">
         <UserForm user={null} action={createUserAction} />
       </div>
     </>
