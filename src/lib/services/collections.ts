@@ -92,8 +92,7 @@ export async function withholdingCodesFromSo(
     select: {
       withholding: true,
       items: {
-        where: { removedAt: null },
-        select: { withholdingRate: true, withholdingAtc: true },
+        select: { withholdingRate: true, withholdingAtc: true, removedAt: true },
       },
     },
   });
@@ -103,15 +102,31 @@ export async function withholdingCodesFromSo(
     .filter((s) => toScaled(s.rate, 4) > 0n)
     .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
 
+  // The snapshot is stale for lines removed after the SO was written: a
+  // snapshot code stays unless its ATC survives only on removed lines.
+  // Codes with no line at all (SO-level codes) stay, since nothing says
+  // they were removed. (S-19: removed WI157 line, snapshot still lists it.)
+  const liveAtcs = new Set<string>();
+  const removedAtcs = new Set<string>();
+  for (const item of so.items) {
+    const atc = item.withholdingAtc?.trim() || null;
+    if (!atc) continue;
+    (item.removedAt ? removedAtcs : liveAtcs).add(atc);
+  }
+  const gated = fromSnap.filter(
+    (c) => c.atcCode == null || !removedAtcs.has(c.atcCode) || liveAtcs.has(c.atcCode),
+  );
+  if (fromSnap.length > 0) return gated;
+
   const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
   for (const item of so.items) {
+    if (item.removedAt) continue;
     const rate = item.withholdingRate != null ? Number(item.withholdingRate).toFixed(4) : "0.0000";
     if (toScaled(rate, 4) <= 0n) continue;
     const atc = item.withholdingAtc?.trim() || null;
     if (!atc) continue;
     if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
   }
-  if (fromSnap.length > 0) return fromSnap;
   return [...fromLines.values()];
 }
 
