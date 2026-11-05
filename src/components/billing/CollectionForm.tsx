@@ -10,7 +10,7 @@ import { formatPeso } from "@/lib/format";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
 
-export type PrefillCode = { rate: string; atcCode: string | null };
+export type PrefillCode = { rate: string; atcCode: string | null; amount?: string };
 
 export type OpenBillingRow = {
   id: string;
@@ -39,7 +39,7 @@ function codesForBilling(b: OpenBillingRow): AllocState["codes"] {
     return b.defaultCodes.map((c) => ({
       rate: c.rate,
       atc: c.atcCode ?? "",
-      amount: "",
+      amount: c.amount ?? "",
     }));
   }
   return [{ rate: b.defaultRate, atc: b.defaultAtc ?? "", amount: "" }];
@@ -78,6 +78,14 @@ export function CollectionForm({
       (acc, b) => {
         const bal = Number(b.balance);
         const take = acc.left > 0 ? Math.min(bal, acc.left) : 0;
+        // Prefilled 2307 amounts only apply to a full settlement of the billing
+        // (cash taken + withholding = remaining balance). On a partial
+        // collection the withholding is staff's call, so leave it blank like
+        // before instead of posting the full remaining split.
+        const codes = codesForBilling(b);
+        const whSum = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+        const fullSettlement =
+          take > 0 && Math.round(take * 100) + Math.round(whSum * 100) === Math.round(bal * 100);
         return {
           left: acc.left - take,
           rows: [
@@ -85,10 +93,10 @@ export function CollectionForm({
             {
               billingId: b.id,
               cash: take > 0 ? take.toFixed(2) : "",
-              withholding: "",
+              withholding: fullSettlement && whSum > 0 ? whSum.toFixed(2) : "",
               rate: b.defaultRate,
               atc: b.defaultAtc ?? "",
-              codes: codesForBilling(b),
+              codes: fullSettlement ? codes : codes.map((c) => ({ ...c, amount: "" })),
             },
           ],
         };

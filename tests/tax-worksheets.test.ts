@@ -23,6 +23,7 @@ import {
   sumPesos,
 } from "@/lib/tax/math";
 import {
+  currentQuarter,
   earlierQuarters,
   latestFinishedQuarter,
   parseTaxQuarter,
@@ -65,6 +66,14 @@ describe("quarter boundaries at midnight PHT", () => {
     // 2026-04-01T00:00:00Z = Apr 1 08:00 PHT → Q1 finished
     const apr1 = latestFinishedQuarter(new Date("2026-04-01T00:00:00.000Z"));
     expect(apr1).toEqual({ year: 2026, quarter: 1 });
+  });
+
+  it("currentQuarter follows the Manila calendar date", () => {
+    // Audit fix: the worksheets default to the latest finished quarter, so
+    // November opens on Q3 — the filter now links to the current quarter.
+    expect(currentQuarter(new Date("2026-11-05T08:00:00.000Z"))).toEqual({ year: 2026, quarter: 4 });
+    expect(currentQuarter(new Date("2026-01-05T08:00:00.000Z"))).toEqual({ year: 2026, quarter: 1 });
+    expect(currentQuarter(new Date("2026-10-30T08:00:00.000Z"))).toEqual({ year: 2026, quarter: 4 });
   });
 
   it("parseTaxQuarter falls back to latest finished", () => {

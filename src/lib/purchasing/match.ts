@@ -60,6 +60,10 @@ export type MatchResult = {
   billedTotal: string;
   /** Sum of billed lines (only bills that have line detail). */
   billedLinesTotal: string;
+  /** Bills recorded without line items: their amount is in billedTotal but
+   * cannot be matched to any line (audit fix — the line used to read ₱0.00
+   * billed while the totals showed the bill). */
+  totalOnlyBills: { billNumber: string; amount: string }[];
   headerFlags: HeaderFlag[];
   status: "MATCHED" | "MISMATCH" | "NOT_BILLED";
 };
@@ -158,6 +162,9 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
   });
 
   const billedTotal = bills.reduce((acc, b) => acc + toScaled(b.amount, C), 0n);
+  const totalOnlyBills = bills
+    .filter((b) => b.items.length === 0)
+    .map((b) => ({ billNumber: b.billNumber, amount: fmt(toScaled(b.amount, C)) }));
   if (bills.length && billedTotal !== receivedTotal) {
     headerFlags.push({
       code: "BILLED_DIFFERS_FROM_RECEIVED",
@@ -172,6 +179,7 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
     receivedTotal: fmt(receivedTotal),
     billedTotal: fmt(billedTotal),
     billedLinesTotal: fmt(billedLinesTotal),
+    totalOnlyBills,
     headerFlags,
     status,
   };

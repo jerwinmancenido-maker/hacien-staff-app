@@ -401,6 +401,13 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
               ))}
             </div>
           )}
+          {m.totalOnlyBills.length > 0 && (
+            <p className="small muted" role="note">
+              {m.totalOnlyBills
+                .map((b) => `Bill ${b.billNumber} (${formatPeso(b.amount)}) has no line items, so its amount is in the totals but not matched to a line.`)
+                .join(" ")}
+            </p>
+          )}
           <div className="table-wrap">
             <table className="list match-table" aria-label="3-way match">
               <thead>
@@ -429,7 +436,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                       </td>
                       <td className="num">
                         {l.billedUnitPrice ? `${qtyText(l.billedQty)} × ${formatPeso(l.billedUnitPrice)}` : "—"}
-                        <div className="small muted">{formatPeso(l.billedAmount)}</div>
+                        <div className="small muted">{l.billedUnitPrice ? formatPeso(l.billedAmount) : "—"}</div>
                       </td>
                       <td className="small">
                         {l.flags.length === 0 && <span className="faint">—</span>}
