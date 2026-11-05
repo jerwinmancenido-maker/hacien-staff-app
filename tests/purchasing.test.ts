@@ -299,6 +299,9 @@ describe("3-way match", () => {
     expect(m.lines[0]!.flags).toEqual([]);
     expect(m.lines[0]!.issues).toEqual([]);
     expect(m.lines[0]!.status).toBe("MATCHED");
+    // Audit fix: the bill is named as total-only so the Match tab can say
+    // its amount is in the totals but not matched to a line.
+    expect(m.totalOnlyBills).toEqual([{ billNumber: "SI-12", amount: "1000.00" }]);
     // A total-only bill that is off is caught by the total check only.
     const off = threeWayMatch(one, [{ id: "1", billNumber: "SI-13", amount: "900.00", items: [] }]);
     expect(off.status).toBe("MISMATCH");

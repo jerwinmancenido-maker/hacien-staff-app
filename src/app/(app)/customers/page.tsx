@@ -6,6 +6,7 @@ import { listCustomers } from "@/lib/services/companies";
 import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
 import { formatAddress } from "@/lib/addresses/format";
 import { WITHHOLDING_LABELS, WITHHOLDING_TYPES } from "@/lib/validation/companies";
+import { customerArSnapshot } from "@/lib/billing/views";
 import { formatPeso } from "@/lib/format";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
@@ -57,9 +58,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     })),
   ];
 
-  const items: RecordItem[] = customers.map((c) => {
-    const address = c.addresses[0] ? formatAddress(c.addresses[0]) : null;
-    return {
+  const items: RecordItem[] = await Promise.all(
+    customers.map(async (c) => {
+      const address = c.addresses[0] ? formatAddress(c.addresses[0]) : null;
+      const balanceDue = (await customerArSnapshot(c.id)).balanceDue;
+      return {
     id: c.id,
     href: `/customers/${c.id}`,
     inactive: !c.active,
@@ -90,11 +93,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     ],
     amount: {
       label: "Balance due",
-      value: formatPeso(0),
+      value: formatPeso(balanceDue),
       strong: true,
     },
     menuItems: [
       { label: "Open customer", href: `/customers/${c.id}` },
+      { label: "Print statement", href: `/print/statements/${c.id}` },
       ...(can(user, "edit_data")
         ? [{ label: "Add contact", href: `/contacts/new?customer=${c.id}` }]
         : []),
@@ -104,10 +108,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       tin: showTin ? (c.tin ?? "") : "",
       wh: WITHHOLDING_LABELS[c.withholdingType],
       terms: c.defaultTerms ?? "",
-      balance: 0,
+      balance: Number(balanceDue),
     },
     };
-  });
+    }),
+  );
 
   return (
     <>

@@ -8,6 +8,7 @@ import { formatAddress } from "@/lib/addresses/format";
 import { missingBankDetails, SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
 import { maskBankAccountNumber, maskSuppliersForViewer } from "@/lib/bank-mask";
+import { supplierPayableBalance } from "@/lib/payables/views";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader, type ChipTone } from "@/components/ui";
@@ -50,9 +51,11 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
     })),
   ];
 
-  const items: RecordItem[] = suppliers.map((x) => {
-    const isMissingBank = missingBankDetails(x);
-    return {
+  const items: RecordItem[] = await Promise.all(
+    suppliers.map(async (x) => {
+      const isMissingBank = missingBankDetails(x);
+      const owed = await supplierPayableBalance(x.id);
+      return {
       id: x.id,
       href: `/suppliers/${x.id}`,
       inactive: !x.active,
@@ -92,11 +95,12 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       ],
       amount: {
         label: "We owe",
-        value: formatPeso(0),
+        value: formatPeso(owed),
         strong: true,
       },
       menuItems: [
         { label: "Open supplier", href: `/suppliers/${x.id}` },
+        { label: "Print statement", href: `/print/supplier-statements/${x.id}` },
         ...(can(user, "edit_data")
           ? [{ label: "Add contact", href: `/contacts/new?supplier=${x.id}` }]
           : []),
@@ -106,10 +110,11 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
         tin: showTin ? (x.tin ?? "") : "",
         tax: TAX_TYPE_LABELS[x.taxType],
         terms: x.defaultTerms ?? "",
-        owe: 0,
+        owe: Number(owed),
       },
     };
-  });
+    }),
+  );
 
   return (
     <>

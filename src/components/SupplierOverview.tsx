@@ -28,6 +28,7 @@ export async function SupplierOverview({
   docCounts,
   docStats,
   warnDays,
+  payableBalance = "0.00",
 }: {
   supplier: Supplier;
   /** S-58: false hides the TIN row (view-only users). */
@@ -41,6 +42,8 @@ export async function SupplierOverview({
   docCounts: DocCounts;
   docStats: OpenDocStats;
   warnDays: number;
+  /** Unpaid supplier bills (same figure as the Balances tab). */
+  payableBalance?: string;
 }) {
   const basePath = `/suppliers/${supplier.id}`;
   const activeAddresses = addresses.filter((a) => !a.archivedAt);
@@ -176,8 +179,10 @@ export async function SupplierOverview({
       <div className="stat-grid">
         <div className="card stat">
           <div className="label">We owe</div>
-          <div className="value num">{formatPeso(0)}</div>
-          <div className="foot">Unpaid supplier bills</div>
+          <div className="value num">{formatPeso(payableBalance)}</div>
+          <div className="foot">
+            Unpaid supplier bills · <Link href={`/print/supplier-statements/${supplier.id}`}>Print statement</Link>
+          </div>
         </div>
         <OpenDocsCards stats={docStats} basePath={basePath} showTotals={false} showQuotesAndSos={false} />
         <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />

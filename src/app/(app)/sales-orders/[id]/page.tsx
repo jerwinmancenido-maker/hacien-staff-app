@@ -80,7 +80,7 @@ export default async function SalesOrderPage({
         title={
           <>
             {so.number}
-            {money?.completed ? <Chip tone="grey">Completed</Chip> : <SoStatusChip status={so.status} />}
+            {money?.completed ? <Chip tone="grey">Fully billed &amp; paid</Chip> : <SoStatusChip status={so.status} />}
           </>
         }
         subtitle={

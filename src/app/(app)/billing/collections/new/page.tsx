@@ -11,7 +11,7 @@ import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { isCashEnabled } from "@/lib/cash/features";
 import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
-import { withholdingCodesFromSo } from "@/lib/services/collections";
+import { withholdingCodePrefill } from "@/lib/services/collections";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionForm, type OpenBillingRow } from "@/components/billing/CollectionForm";
 import { PageHeader } from "@/components/ui";
@@ -67,7 +67,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
           withholdingApplied: fromScaled(wh, 2),
         });
         if (toScaled(balance, 2) <= 0n) return null;
-        const defaultCodes = await withholdingCodesFromSo(db, b.salesOrderId);
+        const defaultCodes = await withholdingCodePrefill(db, b.id);
         return {
           id: b.id,
           invoiceNo: b.invoiceNo,

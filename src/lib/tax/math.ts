@@ -56,6 +56,48 @@ export function incomeBaseFromTax(tax: string, rate: string): string {
   return fromScaled(rounded, 2);
 }
 
+/**
+ * Split one billing's income across its 2307 lines — but ONLY when the
+ * per-line inversion would double-count. Each line's true income base is
+ * tax / rate, and that is what the worksheet shows whenever the inverted
+ * bases fit inside the billing (each ATC on its own slice: goods ₱100 @1%
+ * + services ₱200 @2% on a ₱20,000 billing invert to ₱10,000 + ₱10,000).
+ * The codes share one base only when the inverted bases sum to MORE than
+ * the billing itself (WI640 ₱3,000 @1% + WB080 ₱9,000 @3% on one ₱300,000
+ * billing invert to ₱300,000 + ₱300,000 = ₱600,000). Only then is the
+ * billing amount split across the lines by tax share, cents remainder on
+ * the last line, so the lines sum to exactly the billing amount.
+ * Returns null when per-line inversion applies (the caller falls back to
+ * it) or when the split cannot be computed (no billing amount, no
+ * withholding, or a zero rate). Exact BigInt comparison — no floats.
+ */
+export function splitBillingIncome(
+  billingAmount: string,
+  lines: readonly { tax: string; rate: string }[],
+): string[] | null {
+  const total = toScaled(billingAmount || "0", 2);
+  const taxes = lines.map((l) => toScaled(l.tax || "0", 2));
+  const rates = lines.map((l) => toScaled(l.rate || "0", 4));
+  const totalTax = taxes.reduce((a, t) => a + t, 0n);
+  if (total <= 0n || totalTax <= 0n) return null;
+  if (rates.some((r) => r <= 0n)) return null;
+  // sum(tax_i / rate_i) in cents, compared exactly: with D = product of
+  // all rates, sum(tax_i * 10000 * (D / R_i)) > total * D means the
+  // inverted bases exceed the billing — the shared-base case.
+  const denom = rates.reduce((a, r) => a * r, 1n);
+  const sumNum = taxes.reduce(
+    (a, t, i) => a + t * 10_000n * (denom / rates[i]!),
+    0n,
+  );
+  if (sumNum <= total * denom) return null;
+  let used = 0n;
+  return taxes.map((t, i) => {
+    const income = i === taxes.length - 1 ? total - used : (total * t) / totalTax;
+    used += income;
+    return fromScaled(income, 2);
+  });
+}
+
 export type IncomeTax1701qLines = {
   /** (a) Cumulative figure used for this column (invoiced or collected — never a combined total). */
   a: string;

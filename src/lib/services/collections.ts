@@ -9,7 +9,7 @@ import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type Permissi
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
+import { docTotals, fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
 import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { billingToday } from "../billing/dates";
@@ -75,11 +75,13 @@ export type WithholdingCodeLine = { rate: string; atcCode: string | null; amount
 
 /**
  * Prefill ATC codes for a 2307.
- * - Prefer distinct ATCs from SO lines when every withholding line has an ATC
- *   (avoids splitting a goods-only total onto unused snapshot services codes).
- * - If any withholding line has a rate but null ATC (stacked picks), use the
- *   document withholding snapshot so stacked codes are not dropped.
- * - If lines yield nothing, fall back to the snapshot.
+ * - The SO withholding snapshot is the authority for the withholding total
+ *   (the quote/SO detail and the billing totals are all computed from it), so
+ *   prefer its codes whenever it has any. Item-level codes are only a subset:
+ *   a goods-only order still carries a percentage-tax code (WB080) in the
+ *   snapshot, and preferring item codes dropped it — the whole withholding
+ *   then collapsed onto the single goods code (WI640) on the 2307 record.
+ * - If the SO has no snapshot, fall back to distinct ATCs from its lines.
  */
 export async function withholdingCodesFromSo(
   tx: Tx,
@@ -90,8 +92,7 @@ export async function withholdingCodesFromSo(
     select: {
       withholding: true,
       items: {
-        where: { removedAt: null },
-        select: { withholdingRate: true, withholdingAtc: true },
+        select: { withholdingRate: true, withholdingAtc: true, removedAt: true },
       },
     },
   });
@@ -101,21 +102,103 @@ export async function withholdingCodesFromSo(
     .filter((s) => toScaled(s.rate, 4) > 0n)
     .map((s) => ({ rate: Number(s.rate).toFixed(4), atcCode: s.atcCode ?? null }));
 
-  const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
-  let stackedNullAtc = false;
+  // The snapshot is stale for lines removed after the SO was written: a
+  // snapshot code stays unless its ATC survives only on removed lines.
+  // Codes with no line at all (SO-level codes) stay, since nothing says
+  // they were removed. (S-19: removed WI157 line, snapshot still lists it.)
+  const liveAtcs = new Set<string>();
+  const removedAtcs = new Set<string>();
   for (const item of so.items) {
+    const atc = item.withholdingAtc?.trim() || null;
+    if (!atc) continue;
+    (item.removedAt ? removedAtcs : liveAtcs).add(atc);
+  }
+  const gated = fromSnap.filter(
+    (c) => c.atcCode == null || !removedAtcs.has(c.atcCode) || liveAtcs.has(c.atcCode),
+  );
+  if (fromSnap.length > 0) return gated;
+
+  const fromLines = new Map<string, { rate: string; atcCode: string | null }>();
+  for (const item of so.items) {
+    if (item.removedAt) continue;
     const rate = item.withholdingRate != null ? Number(item.withholdingRate).toFixed(4) : "0.0000";
     if (toScaled(rate, 4) <= 0n) continue;
     const atc = item.withholdingAtc?.trim() || null;
-    if (!atc) {
-      stackedNullAtc = true;
-      continue;
-    }
+    if (!atc) continue;
     if (!fromLines.has(atc)) fromLines.set(atc, { rate, atcCode: atc });
   }
-  if (fromLines.size > 0 && !stackedNullAtc) return [...fromLines.values()];
-  if (fromSnap.length > 0) return fromSnap;
   return [...fromLines.values()];
+}
+
+/**
+ * Split a billing's remaining withholding across the SO's per-code amounts.
+ * Pure: shares follow each code's share of the SO withholding total (not the
+ * rate weight — bases differ, e.g. a services code can be 2% of a ₱0 base),
+ * cents go to the last code so the parts sum exactly to the remaining total.
+ */
+export function splitBillingWithholding(
+  parts: readonly { rate: string; atcCode: string | null; amount: string }[],
+  remainingTotal: string,
+): WithholdingCodeLine[] {
+  if (!parts.length) return [];
+  const total = parts.reduce((a, p) => a + toScaled(money(p.amount), 2), 0n);
+  const remaining = toScaled(money(remainingTotal), 2);
+  if (total <= 0n || remaining <= 0n) {
+    return parts.map((p) => ({ rate: p.rate, atcCode: p.atcCode, amount: "0.00" }));
+  }
+  let used = 0n;
+  return parts.map((p, i) => {
+    const amt =
+      i === parts.length - 1 ? remaining - used : (remaining * toScaled(money(p.amount), 2)) / total;
+    used += amt;
+    return { rate: p.rate, atcCode: p.atcCode, amount: fromScaled(amt, 2) };
+  });
+}
+
+/**
+ * Per-ATC prefill amounts for a billing's remaining withholding, for the new
+ * collection form. The SO's per-code breakdown (from docTotals on its lines +
+ * snapshot) is pro-rated by the billing's remaining share; the form posts
+ * these amounts so the 2307 record keeps the split instead of collapsing
+ * onto the first code. Falls back to bare codes (blank amounts) when the SO
+ * has no usable breakdown.
+ */
+export async function withholdingCodePrefill(
+  tx: Tx,
+  billingId: string,
+): Promise<{ rate: string; atcCode: string | null; amount?: string }[]> {
+  const billing = await tx.billing.findUnique({
+    where: { id: billingId },
+    include: { allocations: { where: { collection: { status: "POSTED" } } } },
+  });
+  if (!billing) return [];
+  const bare = (await withholdingCodesFromSo(tx, billing.salesOrderId)).map((c) => ({ ...c, amount: "" }));
+  const so = await tx.salesOrder.findUnique({
+    where: { id: billing.salesOrderId },
+    select: {
+      withholding: true,
+      items: {
+        where: { removedAt: null },
+        select: { kind: true, total: true, supplierTotal: true, margin: true },
+      },
+    },
+  });
+  if (!so) return bare;
+  const picks = (so.withholding ?? []) as WithholdingSnapshot[];
+  const parts = docTotals(
+    so.items.map((i) => ({
+      kind: i.kind,
+      total: money(i.total),
+      supplierTotal: money(i.supplierTotal),
+      margin: money(i.margin),
+    })),
+    picks.length ? picks : undefined,
+  ).withholding;
+  if (!parts.length) return bare;
+  const already = billing.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
+  const remaining = toScaled(money(billing.withholdingExpected), 2) - already;
+  if (remaining <= 0n) return bare;
+  return splitBillingWithholding(parts, fromScaled(remaining, 2));
 }
 
 /**

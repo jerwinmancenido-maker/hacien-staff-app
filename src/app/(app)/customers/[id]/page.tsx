@@ -83,9 +83,21 @@ export default async function CustomerPage({
     orderBy: { at: "desc" },
     select: { at: true },
   });
-  // Latest of the audit log and the last quote / SO change.
+  // Latest of the audit log, documents, and the last quote / SO / billing /
+  // collection / delivery change. Transactions never wrote audit rows for the
+  // customer itself, so their updatedAt is the activity signal — without it
+  // a November bill and payment still showed an October last activity.
+  const docChanges = await Promise.all([
+    db.quote.findFirst({ where: { customerId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.salesOrder.findFirst({ where: { customerId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.billing.findFirst({ where: { customerId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.collection.findFirst({ where: { customerId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.delivery.findFirst({ where: { salesOrder: { customerId: id } }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+  ]);
   const lastActivityAt =
-    [lastActivity?.at, docStats?.lastDocAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+    [lastActivity?.at, docStats?.lastDocAt, ...docChanges.map((d) => d?.updatedAt)]
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
   return (
     <>

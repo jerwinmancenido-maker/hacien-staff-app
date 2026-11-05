@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { TAX_WORKSHEET_DISCLAIMER, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
-import { parseTaxQuarter } from "@/lib/tax/quarters";
+import { currentQuarter, parseTaxQuarter, quarterLabel } from "@/lib/tax/quarters";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxNav } from "@/components/books/TaxNav";
 import { TaxWorksheetBanner } from "@/components/books/TaxWorksheetBanner";
@@ -22,6 +22,7 @@ export default async function TaxWorksheetsHomePage({
   await requirePagePermission("view_books");
   const sp = await searchParams;
   const period = parseTaxQuarter(sp.year, sp.quarter);
+  const current = currentQuarter();
   const q = `year=${period.year}&quarter=${period.quarter}`;
 
   return (
@@ -37,7 +38,12 @@ export default async function TaxWorksheetsHomePage({
         </p>
         <p className="faint small">
           Default period: <b>{period.label}</b>
-          {period.isDefault ? " (latest finished quarter)" : ""}.
+          {period.isDefault ? " (latest finished quarter)" : ""}.{" "}
+          {period.year !== current.year || period.quarter !== current.quarter ? (
+            <Link href={`/books/tax?year=${current.year}&quarter=${current.quarter}`}>
+              Current quarter ({quarterLabel(current.year, current.quarter)})
+            </Link>
+          ) : null}
         </p>
         <ul className="plain-list" style={{ paddingLeft: 18, marginBottom: 0 }}>
           {PAGES.map((p) => (

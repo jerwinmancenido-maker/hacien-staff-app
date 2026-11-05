@@ -75,9 +75,20 @@ export default async function SupplierPage({
     orderBy: { at: "desc" },
     select: { at: true },
   });
-  // Latest of the audit log and the last quote / SO change.
+  // Latest of the audit log, documents, and the last PO / bill / payment /
+  // receiving change. Transactions never wrote audit rows for the supplier
+  // itself, so their updatedAt is the activity signal — without it a
+  // November bill and payment still showed an October last activity.
+  const docChanges = await Promise.all([
+    db.purchaseOrder.findFirst({ where: { supplierId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.supplierBill.findFirst({ where: { supplierId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.supplierPayment.findFirst({ where: { supplierId: id }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    db.receivingReport.findFirst({ where: { purchaseOrder: { supplierId: id } }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+  ]);
   const lastActivityAt =
-    [lastActivity?.at, docStats?.lastDocAt].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+    [lastActivity?.at, docStats?.lastDocAt, ...docChanges.map((d) => d?.updatedAt)]
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
   return (
     <>
@@ -180,6 +191,7 @@ export default async function SupplierPage({
           docCounts={docCounts}
           docStats={docStats}
           warnDays={warnDays}
+          payableBalance={payableBalance}
         />
       )}
 

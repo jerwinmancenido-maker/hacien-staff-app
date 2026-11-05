@@ -63,6 +63,13 @@ export function latestFinishedQuarter(now: Date = new Date()): TaxQuarter {
   return { year: y - 1, quarter: 4 };
 }
 
+/** The quarter containing today's Manila calendar date. */
+export function currentQuarter(now: Date = new Date()): TaxQuarter {
+  const today = isoDate(manilaToday(now));
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  return { year: y, quarter: Math.ceil(m / 3) as Quarter };
+}
+
 /** Parse ?year=&quarter=; invalid → latest finished quarter. */
 export function parseTaxQuarter(
   yearRaw?: string | null,

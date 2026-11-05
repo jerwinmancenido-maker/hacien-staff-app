@@ -39,7 +39,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
     db.collection.findMany({
       include: {
         customer: { select: { name: true } },
-        allocations: { select: { withholdingApplied: true } },
+        allocations: { select: { withholdingApplied: true, billing: { select: { number: true } } } },
       },
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),
@@ -50,7 +50,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
     db.supplierPayment.findMany({
       include: {
         supplier: { select: { name: true } },
-        allocations: { select: { withholdingApplied: true } },
+        allocations: { select: { withholdingApplied: true, supplierBill: { select: { billNumber: true } } } },
       },
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),
@@ -87,6 +87,10 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
     const bits = [`Collection ${method}`];
     if (c.receiptNo) bits.push(`OR ${c.receiptNo}`);
     if (c.reference) bits.push(`Ref ${c.reference}`);
+    // Name the billings this collection (and its EWT) belongs to, so the
+    // EWT column reads as per-billing rather than one lump on the row.
+    const billed = [...new Set(c.allocations.map((a) => a.billing.number))];
+    if (billed.length) bits.push(`for ${billed.join(", ")}`);
     rows.push({
       id: c.id,
       kind: "COLLECTION",
@@ -121,6 +125,8 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
     const method = p.method.replace(/_/g, " ").toLowerCase();
     const bits = [`Payment ${method}`];
     if (p.reference) bits.push(`Ref ${p.reference}`);
+    const paid = [...new Set(p.allocations.map((a) => a.supplierBill.billNumber))];
+    if (paid.length) bits.push(`for ${paid.join(", ")}`);
     rows.push({
       id: p.id,
       kind: "SUPPLIER_PAYMENT",

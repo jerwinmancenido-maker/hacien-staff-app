@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { currentQuarter, quarterLabel } from "@/lib/tax/quarters";
 
 /** Year + quarter picker for tax worksheets. */
 export function TaxQuarterFilters({
@@ -20,6 +21,7 @@ export function TaxQuarterFilters({
   showQuarter?: boolean;
 }) {
   const router = useRouter();
+  const current = currentQuarter();
   const years = Array.from({ length: 8 }, (_, i) => year - 3 + i).filter((y) => y >= 2000 && y <= 2100);
 
   return (
@@ -71,6 +73,13 @@ export function TaxQuarterFilters({
       {printHref ? (
         <a className="btn btn-secondary" href={printHref} target="_blank" rel="noreferrer">
           Print / PDF
+        </a>
+      ) : null}
+      {/* The default view is the latest finished quarter (filing), which can
+          look empty in a new quarter — one click to the current quarter. */}
+      {showQuarter && !(year === current.year && quarter === current.quarter) ? (
+        <a className="btn-link small" href={`${basePath}?year=${current.year}&quarter=${current.quarter}`}>
+          Current quarter ({quarterLabel(current.year, current.quarter)})
         </a>
       ) : null}
     </form>
