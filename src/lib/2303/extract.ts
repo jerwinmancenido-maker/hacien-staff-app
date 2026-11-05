@@ -8,26 +8,38 @@ import "./dom-polyfill";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { PDFParse } from "pdf-parse";
 import { createWorker } from "tesseract.js";
 import { uploadDir } from "../business-docs/storage";
 
 /**
- * Absolute path of a file inside the installed node_modules tree.
+ * Find a file or directory that ships inside an installed package,
+ * wherever the host put node_modules.
  *
- * Both extraction libraries run their real work in a worker file, and both
- * compute that file's path in a way that breaks inside the Next.js server
- * bundle: pdf.js looks for `pdf.worker.mjs` under `.next/server/chunks`
- * (it is not there), and tesseract.js resolves its worker script against
- * a `__dirname` of `/ROOT` (also not there). Pointing each library at the
- * real file on disk fixes both. `process.cwd()` is the app root, where
- * `node_modules` lives, on dev, CI, and Hostinger alike.
+ * Both extraction libraries run their real work in a worker file, and
+ * both compute that file's path in a way that breaks inside the Next.js
+ * server bundle: pdf.js looks for `pdf.worker.mjs` under
+ * `.next/server/chunks` (it is not there), and tesseract.js resolves its
+ * worker script against a bundled `__dirname` of `/ROOT` (also not
+ * there). `process.cwd()` is no anchor either — Hostinger runs each
+ * build from a versioned directory
+ * (`.../hbuilds/versions/<build>/nodejs`), while node_modules lives
+ * further up the tree. So start at this module's real file location
+ * (the bundle chunk on the server, the source file under vitest) and
+ * walk up until `node_modules/<package>/...` exists — the same search
+ * Node's own resolver does. A runtime-built `require.resolve` is NOT
+ * used: Turbopack rejects it ("expression is too dynamic").
  */
-function nodeModuleFile(...parts: string[]): string {
-  const file = path.join(process.cwd(), "node_modules", ...parts);
-  if (!existsSync(file)) throw new Error(`Missing file in the app install: ${file}`);
-  return file;
+function findInstalledPath(...parts: string[]): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const candidate = path.join(dir, "node_modules", ...parts);
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`Missing file in the app install: node_modules/${parts.join("/")}`);
+    dir = parent;
+  }
 }
 
 /** Fail fast instead of hanging until the host kills the request. */
@@ -70,9 +82,8 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
   // import. Its bundled default points into .next/server/chunks, where
   // the file does not exist ("Setting up fake worker failed"). Set it
   // once per call (it is global state in pdf.js, idempotent).
-  PDFParse.setWorker(
-    pathToFileURL(nodeModuleFile("pdfjs-dist", "legacy", "build", "pdf.worker.mjs")).href,
-  );
+  const pdfWorker = findInstalledPath("pdfjs-dist", "legacy", "build", "pdf.worker.mjs");
+  PDFParse.setWorker(pathToFileURL(pdfWorker).href);
   const parser = new PDFParse({ data: bytes });
   try {
     const { text } = await parser.getText();
@@ -92,12 +103,16 @@ async function extractOcr(bytes: Uint8Array): Promise<string> {
   // workerPath: tesseract's node default resolves its worker script
   // against a bundled `__dirname` of /ROOT, so the worker never starts
   // and the request hangs until the host kills it. Point at the real
-  // file. The language data itself is still fetched once from the
-  // library's CDN into the cache below (see tessdataDir); the 60s cap
-  // keeps a stuck download a readable error instead of a hang.
-  const workerPath = nodeModuleFile("tesseract.js", "src", "worker-script", "node", "index.js");
+  // file. langPath: the English traineddata ships in the
+  // @tesseract.js-data/eng package (installed with the app), so the
+  // first photo read does not need the library's CDN at all — the
+  // worker reads eng.traineddata.gz from disk and caches the unpacked
+  // file under tessdataDir(). The 60s cap keeps a stuck read a readable
+  // error instead of a hang.
+  const workerPath = findInstalledPath("tesseract.js", "src", "worker-script", "node", "index.js");
+  const langPath = findInstalledPath("@tesseract.js-data", "eng", "4.0.0");
   const worker = await withTimeout(
-    createWorker("eng", undefined, { cachePath: tessdataDir(), workerPath }),
+    createWorker("eng", undefined, { cachePath: tessdataDir(), workerPath, langPath }),
     60_000,
     "Reading the photo took too long — the text lookup did not finish. Type the details manually.",
   );
