@@ -9,6 +9,7 @@ import type { Prisma, QuoteApprovalStatus, QuoteStatus, SalesOrderStatus } from 
 import { db } from "../db";
 import { canApprove, canSeeCosts, type PermissionUser } from "../permissions";
 import { QUOTE_APPROVAL_LABELS } from "./approval";
+import { ACCEPTANCE_VIA_LABELS } from "./acceptance";
 import {
   getSettingsSnapshot,
   getSettingsVersion,
@@ -230,6 +231,11 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     approvalLabel: QUOTE_APPROVAL_LABELS[approvalStatus],
     approvedBy: q.approvedBy?.name ?? null,
     approvedAt: q.approvedAt,
+    acceptedAt: q.acceptedAt,
+    acceptedBy: q.acceptedBy,
+    acceptedVia: q.acceptedVia,
+    acceptedViaLabel: q.acceptedVia ? ACCEPTANCE_VIA_LABELS[q.acceptedVia] ?? q.acceptedVia : null,
+    hasAcceptance: q.acceptedAt !== null || q.attachments.length > 0,
     rejectedBy: q.rejectedBy?.name ?? null,
     rejectedAt: q.rejectedAt,
     rejectReason: q.rejectReason,

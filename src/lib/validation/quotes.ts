@@ -209,6 +209,14 @@ export const convertInputSchema = z.object({
 });
 export type ConvertInput = z.infer<typeof convertInputSchema>;
 
+/** Audit (2026-11-05): customer acceptance on a quote — date, name, how. */
+export const acceptanceInputSchema = z.object({
+  acceptedAt: dateOnly("Acceptance date"),
+  acceptedBy: z.string().trim().min(1, "Enter who accepted.").max(128, "Keep this under 128 characters."),
+  acceptedVia: z.enum(["SIGNED_CONFORME", "EMAIL", "PHONE", "IN_PERSON"], { error: "Pick how the customer accepted." }),
+});
+export type AcceptanceInput = z.infer<typeof acceptanceInputSchema>;
+
 export const salesOrderInputSchema = convertInputSchema.extend({
   contactId: optionalId,
   terms: optionalText(100),

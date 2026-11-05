@@ -686,6 +686,14 @@ model Quote {
   // S-70: uploaded signed conforme files (see DocumentAttachment).
   attachments    DocumentAttachment[]
 
+  // Audit (2026-11-05): customer acceptance, recorded when there is no
+  // signed conforme file and no buyer PO number. Conversion to SO
+  // requires one of: a conforme file, a buyer PO number, or these fields.
+  // acceptedVia is one of SIGNED_CONFORME, EMAIL, PHONE, IN_PERSON.
+  acceptedAt     DateTime?
+  acceptedBy     String?     @db.VarChar(128)
+  acceptedVia    String?     @db.VarChar(32)
+
   contractPrice    Decimal @default(0) @db.Decimal(15, 2)
   withholdingTotal Decimal @default(0) @db.Decimal(15, 2)
   netReceived      Decimal @default(0) @db.Decimal(15, 2)
