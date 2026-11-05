@@ -10,7 +10,7 @@ import { requireActionPermission } from "@/lib/auth/current-user";
 import { DocRuleError } from "@/lib/documents/common";
 import { ForbiddenError } from "@/lib/permissions";
 import { discardUploads, prepareUploads } from "@/lib/services/attachments";
-import { extractText, type ExtractMime } from "@/lib/2303/extract";
+import type { ExtractMime } from "@/lib/2303/extract";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +60,12 @@ async function handleParse(req: NextRequest) {
   }
 
   try {
+    // Loaded here, not at the top of the file, so a failure to load the
+    // extraction libraries (pdf-parse / tesseract.js) surfaces as a
+    // readable JSON error instead of an HTML 500 for the whole route:
+    // on staging the static import failed at route load, which the
+    // uploader could only show as an unreadable answer.
+    const { extractText } = await import("@/lib/2303/extract");
     const { text, source } = await extractText(bytes, upload.mimeType as ExtractMime);
     return json(200, { ok: true, text, source, storageKey: upload.storageKey, fileName: upload.fileName });
   } catch (e) {
