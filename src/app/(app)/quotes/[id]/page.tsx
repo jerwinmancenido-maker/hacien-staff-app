@@ -39,7 +39,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "sales-orders" || raw === "conforme" ? raw : "overview";
+  const tab = raw === "sales-orders" || raw === "conforme" || raw === "activity" ? raw : "overview";
   // Built on the server without cost fields for users who can't see costs.
   const q = await getQuoteView(id, user);
   if (!q) notFound();
@@ -145,6 +145,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           { key: "overview", label: "Overview", href: `/quotes/${id}` },
           { key: "sales-orders", label: "Sales orders", count: q.salesOrders.length, href: `/quotes/${id}?tab=sales-orders` },
           { key: "conforme", label: "Conforme", count: q.conformeFiles.length, href: `/quotes/${id}?tab=conforme` },
+          { key: "activity", label: "Activity", href: `/quotes/${id}?tab=activity` },
         ]}
       />
 
@@ -154,67 +155,62 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             Sales orders: {q.salesOrders.length} · <Link href={`/quotes/${id}?tab=sales-orders`}>View →</Link>
             {" · "}Conforme: {q.conformeFiles.length === 0 ? "missing" : "uploaded"} · <Link href={`/quotes/${id}?tab=conforme`}>View →</Link>
           </p>
-          <div className="detail-grid">
-            <div>
-              <div className="card">
-                <dl className="kv kv-grid">
-                  <dt>Customer</dt>
-                  <dd>
-                    <Link href={`/customers/${q.customer.id}`}>{q.customer.name}</Link>
+          <div className="card">
+            <dl className="kv kv-grid">
+              <dt>Customer</dt>
+              <dd>
+                <Link href={`/customers/${q.customer.id}`}>{q.customer.name}</Link>
+              </dd>
+              <dt>Contact</dt>
+              <dd>{q.contact ? `${q.contact.name}${q.contact.email ? ` · ${q.contact.email}` : ""}` : "—"}</dd>
+              <dt>Date</dt>
+              <dd>{day(q.date)}</dd>
+              <dt>Valid until</dt>
+              <dd>{day(q.validUntil)}</dd>
+              <dt>Terms</dt>
+              <dd>{q.terms ?? "—"}</dd>
+              {q.subject && (
+                <>
+                  <dt>Subject / project</dt>
+                  <dd>{q.subject}</dd>
+                </>
+              )}
+              {q.buyerPoNo && (
+                <>
+                  <dt>Customer PO / RFQ no.</dt>
+                  <dd>{q.buyerPoNo}</dd>
+                </>
+              )}
+              <dt>Withholding</dt>
+              <dd>
+                {q.withholdingPick == null
+                  ? "not set"
+                  : q.withholdingPick.length === 0
+                    ? "none"
+                    : q.withholding.length
+                      ? q.withholding.map((w) => w.label).join(", ")
+                      : "none"}
+                <div className="small faint">Internal estimate — not on the printed quote</div>
+              </dd>
+              {q.notes && (
+                <>
+                  <dt>Notes on quote</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{q.notes}</dd>
+                </>
+              )}
+              {q.internalNotes && (
+                <>
+                  <dt>Internal notes</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>
+                    <span className="small muted">Internal only, never prints</span>
+                    <div>{q.internalNotes}</div>
                   </dd>
-                  <dt>Contact</dt>
-                  <dd>{q.contact ? `${q.contact.name}${q.contact.email ? ` · ${q.contact.email}` : ""}` : "—"}</dd>
-                  <dt>Date</dt>
-                  <dd>{day(q.date)}</dd>
-                  <dt>Valid until</dt>
-                  <dd>{day(q.validUntil)}</dd>
-                  <dt>Terms</dt>
-                  <dd>{q.terms ?? "—"}</dd>
-                  {q.subject && (
-                    <>
-                      <dt>Subject / project</dt>
-                      <dd>{q.subject}</dd>
-                    </>
-                  )}
-                  {q.buyerPoNo && (
-                    <>
-                      <dt>Customer PO / RFQ no.</dt>
-                      <dd>{q.buyerPoNo}</dd>
-                    </>
-                  )}
-                  <dt>Withholding</dt>
-                  <dd>
-                    {q.withholdingPick == null
-                      ? "not set"
-                      : q.withholdingPick.length === 0
-                        ? "none"
-                        : q.withholding.length
-                          ? q.withholding.map((w) => w.label).join(", ")
-                          : "none"}
-                    <div className="small faint">Internal estimate — not on the printed quote</div>
-                  </dd>
-                  {q.notes && (
-                    <>
-                      <dt>Notes on quote</dt>
-                      <dd style={{ whiteSpace: "pre-wrap" }}>{q.notes}</dd>
-                    </>
-                  )}
-                  {q.internalNotes && (
-                    <>
-                      <dt>Internal notes</dt>
-                      <dd style={{ whiteSpace: "pre-wrap" }}>
-                        <span className="small muted">Internal only, never prints</span>
-                        <div>{q.internalNotes}</div>
-                      </dd>
-                    </>
-                  )}
-                </dl>
-              </div>
-              <div className="small faint">
-                Created by {q.createdBy} · last updated by {q.updatedBy}, {formatDateTime(q.updatedAt)}
-              </div>
-            </div>
-            <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
+                </>
+              )}
+            </dl>
+          </div>
+          <div className="small faint">
+            Created by {q.createdBy} · last updated by {q.updatedBy}, {formatDateTime(q.updatedAt)}
           </div>
           <div className="card">
             <h2>Items</h2>
@@ -271,6 +267,10 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             </div>
           )}
         </div>
+      )}
+
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
       )}
 
       {tab === "conforme" && (

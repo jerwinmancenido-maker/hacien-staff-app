@@ -27,7 +27,7 @@ import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSal
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
-const TABS = ["overview", "documents", "deliveries", "cost-margin", "attachments"] as const;
+const TABS = ["overview", "documents", "deliveries", "cost-margin", "activity", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SalesOrderPage({
@@ -119,6 +119,7 @@ export default async function SalesOrderPage({
                 } as const,
               ]
             : []),
+          { key: "activity", label: "Activity", href: `${base}?tab=activity` },
           {
             key: "attachments",
             label: "Attachments",
@@ -247,54 +248,53 @@ export default async function SalesOrderPage({
             voidAction={voidDeliveryForOrder.bind(null, so.id)}
           />
       )}
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "SalesOrder", ids: [so.id] }]} viewer={user} />
+      )}
+
       {tab === "attachments" && (
         <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
       )}
 
       {tab === "overview" && (
         <>
-          <div className="detail-grid">
-            <div>
-              <div className="card">
-                <dl className="kv kv-grid">
-                  <dt>Customer</dt>
-                  <dd>
-                    <Link href={`/customers/${so.customer.id}`}>{so.customer.name}</Link>
-                  </dd>
-                  <dt>From quote</dt>
-                  <dd>
-                    <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link> <QuoteStatusChip status={so.quote.status} />
-                  </dd>
-                  <dt>Buyer PO no.</dt>
-                  <dd>{so.buyerPoNo ?? "—"}</dd>
-                  <dt>Buyer PO date</dt>
-                  <dd>{day(so.buyerPoDate)}</dd>
-                  <dt>SO date</dt>
-                  <dd>{day(so.date)}</dd>
-                  <dt>Tracking ref</dt>
-                  <dd>{so.trackingRef ?? "—"}</dd>
-                  <dt>Contact</dt>
-                  <dd>{so.contact ? `${so.contact.name}${so.contact.email ? ` · ${so.contact.email}` : ""}` : "—"}</dd>
-                  <dt>Delivery address</dt>
-                  <dd style={{ whiteSpace: "pre-wrap" }}>{so.deliveryAddress ?? "—"}</dd>
-                  <dt>Terms</dt>
-                  <dd>{so.terms ?? "—"}</dd>
-                  <dt>Withholding</dt>
-                  <dd>{so.withholding.length ? so.withholding.map((w) => w.label).join(", ") : "None"}</dd>
-                  {so.notes && (
-                    <>
-                      <dt>Notes</dt>
-                      <dd style={{ whiteSpace: "pre-wrap" }}>{so.notes}</dd>
-                    </>
-                  )}
-                </dl>
-              </div>
-              {so.customer.withholdingType === "GOVERNMENT" && (
-                <GovernmentDealBox so={so} canEdit={can(user, "edit_data")} />
+          <div className="card">
+            <dl className="kv kv-grid">
+              <dt>Customer</dt>
+              <dd>
+                <Link href={`/customers/${so.customer.id}`}>{so.customer.name}</Link>
+              </dd>
+              <dt>From quote</dt>
+              <dd>
+                <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link> <QuoteStatusChip status={so.quote.status} />
+              </dd>
+              <dt>Buyer PO no.</dt>
+              <dd>{so.buyerPoNo ?? "—"}</dd>
+              <dt>Buyer PO date</dt>
+              <dd>{day(so.buyerPoDate)}</dd>
+              <dt>SO date</dt>
+              <dd>{day(so.date)}</dd>
+              <dt>Tracking ref</dt>
+              <dd>{so.trackingRef ?? "—"}</dd>
+              <dt>Contact</dt>
+              <dd>{so.contact ? `${so.contact.name}${so.contact.email ? ` · ${so.contact.email}` : ""}` : "—"}</dd>
+              <dt>Delivery address</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{so.deliveryAddress ?? "—"}</dd>
+              <dt>Terms</dt>
+              <dd>{so.terms ?? "—"}</dd>
+              <dt>Withholding</dt>
+              <dd>{so.withholding.length ? so.withholding.map((w) => w.label).join(", ") : "None"}</dd>
+              {so.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{so.notes}</dd>
+                </>
               )}
-            </div>
-            <Activity targets={[{ entityType: "SalesOrder", ids: [so.id] }]} viewer={user} />
+            </dl>
           </div>
+          {so.customer.withholdingType === "GOVERNMENT" && (
+            <GovernmentDealBox so={so} canEdit={can(user, "edit_data")} />
+          )}
           <div className="card">
             <h2>Items</h2>
             <ItemsTable
@@ -331,13 +331,12 @@ export default async function SalesOrderPage({
                   <dd className="num strong">{formatPeso(money.totalPaid)}</dd>
                 </dl>
               )}
-              {billings.length === 0 ? (
+              {billings.length === 0 && (
                 <p className="faint">No billings yet. Write the booklet invoice number you issued.</p>
-              ) : (
-                <p>
-                  <Link href={`${base}?tab=documents`}>View billings →</Link>
-                </p>
               )}
+              <p>
+                <Link href={`${base}?tab=documents`}>View billings →</Link>
+              </p>
             </div>
           )}
           <div className="card" aria-label="Purchasing">

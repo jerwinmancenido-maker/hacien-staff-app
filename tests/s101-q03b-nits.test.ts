@@ -23,6 +23,21 @@ describe("S-101 Q03b later-batch nits", () => {
     expect(readableDiffValue({ status: "SENT" })).toBe("Status: SENT");
   });
 
+  it("caps long item lists so the Activity feed stays readable", () => {
+    const items = [
+      { description: "Widget A", qty: "2" },
+      { description: "Widget B", qty: "1" },
+      { description: "Widget C", qty: "3" },
+      { description: "Widget D", qty: "4" },
+      { description: "Widget E", qty: "5" },
+    ];
+    const out = readableDiffValue(items);
+    expect(out).toContain("Description: Widget A");
+    expect(out).toContain("Description: Widget C");
+    expect(out).not.toContain("Widget D");
+    expect(out).toContain("… and 2 more");
+  });
+
   it("the blank-cost approval case has the confirm-none reject check", () => {
     const dbTest = src("tests/db/quote-approvals.db.test.ts");
     const blankCase = dbTest.split("const blankId = await approvedQuote();")[1] ?? "";

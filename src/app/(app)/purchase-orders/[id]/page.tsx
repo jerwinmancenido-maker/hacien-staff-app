@@ -27,7 +27,7 @@ import {
   voidSupplierReturnAction,
 } from "../actions";
 
-const TABS = ["overview", "receiving", "bills", "match", "attachments", "returns"] as const;
+const TABS = ["overview", "receiving", "bills", "match", "returns", "activity", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function PurchaseOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
@@ -102,6 +102,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             href: `${base}?tab=match`,
           },
           { key: "returns", label: "Returns", count: returns.filter((r) => r.status === "POSTED").length, href: `${base}?tab=returns` },
+          { key: "activity", label: "Activity", href: `${base}?tab=activity` },
           {
             key: "attachments",
             label: "Attachments",
@@ -113,59 +114,49 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
 
       {tab === "overview" && (
         <>
-          <div className="detail-grid">
-            <div className="card">
-              <dl className="kv kv-grid">
-                <dt>Supplier</dt>
-                <dd>
-                  <Link href={`/suppliers/${po.supplier.id}`}>{po.supplier.name}</Link>
-                  {po.supplier.tin && <span className="muted small"> · TIN {po.supplier.tin}</span>}
-                </dd>
-                <dt>Contact</dt>
-                <dd>{po.supplierContact ? `${po.supplierContact.name}${po.supplierContact.email ? ` · ${po.supplierContact.email}` : ""}` : "—"}</dd>
-                <dt>Supplier address</dt>
-                <dd style={{ whiteSpace: "pre-wrap" }}>{po.supplierAddressText ?? "—"}</dd>
-                <dt>Sales order</dt>
-                <dd>{po.salesOrder ? <Link href={`/sales-orders/${po.salesOrder.id}`}>{po.salesOrder.number}</Link> : "Standalone"}</dd>
-                <dt>PO date</dt>
-                <dd>{day(po.date)}</dd>
-                <dt>Expected delivery</dt>
-                <dd>{day(po.expectedDate)}</dd>
-                <dt>Deliver to</dt>
-                <dd style={{ whiteSpace: "pre-wrap" }}>{po.deliveryAddressText ?? "—"}</dd>
-                <dt>Terms</dt>
-                <dd>{po.terms ?? "—"}</dd>
-                <dt>Approval</dt>
-                <dd>
-                  {po.approvedBy ? (
-                    <>
-                      Approved by {po.approvedBy}
-                      {po.approvedAt ? ` · ${formatDateTime(po.approvedAt)}` : ""}
-                    </>
-                  ) : po.status === "DRAFT" ? (
-                    <Chip tone="blue">Needs approval</Chip>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-                <dt>Created by</dt>
-                <dd>{po.createdBy}</dd>
-                {po.notes && (
+          <div className="card">
+            <dl className="kv kv-grid">
+              <dt>Supplier</dt>
+              <dd>
+                <Link href={`/suppliers/${po.supplier.id}`}>{po.supplier.name}</Link>
+                {po.supplier.tin && <span className="muted small"> · TIN {po.supplier.tin}</span>}
+              </dd>
+              <dt>Contact</dt>
+              <dd>{po.supplierContact ? `${po.supplierContact.name}${po.supplierContact.email ? ` · ${po.supplierContact.email}` : ""}` : "—"}</dd>
+              <dt>Supplier address</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{po.supplierAddressText ?? "—"}</dd>
+              <dt>Sales order</dt>
+              <dd>{po.salesOrder ? <Link href={`/sales-orders/${po.salesOrder.id}`}>{po.salesOrder.number}</Link> : "Standalone"}</dd>
+              <dt>PO date</dt>
+              <dd>{day(po.date)}</dd>
+              <dt>Expected delivery</dt>
+              <dd>{day(po.expectedDate)}</dd>
+              <dt>Deliver to</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{po.deliveryAddressText ?? "—"}</dd>
+              <dt>Terms</dt>
+              <dd>{po.terms ?? "—"}</dd>
+              <dt>Approval</dt>
+              <dd>
+                {po.approvedBy ? (
                   <>
-                    <dt>Notes</dt>
-                    <dd style={{ whiteSpace: "pre-wrap" }}>{po.notes}</dd>
+                    Approved by {po.approvedBy}
+                    {po.approvedAt ? ` · ${formatDateTime(po.approvedAt)}` : ""}
                   </>
+                ) : po.status === "DRAFT" ? (
+                  <Chip tone="blue">Needs approval</Chip>
+                ) : (
+                  "—"
                 )}
-              </dl>
-            </div>
-            <Activity
-              targets={[
-                { entityType: "PurchaseOrder", ids: [po.id] },
-                { entityType: "ReceivingReport", ids: po.receivingReports.map((r) => r.id) },
-                { entityType: "SupplierBill", ids: po.bills.map((b) => b.id) },
-              ]}
-              viewer={user}
-            />
+              </dd>
+              <dt>Created by</dt>
+              <dd>{po.createdBy}</dd>
+              {po.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{po.notes}</dd>
+                </>
+              )}
+            </dl>
           </div>
           <div className="card">
             <h2>Items</h2>
@@ -223,6 +214,17 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           </div>
           {canEdit && <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={createReminderAction} />}
         </>
+      )}
+
+      {tab === "activity" && (
+        <Activity
+          targets={[
+            { entityType: "PurchaseOrder", ids: [po.id] },
+            { entityType: "ReceivingReport", ids: po.receivingReports.map((r) => r.id) },
+            { entityType: "SupplierBill", ids: po.bills.map((b) => b.id) },
+          ]}
+          viewer={user}
+        />
       )}
 
       {tab === "attachments" && (

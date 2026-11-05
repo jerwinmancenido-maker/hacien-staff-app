@@ -20,7 +20,11 @@ export function readableDiffValue(v: Json): string {
   if (v === null || v === undefined || v === "") return "—";
   if (Array.isArray(v)) {
     if (!v.length) return "—";
-    return v.map((el) => readableDiffValue(el)).join("; ");
+    // A long items list dumps as one giant line in the Activity feed.
+    // Show the first 3, then how many more there are.
+    const shown = v.slice(0, 3).map((el) => readableDiffValue(el));
+    if (v.length > 3) shown.push(`… and ${v.length - 3} more`);
+    return shown.join("; ");
   }
   if (typeof v === "object") {
     const parts = Object.entries(v as Record<string, Json>)
