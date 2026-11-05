@@ -127,13 +127,21 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             attachments: uploads.length,
           },
         });
+        // Audit C: note it in the audit trail when the billing goes out
+        // before anything was delivered (warn only — never a block).
+        const deliveredCount = await tx.delivery.count({ where: { salesOrderId: so.id, voidedAt: null } });
         await writeAudit(tx, {
           userId: actor.id,
           entityType: "SalesOrder",
           entityId: so.id,
           action: "update",
           before: null,
-          after: { billingRecorded: number, invoiceNo: billing.invoiceNo, amount: money(billing.amount) },
+          after: {
+            billingRecorded: number,
+            invoiceNo: billing.invoiceNo,
+            amount: money(billing.amount),
+            ...(deliveredCount === 0 ? { billedBeforeDelivery: true } : {}),
+          },
           diff: false,
         });
         // Audit A: a new billing can complete the order's money side.

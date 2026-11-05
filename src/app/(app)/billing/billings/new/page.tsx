@@ -90,6 +90,8 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
   const booklet = await getBookletView();
   const today = billingToday();
   const due = dueDateFromTerms(today, so.terms);
+  // Audit C: warn (don't block) when nothing has been delivered yet.
+  const deliveredCount = await db.delivery.count({ where: { salesOrderId: so.id, voidedAt: null } });
   // Prefill amount = remaining; withholding snapshot exists on SO for later collections.
   void (so.withholding as WithholdingSnapshot[]);
 
@@ -106,6 +108,7 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
           canEdit
           salesOrderLabel={`${so.number} · ${so.customer.name}`}
           remaining={remaining}
+          deliveryWarning={deliveredCount === 0}
           nextInvoiceHint={booklet.nextFree}
           seriesFrom={snap.settings.invoiceBooklet.seriesFrom}
           seriesTo={snap.settings.invoiceBooklet.seriesTo}
