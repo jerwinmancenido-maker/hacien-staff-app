@@ -49,7 +49,7 @@ export type SoMoneySnapshot = {
  * (cash + 2307 credited equals the non-void billed total).
  */
 export function salesOrderMoney(
-  soStatus: "OPEN" | "VOID",
+  soStatus: "OPEN" | "VOID" | "CLOSED",
   contractPrice: string,
   billings: readonly SoBillingMoney[],
 ): SoMoneySnapshot {

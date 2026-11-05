@@ -241,7 +241,9 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
 
     const done = await shown();
     expect(done.money.completed).toBe(true);
-    // Display only — the sales order row stays OPEN.
+    // The sales order row stays OPEN here: nothing was delivered, so the
+    // auto-close (Audit A) does not fire. Money-complete alone is not
+    // enough — the order also needs to be fully delivered.
     expect(done.status).toBe("OPEN");
 
     // Void collection: posted cash and 2307 drop out of soBillingSummary; the billing stays.

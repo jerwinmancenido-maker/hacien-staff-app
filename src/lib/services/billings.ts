@@ -15,6 +15,7 @@ import type { BillingInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { claimBookletSerial, lockSiBookletNumber, moveSiBookletClaim } from "./booklet";
+import { refreshSalesOrderCloseState } from "./sales-orders";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -135,6 +136,8 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
           after: { billingRecorded: number, invoiceNo: billing.invoiceNo, amount: money(billing.amount) },
           diff: false,
         });
+        // Audit A: a new billing can complete the order's money side.
+        await refreshSalesOrderCloseState(tx, so.id, actor.id);
         return billing;
       }, DOC_TX),
     );
@@ -177,7 +180,7 @@ export async function updateBilling(
         if (postedAlloc > 0) throw new DocRuleError("This billing has posted collections; void those first before editing.");
 
         const so = await lockSalesOrder(tx, before.salesOrderId);
-        if (so.status !== "OPEN") throw new DocRuleError("The sales order is void; this billing can't be edited.");
+        if (so.status !== "OPEN") throw new DocRuleError("The sales order is closed or void; this billing can't be edited.");
 
         const others = (await nonVoidBillings(tx, so.id)).filter((b) => b.id !== id);
         const remaining = remainingToBill(
@@ -246,6 +249,8 @@ export async function updateBilling(
             notes: after.notes,
           },
         });
+        // Audit A: an amount change can complete (or un-complete) the order.
+        await refreshSalesOrderCloseState(tx, before.salesOrderId, actor.id);
         return after;
       }, DOC_TX),
     );
@@ -341,6 +346,8 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
         after: { status: "VOID", voidReason: why, invoiceNo: before.invoiceNo },
         diff: false,
       });
+      // Audit A: voiding a billing can reopen a closed order.
+      await refreshSalesOrderCloseState(tx, before.salesOrderId, actor.id);
       return after;
     }, DOC_TX),
   );
@@ -374,7 +381,10 @@ export async function markBillingChecked(id: string, actor: BillingActor) {
 /** Recompute and persist a billing's status from its posted allocations. */
 export async function recomputeBillingStatus(tx: Tx, billingId: string, actorId: string) {
   const billing = await tx.billing.findUniqueOrThrow({ where: { id: billingId } });
-  if (billing.status === "VOID") return billing;
+  if (billing.status === "VOID") {
+    await refreshSalesOrderCloseState(tx, billing.salesOrderId, actorId);
+    return billing;
+  }
   const allocs = await tx.collectionAllocation.findMany({
     where: { billingId, collection: { status: "POSTED" } },
   });
@@ -385,8 +395,14 @@ export async function recomputeBillingStatus(tx: Tx, billingId: string, actorId:
   if (cash + wh <= 0n) status = "OPEN";
   else if (cash + wh >= amt) status = "PAID";
   else status = "PARTIALLY_PAID";
-  if (status === billing.status) return billing;
-  return tx.billing.update({ where: { id: billingId }, data: { status, updatedById: actorId } });
+  // Audit A: a collection change moves the SO money even when this billing's
+  // own status does not change, so refresh the SO close state every time.
+  let result = billing;
+  if (status !== billing.status) {
+    result = await tx.billing.update({ where: { id: billingId }, data: { status, updatedById: actorId } });
+  }
+  await refreshSalesOrderCloseState(tx, billing.salesOrderId, actorId);
+  return result;
 }
 
 /** SO rollup: billed / remaining / collected / balance. */

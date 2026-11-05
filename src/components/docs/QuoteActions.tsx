@@ -323,7 +323,9 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAc
   for (const b of billings) {
     items.push({ key: `print-billing-${b.id}`, label: `Print billing statement ${b.number}`, href: `/print/billings/${b.id}`, newTab: true });
   }
-  if (canVoid && status === "OPEN") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
+  // Audit A: a closed order can still be cancelled — void is the correction
+  // path for OPEN and CLOSED alike. Edit stays OPEN-only.
+  if (canVoid && (status === "OPEN" || status === "CLOSED")) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
   return (
     <>
       <ActionsMenu items={items} />

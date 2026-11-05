@@ -640,6 +640,7 @@ enum QuoteApprovalStatus {
 enum SalesOrderStatus {
   OPEN
   VOID
+  CLOSED
 }
 
 enum ItemKind {

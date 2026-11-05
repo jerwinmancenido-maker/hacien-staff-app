@@ -5,7 +5,9 @@ import type { Prisma, SalesOrder, SalesOrderItem } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
-import { toScaled } from "../quotes/calc";
+import { fromScaled, toScaled } from "../quotes/calc";
+import { salesOrderMoney } from "../billing/status";
+import { soDeliveryProgress } from "../sales-orders/delivery";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave, rateFromDocWithholding } from "../quotes/legacy-withholding";
@@ -113,6 +115,57 @@ async function lockSalesOrder(tx: Tx, id: string): Promise<SoWithItems> {
   const so = await tx.salesOrder.findUnique({ where: { id }, include: { items: { where: { removedAt: null } } } });
   if (!so) throw new DocRuleError("Sales order not found.");
   return so;
+}
+
+/** Audit A (2026-11-05): recompute an SO's open/closed state in the same
+ * transaction as the billing, collection or delivery change that may have
+ * completed it. Closes when fully billed AND fully paid AND fully
+ * delivered; reopens when a later change breaks that. VOID is never
+ * touched, and nothing happens when the state is already right. Callers
+ * are the billing, collection (via recomputeBillingStatus) and delivery
+ * services, plus updateSalesOrder for item/total edits. */
+export async function refreshSalesOrderCloseState(tx: Tx, salesOrderId: string, actorId: string): Promise<void> {
+  const so = await tx.salesOrder.findUnique({
+    where: { id: salesOrderId },
+    select: { status: true, contractPrice: true },
+  });
+  if (!so || so.status === "VOID") return;
+  const billings = await tx.billing.findMany({
+    where: { salesOrderId, status: { not: "VOID" } },
+    include: { allocations: { where: { collection: { status: "POSTED" } } } },
+  });
+  const moneySnap = salesOrderMoney(
+    so.status,
+    money(so.contractPrice),
+    billings.map((b) => ({
+      status: b.status,
+      amount: money(b.amount),
+      cashApplied: fromScaled(b.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n), 2),
+      withholdingApplied: fromScaled(b.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n), 2),
+    })),
+  );
+  const items = await tx.salesOrderItem.findMany({
+    where: { salesOrderId, removedAt: null },
+    select: { qty: true, deliveredQty: true },
+  });
+  const delivered = soDeliveryProgress(
+    items.map((i) => ({ qty: money(i.qty), deliveredQty: money(i.deliveredQty) })),
+  );
+  const target = moneySnap.completed && delivered.fullyDelivered ? "CLOSED" : "OPEN";
+  if (target === so.status) return;
+  await tx.salesOrder.update({ where: { id: salesOrderId }, data: { status: target, updatedById: actorId } });
+  await writeAudit(tx, {
+    userId: actorId,
+    entityType: "SalesOrder",
+    entityId: salesOrderId,
+    action: "update",
+    before: { status: so.status },
+    after: {
+      status: target,
+      reason: target === "CLOSED" ? "Fully billed, paid and delivered" : "No longer fully billed, paid and delivered",
+    },
+    diff: false,
+  });
 }
 
 export async function updateSalesOrder(id: string, input: SalesOrderInput, actor: DocActor): Promise<SoWithItems> {
@@ -264,6 +317,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         before: salesOrderAudit(before),
         after: { ...salesOrderAudit(after), ...(pricesChanged ? { priceOverrideReason } : {}) },
       });
+      // Audit A: an item/total edit can complete (or un-complete) the order.
+      await refreshSalesOrderCloseState(tx, id, actor.id);
       return after;
     }, DOC_TX),
   );

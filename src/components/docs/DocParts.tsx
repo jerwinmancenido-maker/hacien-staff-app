@@ -10,8 +10,8 @@ import { COST_NOT_SET_LABEL, supplierCostMissing, type SupplierCostState } from 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
 const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "blue", WON: "green", LOST: "red", VOID: "red" };
 
-export const SO_STATUS_LABELS: Record<string, string> = { OPEN: "Open", VOID: "Void" };
-const SO_TONES: Record<string, ChipTone> = { OPEN: "green", VOID: "red" };
+export const SO_STATUS_LABELS: Record<string, string> = { OPEN: "Open", VOID: "Void", CLOSED: "Closed" };
+const SO_TONES: Record<string, ChipTone> = { OPEN: "green", VOID: "red", CLOSED: "blue" };
 
 export function QuoteStatusChip({ status }: { status: string }) {
   return <Chip tone={QUOTE_TONES[status]}>{QUOTE_STATUS_LABELS[status] ?? status}</Chip>;

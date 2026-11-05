@@ -422,7 +422,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
 }
 export type SalesOrderView = NonNullable<Awaited<ReturnType<typeof getSalesOrderView>>>;
 
-export const SALES_ORDER_STATUSES: SalesOrderStatus[] = ["OPEN", "VOID"];
+export const SALES_ORDER_STATUSES: SalesOrderStatus[] = ["OPEN", "VOID", "CLOSED"];
 
 export type SalesOrderListFilter = {
   q?: string;
