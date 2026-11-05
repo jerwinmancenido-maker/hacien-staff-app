@@ -40,6 +40,18 @@ describe("audit fix: collection cash take reserves room for prefilled withholdin
     expect(f).toContain("Math.max(0, bal - whSum)");
     expect(f).toContain("Math.min(reserve, acc.left)");
   });
+
+  it("prefill follows the typed amount, not the mount-time amount", () => {
+    // Regression: the page mounts with amountReceived "", so a mount-only
+    // allocation always computed take 0 and wiped the prefilled split before
+    // staff typed anything. The split must follow the typed amount, and rows
+    // staff edited by hand must keep their values.
+    const f = src("src/components/billing/CollectionForm.tsx");
+    expect(f).toContain("onAmountChange");
+    expect(f).toContain("computeAlloc(openBillings, Number(value) || 0)");
+    expect(f).toContain("touched.has(i) ? row : fresh[i]!");
+    expect(f).toContain("markTouched(i)");
+  });
 });
 
 describe("audit fix: supplier statement print is linked", () => {

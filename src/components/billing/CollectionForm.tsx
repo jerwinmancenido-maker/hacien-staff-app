@@ -45,6 +45,45 @@ function codesForBilling(b: OpenBillingRow): AllocState["codes"] {
   return [{ rate: b.defaultRate, atc: b.defaultAtc ?? "", amount: "" }];
 }
 
+/**
+ * Cash take + 2307 split for a given amount received, oldest billing first.
+ * The cash take reserves room for the prefilled withholding, or the auto-fill
+ * would eat the whole balance in cash and the split could never apply.
+ * Prefilled 2307 amounts only apply to a full settlement of the billing
+ * (cash taken + withholding = remaining balance). On a partial collection the
+ * withholding is staff's call, so the split stays blank instead of posting
+ * the full remaining split.
+ */
+function computeAlloc(openBillings: OpenBillingRow[], received: number): AllocState[] {
+  const { rows } = openBillings.reduce<{ left: number; rows: AllocState[] }>(
+    (acc, b) => {
+      const bal = Number(b.balance);
+      const codes = codesForBilling(b);
+      const whSum = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+      const reserve = whSum > 0 ? Math.max(0, bal - whSum) : bal;
+      const take = acc.left > 0 ? Math.min(reserve, acc.left) : 0;
+      const fullSettlement =
+        take > 0 && Math.round(take * 100) + Math.round(whSum * 100) === Math.round(bal * 100);
+      return {
+        left: acc.left - take,
+        rows: [
+          ...acc.rows,
+          {
+            billingId: b.id,
+            cash: take > 0 ? take.toFixed(2) : "",
+            withholding: fullSettlement && whSum > 0 ? whSum.toFixed(2) : "",
+            rate: b.defaultRate,
+            atc: b.defaultAtc ?? "",
+            codes: fullSettlement ? codes : codes.map((c) => ({ ...c, amount: "" })),
+          },
+        ],
+      };
+    },
+    { left: received, rows: [] },
+  );
+  return rows;
+}
+
 export function CollectionForm({
   action,
   customerId,
@@ -72,44 +111,31 @@ export function CollectionForm({
   const e = state.fieldErrors ?? {};
   const [method, setMethod] = useState(defaults.method || "CASH");
   const [amount, setAmount] = useState(defaults.amountReceived);
+  // Billings staff already edited by hand — the amount-driven auto-fill must
+  // never overwrite their values.
+  const [touched, setTouched] = useState<ReadonlySet<number>>(new Set());
 
-  const initialAlloc = useMemo(() => {
-    const { rows } = openBillings.reduce<{ left: number; rows: AllocState[] }>(
-      (acc, b) => {
-        const bal = Number(b.balance);
-        // Prefilled 2307 amounts only apply to a full settlement of the billing
-        // (cash taken + withholding = remaining balance). On a partial
-        // collection the withholding is staff's call, so leave it blank like
-        // before instead of posting the full remaining split. The cash take
-        // itself reserves room for the prefilled withholding, or the auto-fill
-        // would eat the whole balance in cash and the split could never apply.
-        const codes = codesForBilling(b);
-        const whSum = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
-        const reserve = whSum > 0 ? Math.max(0, bal - whSum) : bal;
-        const take = acc.left > 0 ? Math.min(reserve, acc.left) : 0;
-        const fullSettlement =
-          take > 0 && Math.round(take * 100) + Math.round(whSum * 100) === Math.round(bal * 100);
-        return {
-          left: acc.left - take,
-          rows: [
-            ...acc.rows,
-            {
-              billingId: b.id,
-              cash: take > 0 ? take.toFixed(2) : "",
-              withholding: fullSettlement && whSum > 0 ? whSum.toFixed(2) : "",
-              rate: b.defaultRate,
-              atc: b.defaultAtc ?? "",
-              codes: fullSettlement ? codes : codes.map((c) => ({ ...c, amount: "" })),
-            },
-          ],
-        };
-      },
-      { left: Number(defaults.amountReceived) || 0, rows: [] },
-    );
-    return rows;
-  }, [openBillings, defaults.amountReceived]);
+  const initialAlloc = useMemo(
+    () => computeAlloc(openBillings, Number(defaults.amountReceived) || 0),
+    [openBillings, defaults.amountReceived],
+  );
 
   const [allocs, setAllocs] = useState(initialAlloc);
+
+  function markTouched(i: number) {
+    setTouched((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
+  }
+
+  // The form mounts with an empty amount (staff type it after the page loads),
+  // so the mount-time allocation can never know the cash take — the 2307 split
+  // has to follow the typed amount instead. When the amount changes, auto-fill
+  // cash and the split for billings the amount fully settles; rows staff
+  // edited by hand keep their values.
+  function onAmountChange(value: string) {
+    setAmount(value);
+    const fresh = computeAlloc(openBillings, Number(value) || 0);
+    setAllocs((prev) => prev.map((row, i) => (touched.has(i) ? row : fresh[i]!)));
+  }
 
   if (!canEdit) return <p className="faint">You can view collections but not record them.</p>;
 
@@ -117,6 +143,7 @@ export function CollectionForm({
   const unapplied = Math.max(0, (Number(amount) || 0) - cashSum);
 
   function setCodeAmount(billingIndex: number, codeIndex: number, value: string) {
+    markTouched(billingIndex);
     const next = [...allocs];
     const row = { ...next[billingIndex]! };
     const codes = [...row.codes];
@@ -171,7 +198,7 @@ export function CollectionForm({
             id="amountReceived"
             name="amountReceived"
             value={amount}
-            onChange={(ev) => setAmount(ev.target.value)}
+            onChange={(ev) => onAmountChange(ev.target.value)}
             inputMode="decimal"
           />
           {e.amountReceived && <div className="error">{e.amountReceived}</div>}
@@ -231,7 +258,8 @@ export function CollectionForm({
       </h3>
       <p className="faint small">
         Leave cash unallocated to keep it as customer credit (advances / downpayments). Cash applied cannot exceed amount
-        received. Unapplied: <strong>{formatPeso(unapplied)}</strong>
+        received. Unapplied: <strong>{formatPeso(unapplied)}</strong> The 2307 split fills in automatically once the amount
+        fully covers a billing — clear it if the customer withheld less.
         {!canOverrideRates ? " Rates come from the sales order — only an Admin can override." : ""}
       </p>
       {e.allocations && (
@@ -273,6 +301,7 @@ export function CollectionForm({
                       name="allocCash"
                       value={allocs[i]?.cash ?? ""}
                       onChange={(ev) => {
+                        markTouched(i);
                         const next = [...allocs];
                         next[i] = { ...next[i]!, cash: ev.target.value };
                         setAllocs(next);
@@ -298,6 +327,7 @@ export function CollectionForm({
                                 className="input"
                                 value={code.rate}
                                 onChange={(ev) => {
+                                  markTouched(i);
                                   const next = [...allocs];
                                   const codes = [...next[i]!.codes];
                                   codes[ci] = { ...codes[ci]!, rate: ev.target.value };
@@ -311,6 +341,7 @@ export function CollectionForm({
                                 className="input"
                                 value={code.atc}
                                 onChange={(ev) => {
+                                  markTouched(i);
                                   const next = [...allocs];
                                   const codes = [...next[i]!.codes];
                                   codes[ci] = { ...codes[ci]!, atc: ev.target.value };
