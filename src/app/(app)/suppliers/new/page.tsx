@@ -10,7 +10,7 @@ export default async function NewSupplierPage() {
   return (
     <>
       <PageHeader title="New supplier" subtitle="Name is required. Add UnionBank details before paying." />
-      <div className="card" style={{ maxWidth: 760 }}>
+      <div className="card">
         <SupplierForm supplier={null} terms={settings.lists.paymentTerms} action={saveSupplierAction.bind(null, null)} canEdit isAdmin={user.isAdmin} />
       </div>
     </>

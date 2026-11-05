@@ -30,7 +30,7 @@ export default async function NewContactPage({ searchParams }: { searchParams: P
           </>
         }
       />
-      <div className="card" style={{ maxWidth: 760 }}>
+      <div className="card">
         <ContactForm contact={null} roles={settings.lists.contactRoles} action={addContactAction.bind(null, owner)} canEdit firstContact={hasMain === 0} />
       </div>
     </>

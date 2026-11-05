@@ -14,7 +14,7 @@ export default async function NewCustomerPage() {
   return (
     <>
       <PageHeader title="New customer" subtitle="Name, payment terms, and customer type are required. Withholding rates are picked below." />
-      <div className="card" style={{ maxWidth: 760 }}>
+      <div className="card">
         <CustomerForm
           customer={null}
           terms={settings.lists.paymentTerms}
