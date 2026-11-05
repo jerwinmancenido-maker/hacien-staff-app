@@ -62,6 +62,12 @@ export function proxy(req: NextRequest) {
         headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
       });
     }
+    // API calls answer 401 JSON instead of redirecting: a fetch client
+    // cannot show the login page, and a redirect would surface as an
+    // unreadable (non-JSON) answer.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ ok: false, message: "Sign in again and try that." }, { status: 401 });
+    }
     return NextResponse.redirect(new URL("/login", req.url));
   }
   return NextResponse.next();

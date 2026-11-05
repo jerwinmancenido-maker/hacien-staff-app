@@ -20,6 +20,20 @@ function json(status: number, body: unknown) {
 
 export async function POST(req: NextRequest) {
   try {
+    return await handleParse(req);
+  } catch (e) {
+    // Never answer a fetch client with an HTML error page: the uploader
+    // can only show JSON. The cause travels in the message (staff-facing,
+    // signed-in only) so a failure on staging is diagnosable without
+    // server access.
+    console.error("parse-2303 failed:", e);
+    const detail = e instanceof Error ? e.message : "Unknown error.";
+    return json(200, { ok: false, message: `Could not read this file (${detail}). Try again, or type the details manually.` });
+  }
+}
+
+async function handleParse(req: NextRequest) {
+  try {
     await requireActionPermission("edit_data");
   } catch (e) {
     if (e instanceof ForbiddenError) return json(403, { ok: false, message: "You don't have permission to do that." });
