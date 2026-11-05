@@ -77,13 +77,16 @@ export function CollectionForm({
     const { rows } = openBillings.reduce<{ left: number; rows: AllocState[] }>(
       (acc, b) => {
         const bal = Number(b.balance);
-        const take = acc.left > 0 ? Math.min(bal, acc.left) : 0;
         // Prefilled 2307 amounts only apply to a full settlement of the billing
         // (cash taken + withholding = remaining balance). On a partial
         // collection the withholding is staff's call, so leave it blank like
-        // before instead of posting the full remaining split.
+        // before instead of posting the full remaining split. The cash take
+        // itself reserves room for the prefilled withholding, or the auto-fill
+        // would eat the whole balance in cash and the split could never apply.
         const codes = codesForBilling(b);
         const whSum = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+        const reserve = whSum > 0 ? Math.max(0, bal - whSum) : bal;
+        const take = acc.left > 0 ? Math.min(reserve, acc.left) : 0;
         const fullSettlement =
           take > 0 && Math.round(take * 100) + Math.round(whSum * 100) === Math.round(bal * 100);
         return {

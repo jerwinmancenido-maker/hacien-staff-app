@@ -34,6 +34,14 @@ describe("audit fix: supplier 'We owe' is wired, not hardcoded", () => {
   });
 });
 
+describe("audit fix: collection cash take reserves room for prefilled withholding", () => {
+  it("auto cash leaves the prefilled split inside the billing balance", () => {
+    const f = src("src/components/billing/CollectionForm.tsx");
+    expect(f).toContain("Math.max(0, bal - whSum)");
+    expect(f).toContain("Math.min(reserve, acc.left)");
+  });
+});
+
 describe("audit fix: supplier statement print is linked", () => {
   it("overview card, list menu, and customer list menu link to the print", () => {
     expect(src("src/components/SupplierOverview.tsx")).toContain(
