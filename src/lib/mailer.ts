@@ -3,7 +3,7 @@
 
 import nodemailer from "nodemailer";
 
-export type Mail = { to: string; subject: string; text: string };
+export type Mail = { to: string; subject: string; text: string; html?: string };
 
 export interface Mailer {
   send(mail: Mail): Promise<void>;
@@ -11,7 +11,7 @@ export interface Mailer {
 
 export const consoleMailer: Mailer = {
   async send(mail) {
-    console.info(`\n[mail] To: ${mail.to}\n[mail] Subject: ${mail.subject}\n${mail.text}\n`);
+    console.info(`\n[mail] To: ${mail.to}\n[mail] Subject: ${mail.subject}${mail.html ? "\n[mail] (HTML version included)" : ""}\n${mail.text}\n`);
   },
 };
 
