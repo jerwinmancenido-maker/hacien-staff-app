@@ -111,16 +111,19 @@ async function extractOcr(bytes: Uint8Array): Promise<string> {
   // error instead of a hang.
   const workerPath = findInstalledPath("tesseract.js", "src", "worker-script", "node", "index.js");
   const langPath = findInstalledPath("@tesseract.js-data", "eng", "4.0.0");
+  // Two separate caps with distinct messages: on staging the photo read
+  // times out, and the stage that timed out is the diagnosis (worker
+  // that never starts vs a read that never finishes).
   const worker = await withTimeout(
     createWorker("eng", undefined, { cachePath: tessdataDir(), workerPath, langPath }),
-    60_000,
-    "Reading the photo took too long — the text lookup did not finish. Type the details manually.",
+    25_000,
+    "The photo reader did not start. Type the details manually.",
   );
   try {
     const { data } = await withTimeout(
       worker.recognize(Buffer.from(bytes)),
       60_000,
-      "Reading the photo took too long — the text lookup did not finish. Type the details manually.",
+      "The photo reader started but did not finish reading. Type the details manually.",
     );
     return data.text.trim();
   } finally {
