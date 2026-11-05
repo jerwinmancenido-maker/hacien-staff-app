@@ -44,6 +44,34 @@ export async function recordSupplierBill(purchaseOrderId: string, input: BillInp
       const err = poActionError(po.status, "bill");
       if (err) throw new DocRuleError(err);
       const lines = billLines(input.lines, new Set(po.items.map((i) => i.id)));
+      // Audit B: a bill line may not exceed what was received on that PO
+      // line, less what non-void bills already billed. (The reverse is
+      // already guarded: voidReceivingReport refuses while any non-void
+      // bill sits on the PO. Total-only bills have no lines, so this
+      // gate does not apply to them — they still show as total-only in
+      // the 3-way match tab.)
+      if (lines.length) {
+        const billedItems = await tx.supplierBillItem.findMany({
+          where: { supplierBill: { purchaseOrderId: po.id, status: { not: "VOID" } } },
+          select: { purchaseOrderItemId: true, qty: true },
+        });
+        const billedQty = new Map<string, bigint>();
+        for (const b of billedItems) {
+          billedQty.set(b.purchaseOrderItemId, (billedQty.get(b.purchaseOrderItemId) ?? 0n) + toScaled(money(b.qty), 2));
+        }
+        for (const l of lines) {
+          const poLine = po.items.find((i) => i.id === l.purchaseOrderItemId)!;
+          const received = toScaled(money(poLine.receivedQty), 2);
+          const available = received - (billedQty.get(l.purchaseOrderItemId) ?? 0n);
+          const want = toScaled(l.qty, 2);
+          if (want > available) {
+            throw new DocRuleError(
+              `${poLine.description}: only ${fromScaled(available, 2)} received and not yet billed — cannot bill ${l.qty}.`,
+              "lines",
+            );
+          }
+        }
+      }
       const dueDate = dueDateFromTerms(input.billDate, po.terms);
       const bill = await tx.supplierBill.create({
         data: {

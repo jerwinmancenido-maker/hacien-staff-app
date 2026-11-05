@@ -551,6 +551,36 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(recordSupplierBill(po!.id, { billNumber: "X1", billDate: new Date(Date.UTC(year, 3, 5)), amount: "1", notes: null, lines: [] }, buyer)).rejects.toThrow(DocRuleError);
     });
 
+    it("Audit B: a bill line cannot exceed what was received, less what is already billed", async () => {
+      const year = await freshYear();
+      const { po, lines } = await sentPo(year);
+      const [laptop, mouse] = lines;
+      const bill = (lineId: string, qty: string, no: string) =>
+        recordSupplierBill(
+          po.id,
+          { billNumber: no, billDate: new Date(Date.UTC(year, 3, 5)), amount: "1", notes: null, lines: [{ purchaseOrderItemId: lineId, qty, unitPrice: "45000" }] },
+          buyer,
+        );
+
+      // Nothing received yet: no line can be billed at all.
+      await expect(bill(laptop!.id, "1", `SI-B0-${tag()}`)).rejects.toThrow(/only 0.00 received and not yet billed/);
+
+      // Receive 4 of 10 laptops; mouse stays at 0.
+      await postReceivingReport(po.id, receipt(year, [{ lineId: laptop!.id, qty: "4" }], staff.id), staff);
+      await expect(bill(laptop!.id, "5", `SI-B1-${tag()}`)).rejects.toThrow(/only 4.00 received and not yet billed/);
+      await expect(bill(mouse!.id, "1", `SI-B2-${tag()}`)).rejects.toThrow(/only 0.00 received and not yet billed/);
+
+      // Billing the 4 received is fine; the next unit is not.
+      const first = await bill(laptop!.id, "4", `SI-B3-${tag()}`);
+      expect(first.status).toBe("RECORDED");
+      await expect(bill(laptop!.id, "1", `SI-B4-${tag()}`)).rejects.toThrow(/only 0.00 received and not yet billed/);
+
+      // Voiding the bill frees the received qty for re-billing.
+      await voidSupplierBill(first.id, "Supplier reissued", buyer);
+      const again = await bill(laptop!.id, "4", `SI-B5-${tag()}`);
+      expect(again.status).toBe("RECORDED");
+    });
+
     it("cannot void a receiving report while a non-void supplier bill exists; void the bill first", async () => {
       const year = await freshYear();
       const { po, lines } = await sentPo(year);
