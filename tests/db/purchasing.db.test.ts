@@ -406,8 +406,9 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
 
       const progress = await getSoPurchasing(so.id, staff);
       expect(progress.received).toBe(2);
-      // Non-cost users see the PO number but get no PO id (PO pages are cost-gated).
-      expect(progress.lines[0]!.purchaseOrders[0]).toEqual({ number: po.number, status: "RECEIVED" });
+      // Audit F: non-cost users see the PO number and id — the id is a link,
+      // not money. Only the total stays cost-only.
+      expect(progress.lines[0]!.purchaseOrders[0]).toEqual({ id: po.id, number: po.number, status: "RECEIVED" });
       expect((await getSoPurchasing(so.id, admin)).lines[0]!.purchaseOrders[0]!.id).toBe(po.id);
     });
 
@@ -480,9 +481,19 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         expect(view!.lines[0]!.remainingQty).toBe("8.00");
         expect(JSON.stringify(view)).not.toMatch(/45000|450000|455000/);
       }
-      await expect(getPurchaseOrderView(po.id, { ...staff, isAdmin: false })).rejects.toBeInstanceOf(ForbiddenError);
+      // Audit F: PO pages are open to every viewer; money is stripped for
+      // non-cost viewers. Prints stay cost-gated.
+      const staffView = await getPurchaseOrderView(po.id, { ...staff, isAdmin: false });
+      expect(staffView).not.toBeNull();
+      expect(staffView!.canSeeCosts).toBe(false);
+      expect(staffView!.subtotal).toBeNull();
+      expect(staffView!.items.every((i) => i.unitCost === null && i.total === null)).toBe(true);
+      expect(staffView!.bills).toEqual([]);
+      expect(staffView!.match).toBeNull();
       await expect(getPurchaseOrderPrint(po.id, staff)).rejects.toBeInstanceOf(ForbiddenError);
-      await expect(listPurchaseOrdersView({}, viewer)).rejects.toBeInstanceOf(ForbiddenError);
+      const viewerList = await listPurchaseOrdersView({}, viewer);
+      expect(viewerList.length).toBeGreaterThan(0);
+      expect(viewerList.every((o) => o.subtotal === null)).toBe(true);
 
       // RR attachment: stored, downloadable by anyone with "view".
       const att = await db.documentAttachment.findFirstOrThrow({ where: { receivingReportId: rr.id } });
@@ -654,7 +665,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       expect(soPurchasesAdmin.purchaseOrders.every((p) => p.id && p.total != null)).toBe(true);
       const soPurchasesStaff = await getSoPurchasing(so.id, staff);
       expect(soPurchasesStaff.purchaseOrders.map((p) => p.number).sort()).toEqual(soPos.map((p) => p.number).sort());
-      expect(soPurchasesStaff.purchaseOrders.every((p) => p.id === undefined && p.total === undefined)).toBe(true);
+      expect(soPurchasesStaff.purchaseOrders.every((p) => p.id != null && p.total === undefined)).toBe(true);
 
       const margin = await getSoCostMargin(so.id, admin);
       expect(margin).not.toBeNull();

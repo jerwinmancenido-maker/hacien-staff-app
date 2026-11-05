@@ -152,7 +152,9 @@ describe.skipIf(!env.hasDb)("customer return / credit memo (MySQL)", () => {
 
   async function deliveredQty(itemId: string) {
     const item = await db.salesOrderItem.findUniqueOrThrow({ where: { id: itemId } });
-    return String(item.deliveredQty);
+    // Decimal toString strips trailing zeros ("1"), so format to 2dp like
+    // the rest of the suite does (receivedQty.toFixed(2)).
+    return item.deliveredQty.toFixed(2);
   }
 
   it("a return reduces deliveredQty and creates credit for the returned value", async () => {
@@ -177,7 +179,7 @@ describe.skipIf(!env.hasDb)("customer return / credit memo (MySQL)", () => {
         { returnDate: new Date(Date.UTC(year, 2, 10)), reason: null, lines: [{ lineId: itemId, qty: "3" }] },
         admin,
       ),
-    ).rejects.toThrow(/Only 2 delivered/);
+    ).rejects.toThrow(/Fix the quantities marked below/);
     expect(await deliveredQty(itemId)).toBe("2.00");
   });
 
