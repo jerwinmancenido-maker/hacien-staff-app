@@ -186,27 +186,53 @@ describe("1701Q worksheet lines (scaled decimals)", () => {
     expect(incomeBaseFromTax("10.00", "0.0000")).toBe("0.00");
   });
 
-  it("splitBillingIncome: split lines share one billing, never double-count", () => {
-    // E2E re-record: one ₱300,000 billing, WI640 ₱3,000 + WB080 ₱9,000.
-    // Inverting each line would give ₱300,000 + ₱300,000 = ₱600,000.
-    expect(splitBillingIncome("300000.00", ["3000.00", "9000.00"])).toEqual([
-      "75000.00",
-      "225000.00",
+  it("splitBillingIncome: split only when inversion would double-count", () => {
+    // E2E re-record: one ₱300,000 billing, WI640 ₱3,000 @1% + WB080 ₱9,000 @3%.
+    // Inverting each line would give ₱300,000 + ₱300,000 = ₱600,000, so the
+    // billing is split by tax share instead.
+    expect(
+      splitBillingIncome("300000.00", [
+        { tax: "3000.00", rate: "0.0100" },
+        { tax: "9000.00", rate: "0.0300" },
+      ]),
+    ).toEqual(["75000.00", "225000.00"]);
+    // Separate bases (S-19): goods ₱100 @1% + services ₱200 @2% on a
+    // ₱20,000 billing invert to ₱10,000 + ₱10,000 — consistent, so no split.
+    // The worksheet inverts per line and the S-19 DB test pins those figures.
+    expect(
+      splitBillingIncome("20000.00", [
+        { tax: "100.00", rate: "0.0100" },
+        { tax: "200.00", rate: "0.0200" },
+      ]),
+    ).toBeNull();
+    // Goods ₱100,000 @1% + services ₱50,000 @2%: inverted bases sum to
+    // exactly the billing, so per-line inversion is the true figure.
+    expect(
+      splitBillingIncome("150000.00", [
+        { tax: "1000.00", rate: "0.0100" },
+        { tax: "1000.00", rate: "0.0200" },
+      ]),
+    ).toBeNull();
+    // One line, all withholding collapsed on one ATC: inverted ₱1,200,000
+    // exceeds the ₱300,000 billing, so the billing amount is the income.
+    expect(splitBillingIncome("300000.00", [{ tax: "12000.00", rate: "0.0100" }])).toEqual([
+      "300000.00",
     ]);
-    // Different bases: total stays right, split is proportional to the tax.
-    expect(splitBillingIncome("150000.00", ["1000.00", "1000.00"])).toEqual([
-      "75000.00",
-      "75000.00",
-    ]);
-    // One line: the whole billing income.
-    expect(splitBillingIncome("300000.00", ["12000.00"])).toEqual(["300000.00"]);
+    // One line, partial withholding: inverted ₱10,000 fits inside the
+    // ₱20,000 billing, so the worksheet shows ₱10,000, not the full billing.
+    expect(splitBillingIncome("20000.00", [{ tax: "100.00", rate: "0.0100" }])).toBeNull();
     // Cents remainder lands on the last line; lines still sum to the billing.
-    const odd = splitBillingIncome("100.00", ["1.00", "1.00", "1.00"])!;
+    const odd = splitBillingIncome("100.00", [
+      { tax: "1.00", rate: "0.0100" },
+      { tax: "1.00", rate: "0.0100" },
+      { tax: "1.00", rate: "0.0100" },
+    ])!;
     expect(odd).toEqual(["33.33", "33.33", "33.34"]);
     expect(sumPesos(odd)).toBe("100.00");
-    // No billing amount or no withholding: null, caller inverts per line.
-    expect(splitBillingIncome("0.00", ["3000.00"])).toBeNull();
-    expect(splitBillingIncome("300000.00", ["0.00"])).toBeNull();
+    // No billing amount, no withholding, or a zero rate: null, caller inverts per line.
+    expect(splitBillingIncome("0.00", [{ tax: "3000.00", rate: "0.0100" }])).toBeNull();
+    expect(splitBillingIncome("300000.00", [{ tax: "0.00", rate: "0.0100" }])).toBeNull();
+    expect(splitBillingIncome("300000.00", [{ tax: "3000.00", rate: "0.0000" }])).toBeNull();
   });
 
   it("sumPesos uses scaled decimals", () => {

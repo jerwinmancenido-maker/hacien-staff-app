@@ -251,9 +251,10 @@ export async function getCustomer2307Worksheet(
       customer: { select: { id: true, name: true, tin: true } },
       collection: { select: { id: true, number: true, date: true } },
       billing: { select: { amount: true } },
-      // Multi-code: the lines share one billing's income, so the income is
-      // split across them by tax share (see splitBillingIncome) — inverting
-      // each line on its own (tax / rate) counts the billing twice.
+      // Multi-code: each line's income is tax / rate — unless the inverted
+      // bases sum to more than the billing itself, which means the codes
+      // share one base and inverting would count the billing twice (see
+      // splitBillingIncome). The split only runs in that case.
       lines: { where: { amount: { gt: 0 } }, orderBy: [{ atcCode: "asc" }, { createdAt: "asc" }] },
     },
     orderBy: [{ createdAt: "asc" }],
@@ -275,7 +276,7 @@ export async function getCustomer2307Worksheet(
     if (w.lines.length > 0) {
       const incomes = splitBillingIncome(
         money(w.billing?.amount ?? "0"),
-        w.lines.map((line) => money(line.amount)),
+        w.lines.map((line) => ({ tax: money(line.amount), rate: Number(line.rate).toFixed(4) })),
       );
       return w.lines.map((line, i) => {
         const tax = money(line.amount);
