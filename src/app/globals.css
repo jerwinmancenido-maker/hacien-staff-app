@@ -592,6 +592,23 @@ a.tracker-card:hover {
   background: var(--card);
   color: var(--text-3);
 }
+
+/* Styled file picker (see src/components/FileInput.tsx). The real input is
+   visually hidden but stays in the DOM so form submission is unchanged. */
+.file-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
 .btn-danger {
   background: var(--card);
   color: var(--red);

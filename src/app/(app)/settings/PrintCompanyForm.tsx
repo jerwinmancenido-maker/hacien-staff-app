@@ -6,6 +6,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FileInput } from "@/components/FileInput";
 import type { FormState } from "@/lib/validation/forms";
 import type { Settings } from "@/lib/settings/schema";
 import { NON_VAT_LABEL } from "@/lib/print/tax-wording";
@@ -170,7 +171,7 @@ export function PrintCompanyForm({
                 <Field err={e.website} label="Website" name="website" value={val("website", live.website)} />
                 <div className="field full">
                   <label htmlFor="logo">Company logo</label>
-                  <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" />
+                  <FileInput id="logo" name="logo" accept="image/png,image/jpeg,image/webp" />
                   <div className="hint">Optional. PNG/JPEG/WebP. Falls back to the business name when empty.</div>
                 </div>
               </div>

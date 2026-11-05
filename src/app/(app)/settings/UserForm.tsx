@@ -3,6 +3,7 @@
 import { useFormAction } from "@/components/useFormAction";
 import type { User } from "@prisma/client";
 import { Field } from "@/components/Field";
+import { FileInput } from "@/components/FileInput";
 import { ROLE_LABELS, ROLES, rolesOf } from "@/lib/permissions";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -47,7 +48,7 @@ export function UserForm({ user, action }: { user: User | null; action: (s: Form
               <img src={`/files/user-signature/${user.id}`} alt="Current signature" style={{ maxHeight: 64, border: "1px solid var(--border)", background: "#fff" }} />
             </div>
           ) : null}
-          <input id="signature" name="signature" type="file" accept="image/png,image/jpeg,image/webp" />
+          <FileInput id="signature" name="signature" accept="image/png,image/jpeg,image/webp" />
           <div className="hint">PNG, JPG or WEBP. Used on printed quotes under Prepared by. Uploading a new one replaces the old.</div>
           {e.signature && <div className="error">{e.signature}</div>}
         </div>

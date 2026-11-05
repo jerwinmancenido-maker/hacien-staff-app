@@ -6,6 +6,7 @@ import { QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { useFormAction } from "@/components/useFormAction";
+import { FileInput } from "@/components/FileInput";
 import { soDeliveryProgress } from "@/lib/sales-orders/delivery";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -308,10 +309,9 @@ export function DeliverySection({
 
             <div className={`field full${e.files ? " has-error" : ""}`}>
               <label htmlFor="files">Signed copy upload</label>
-              <input
+              <FileInput
                 id="files"
                 name="files"
-                type="file"
                 multiple
                 accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
               />

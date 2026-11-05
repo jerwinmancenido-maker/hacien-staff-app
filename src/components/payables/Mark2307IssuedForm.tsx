@@ -2,6 +2,7 @@
 
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
+import { FileInput } from "@/components/FileInput";
 import type { FormState } from "@/lib/validation/forms";
 
 export function Mark2307IssuedForm({
@@ -22,7 +23,7 @@ export function Mark2307IssuedForm({
       style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
     >
       <input name="issuedAt" type="date" className="input" defaultValue={defaultDate} required style={{ width: 140 }} />
-      <input name="files" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+      <FileInput name="files" accept=".pdf,.png,.jpg,.jpeg" />
       <button className="btn btn-secondary" type="submit" disabled={pending}>
         {pending ? "…" : "Mark issued"}
       </button>
