@@ -39,6 +39,7 @@ export default async function CollectionDetailPage({
           <>
             {c.number}
             <CollectionStatusChip status={c.status} />
+            {c.isDeposit && <Chip tone="blue">Deposit</Chip>}
             {c.needsAdminCheck && c.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
           </>
         }

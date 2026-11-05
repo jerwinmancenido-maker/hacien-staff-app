@@ -12,22 +12,24 @@ import { toScaled } from "@/lib/quotes/calc";
 import { Activity } from "@/components/Activity";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PillTabs } from "@/components/PillTabs";
-import { Chip, PageHeader } from "@/components/ui";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { SalesOrderActions } from "@/components/docs/QuoteActions";
 import { SoCostMarginTab } from "@/components/purchasing/SoCostMarginTab";
 import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
+import { VoidButton } from "@/components/purchasing/DocButtons";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
-import { recordDeliveryAction, voidDeliveryAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { listCustomerReturns } from "@/lib/services/customer-returns";
+import { recordDeliveryAction, voidCustomerReturnAction, voidDeliveryAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
-const TABS = ["overview", "documents", "deliveries", "cost-margin", "activity", "attachments"] as const;
+const TABS = ["overview", "documents", "deliveries", "returns", "cost-margin", "activity", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SalesOrderPage({
@@ -46,12 +48,13 @@ export default async function SalesOrderPage({
   // PO numbers for everyone; links (and Create POs) only for cost users.
   const purchasing = await getSoPurchasing(so.id, user);
   const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
-  const [billingSummary, billings, costMargin, deliveries, collections] = await Promise.all([
+  const [billingSummary, billings, costMargin, deliveries, collections, returns] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
     listSalesOrderDeliveries(so.id),
     listSalesOrderCollections(so.id),
+    listCustomerReturns(so.id),
   ]);
   const money = billingSummary
     ? salesOrderMoney(so.status, billingSummary.contractPrice, [
@@ -105,8 +108,14 @@ export default async function SalesOrderPage({
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: base },
-          { key: "documents", label: "Documents", count: billings.length + collections.length + deliveries.length + 1, href: `${base}?tab=documents` },
+          { key: "documents", label: "Documents", count: billings.length + collections.length + deliveries.length + purchasing.purchaseOrders.length + 1, href: `${base}?tab=documents` },
           { key: "deliveries", label: "Deliveries", count: deliveries.length, href: `${base}?tab=deliveries` },
+          {
+            key: "returns",
+            label: "Returns",
+            count: returns.filter((r) => r.status === "POSTED").length,
+            href: `${base}?tab=returns`,
+          },
           ...(so.canSeeCosts
             ? [
                 {
@@ -134,7 +143,7 @@ export default async function SalesOrderPage({
       {tab === "documents" && (
         <div className="card">
           <h2>Documents</h2>
-          <p className="small muted">Source quote, billings, collections and delivery receipts for this order. POs, receiving and supplier bills stay in the Cost &amp; margin tab.</p>
+          <p className="small muted">Source quote, billings, collections, delivery receipts and purchase orders for this order. Receiving and supplier bills stay in the Cost &amp; margin tab.</p>
           <div className="table-wrap">
             <table className="list" aria-label="Documents">
               <thead>
@@ -207,6 +216,18 @@ export default async function SalesOrderPage({
                     </td>
                   </tr>
                 ))}
+                {purchasing.purchaseOrders.map((p) => (
+                  <tr key={p.number}>
+                    <td>Purchase order · {p.supplierName}</td>
+                    <td className="strong">
+                      {p.id ? <Link href={`/purchase-orders/${p.id}`}>{p.number}</Link> : p.number}
+                    </td>
+                    <td>—</td>
+                    <td className="num">{p.total ? formatPeso(p.total) : "—"}</td>
+                    <td>{p.status}</td>
+                    <td>{p.id ? <Link href={`/purchase-orders/${p.id}`}>Open</Link> : "—"}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -250,6 +271,69 @@ export default async function SalesOrderPage({
       )}
       {tab === "activity" && (
         <Activity targets={[{ entityType: "SalesOrder", ids: [so.id] }]} viewer={user} />
+      )}
+
+      {tab === "returns" && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Returns from customer</h2>
+            {so.status !== "VOID" && can(user, "edit_data") && (
+              <Link className="btn btn-secondary" href={`/sales-orders/${so.id}/returns/new`}>
+                Record return
+              </Link>
+            )}
+          </div>
+          {returns.length === 0 ? (
+            <EmptyState line="Nothing returned yet. Returned goods come off what was delivered, and their value becomes customer credit." />
+          ) : (
+            <div className="table-wrap">
+              <table className="list" aria-label="Customer returns">
+                <thead>
+                  <tr>
+                    <th>Credit memo</th>
+                    <th>Returned</th>
+                    <th>Items</th>
+                    <th className="num">Credit</th>
+                    <th>Status</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {returns.map((r) => (
+                    <tr key={r.id} className={r.status === "VOID" ? "inactive" : undefined}>
+                      <td className="strong">{r.number}</td>
+                      <td>{day(r.returnDate)}</td>
+                      <td className="small">
+                        {r.items.map((x, n) => (
+                          <div key={n}>
+                            {x.description.split("\n")[0]}: <b>{x.qtyReturned.replace(/\.00$/, "")}</b> × {formatPeso(x.unitPrice)} = {formatPeso(x.amount)}
+                          </div>
+                        ))}
+                        {r.reason && <div className="faint">{r.reason}</div>}
+                        {r.voidReason && <div className="faint">Void: {r.voidReason}</div>}
+                      </td>
+                      <td className="num">
+                        {formatPeso(r.amount)}
+                        {r.creditApplied !== "0.00" && <div className="faint">applied {formatPeso(r.creditApplied)}</div>}
+                      </td>
+                      <td>{r.status === "VOID" ? "Void" : "Posted"}</td>
+                      <td>
+                        {r.status !== "VOID" && canVoid(user) && (
+                          <VoidButton
+                            label="Void"
+                            docLabel="customer return"
+                            body={`${r.number} will be marked Void, its quantities put back on the order, and any credit already applied reversed.`}
+                            onVoid={voidCustomerReturnAction.bind(null, id, r.id)}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {tab === "attachments" && (

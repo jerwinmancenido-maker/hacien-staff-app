@@ -13,7 +13,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 describe("S-74 SO Linked documents tab", () => {
   it("SO page has a Documents tab for every viewer", () => {
     const src = read("src/app/(app)/sales-orders/[id]/page.tsx");
-    expect(src).toContain('"documents", "deliveries", "cost-margin"');
+    expect(src).toContain('"documents", "deliveries", "returns", "cost-margin"');
     expect(src).toContain('label: "Documents"');
     expect(src).toContain('tab === "documents"');
     // Cost & margin stays gated to cost users.

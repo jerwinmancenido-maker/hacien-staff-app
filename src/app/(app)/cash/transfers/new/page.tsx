@@ -23,7 +23,7 @@ export default async function NewTransferPage() {
     <>
       <PageHeader title="Record transfer" subtitle={CASH_DISCLAIMER} />
       <CashNav active="transfers" />
-      <div className="card" style={{ maxWidth: 720 }}>
+      <div className="card">
         <TransferForm
           action={recordCashTransferAction}
           canEdit

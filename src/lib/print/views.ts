@@ -806,8 +806,20 @@ export function statementLedgerLines(lines: readonly StatementLedgerInput[]) {
       });
       continue;
     }
+    // Audit D: a credit memo is its own line (no method, no withholding).
+    if (line.kind === "credit") {
+      out.push({
+        date: day(line.date),
+        description: `Credit memo ${line.number} · goods returned`,
+        charges: null,
+        credits: line.amount,
+        balance: line.runningBalance,
+      });
+      continue;
+    }
     const method = COLLECTION_METHOD_LABELS[line.method as keyof typeof COLLECTION_METHOD_LABELS] ?? line.method;
-    const label = `Collection · ${method}${line.receiptNo ? ` · ${line.receiptNo}` : ""}`;
+    // Audit E: a deposit collection is labelled as a deposit.
+    const label = `${line.isDeposit ? "Deposit" : "Collection"} · ${method}${line.receiptNo ? ` · ${line.receiptNo}` : ""}`;
     const cashAndUnapplied = fromScaled(toScaled(line.cash, 2) + toScaled(line.unapplied, 2), 2);
     const wh = line.withholding;
     if (Number(wh) > 0) {

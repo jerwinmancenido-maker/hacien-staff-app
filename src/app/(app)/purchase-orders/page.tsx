@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireCostPage } from "@/lib/auth/current-user";
+import { requirePagePermission } from "@/lib/auth/current-user";
+import { canSeeCosts } from "@/lib/permissions";
 import { listPurchaseOrdersView, PO_STATUSES } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS, type PoStatus } from "@/lib/purchasing/status";
 import { formatPeso } from "@/lib/format";
@@ -18,9 +19,11 @@ function href(s: Search, patch: Partial<Search>) {
 }
 
 export default async function PurchaseOrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
-  const user = await requireCostPage("view");
+  // Audit F: every viewer can list POs; money stays cost-only.
+  const user = await requirePagePermission("view");
+  const withCosts = canSeeCosts(user);
   const s = await searchParams;
-  const billedOver = s.billedOver === "1";
+  const billedOver = s.billedOver === "1" && withCosts;
   const status = PO_STATUSES.includes(s.status as PoStatus) ? (s.status as PoStatus) : undefined;
   const pos = await listPurchaseOrdersView({ q: s.q, status, billedOver: billedOver || undefined }, user);
   const filtered = !!(s.q || status || billedOver);
@@ -31,7 +34,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
         title="Supplier POs"
         subtitle="Purchase orders to suppliers. Create them from a sales order, or a standalone PO."
         actions={
-          user.isAdmin && (
+          user.isAdmin && withCosts && (
             <Link className="btn" href="/purchase-orders/new">
               <PlusIcon /> New standalone PO
             </Link>
@@ -62,12 +65,14 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             {PO_STATUS_LABELS[t]}
           </Link>
         ))}
-        <Link
-          className={`filter-chip${billedOver ? " active" : ""}`}
-          href={href(s, { status: undefined, billedOver: "1" })}
-        >
-          Bill higher than PO
-        </Link>
+        {withCosts && (
+          <Link
+            className={`filter-chip${billedOver ? " active" : ""}`}
+            href={href(s, { status: undefined, billedOver: "1" })}
+          >
+            Bill higher than PO
+          </Link>
+        )}
       </div>
       {pos.length === 0 ? (
         <div className="card">
@@ -92,7 +97,8 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             { key: "number", label: "PO no." },
             { key: "supplier", label: "Supplier" },
             { key: "so", label: "Sales order" },
-            { key: "total", label: "Total", numeric: true },
+            // Audit F: no Total column for non-cost viewers.
+            ...(withCosts ? [{ key: "total", label: "Total", numeric: true } as const] : []),
             { key: "status", label: "Status" },
             { key: "date", label: "Date" },
             { key: "expected", label: "Expected" },
@@ -105,12 +111,12 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
               number: <span className="strong">{o.number}</span>,
               supplier: <PrimaryCell name={o.supplierName} />,
               so: o.salesOrder?.number ?? <span className="faint">Standalone</span>,
-              total: <span className="strong">{formatPeso(o.subtotal)}</span>,
+              total: o.subtotal == null ? "" : <span className="strong">{formatPeso(o.subtotal)}</span>,
               status: <PoStatusChip status={o.status} />,
               date: day(o.date),
               expected: day(o.expectedDate),
             },
-            sort: { number: o.number, supplier: o.supplierName, so: o.salesOrder?.number ?? "", total: Number(o.subtotal), status: o.status, date: o.date, expected: o.expectedDate ?? "" },
+            sort: { number: o.number, supplier: o.supplierName, so: o.salesOrder?.number ?? "", total: Number(o.subtotal ?? 0), status: o.status, date: o.date, expected: o.expectedDate ?? "" },
           }))}
         />
       )}

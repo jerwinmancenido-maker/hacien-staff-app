@@ -7,6 +7,8 @@ import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
+import { postCustomerReturn, voidCustomerReturn } from "@/lib/services/customer-returns";
+import { customerReturnInputSchema } from "@/lib/validation/customer-returns";
 import { govDealInputSchema, salesOrderInputSchema, voidReasonSchema } from "@/lib/validation/quotes";
 import { parseDeliveryForm } from "@/lib/validation/deliveries";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
@@ -101,4 +103,40 @@ export async function updateSalesOrderGovDealAction(salesOrderId: string, _prev:
 
 export async function voidDeliveryForOrder(salesOrderId: string, deliveryId: string, reason: string): Promise<FormState> {
   return voidDeliveryAction(deliveryId, salesOrderId, reason);
+}
+
+/** Audit D: record a customer return (credit memo); the goods come back and the customer gets credit. */
+export async function postCustomerReturnAction(salesOrderId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(str(form, "payload"));
+    } catch {
+      // handled by the schema below
+    }
+    const parsed = customerReturnInputSchema.safeParse(raw);
+    if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+    await postCustomerReturn(salesOrderId, parsed.data, user);
+    revalidatePath("/sales-orders");
+    revalidatePath(`/sales-orders/${salesOrderId}`);
+    goTo = `/sales-orders/${salesOrderId}?tab=returns`;
+    return { ok: true };
+  });
+  if (goTo) redirect(goTo);
+  return result;
+}
+
+/** Audit D: void a customer return; the quantities go back and any credit already applied is reversed. */
+export async function voidCustomerReturnAction(salesOrderId: string, id: string, reason: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanVoid(user);
+    await voidCustomerReturn(id, reason, user);
+    revalidatePath("/sales-orders");
+    revalidatePath(`/sales-orders/${salesOrderId}`);
+    return { ok: true, message: "Return voided." };
+  });
 }

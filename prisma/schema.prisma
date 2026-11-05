@@ -69,6 +69,8 @@ model User {
   receivingReportsBy     ReceivingReport[]    @relation("ReceivingReportReceivedBy")
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierReturnsMade  SupplierReturn[]     @relation("SupplierReturnCreatedBy")
+  customerReturnsMade  CustomerReturn[]     @relation("CustomerReturnCreatedBy")
+  customerCreditsMade  CustomerCredit[]     @relation("CustomerCreditCreatedBy")
   supplierBillsCreated   SupplierBill[]
   attachmentsUploaded    DocumentAttachment[]
   accessReviewsMade  AccessReview[]
@@ -210,6 +212,7 @@ model Customer {
   billings     Billing[]
   collections  Collection[]
   withholdings Withholding2307[]
+  customerCredits CustomerCredit[]
 
   @@index([name])
 }
@@ -585,6 +588,7 @@ enum DocType {
   EXPENSE
   CASH_TRANSFER
   SUPPLIER_RETURN
+  CUSTOMER_RETURN
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -816,6 +820,7 @@ model SalesOrder {
   purchaseOrders PurchaseOrder[]
   billings       Billing[]
   deliveries     Delivery[]
+  customerReturns CustomerReturn[]
 
   @@index([quoteId])
   @@index([customerId])
@@ -847,6 +852,8 @@ model SalesOrderItem {
   removedAt        DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+
+  customerReturnItems CustomerReturnItem[]
 
   purchaseOrderItems PurchaseOrderItem[]
   deliveryItems      DeliveryItem[]
@@ -1113,6 +1120,84 @@ model SupplierReturnItem {
   @@index([purchaseOrderItemId])
 }
 
+// Audit D: goods a customer returns, with a credit memo for their value.
+// Posting reduces the SO line's deliveredQty; the credit can be applied
+// to an open billing like unapplied collection cash. A credit memo is
+// NOT a Collection (money never moved) — it has its own ledger so cash
+// reports stay truthful.
+enum CustomerReturnStatus {
+  POSTED
+  VOID
+}
+
+model CustomerReturn {
+  id             String               @id @default(cuid())
+  number         String               @unique @db.VarChar(40)
+  salesOrderId   String
+  salesOrder     SalesOrder           @relation(fields: [salesOrderId], references: [id])
+  returnDate     DateTime             @db.Date
+  reason         String?              @db.Text
+  status         CustomerReturnStatus @default(POSTED)
+  voidedAt       DateTime?
+  voidReason     String?              @db.Text
+  createdById    String
+  createdBy      User                 @relation("CustomerReturnCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  items  CustomerReturnItem[]
+  credit CustomerCredit?
+
+  @@index([salesOrderId])
+  @@index([status])
+  @@index([returnDate])
+}
+
+model CustomerReturnItem {
+  id               String         @id @default(cuid())
+  customerReturnId String
+  customerReturn   CustomerReturn @relation(fields: [customerReturnId], references: [id])
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id])
+  qtyReturned      Decimal        @db.Decimal(12, 2)
+  // Unit price snapshot from the SO line at return time.
+  unitPrice        Decimal        @db.Decimal(15, 2)
+  amount           Decimal        @db.Decimal(15, 2)
+
+  @@index([customerReturnId])
+  @@index([salesOrderItemId])
+}
+
+model CustomerCredit {
+  id               String         @id @default(cuid())
+  customerId       String
+  customer         Customer       @relation(fields: [customerId], references: [id])
+  customerReturnId String         @unique
+  customerReturn   CustomerReturn @relation(fields: [customerReturnId], references: [id])
+  amount           Decimal        @db.Decimal(15, 2)
+  createdById      String
+  createdBy        User           @relation("CustomerCreditCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime       @default(now())
+
+  applications CustomerCreditApplication[]
+
+  @@index([customerId])
+}
+
+model CustomerCreditApplication {
+  id               String         @id @default(cuid())
+  customerCreditId String
+  customerCredit   CustomerCredit @relation(fields: [customerCreditId], references: [id])
+  billingId        String
+  billing          Billing        @relation(fields: [billingId], references: [id])
+  cashApplied      Decimal        @db.Decimal(15, 2)
+  // Business date of this application (return-credit apply day).
+  appliedOn        DateTime       @default(dbgenerated("(curdate())")) @db.Date
+
+  @@index([customerCreditId])
+  @@index([billingId])
+}
+
 // The supplier's invoice, recorded against a PO (or just the supplier).
 // Status (unpaid / partial / paid) is recomputed from posted payment allocations.
 model SupplierBill {
@@ -1292,6 +1377,7 @@ model Billing {
   allocations  CollectionAllocation[]
   withholdings Withholding2307[]
   attachments  DocumentAttachment[]
+  creditApplications CustomerCreditApplication[]
 
   @@unique([invoiceNo])
   @@index([customerId])
@@ -1357,6 +1443,9 @@ model Collection {
   // Hand-written OR / acknowledgment receipt number (manual text).
   receiptNo      String?            @db.VarChar(64)
   amountReceived Decimal            @db.Decimal(15, 2)
+  // Audit E: deposit / advance — money held as customer credit, never
+  // allocated to a billing at record time. Applied later via Apply credit.
+  isDeposit      Boolean           @default(false)
   // Optional cash/bank account where the money landed (Part 7a). Null = not assigned.
   cashAccountId  String?
   cashAccount    CashAccount?       @relation(fields: [cashAccountId], references: [id])

@@ -240,19 +240,19 @@ describe("allocation rules", () => {
     const planned = planCreditApplication(
       "150.00",
       [
-        { collectionId: "c1", unappliedCredit: "100.00" },
-        { collectionId: "c2", unappliedCredit: "80.00" },
+        { kind: "collection", sourceId: "c1", unappliedCredit: "100.00" },
+        { kind: "credit", sourceId: "cr1", unappliedCredit: "80.00" },
       ],
       "b1",
     );
     expect(planned).toEqual([
-      { collectionId: "c1", billingId: "b1", cashApplied: "100.00", withholdingApplied: "0.00" },
-      { collectionId: "c2", billingId: "b1", cashApplied: "50.00", withholdingApplied: "0.00" },
+      { kind: "collection", sourceId: "c1", billingId: "b1", cashApplied: "100.00", withholdingApplied: "0.00" },
+      { kind: "credit", sourceId: "cr1", billingId: "b1", cashApplied: "50.00", withholdingApplied: "0.00" },
     ]);
   });
   it("planCreditApplication fails when credit is short", () => {
     expect(() =>
-      planCreditApplication("50.00", [{ collectionId: "c1", unappliedCredit: "20.00" }], "b1"),
+      planCreditApplication("50.00", [{ kind: "collection", sourceId: "c1", unappliedCredit: "20.00" }], "b1"),
     ).toThrow(/Not enough customer credit/);
   });
   it("minMoney picks the smaller scaled amount", () => {
@@ -305,8 +305,8 @@ describe("statement running balance (unit)", () => {
     let running = 0n;
     const steps = [
       { kind: "billing" as const, amount: "1000.00" },
-      { kind: "collection" as const, cash: "400.00", withholding: "20.00", unapplied: "0.00" },
-      { kind: "collection" as const, cash: "0.00", withholding: "0.00", unapplied: "100.00" },
+      { kind: "collection" as const, cash: "400.00", withholding: "20.00", unapplied: "0.00", isDeposit: false },
+      { kind: "collection" as const, cash: "0.00", withholding: "0.00", unapplied: "100.00", isDeposit: false },
     ];
     const bals: string[] = [];
     for (const s of steps) {

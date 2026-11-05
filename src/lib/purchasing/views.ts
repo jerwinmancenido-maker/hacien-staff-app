@@ -1,11 +1,13 @@
 // What the server sends to pages for supplier POs and receiving.
 //
-// Costs rule: PO pages, the PO print, bills and the match view are cost data
-// and are built only for users with "Can see costs" (others get
-// ForbiddenError; pages send them to /no-access). The receiving views are for
-// everyone with "view" and are built WITHOUT unit costs, totals or amounts —
-// the keys are never set — and also pass through stripCosts() as a backstop.
-// tests/db/purchasing.db.test.ts inspects these payloads.
+// Costs rule (Audit F): the PO list and detail pages are for every viewer,
+// but money is cost-only — for users without "Can see costs" the payload
+// carries no unit costs, totals, bill amounts or match (the keys are nulled
+// or emptied, never set). The PO print, bills and the match view stay cost
+// data (ForbiddenError; pages send them to /no-access). The receiving views
+// are for everyone with "view" and are built WITHOUT unit costs, totals or
+// amounts — the keys are never set — and also pass through stripCosts() as
+// a backstop. tests/db/purchasing.db.test.ts inspects these payloads.
 
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
@@ -57,9 +59,12 @@ export type PoListFilter = {
 };
 
 export async function listPurchaseOrdersView(filter: PoListFilter, viewer: PermissionUser) {
-  assertCosts(viewer);
+  // Audit F: every viewer can list POs; money stays cost-only. The
+  // "billed over PO" filter compares bill totals to PO totals, so it only
+  // applies for cost viewers.
+  const withCosts = canSeeCosts(viewer);
   const q = filter.q?.trim();
-  const billedOver = filter.billedOver === true;
+  const billedOver = filter.billedOver === true && withCosts;
   const rows = await db.purchaseOrder.findMany({
     where: {
       ...(filter.status ? { status: filter.status } : {}),
@@ -93,12 +98,15 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
     salesOrder: r.salesOrder,
     date: ymd(r.date)!,
     expectedDate: ymd(r.expectedDate),
-    subtotal: money(r.subtotal),
+    // Audit F: null for non-cost viewers — the list page hides the column.
+    subtotal: withCosts ? money(r.subtotal) : null,
   }));
 }
 
 export async function getPurchaseOrderView(id: string, viewer: Viewer) {
-  assertCosts(viewer);
+  // Audit F: every viewer can open a PO; money is stripped below for
+  // non-cost viewers.
+  const withCosts = canSeeCosts(viewer);
   const po = await db.purchaseOrder.findUnique({
     where: { id },
     include: {
@@ -183,7 +191,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
   const canApproveThis = canApprove(viewer) && canPo(po.status, "approve") && selfErr === null;
   const blockedReason = canPo(po.status, "approve") ? selfErr : null;
 
-  return {
+  const view = {
     id: po.id,
     number: po.number,
     revision: po.revision,
@@ -195,6 +203,8 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     supplierAddressText: po.supplierAddressText,
     notes: po.notes,
     subtotal,
+    // Audit F: the page hides money UI when this is false.
+    canSeeCosts: withCosts,
     supplier: po.supplier,
     supplierContact: po.supplierContact,
     salesOrder: po.salesOrder,
@@ -247,6 +257,16 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       needsApproval,
       canMarkSentFromDraft: po.status === "DRAFT" && !needsApproval,
     },
+  };
+  if (withCosts) return view;
+  // Audit F: strip every money field for non-cost viewers. Bills and the
+  // match are money, so they come back empty — the page hides those tabs.
+  return {
+    ...view,
+    subtotal: null,
+    items: view.items.map((i) => ({ ...i, unitCost: null, total: null })),
+    bills: [],
+    match: null,
   };
 }
 export type PurchaseOrderView = NonNullable<Awaited<ReturnType<typeof getPurchaseOrderView>>>;
@@ -329,13 +349,13 @@ export type SoPurchasingLine = {
   state: ProgressState;
   ordered: string;
   received: string;
-  /** PO numbers; `id` only for cost users (PO pages are cost-gated). */
+  /** PO numbers; `total` only for cost users. */
   purchaseOrders: { id?: string; number: string; status: PoStatus }[];
 };
 
-/** Linked PO on a sales order; `id` / `total` only for cost users. */
+/** Linked PO on a sales order; `total` only for cost users. */
 export type SoPurchaseOrder = {
-  id?: string;
+  id: string;
   number: string;
   status: PoStatus;
   supplierName: string;
@@ -379,15 +399,18 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
     const purchaseOrders = i.purchaseOrderItems
       .map((x) => x.purchaseOrder)
       .filter((po) => (seen.has(po.id) ? false : (seen.add(po.id), true)))
-      .map((po) => (withCosts ? { id: po.id, number: po.number, status: po.status } : { number: po.number, status: po.status }));
+      .map((po) => ({ id: po.id, number: po.number, status: po.status }));
     return { id: i.id, ...p, purchaseOrders };
   });
-  // Built without cost keys for non-cost users (same as line PO ids above).
-  const purchaseOrders: SoPurchaseOrder[] = pos.map((po) =>
-    withCosts
-      ? { id: po.id, number: po.number, status: po.status, supplierName: po.supplier.name, total: money(po.subtotal) }
-      : { number: po.number, status: po.status, supplierName: po.supplier.name },
-  );
+  // Audit F: the PO id is a link, not money — every viewer gets it. Only
+  // the total stays cost-only.
+  const purchaseOrders: SoPurchaseOrder[] = pos.map((po) => ({
+    id: po.id,
+    number: po.number,
+    status: po.status,
+    supplierName: po.supplier.name,
+    ...(withCosts ? { total: money(po.subtotal) } : {}),
+  }));
   return {
     lines,
     purchaseOrders,

@@ -27,6 +27,8 @@ describe("S-54 statement: 2307 on its own line", () => {
     withholding: "1000.00",
     unapplied: "0.00",
     runningBalance: "0.00",
+    // Audit E: not a deposit.
+    isDeposit: false,
   };
 
   it("splits a collection with withholding into a cash line and a 2307 line", () => {

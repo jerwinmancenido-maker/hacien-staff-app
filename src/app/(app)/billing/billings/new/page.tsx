@@ -102,7 +102,7 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
         subtitle={`${so.number} · ${so.customer.name} · remaining ₱${remaining}`}
       />
       <BillingNav active="billings" />
-      <div className="card" style={{ maxWidth: 720 }}>
+      <div className="card">
         <BillingForm
           action={recordBillingAction}
           canEdit

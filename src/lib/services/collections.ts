@@ -10,10 +10,10 @@ import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { docTotals, fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
-import { validateAllocations, type AllocationInput, type BillingForAlloc } from "../billing/allocations";
+import { validateAllocations, planCreditApplication, type AllocationInput, type BillingForAlloc, type CreditSource } from "../billing/allocations";
 import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { billingToday } from "../billing/dates";
-import { unappliedCash } from "../billing/status";
+import { billingBalance, unappliedCash } from "../billing/status";
 import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
@@ -366,7 +366,11 @@ async function upsert2307(
   return created;
 }
 
-export async function recordCollection(input: CollectionInput, actor: CollectionActor, files: readonly UploadFile[] = []) {
+export async function recordCollection(
+  input: Omit<CollectionInput, "isDeposit"> & { isDeposit?: boolean },
+  actor: CollectionActor,
+  files: readonly UploadFile[] = [],
+) {
   assertCan(actor, "record_billing");
   if (toScaled(input.amountReceived, 2) <= 0n) throw new DocRuleError("Amount received must be greater than 0.", "amountReceived");
 
@@ -382,6 +386,10 @@ export async function recordCollection(input: CollectionInput, actor: Collection
     const collection = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const customer = await lockCustomer(tx, input.customerId);
+        // Audit E: a deposit is money held, never allocated at record time.
+        if (input.isDeposit && input.allocations.length > 0) {
+          throw new DocRuleError("A deposit can't be allocated to a billing. Untick Deposit, or apply it later from Apply credit.", "allocations");
+        }
         const allocInputs: AllocationInput[] = input.allocations.map((a) => ({
           billingId: a.billingId,
           cashApplied: a.cashApplied,
@@ -444,6 +452,7 @@ export async function recordCollection(input: CollectionInput, actor: Collection
             amountReceived: input.amountReceived,
             cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,
+            isDeposit: input.isDeposit ?? false,
             needsAdminCheck: staffNeedsAdminCheck(actor),
             createdById: actor.id,
           },
@@ -816,5 +825,164 @@ export async function customerCreditBalance(customerId: string): Promise<string>
     );
     credit += toScaled(u, 2);
   }
+  // Audit D: unapplied credit from customer returns (credit memos) counts too.
+  const returnCredits = await db.customerCredit.findMany({
+    where: { customerId, customerReturn: { status: "POSTED" } },
+    include: { applications: true },
+  });
+  for (const c of returnCredits) {
+    const applied = c.applications.reduce((a, x) => a + toScaled(money(String(x.cashApplied)), 2), 0n);
+    credit += toScaled(money(String(c.amount)), 2) - applied;
+  }
   return fromScaled(credit, 2);
+}
+
+/**
+ * Audit E: deposits held — unapplied cash on POSTED collections flagged
+ * isDeposit. A deposit's credit can be partly applied later (Apply credit),
+ * so this is the still-unapplied part, not the amount received.
+ */
+export async function customerDepositBalance(customerId: string): Promise<string> {
+  const collections = await db.collection.findMany({
+    where: { customerId, status: "POSTED", isDeposit: true },
+    include: { allocations: true },
+  });
+  let deposits = 0n;
+  for (const c of collections) {
+    const u = unappliedCash(
+      money(c.amountReceived),
+      c.allocations.map((a) => money(a.cashApplied)),
+    );
+    deposits += toScaled(u, 2);
+  }
+  return fromScaled(deposits, 2);
+}
+
+/**
+ * Audit D: the simple apply path (customer page / billing page). Applies
+ * `amount` of customer credit onto one open billing, drawing FIFO across
+ * BOTH credit sources — unapplied collection cash and unapplied return
+ * credit, oldest first — in one transaction. Cash only, never 2307.
+ */
+export async function applyCreditSimple(customerId: string, billingId: string, amount: string, actor: CollectionActor) {
+  assertManageBilling(actor);
+  const want = toScaled(amount, 2);
+  if (want <= 0n) throw new DocRuleError("Enter an amount greater than 0.", "amount");
+  return withTxRetry(() =>
+    db.$transaction(async (tx) => {
+      await lockCustomer(tx, customerId);
+      await lockBillings(tx, [billingId]);
+      const billing = await tx.billing.findUnique({
+        where: { id: billingId },
+        include: {
+          allocations: { where: { collection: { status: "POSTED" } } },
+          // Audit D: only POSTED returns count — a voided return un-applies its credit.
+          creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
+        },
+      });
+      if (!billing || billing.customerId !== customerId) {
+        throw new DocRuleError("That billing isn't open for this customer. Refresh the page and try again.", "billingId");
+      }
+      if (billing.status === "VOID") throw new DocRuleError("That billing is void.", "billingId");
+      const cashApplied =
+        billing.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n) +
+        billing.creditApplications.reduce((a, x) => a + toScaled(money(String(x.cashApplied)), 2), 0n);
+      const whApplied = billing.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
+      const remaining = toScaled(
+        billingBalance(money(billing.amount), {
+          cashApplied: fromScaled(cashApplied, 2),
+          withholdingApplied: fromScaled(whApplied, 2),
+        }),
+        2,
+      );
+      if (want > remaining) {
+        throw new DocRuleError(
+          `That is more than the billing's open balance (₱${fromScaled(remaining, 2)} left). Lower the amount.`,
+          "amount",
+        );
+      }
+      const collections = await tx.collection.findMany({
+        where: { customerId, status: "POSTED" },
+        include: { allocations: true },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      });
+      const returnCredits = await tx.customerCredit.findMany({
+        where: { customerId, customerReturn: { status: "POSTED" } },
+        include: { applications: true, customerReturn: { select: { returnDate: true, createdAt: true } } },
+      });
+      const sources: (CreditSource & { date: Date; createdAt: Date })[] = [
+        ...collections.map((c) => ({
+          kind: "collection" as const,
+          sourceId: c.id,
+          unappliedCredit: unappliedCash(money(c.amountReceived), c.allocations.map((a) => money(a.cashApplied))),
+          date: c.date,
+          createdAt: c.createdAt,
+        })),
+        ...returnCredits.map((c) => ({
+          kind: "credit" as const,
+          sourceId: c.id,
+          unappliedCredit: fromScaled(
+            toScaled(money(String(c.amount)), 2) -
+              c.applications.reduce((a, x) => a + toScaled(money(String(x.cashApplied)), 2), 0n),
+            2,
+          ),
+          date: c.customerReturn.returnDate,
+          createdAt: c.customerReturn.createdAt,
+        })),
+      ];
+      sources.sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
+      const totalCredit = fromScaled(
+        sources.reduce((acc, s) => acc + toScaled(s.unappliedCredit, 2), 0n),
+        2,
+      );
+      if (want > toScaled(totalCredit, 2)) {
+        throw new DocRuleError(
+          `Only ₱${totalCredit} credit is available. Lower the amount or record a collection first.`,
+          "amount",
+        );
+      }
+      let planned;
+      try {
+        planned = planCreditApplication(amount, sources, billingId);
+      } catch (err) {
+        throw new DocRuleError(err instanceof Error ? err.message : "Couldn't plan the credit apply.", "amount");
+      }
+      if (planned.length === 0) {
+        throw new DocRuleError("No unapplied credit to apply. Record a collection first.", "amount");
+      }
+      for (const row of planned) {
+        if (row.kind === "collection") {
+          await tx.collectionAllocation.create({
+            data: {
+              collectionId: row.sourceId,
+              billingId,
+              cashApplied: row.cashApplied,
+              withholdingApplied: "0.00",
+              appliedOn: billingToday(),
+            },
+          });
+        } else {
+          await tx.customerCreditApplication.create({
+            data: {
+              customerCreditId: row.sourceId,
+              billingId,
+              cashApplied: row.cashApplied,
+              appliedOn: billingToday(),
+            },
+          });
+        }
+      }
+      await recomputeBillingStatus(tx, billingId, actor.id);
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "Customer",
+        entityId: customerId,
+        action: "update",
+        before: null,
+        after: { creditApplied: planned.length, billings: [billingId] },
+        diff: false,
+      });
+      return { applied: planned.length, billings: [billingId] };
+    }, DOC_TX),
+  );
 }

@@ -32,7 +32,7 @@ export default async function BillingDetailPage({
   const b = await getBillingView(id);
   if (!b) notFound();
   const canManage = can(user, "manage_billing");
-  const canVoid = canManage && b.status !== "VOID" && b.allocations.length === 0;
+  const canVoid = canManage && b.status !== "VOID" && b.allocations.length === 0 && b.creditApplications.length === 0;
   const credit =
     canManage && b.status !== "VOID" ? await customerCreditBalance(b.customer.id) : "0.00";
 
@@ -142,7 +142,7 @@ export default async function BillingDetailPage({
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: `/billing/billings/${id}` },
-          { key: "allocations", label: "Allocations", count: b.allocations.length, href: `/billing/billings/${id}?tab=allocations` },
+          {key: "allocations", label: "Allocations", count: b.allocations.length + b.creditApplications.length, href: `/billing/billings/${id}?tab=allocations`},
           { key: "activity", label: "Activity", href: `/billing/billings/${id}?tab=activity` },
           { key: "attachments", label: "Attachments", count: b.attachments.length, href: `/billing/billings/${id}?tab=attachments` },
         ]}
@@ -191,7 +191,7 @@ export default async function BillingDetailPage({
 
       {tab === "allocations" && (
         <div className="card">
-          {b.allocations.length === 0 ? (
+          {b.allocations.length === 0 && b.creditApplications.length === 0 ? (
             <p className="faint">No collections applied yet.</p>
           ) : (
             <div className="table-wrap">
@@ -219,6 +219,16 @@ export default async function BillingDetailPage({
                       <td>{a.collection.receiptNo ?? "—"}</td>
                       <td className="num">{formatPeso(a.cashApplied)}</td>
                       <td className="num">{formatPeso(a.withholdingApplied)}</td>
+                    </tr>
+                  ))}
+                  {b.creditApplications.map((a) => (
+                    <tr key={a.id}>
+                      <td>Credit memo {a.creditMemo}</td>
+                      <td>{day(a.creditMemoDate)}</td>
+                      <td>Return credit</td>
+                      <td>—</td>
+                      <td className="num">{formatPeso(a.cashApplied)}</td>
+                      <td className="num">—</td>
                     </tr>
                   ))}
                 </tbody>

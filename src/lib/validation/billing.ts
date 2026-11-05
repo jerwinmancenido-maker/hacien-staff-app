@@ -108,6 +108,8 @@ export const collectionInputSchema = z
       .max(64)
       .transform((v) => v || null),
     amountReceived: moneyStr,
+    // Audit E: deposit / advance — the full amount stays as customer credit.
+    isDeposit: z.boolean().default(false),
     // Optional cash account (Part 7a). Blank = not assigned.
     cashAccountId: z
       .string()
@@ -263,7 +265,7 @@ export function parseCollectionForm(form: FormData): { ok: true; data: Collectio
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
-  const parsed = collectionInputSchema.safeParse({ ...values, allocations });
+  const parsed = collectionInputSchema.safeParse({ ...values, allocations, isDeposit: form.get("isDeposit") === "on" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;

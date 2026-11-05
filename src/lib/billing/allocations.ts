@@ -105,7 +105,12 @@ export function wouldExceedCredit(unapplied: string, additionalCash: string): bo
   return toScaled(additionalCash, 2) > toScaled(unapplied, 2);
 }
 
-export type CreditSource = { collectionId: string; unappliedCredit: string };
+export type CreditSource = {
+  /** "collection" = unapplied cash on a POSTED collection; "credit" = unapplied return credit. */
+  kind: "collection" | "credit";
+  sourceId: string;
+  unappliedCredit: string;
+};
 
 /**
  * Spread `amount` of customer credit onto one billing from credit sources
@@ -116,17 +121,18 @@ export function planCreditApplication(
   amount: string,
   sources: readonly CreditSource[],
   billingId: string,
-): Array<{ collectionId: string; billingId: string; cashApplied: string; withholdingApplied: string }> {
+): Array<{ kind: "collection" | "credit"; sourceId: string; billingId: string; cashApplied: string; withholdingApplied: string }> {
   let left = toScaled(amount, 2);
   if (left < 0n) throw new Error("Amount can't be negative.");
-  const out: Array<{ collectionId: string; billingId: string; cashApplied: string; withholdingApplied: string }> = [];
+  const out: Array<{ kind: "collection" | "credit"; sourceId: string; billingId: string; cashApplied: string; withholdingApplied: string }> = [];
   for (const s of sources) {
     if (left <= 0n) break;
     const avail = toScaled(s.unappliedCredit, 2);
     if (avail <= 0n) continue;
     const take = avail < left ? avail : left;
     out.push({
-      collectionId: s.collectionId,
+      kind: s.kind,
+      sourceId: s.sourceId,
       billingId,
       cashApplied: fromScaled(take, 2),
       withholdingApplied: "0.00",
