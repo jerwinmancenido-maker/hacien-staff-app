@@ -342,7 +342,7 @@ export function DeliverySection({
         </form>
       )}
 
-      {deliveries.length > 0 && (
+      {deliveries.length > 0 ? (
         <div style={{ marginTop: "20px" }}>
           <h3>Delivery records</h3>
           <div className="table-wrap">
@@ -425,6 +425,8 @@ export function DeliverySection({
             </table>
           </div>
         </div>
+      ) : (
+        <p className="faint">No deliveries yet.</p>
       )}
     </div>
   );

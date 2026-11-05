@@ -2,18 +2,19 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// S-74: sales order 'Linked documents' tab — source quote, billings,
-// collections and DR numbers, each with number, date, amount and status
-// and a link. POs, receiving and supplier bills stay in Cost & margin.
+// S-74: sales order 'Documents' tab (renamed from 'Linked documents' by
+// the tab-layout change) — source quote, billings, collections and DR
+// numbers, each with number, date, amount and status and a link. POs,
+// receiving and supplier bills stay in Cost & margin.
 // Also the S-87 note: the tab carries a Print link per billing.
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
 describe("S-74 SO Linked documents tab", () => {
-  it("SO page has a Linked documents tab for every viewer", () => {
+  it("SO page has a Documents tab for every viewer", () => {
     const src = read("src/app/(app)/sales-orders/[id]/page.tsx");
-    expect(src).toContain('"documents", "cost-margin"');
-    expect(src).toContain('label: "Linked documents"');
+    expect(src).toContain('"documents", "deliveries", "cost-margin"');
+    expect(src).toContain('label: "Documents"');
     expect(src).toContain('tab === "documents"');
     // Cost & margin stays gated to cost users.
     expect(src).toContain("so.canSeeCosts");

@@ -79,73 +79,71 @@ export default async function BillingDetailPage({
         </div>
       )}
 
-      <div className="detail-grid">
-        <div className="card">
-          <dl className="kv kv-grid">
-            <dt>Customer</dt>
-            <dd>
-              <Link href={`/customers/${b.customer.id}`}>{b.customer.name}</Link>
-            </dd>
-            <dt>Sales order</dt>
-            <dd>
-              <Link href={`/sales-orders/${b.salesOrder.id}`}>{b.salesOrder.number}</Link>
-            </dd>
-            <dt>Booklet invoice no.</dt>
-            <dd className="num strong">{b.invoiceNo}</dd>
-            <dt>Invoice date</dt>
-            <dd>{day(b.invoiceDate)}</dd>
-            {b.expectedPaymentLabel ? (
-              <>
-                <dt>Expected by</dt>
-                <dd>
-                  <span className="strong">{b.expectedPaymentLabel}</span>
-                  {can(user, "edit_data") && b.status !== "VOID" && (
-                    <details style={{ marginTop: "4px" }}>
-                      <summary className="small muted" style={{ cursor: "pointer" }}>Change Expected by date</summary>
-                      <form action={updateBillingExpectedDateFormAction.bind(null, b.id)} style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
-                        <input type="date" name="expectedDate" defaultValue={b.expectedDate ?? ""} className="input" style={{ width: "auto" }} />
-                        <button type="submit" className="btn btn-secondary">Save</button>
-                      </form>
-                    </details>
-                  )}
-                </dd>
-              </>
-            ) : (
-              <>
-                <dt>Due date</dt>
-                <dd>
-                  {day(b.dueDate)} {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
-                </dd>
-              </>
-            )}
-            <dt>Amount</dt>
-            <dd className="num">{formatPeso(b.amount)}</dd>
-            <dt>Withholding expected</dt>
-            <dd className="num">{formatPeso(b.withholdingExpected)}</dd>
-            <dt>Net expected</dt>
-            <dd className="num">{formatPeso(b.netExpected)}</dd>
-            <dt>Cash applied</dt>
-            <dd className="num">{formatPeso(b.applied.cashApplied)}</dd>
-            <dt>2307 applied</dt>
-            <dd className="num">{formatPeso(b.applied.withholdingApplied)}</dd>
-            <dt>Balance</dt>
-            <dd className="num strong">{formatPeso(b.balance)}</dd>
-            {b.notes && (
-              <>
-                <dt>Notes</dt>
-                <dd style={{ whiteSpace: "pre-wrap" }}>{b.notes}</dd>
-              </>
-            )}
-          </dl>
-        </div>
-        <Activity targets={[{ entityType: "Billing", ids: [b.id] }]} viewer={user} />
+      <div className="card">
+        <dl className="kv kv-grid">
+          <dt>Customer</dt>
+          <dd>
+            <Link href={`/customers/${b.customer.id}`}>{b.customer.name}</Link>
+          </dd>
+          <dt>Sales order</dt>
+          <dd>
+            <Link href={`/sales-orders/${b.salesOrder.id}`}>{b.salesOrder.number}</Link>
+          </dd>
+          <dt>Booklet invoice no.</dt>
+          <dd className="num strong">{b.invoiceNo}</dd>
+          <dt>Invoice date</dt>
+          <dd>{day(b.invoiceDate)}</dd>
+          {b.expectedPaymentLabel ? (
+            <>
+              <dt>Expected by</dt>
+              <dd>
+                <span className="strong">{b.expectedPaymentLabel}</span>
+                {can(user, "edit_data") && b.status !== "VOID" && (
+                  <details style={{ marginTop: "4px" }}>
+                    <summary className="small muted" style={{ cursor: "pointer" }}>Change Expected by date</summary>
+                    <form action={updateBillingExpectedDateFormAction.bind(null, b.id)} style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
+                      <input type="date" name="expectedDate" defaultValue={b.expectedDate ?? ""} className="input" style={{ width: "auto" }} />
+                      <button type="submit" className="btn btn-secondary">Save</button>
+                    </form>
+                  </details>
+                )}
+              </dd>
+            </>
+          ) : (
+            <>
+              <dt>Due date</dt>
+              <dd>
+                {day(b.dueDate)} {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
+              </dd>
+            </>
+          )}
+          <dt>Amount</dt>
+          <dd className="num">{formatPeso(b.amount)}</dd>
+          <dt>Withholding expected</dt>
+          <dd className="num">{formatPeso(b.withholdingExpected)}</dd>
+          <dt>Net expected</dt>
+          <dd className="num">{formatPeso(b.netExpected)}</dd>
+          <dt>Cash applied</dt>
+          <dd className="num">{formatPeso(b.applied.cashApplied)}</dd>
+          <dt>2307 applied</dt>
+          <dd className="num">{formatPeso(b.applied.withholdingApplied)}</dd>
+          <dt>Balance</dt>
+          <dd className="num strong">{formatPeso(b.balance)}</dd>
+          {b.notes && (
+            <>
+              <dt>Notes</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{b.notes}</dd>
+            </>
+          )}
+        </dl>
       </div>
 
       <PillTabs
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: `/billing/billings/${id}` },
-          { key: "allocations", label: "Collections", count: b.allocations.length, href: `/billing/billings/${id}?tab=allocations` },
+          { key: "allocations", label: "Allocations", count: b.allocations.length, href: `/billing/billings/${id}?tab=allocations` },
+          { key: "activity", label: "Activity", href: `/billing/billings/${id}?tab=activity` },
           { key: "attachments", label: "Attachments", count: b.attachments.length, href: `/billing/billings/${id}?tab=attachments` },
         ]}
       />
@@ -228,6 +226,10 @@ export default async function BillingDetailPage({
             </div>
           )}
         </div>
+      )}
+
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "Billing", ids: [b.id] }]} viewer={user} />
       )}
 
       {tab === "attachments" && (

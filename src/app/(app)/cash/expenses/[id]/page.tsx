@@ -25,7 +25,7 @@ export default async function ExpenseDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "attachments" ? raw : "overview";
+  const tab = raw === "activity" ? raw : "attachments";
   const e = await getExpense(id);
   if (!e) notFound();
   const canManage = can(user, "manage_cash");
@@ -65,64 +65,57 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      <div className="detail-grid">
-        <div className="card">
-          <dl className="kv kv-grid">
-            <dt>Date</dt>
-            <dd>{day(ymd(e.date))}</dd>
-            <dt>Payee</dt>
-            <dd>
-              {e.supplier ? <Link href={`/suppliers/${e.supplier.id}`}>{e.supplier.name}</Link> : e.payeeText}
-            </dd>
-            <dt>Category</dt>
-            <dd>{e.category.label}</dd>
-            <dt>Paid from</dt>
-            <dd>
-              <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
-            </dd>
-            <dt>Amount</dt>
-            <dd className="num strong">{formatPeso(money(e.amount))}</dd>
-            {Number(money(e.withholdingApplied)) > 0 && (
-              <>
-                <dt>
-                  Withholding (EWT)
-                  <div className="hint">Record only — does not change cash leaving the account</div>
-                </dt>
-                <dd className="num">{formatPeso(money(e.withholdingApplied))}</dd>
-              </>
-            )}
-            <dt>OR / receipt no.</dt>
-            <dd>{e.receiptNo ?? "—"}</dd>
-            {e.notes && (
-              <>
-                <dt>Notes</dt>
-                <dd style={{ whiteSpace: "pre-wrap" }}>{e.notes}</dd>
-              </>
-            )}
-          </dl>
-        </div>
-        <Activity targets={[{ entityType: "Expense", ids: [id] }]} viewer={user} />
+      <div className="card">
+        <dl className="kv kv-grid">
+          <dt>Date</dt>
+          <dd>{day(ymd(e.date))}</dd>
+          <dt>Payee</dt>
+          <dd>
+            {e.supplier ? <Link href={`/suppliers/${e.supplier.id}`}>{e.supplier.name}</Link> : e.payeeText}
+          </dd>
+          <dt>Category</dt>
+          <dd>{e.category.label}</dd>
+          <dt>Paid from</dt>
+          <dd>
+            <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
+          </dd>
+          <dt>Amount</dt>
+          <dd className="num strong">{formatPeso(money(e.amount))}</dd>
+          {Number(money(e.withholdingApplied)) > 0 && (
+            <>
+              <dt>
+                Withholding (EWT)
+                <div className="hint">Record only — does not change cash leaving the account</div>
+              </dt>
+              <dd className="num">{formatPeso(money(e.withholdingApplied))}</dd>
+            </>
+          )}
+          <dt>OR / receipt no.</dt>
+          <dd>{e.receiptNo ?? "—"}</dd>
+          {e.notes && (
+            <>
+              <dt>Notes</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{e.notes}</dd>
+            </>
+          )}
+        </dl>
       </div>
 
       <PillTabs
         active={tab}
         tabs={[
-          { key: "overview", label: "Overview", href: `/cash/expenses/${id}` },
+          { key: "activity", label: "Activity", href: `/cash/expenses/${id}?tab=activity` },
           { key: "attachments", label: "Attachments", count: e.attachments.length, href: `/cash/expenses/${id}?tab=attachments` },
         ]}
       />
 
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">
-            Key status and amounts are at the top. This expense is in the{" "}
-            <Link href={`/cash/ledger?accountId=${e.cashAccountId}`}>ledger for {e.cashAccount.name}</Link>.
-          </p>
-        </div>
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "Expense", ids: [id] }]} viewer={user} />
       )}
 
       {tab === "attachments" && (
         <div className="card">
+          <h2>Attachments</h2>
           {e.attachments.length === 0 ? (
             <p className="faint">No receipt attachments.</p>
           ) : (

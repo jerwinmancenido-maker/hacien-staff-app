@@ -26,11 +26,17 @@ describe("S-87 print billing statement from the SO", () => {
     expect(src).toContain("billings={billings.map((b) => ({ id: b.id, number: b.number }))}");
   });
 
-  it("SO Billing card has a Print link per billing, desktop table and phone list", () => {
+  it("Documents tab has a Print link per billing; Overview links to it", () => {
     const src = read("src/app/(app)/sales-orders/[id]/page.tsx");
-    expect(src).toContain("<th>Print</th>");
-    expect(src.match(/href={`\/print\/billings\/\$\{b\.id\}`}/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(src).toContain('target="_blank"');
+    // The billings table (with its Print column) lives in the Documents tab,
+    // not on Overview — Overview keeps only the money summary and a link.
+    const start = src.indexOf('tab === "documents"');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const tab = src.slice(start, src.indexOf('tab === "deliveries"', start));
+    expect(tab).toContain("<th>Link</th>");
+    expect(tab).toContain("`/print/billings/${b.id}`");
+    expect(tab).toContain('target="_blank"');
+    expect(src).toContain("View billings →");
   });
 
   it("the billing print reached by those links is a statement, not an invoice", () => {

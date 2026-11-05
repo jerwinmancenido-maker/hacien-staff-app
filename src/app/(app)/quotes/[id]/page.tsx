@@ -10,6 +10,7 @@ import { formatAddress } from "@/lib/addresses/format";
 import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { Activity } from "@/components/Activity";
+import { PillTabs } from "@/components/PillTabs";
 import { Chip, PageHeader } from "@/components/ui";
 import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
 import { QuoteActions } from "@/components/docs/QuoteActions";
@@ -34,9 +35,11 @@ import { WITHHOLDING_INTERNAL_PANEL_LABEL, WITHHOLDING_NOT_SET_NOTICE, isWithhol
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
-export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function QuotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
+  const { tab: raw } = await searchParams;
+  const tab = raw === "sales-orders" || raw === "conforme" || raw === "activity" ? raw : "overview";
   // Built on the server without cost fields for users who can't see costs.
   const q = await getQuoteView(id, user);
   if (!q) notFound();
@@ -135,8 +138,23 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             : `Low margin / over threshold: ${q.approval.reasons.join(" · ")}.`}
         </div>
       )}
-      <div className="detail-grid">
-        <div>
+
+      <PillTabs
+        active={tab}
+        tabs={[
+          { key: "overview", label: "Overview", href: `/quotes/${id}` },
+          { key: "sales-orders", label: "Sales orders", count: q.salesOrders.length, href: `/quotes/${id}?tab=sales-orders` },
+          { key: "conforme", label: "Conforme", count: q.conformeFiles.length, href: `/quotes/${id}?tab=conforme` },
+          { key: "activity", label: "Activity", href: `/quotes/${id}?tab=activity` },
+        ]}
+      />
+
+      {tab === "overview" && (
+        <>
+          <p className="small muted">
+            Sales orders: {q.salesOrders.length} · <Link href={`/quotes/${id}?tab=sales-orders`}>View →</Link>
+            {" · "}Conforme: {q.conformeFiles.length === 0 ? "missing" : "uploaded"} · <Link href={`/quotes/${id}?tab=conforme`}>View →</Link>
+          </p>
           <div className="card">
             <dl className="kv kv-grid">
               <dt>Customer</dt>
@@ -191,76 +209,87 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               )}
             </dl>
           </div>
-          {q.salesOrders.length > 0 && (
-            <div className="card">
-              <h2>Sales orders from this quote</h2>
-              <div className="table-wrap">
-                <table className="list" aria-label="Sales orders from this quote">
-                  <thead>
-                    <tr>
-                      <th>Number</th>
-                      <th>Date</th>
-                      <th>Buyer PO</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {q.salesOrders.map((s) => (
-                      <tr key={s.id}>
-                        <td>
-                          <Link href={`/sales-orders/${s.id}`}>{s.number}</Link>
-                        </td>
-                        <td>{day(s.date)}</td>
-                        <td>{s.buyerPoNo ?? "—"}</td>
-                        <td>
-                          <SoStatusChip status={s.status} />
-                          {s.status === "VOID" && s.voidReason && <div className="small muted">{s.voidReason}</div>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
           <div className="small faint">
             Created by {q.createdBy} · last updated by {q.updatedBy}, {formatDateTime(q.updatedAt)}
           </div>
-        </div>
-        <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
-      </div>
-      <div className="card">
-        <h2>Signed conforme</h2>
-        {q.conformeFiles.length === 0 ? (
-          <p className="faint">No signed conforme uploaded yet. Conforme stays a blank line on the print until the customer signs.</p>
-        ) : (
-          <ul className="plain-list">
-            {q.conformeFiles.map((f) => (
-              <li key={f.id}>
-                <a href={f.href}>{f.fileName}</a>
-              </li>
-            ))}
-          </ul>
-        )}
-        {canEdit && q.status !== "VOID" && <ConformeUploadForm action={uploadQuoteConformeAction.bind(null, q.id)} />}
-      </div>
-      <div className="card">
-        <h2>Items</h2>
-        <ItemsTable
-          items={q.items.map((i) => ({
-            ...i,
-            overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
-          }))}
-          showCosts={q.canSeeCosts}
-        />
-        <div className="totals-wrap">
-          <div className="wh-internal-panel">
-            <div className="wh-internal-panel-label">{WITHHOLDING_INTERNAL_PANEL_LABEL}</div>
-            <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
+          <div className="card">
+            <h2>Items</h2>
+            <ItemsTable
+              items={q.items.map((i) => ({
+                ...i,
+                overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
+              }))}
+              showCosts={q.canSeeCosts}
+            />
+            <div className="totals-wrap">
+              <div className="wh-internal-panel">
+                <div className="wh-internal-panel-label">{WITHHOLDING_INTERNAL_PANEL_LABEL}</div>
+                <TotalsBox totals={q.totals} showCosts={q.canSeeCosts} />
+              </div>
+            </div>
           </div>
+          {canEdit && <RemindMeForm entityType="QUOTE" entityId={q.id} action={createReminderAction} />}
+        </>
+      )}
+
+      {tab === "sales-orders" && (
+        <div className="card">
+          <h2>Sales orders from this quote</h2>
+          {q.salesOrders.length === 0 ? (
+            <p className="faint">No sales orders yet.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="list" aria-label="Sales orders from this quote">
+                <thead>
+                  <tr>
+                    <th>Number</th>
+                    <th>Date</th>
+                    <th>Buyer PO</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {q.salesOrders.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <Link href={`/sales-orders/${s.id}`}>{s.number}</Link>
+                      </td>
+                      <td>{day(s.date)}</td>
+                      <td>{s.buyerPoNo ?? "—"}</td>
+                      <td>
+                        <SoStatusChip status={s.status} />
+                        {s.status === "VOID" && s.voidReason && <div className="small muted">{s.voidReason}</div>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
-      {canEdit && <RemindMeForm entityType="QUOTE" entityId={q.id} action={createReminderAction} />}
+      )}
+
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
+      )}
+
+      {tab === "conforme" && (
+        <div className="card">
+          <h2>Signed conforme</h2>
+          {q.conformeFiles.length === 0 ? (
+            <p className="faint">No signed conforme uploaded yet. Conforme stays a blank line on the print until the customer signs.</p>
+          ) : (
+            <ul className="plain-list">
+              {q.conformeFiles.map((f) => (
+                <li key={f.id}>
+                  <a href={f.href}>{f.fileName}</a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {canEdit && q.status !== "VOID" && <ConformeUploadForm action={uploadQuoteConformeAction.bind(null, q.id)} />}
+        </div>
+      )}
     </>
   );
 }

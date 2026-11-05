@@ -25,7 +25,7 @@ export default async function CollectionDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "allocations" || raw === "attachments" ? raw : "overview";
+  const tab = raw === "attachments" || raw === "activity" ? raw : "allocations";
   const c = await getCollectionView(id);
   if (!c) notFound();
   const canManage = can(user, "manage_billing");
@@ -73,74 +73,65 @@ export default async function CollectionDetailPage({
         </div>
       )}
 
-      <div className="detail-grid">
-        <div className="card">
-          <dl className="kv kv-grid">
-            <dt>Customer</dt>
-            <dd>
-              <Link href={`/customers/${c.customer.id}`}>{c.customer.name}</Link>
-            </dd>
-            <dt>Date</dt>
-            <dd>{day(c.date)}</dd>
-            <dt>Method</dt>
-            <dd>
-              <MethodLabel method={c.method} />
-            </dd>
-            <dt>Reference</dt>
-            <dd>{c.reference ?? "—"}</dd>
-            {c.method === "CHECK" && (
-              <>
-                <dt>Bank</dt>
-                <dd>{c.checkBank ?? "—"}</dd>
-                <dt>Check date</dt>
-                <dd>{day(c.checkDate)}</dd>
-              </>
-            )}
-            <dt>Receipt no.</dt>
-            <dd>{c.receiptNo ?? "—"}</dd>
-            <dt>Deposited to</dt>
-            <dd>
-              {c.cashAccount ? (
-                cashOn ? (
-                  <Link href={`/cash/accounts/${c.cashAccount.id}`}>{c.cashAccount.name}</Link>
-                ) : (
-                  c.cashAccount.name
-                )
+      <div className="card">
+        <dl className="kv kv-grid">
+          <dt>Customer</dt>
+          <dd>
+            <Link href={`/customers/${c.customer.id}`}>{c.customer.name}</Link>
+          </dd>
+          <dt>Date</dt>
+          <dd>{day(c.date)}</dd>
+          <dt>Method</dt>
+          <dd>
+            <MethodLabel method={c.method} />
+          </dd>
+          <dt>Reference</dt>
+          <dd>{c.reference ?? "—"}</dd>
+          {c.method === "CHECK" && (
+            <>
+              <dt>Bank</dt>
+              <dd>{c.checkBank ?? "—"}</dd>
+              <dt>Check date</dt>
+              <dd>{day(c.checkDate)}</dd>
+            </>
+          )}
+          <dt>Receipt no.</dt>
+          <dd>{c.receiptNo ?? "—"}</dd>
+          <dt>Deposited to</dt>
+          <dd>
+            {c.cashAccount ? (
+              cashOn ? (
+                <Link href={`/cash/accounts/${c.cashAccount.id}`}>{c.cashAccount.name}</Link>
               ) : (
-                <span className="faint">Not assigned</span>
-              )}
-            </dd>
-            <dt>Amount received</dt>
-            <dd className="num strong">{formatPeso(c.amountReceived)}</dd>
-            <dt>Cash applied</dt>
-            <dd className="num">{formatPeso(c.cashApplied)}</dd>
-            <dt>Unapplied credit</dt>
-            <dd className="num">{formatPeso(c.unappliedCredit)}</dd>
-            {c.notes && (
-              <>
-                <dt>Notes</dt>
-                <dd style={{ whiteSpace: "pre-wrap" }}>{c.notes}</dd>
-              </>
+                c.cashAccount.name
+              )
+            ) : (
+              <span className="faint">Not assigned</span>
             )}
-          </dl>
-        </div>
-        <Activity targets={[{ entityType: "Collection", ids: [c.id] }]} viewer={user} />
+          </dd>
+          <dt>Amount received</dt>
+          <dd className="num strong">{formatPeso(c.amountReceived)}</dd>
+          <dt>Cash applied</dt>
+          <dd className="num">{formatPeso(c.cashApplied)}</dd>
+          <dt>Unapplied credit</dt>
+          <dd className="num">{formatPeso(c.unappliedCredit)}</dd>
+          {c.notes && (
+            <>
+              <dt>Notes</dt>
+              <dd style={{ whiteSpace: "pre-wrap" }}>{c.notes}</dd>
+            </>
+          )}
+        </dl>
       </div>
 
       <PillTabs
         active={tab}
         tabs={[
-          { key: "overview", label: "Overview", href: `/billing/collections/${id}` },
           { key: "allocations", label: "Allocations", count: c.allocations.length, href: `/billing/collections/${id}?tab=allocations` },
+          { key: "activity", label: "Activity", href: `/billing/collections/${id}?tab=activity` },
           { key: "attachments", label: "Attachments", count: c.attachments.length, href: `/billing/collections/${id}?tab=attachments` },
         ]}
       />
-
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">Advances before billing stay as credit until applied. Refunds are out of scope.</p>
-        </div>
-      )}
 
       {tab === "allocations" && (
         <div className="card">
@@ -173,6 +164,10 @@ export default async function CollectionDetailPage({
             </div>
           )}
         </div>
+      )}
+
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "Collection", ids: [c.id] }]} viewer={user} />
       )}
 
       {tab === "attachments" && (

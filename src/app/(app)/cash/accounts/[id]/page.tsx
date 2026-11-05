@@ -28,7 +28,7 @@ export default async function CashAccountDetailPage({
   const user = await requirePagePermission("view");
   const { id } = await params;
   const { tab: raw } = await searchParams;
-  const tab = raw === "edit" || raw === "ledger" ? raw : "overview";
+  const tab = raw === "edit" || raw === "ledger" || raw === "activity" ? raw : "ledger";
   const account = await db.cashAccount.findUnique({ where: { id } });
   if (!account) notFound();
   const canManage = can(user, "manage_cash");
@@ -60,49 +60,41 @@ export default async function CashAccountDetailPage({
       />
       <CashNav active="accounts" />
 
-      <div className="detail-grid">
-        <div className="card">
-          <dl className="kv kv-grid">
-            <dt>Type</dt>
-            <dd>
-              {CASH_ACCOUNT_TYPE_LABELS[account.type]}
-              <div className="hint">{CASH_ACCOUNT_TYPE_HINTS[account.type]}</div>
-            </dd>
-            {account.bankName && (
-              <>
-                <dt>Bank / provider</dt>
-                <dd>{account.bankName}</dd>
-              </>
-            )}
-            <dt>Last 4 digits</dt>
-            <dd>{account.accountHintLast4 ? `···${account.accountHintLast4}` : "—"}</dd>
-            <dt>Opening</dt>
-            <dd>
-              {formatPeso(money(account.openingBalance))} on {day(ymd(account.openingDate))}
-            </dd>
-            <dt>Running balance</dt>
-            <dd className="num strong">{formatPeso(balance)}</dd>
-          </dl>
-        </div>
-        <Activity targets={[{ entityType: "CashAccount", ids: [id] }]} viewer={user} />
+      <div className="card">
+        <dl className="kv kv-grid">
+          <dt>Type</dt>
+          <dd>
+            {CASH_ACCOUNT_TYPE_LABELS[account.type]}
+            <div className="hint">{CASH_ACCOUNT_TYPE_HINTS[account.type]}</div>
+          </dd>
+          {account.bankName && (
+            <>
+              <dt>Bank / provider</dt>
+              <dd>{account.bankName}</dd>
+            </>
+          )}
+          <dt>Last 4 digits</dt>
+          <dd>{account.accountHintLast4 ? `···${account.accountHintLast4}` : "—"}</dd>
+          <dt>Opening</dt>
+          <dd>
+            {formatPeso(money(account.openingBalance))} on {day(ymd(account.openingDate))}
+          </dd>
+          <dt>Running balance</dt>
+          <dd className="num strong">{formatPeso(balance)}</dd>
+        </dl>
       </div>
 
       <PillTabs
         active={tab}
         tabs={[
-          { key: "overview", label: "Overview", href: `/cash/accounts/${id}` },
           { key: "ledger", label: "Recent ledger", href: `/cash/accounts/${id}?tab=ledger` },
+          { key: "activity", label: "Activity", href: `/cash/accounts/${id}?tab=activity` },
           ...(canManage ? [{ key: "edit", label: "Edit", href: `/cash/accounts/${id}?tab=edit` }] : []),
         ]}
       />
 
-      {tab === "overview" && (
-        <div className="card">
-          <p className="faint small">
-            Status and balance are at the top. Use the ledger tab for recent money in and out, or open the full{" "}
-            <Link href={`/cash/ledger?accountId=${id}`}>account ledger</Link>.
-          </p>
-        </div>
+      {tab === "activity" && (
+        <Activity targets={[{ entityType: "CashAccount", ids: [id] }]} viewer={user} />
       )}
 
       {tab === "ledger" && (
