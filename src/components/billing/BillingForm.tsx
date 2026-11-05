@@ -16,6 +16,8 @@ export function BillingForm({
   seriesTo,
   canEdit,
   submitLabel = "Record billing",
+  // Audit C: warn (don't block) when nothing has been delivered yet.
+  deliveryWarning = false,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   defaults: {
@@ -33,6 +35,7 @@ export function BillingForm({
   seriesTo: number;
   canEdit: boolean;
   submitLabel?: string;
+  deliveryWarning?: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
@@ -50,6 +53,12 @@ export function BillingForm({
         submit(ev.currentTarget);
       }}
     >
+      {deliveryWarning && (
+        <div className="alert warn" role="status">
+          Nothing has been delivered on this order yet. You can still record this billing — payment-first
+          terms may need the invoice out before delivery — but check the goods are on their way.
+        </div>
+      )}
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
