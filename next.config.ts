@@ -31,6 +31,21 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: bodyLimit },
     proxyClientMaxBodySize: bodyLimit,
   },
+  // The 2303 readers load files by path at runtime, so the standalone
+  // tracer cannot see them — Hostinger runs the standalone server,
+  // whose node_modules holds only traced files. Without these, both
+  // readers fail on staging with "Missing file in the app install".
+  // The whole tesseract packages are included because the worker
+  // thread loads its own helpers (getCore, gunzip, cache) and the
+  // core (tesseract.js-core) by relative require at runtime.
+  outputFileTracingIncludes: {
+    "/api/customers/parse-2303": [
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/@tesseract.js-data/eng/4.0.0/**/*",
+    ],
+  },
   ...(hostingerBuild ? { typescript: { ignoreBuildErrors: true } } : {}),
 };
 
