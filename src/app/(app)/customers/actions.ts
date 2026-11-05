@@ -7,6 +7,7 @@ import { runAction } from "@/lib/actions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { duplicateCustomer, getCustomer, saveCustomer, setCustomerActive } from "@/lib/services/companies";
 import { saveAddress } from "@/lib/services/addresses";
+import { attachStagedBusinessDocument } from "@/lib/services/business-documents";
 import { listWithholdingRates } from "@/lib/services/withholding";
 import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema } from "@/lib/validation/companies";
@@ -159,6 +160,18 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
     }
     if (deliveryData) {
       await saveAddress(null, owner, deliveryData, user.id);
+    }
+
+    // New customer only: attach a 2303 staged by the uploader. A failure
+    // here must not fail the save (the customer already exists, and
+    // failing would invite a duplicate on retry) — the file can be
+    // re-uploaded from the customer's Documents tab.
+    if (!id) {
+      const storageKey = str(form, "bir2303StorageKey");
+      const fileName = str(form, "bir2303FileName");
+      if (storageKey && fileName) {
+        await attachStagedBusinessDocument(owner, storageKey, fileName, user).catch(() => undefined);
+      }
     }
 
     if (!id) createdId = saved.id;

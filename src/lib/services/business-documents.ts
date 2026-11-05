@@ -12,7 +12,7 @@ import { manilaToday } from "../format";
 import { getSettingsSnapshot } from "../settings";
 import { checkUpload, uploadMaxBytes } from "../business-docs/sniff";
 import { expiringCutoff, expiryStatus } from "../business-docs/expiry";
-import { discardUnreferencedFile, newStorageKey, saveFile } from "../business-docs/storage";
+import { discardUnreferencedFile, isStorageKey, newStorageKey, openFile, saveFile } from "../business-docs/storage";
 import type { BusinessDocumentMeta } from "../validation/business-documents";
 import { CompanyRuleError } from "./companies";
 import type { ContactOwner as Owner } from "./contacts";
@@ -112,6 +112,52 @@ export async function uploadBusinessDocument(owner: DocOwner, meta: BusinessDocu
     await discardUnreferencedFile(storageKey);
     throw e;
   }
+}
+
+/**
+ * Attach a 2303 file staged by POST /api/customers/parse-2303 (the customer
+ * didn't exist at upload time, so no row was created then). The hidden
+ * form fields carry only the storage key + file name — both are
+ * user-editable, so the staged file is re-read from disk and re-validated
+ * here (magic bytes, name/extension agreement, size) before the row is
+ * created. The file lands as the customer's BIR 2303 document, visible
+ * on the Documents tab.
+ */
+export async function attachStagedBusinessDocument(owner: DocOwner, storageKey: string, fileName: string, actor: Actor) {
+  assertCan(actor, "edit_data");
+  if (!isStorageKey(storageKey)) throw new CompanyRuleError("That upload wasn't found. Upload the 2303 again.");
+  const staged = await openFile(storageKey).catch(() => null);
+  if (!staged) throw new CompanyRuleError("That upload wasn't found. Upload the 2303 again.");
+  const chunks: Buffer[] = [];
+  for await (const chunk of staged.stream) chunks.push(chunk as Buffer);
+  const bytes = Buffer.concat(chunks);
+  const check = checkUpload({ name: fileName, size: bytes.byteLength }, bytes.subarray(0, 16), uploadMaxBytes());
+  if (!check.ok) throw new CompanyRuleError(check.error);
+
+  const ownerRow = owner.kind === "customer" ? await db.customer.findUnique({ where: { id: owner.id } }) : await db.supplier.findUnique({ where: { id: owner.id } });
+  if (!ownerRow) throw new CompanyRuleError(`That ${owner.kind} doesn't exist.`);
+
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  return db.$transaction(async (tx) => {
+    const created = await tx.businessDocument.create({
+      data: {
+        ...ownerWhere(owner),
+        type: "BIR_2303",
+        otherLabel: null,
+        docNumber: null,
+        issueDate: null,
+        expiryDate: null,
+        fileName: check.fileName,
+        mimeType: check.type.mime,
+        sizeBytes: bytes.byteLength,
+        storageKey,
+        sha256,
+        uploadedById: actor.id,
+      },
+    });
+    await writeAudit(tx, { userId: actor.id, entityType: "BusinessDocument", entityId: created.id, action: "create", after: created });
+    return created;
+  });
 }
 
 export async function setBusinessDocumentArchived(id: string, archived: boolean, actor: Actor) {
