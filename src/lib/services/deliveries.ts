@@ -15,6 +15,7 @@ import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { notifyOrderDelivered } from "../messaging/order-text-triggers";
+import { refreshSalesOrderCloseState } from "./sales-orders";
 import { claimBookletSerial } from "./booklet";
 
 export type DeliveryActor = PermissionUser & { id: string };
@@ -41,13 +42,13 @@ function mapLockedLines(
   }));
 }
 
-/** Lock live SO lines for recording a delivery (void SOs refused). */
+/** Lock live SO lines for recording a delivery (closed and void SOs refused). */
 async function lockForDelivery(
   tx: Tx,
   salesOrderId: string,
 ): Promise<{ status: string; number: string; lines: LockedLine[] }> {
   const so = await lockSalesOrderRow(tx, salesOrderId);
-  if (so.status === "VOID") throw new DocRuleError("Cannot deliver on a void sales order.");
+  if (so.status !== "OPEN") throw new DocRuleError("Cannot deliver on a closed or void sales order.");
 
   const rows = await tx.$queryRaw<{ id: string; description: string; qty: unknown; deliveredQty: unknown }[]>`SELECT \`id\`, \`description\`, \`qty\`, \`deliveredQty\` FROM \`SalesOrderItem\` WHERE \`salesOrderId\` = ${salesOrderId} AND \`removedAt\` IS NULL ORDER BY \`sortOrder\` FOR UPDATE`;
   return { status: so.status, number: so.number, lines: mapLockedLines(rows) };
@@ -183,6 +184,8 @@ export async function recordDelivery(
           },
         });
 
+        // Audit A: a delivery can complete the order.
+        await refreshSalesOrderCloseState(tx, salesOrderId, actor.id);
         return delivery;
       }, DOC_TX),
     );
@@ -249,6 +252,8 @@ export async function voidDelivery(id: string, reason: string, actor: DeliveryAc
         },
       });
 
+      // Audit A: voiding a delivery can reopen a closed order.
+      await refreshSalesOrderCloseState(tx, delivery.salesOrderId, actor.id);
       return updated;
     }, DOC_TX),
   );
