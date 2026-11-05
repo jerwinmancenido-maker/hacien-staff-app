@@ -56,6 +56,38 @@ export function incomeBaseFromTax(tax: string, rate: string): string {
   return fromScaled(rounded, 2);
 }
 
+/**
+ * Split one billing's income across its 2307 lines by each line's share of
+ * the billing's total withholding, cents remainder on the last line, so the
+ * lines sum to exactly the billing amount. Returns null when the split
+ * cannot be computed (no billing amount or no withholding) — the caller
+ * falls back to inverting each line on its own.
+ *
+ * Inverting each line on its own (tax / rate) double-counts whenever two
+ * codes share one billing's income: WI640 ₱3,000 @1% and WB080 ₱9,000 @3%
+ * on one ₱300,000 billing invert to ₱300,000 + ₱300,000 = ₱600,000. The
+ * share split gives ₱75,000 + ₱225,000 = ₱300,000 instead. When the codes
+ * sit on genuinely different bases the total still comes out right (goods
+ * ₱100,000 + services ₱50,000, ₱1,000 withheld on each → ₱75,000 + ₱75,000
+ * = ₱150,000); the per-line split is then proportional to the tax, not
+ * per-base.
+ */
+export function splitBillingIncome(
+  billingAmount: string,
+  lineTaxes: readonly string[],
+): string[] | null {
+  const total = toScaled(billingAmount || "0", 2);
+  const taxes = lineTaxes.map((t) => toScaled(t || "0", 2));
+  const totalTax = taxes.reduce((a, t) => a + t, 0n);
+  if (total <= 0n || totalTax <= 0n) return null;
+  let used = 0n;
+  return taxes.map((t, i) => {
+    const income = i === taxes.length - 1 ? total - used : (total * t) / totalTax;
+    used += income;
+    return fromScaled(income, 2);
+  });
+}
+
 export type IncomeTax1701qLines = {
   /** (a) Cumulative figure used for this column (invoiced or collected — never a combined total). */
   a: string;

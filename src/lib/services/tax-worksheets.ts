@@ -13,6 +13,7 @@ import {
   build1701qWorksheet,
   eitherOverThreshold,
   incomeBaseFromTax,
+  splitBillingIncome,
   sumPesos,
   type IncomeTax1701qLines,
 } from "../tax/math";
@@ -249,8 +250,10 @@ export async function getCustomer2307Worksheet(
     include: {
       customer: { select: { id: true, name: true, tin: true } },
       collection: { select: { id: true, number: true, date: true } },
-      // Multi-code: parent.amount is the sum; parent.rate/atcCode are first-line only —
-      // invert income base per line so WI640 ₱100 + WI157 ₱200 → ₱10k + ₱10k, not ₱30k.
+      billing: { select: { amount: true } },
+      // Multi-code: the lines share one billing's income, so the income is
+      // split across them by tax share (see splitBillingIncome) — inverting
+      // each line on its own (tax / rate) counts the billing twice.
       lines: { where: { amount: { gt: 0 } }, orderBy: [{ atcCode: "asc" }, { createdAt: "asc" }] },
     },
     orderBy: [{ createdAt: "asc" }],
@@ -270,14 +273,18 @@ export async function getCustomer2307Worksheet(
       href,
     };
     if (w.lines.length > 0) {
-      return w.lines.map((line) => {
+      const incomes = splitBillingIncome(
+        money(w.billing?.amount ?? "0"),
+        w.lines.map((line) => money(line.amount)),
+      );
+      return w.lines.map((line, i) => {
         const tax = money(line.amount);
         const rate = Number(line.rate).toFixed(4);
         return {
           ...shared,
           id: line.id,
           atc: line.atcCode ?? "",
-          incomeAmount: incomeBaseFromTax(tax, rate),
+          incomeAmount: incomes?.[i] ?? incomeBaseFromTax(tax, rate),
           taxWithheld: tax,
           rate,
         };

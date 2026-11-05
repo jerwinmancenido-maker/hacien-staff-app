@@ -20,6 +20,7 @@ import {
   incomeBaseFromTax,
   pesosMaxZeroDiff,
   pesosTimesRate,
+  splitBillingIncome,
   sumPesos,
 } from "@/lib/tax/math";
 import {
@@ -183,6 +184,29 @@ describe("1701Q worksheet lines (scaled decimals)", () => {
     expect(incomeBaseFromTax("1000.00", "0.0100")).toBe("100000.00");
     expect(incomeBaseFromTax("50.00", "0.0200")).toBe("2500.00");
     expect(incomeBaseFromTax("10.00", "0.0000")).toBe("0.00");
+  });
+
+  it("splitBillingIncome: split lines share one billing, never double-count", () => {
+    // E2E re-record: one ₱300,000 billing, WI640 ₱3,000 + WB080 ₱9,000.
+    // Inverting each line would give ₱300,000 + ₱300,000 = ₱600,000.
+    expect(splitBillingIncome("300000.00", ["3000.00", "9000.00"])).toEqual([
+      "75000.00",
+      "225000.00",
+    ]);
+    // Different bases: total stays right, split is proportional to the tax.
+    expect(splitBillingIncome("150000.00", ["1000.00", "1000.00"])).toEqual([
+      "75000.00",
+      "75000.00",
+    ]);
+    // One line: the whole billing income.
+    expect(splitBillingIncome("300000.00", ["12000.00"])).toEqual(["300000.00"]);
+    // Cents remainder lands on the last line; lines still sum to the billing.
+    const odd = splitBillingIncome("100.00", ["1.00", "1.00", "1.00"])!;
+    expect(odd).toEqual(["33.33", "33.33", "33.34"]);
+    expect(sumPesos(odd)).toBe("100.00");
+    // No billing amount or no withholding: null, caller inverts per line.
+    expect(splitBillingIncome("0.00", ["3000.00"])).toBeNull();
+    expect(splitBillingIncome("300000.00", ["0.00"])).toBeNull();
   });
 
   it("sumPesos uses scaled decimals", () => {
