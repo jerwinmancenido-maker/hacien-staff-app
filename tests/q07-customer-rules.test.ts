@@ -270,6 +270,61 @@ describe("Q07 S-68: Quick-add customer on a quote", () => {
     expect(delivery?.isDefault).toBe(true);
     expect(delivery?.street).toBe("Unit 10A, Ayala Tower, Makati");
   });
+
+  it("saves split address parts on both rows and clears needs-review when complete", async () => {
+    const fd = new FormData();
+    fd.set("name", "Split Address Corp");
+    fd.set("withholdingType", "NONE");
+    fd.set("defaultTerms", "Net 30");
+    fd.set("address", "Bldg.14, Gate 2, TESDA Complex, East Service Rd, SLEX");
+    fd.set("barangay", "San Antonio");
+    fd.set("cityMunicipality", "Taguig City");
+    fd.set("province", "Metro Manila");
+    fd.set("zip", "1630");
+    fd.set("contactName", "John Doe");
+    fd.set("email", "john@example.com");
+    fd.set("phone", "+63 917 000-0000");
+
+    const res = await createCustomerForQuoteAction({}, fd);
+    expect(res.ok).toBe(true);
+
+    const addrs = fake.state.addresses.filter((a) => a.customerId === res.customer?.id);
+    expect(addrs).toHaveLength(2);
+    for (const a of addrs) {
+      expect(a.street).toBe("Bldg.14, Gate 2, TESDA Complex, East Service Rd, SLEX");
+      expect(a.barangay).toBe("San Antonio");
+      expect(a.cityMunicipality).toBe("Taguig City");
+      expect(a.province).toBe("Metro Manila");
+      expect(a.zip).toBe("1630");
+      expect(a.isDefault).toBe(true);
+      expect(a.needsReview).toBe(false);
+    }
+  });
+
+  it("street-only address keeps needs-review true and leaves parts blank", async () => {
+    const fd = new FormData();
+    fd.set("name", "Street Only Corp");
+    fd.set("withholdingType", "NONE");
+    fd.set("defaultTerms", "Net 30");
+    fd.set("address", "123 Main St, Pasig");
+    fd.set("contactName", "John Doe");
+    fd.set("email", "john@example.com");
+    fd.set("phone", "+63 917 000-0000");
+
+    const res = await createCustomerForQuoteAction({}, fd);
+    expect(res.ok).toBe(true);
+
+    const addrs = fake.state.addresses.filter((a) => a.customerId === res.customer?.id);
+    expect(addrs).toHaveLength(2);
+    for (const a of addrs) {
+      expect(a.street).toBe("123 Main St, Pasig");
+      expect(a.barangay).toBe("");
+      expect(a.cityMunicipality).toBe("");
+      expect(a.province).toBe("");
+      expect(a.zip).toBe("");
+      expect(a.needsReview).toBe(true);
+    }
+  });
 });
 
 describe("Q07 S-76: SO convert requires a delivery address", () => {
