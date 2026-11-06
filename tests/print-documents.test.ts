@@ -77,6 +77,16 @@ describe("professional print documents", () => {
     expect(html(draftPoFixture())).toContain("DRAFT");
   });
 
+  it("statements label the meta row with the party, not a document number", () => {
+    // Statements have no number — the "number" is the party name (owner 2026-11-07).
+    const customer = html(customerStatementFixture());
+    expect(customer).toContain("<th>Customer</th>");
+    expect(customer).not.toContain("<th>No.</th>");
+    const supplier = html(supplierStatementFixture());
+    expect(supplier).toContain("<th>Supplier</th>");
+    expect(supplier).not.toContain("<th>No.</th>");
+  });
+
   it("customer prints never show supplier costs or margins", () => {
     for (const fixture of [quotePrintFixture, salesOrderPrintFixture, billingPrintFixture, collectionPrintFixture, customerStatementFixture]) {
       const lower = html(fixture()).toLowerCase();

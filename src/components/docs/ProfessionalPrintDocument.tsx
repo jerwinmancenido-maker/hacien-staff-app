@@ -136,8 +136,20 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
   const unitLabel = doc.unitPriceLabel ?? "Unit price";
   const hideAmounts = !!doc.hideLineAmounts;
   const hideStatus = doc.hideStatus ?? HIDE_STATUS_ON_PRINT.has(doc.kind);
+  // Statements have no document number — the "number" is the party name, so
+  // the label names the party instead of claiming it is a number (owner 2026-11-07).
   const numberLabel =
-    doc.kind === "quote" ? "Quote no." : doc.kind === "sales_order" ? "SO no." : doc.kind === "billing" ? "Billing no." : "No.";
+    doc.kind === "quote"
+      ? "Quote no."
+      : doc.kind === "sales_order"
+        ? "SO no."
+        : doc.kind === "billing"
+          ? "Billing no."
+          : doc.kind === "customer_statement"
+            ? "Customer"
+            : doc.kind === "supplier_statement"
+              ? "Supplier"
+              : "No.";
 
   return (
     <article

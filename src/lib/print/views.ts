@@ -11,6 +11,7 @@ import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
+import { PAYMENT_METHOD_LABELS } from "@/lib/validation/payables";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
@@ -685,7 +686,7 @@ export async function getSupplierPaymentPrintModel(
       email: null,
     },
     meta: [
-      { label: "Method", value: p.method },
+      { label: "Method", value: PAYMENT_METHOD_LABELS[p.method as keyof typeof PAYMENT_METHOD_LABELS] ?? p.method },
       ...(p.reference ? [{ label: "Reference", value: p.reference }] : []),
       ...(p.cashAccount ? [{ label: "Paid from", value: p.cashAccount.name }] : []),
       ...(billRefs.length ? [{ label: "Bills", value: billRefs.join(", ") }] : []),
