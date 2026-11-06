@@ -139,12 +139,10 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         <CompanyLetterhead company={doc.company} />
       </header>
 
-      {/* Letterhead Template v3: title + meta sit below the rule, title left, meta right. */}
+      {/* Letterhead Template v3: title + meta sit below the rule.
+          Title on the RIGHT, meta on the left (owner 2026-11-07;
+          the Template v3 doc shows the title on the left). */}
       <div className="pp-title-block">
-        <h1>
-          <span className="pp-title-pixel" aria-hidden="true" />
-          {doc.title}
-        </h1>
         <table className="pp-meta">
           <tbody>
             <tr>
@@ -169,6 +167,10 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
             ))}
           </tbody>
         </table>
+        <h1>
+          <span className="pp-title-pixel" aria-hidden="true" />
+          {doc.title}
+        </h1>
       </div>
 
       <PartyBoxes party={doc.party} kind={doc.kind} hideCounterpartyTin={hideCounterpartyTin} />
@@ -280,18 +282,12 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           </p>
         )}
 
-        {(doc.terms || doc.validity || doc.notes || doc.deliveryNotes || doc.warrantyNotes) && (
+        {(doc.terms || doc.notes || doc.deliveryNotes || doc.warrantyNotes) && (
           <section className="pp-notes">
             {doc.terms && (
               <div>
                 <span className="pp-label-inline">Terms &amp; conditions: </span>
                 {doc.terms}
-              </div>
-            )}
-            {doc.validity && doc.kind === "quote" && (
-              <div>
-                <span className="pp-label-inline">Valid until: </span>
-                {doc.validity}
               </div>
             )}
             {doc.deliveryNotes && (

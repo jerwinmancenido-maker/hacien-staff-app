@@ -47,18 +47,21 @@ function splitDescription(raw: string): { description: string; detail: string | 
 /** S-70: quote signatures — Prepared by (name, position, uploaded
     signature), Approved by (name + approval date/time, only when the
     quote was actually approved), Conforme stays a blank line. */
-function quoteSignatories(q: {
-  createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
-  approvedBy: { name: string } | null;
-  approvedAt: Date | null;
-  approvalStatus: string;
-}): PrintSignatory[] {
+function quoteSignatories(
+  q: {
+    createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
+    approvedBy: { name: string } | null;
+    approvedAt: Date | null;
+    approvalStatus: string;
+  },
+  preparer: { id: string; name: string; position: string | null; signatureStorageKey: string | null },
+): PrintSignatory[] {
   const out: PrintSignatory[] = [
     {
       role: "Prepared by",
-      name: printablePersonName(q.createdBy.name),
-      position: printablePosition(q.createdBy.position),
-      signatureUrl: q.createdBy.signatureStorageKey ? `/files/user-signature/${q.createdBy.id}` : null,
+      name: printablePersonName(preparer.name),
+      position: printablePosition(preparer.position),
+      signatureUrl: preparer.signatureStorageKey ? `/files/user-signature/${preparer.id}` : null,
     },
   ];
   if (q.approvalStatus === "APPROVED" && q.approvedBy) {
@@ -180,6 +183,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
+      preparedBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
       approvedBy: { select: { name: true } },
     },
   });
@@ -187,7 +191,9 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const letter = await letterhead(q.settingsVersionId);
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
-  const prepared = printablePersonName(q.createdBy.name);
+  // Preparer picker: the chosen preparer, else the creator.
+  const preparer = q.preparedBy ?? q.createdBy;
+  const prepared = printablePersonName(preparer.name);
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
@@ -247,7 +253,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
     warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
-    signatories: quoteSignatories(q),
+    signatories: quoteSignatories(q, preparer),
     // S-70: only an approved quote may claim approval on the print.
     generatedNote: q.approvalStatus === "APPROVED" ? "Electronically generated, approved in the HACIEN system." : null,
     ...footer,

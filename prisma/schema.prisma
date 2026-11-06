@@ -58,6 +58,7 @@ model User {
   quotesUpdated      Quote[]            @relation("QuoteUpdatedBy")
   quotesApproved     Quote[]            @relation("QuoteApprovedBy")
   quotesRejected     Quote[]            @relation("QuoteRejectedBy")
+  quotesPrepared     Quote[]            @relation("QuotePreparedBy")
   salesOrdersCreated SalesOrder[]       @relation("SalesOrderCreatedBy")
   salesOrdersUpdated SalesOrder[]       @relation("SalesOrderUpdatedBy")
   voids              DocumentVoid[]
@@ -721,6 +722,10 @@ model Quote {
   voidReason  String?   @db.Text
   createdById String
   createdBy   User      @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  // Preparer picker (2026-11-07): who prepared this quote. Null = the
+  // creator (old quotes + the default). Prints under "Prepared by".
+  preparedById String?
+  preparedBy   User?     @relation("QuotePreparedBy", fields: [preparedById], references: [id])
   updatedById String
   updatedBy   User      @relation("QuoteUpdatedBy", fields: [updatedById], references: [id])
   createdAt   DateTime  @default(now())
