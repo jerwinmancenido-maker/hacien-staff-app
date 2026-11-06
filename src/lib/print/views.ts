@@ -11,6 +11,7 @@ import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { getStatement } from "@/lib/billing/views";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
+import { PAYMENT_METHOD_LABELS } from "@/lib/validation/payables";
 import { canSeeCosts, ForbiddenError, type PermissionUser } from "@/lib/permissions";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { snapshotList } from "@/lib/services/withholding";
@@ -47,18 +48,21 @@ function splitDescription(raw: string): { description: string; detail: string | 
 /** S-70: quote signatures — Prepared by (name, position, uploaded
     signature), Approved by (name + approval date/time, only when the
     quote was actually approved), Conforme stays a blank line. */
-function quoteSignatories(q: {
-  createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
-  approvedBy: { name: string } | null;
-  approvedAt: Date | null;
-  approvalStatus: string;
-}): PrintSignatory[] {
+function quoteSignatories(
+  q: {
+    createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
+    approvedBy: { name: string } | null;
+    approvedAt: Date | null;
+    approvalStatus: string;
+  },
+  preparer: { id: string; name: string; position: string | null; signatureStorageKey: string | null },
+): PrintSignatory[] {
   const out: PrintSignatory[] = [
     {
       role: "Prepared by",
-      name: printablePersonName(q.createdBy.name),
-      position: printablePosition(q.createdBy.position),
-      signatureUrl: q.createdBy.signatureStorageKey ? `/files/user-signature/${q.createdBy.id}` : null,
+      name: printablePersonName(preparer.name),
+      position: printablePosition(preparer.position),
+      signatureUrl: preparer.signatureStorageKey ? `/files/user-signature/${preparer.id}` : null,
     },
   ];
   if (q.approvalStatus === "APPROVED" && q.approvedBy) {
@@ -180,6 +184,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
+      preparedBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
       approvedBy: { select: { name: true } },
     },
   });
@@ -187,7 +192,9 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const letter = await letterhead(q.settingsVersionId);
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
-  const prepared = printablePersonName(q.createdBy.name);
+  // Preparer picker: the chosen preparer, else the creator.
+  const preparer = q.preparedBy ?? q.createdBy;
+  const prepared = printablePersonName(preparer.name);
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   const deliveryAddress = await suggestedDeliveryAddress(q.customer);
@@ -247,9 +254,9 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
     warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
-    signatories: quoteSignatories(q),
+    signatories: quoteSignatories(q, preparer),
     // S-70: only an approved quote may claim approval on the print.
-    generatedNote: q.approvalStatus === "APPROVED" ? "Electronically generated, approved in the HACIEN system." : null,
+    generatedNote: q.approvalStatus === "APPROVED" ? "System-generated and approved. No signature required." : null,
     ...footer,
     thankYou: true,
   };
@@ -679,7 +686,7 @@ export async function getSupplierPaymentPrintModel(
       email: null,
     },
     meta: [
-      { label: "Method", value: p.method },
+      { label: "Method", value: PAYMENT_METHOD_LABELS[p.method as keyof typeof PAYMENT_METHOD_LABELS] ?? p.method },
       ...(p.reference ? [{ label: "Reference", value: p.reference }] : []),
       ...(p.cashAccount ? [{ label: "Paid from", value: p.cashAccount.name }] : []),
       ...(billRefs.length ? [{ label: "Bills", value: billRefs.join(", ") }] : []),
@@ -906,6 +913,8 @@ export async function getCustomerStatementPrintModel(
 export async function getSupplierStatementPrintModel(
   supplierId: string,
   viewer: PermissionUser,
+  from?: Date | null,
+  to?: Date | null,
 ): Promise<{ doc: ProfessionalPrintModel; missing: string[] } | null> {
   assertCosts(viewer);
   const supplier = await db.supplier.findUnique({
@@ -916,16 +925,48 @@ export async function getSupplierStatementPrintModel(
   });
   if (!supplier) return null;
   const letter = await letterhead();
+  // Date filter (2026-11-07, owner-approved): same from/to convention as the
+  // customer statement — no dates means all-time, as before.
   const bills = await db.supplierBill.findMany({
-    where: { supplierId, status: { not: "VOID" } },
+    where: {
+      supplierId,
+      status: { not: "VOID" },
+      ...(from || to
+        ? { billDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
+    },
     include: { allocations: { where: { supplierPayment: { status: "POSTED" } } } },
     orderBy: [{ billDate: "asc" }, { createdAt: "asc" }],
   });
   const payments = await db.supplierPayment.findMany({
-    where: { supplierId, status: "POSTED" },
+    where: {
+      supplierId,
+      status: "POSTED",
+      ...(from || to
+        ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
+    },
     include: { allocations: true },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
+
+  // Opening balance: bills before `from` minus payments before `from`, so a
+  // filtered statement still starts from what was really owed.
+  let opening = 0;
+  if (from) {
+    const priorBills = await db.supplierBill.findMany({
+      where: { supplierId, status: { not: "VOID" }, billDate: { lt: from } },
+      select: { amount: true },
+    });
+    for (const b of priorBills) opening += Number(money(b.amount));
+    const priorPayments = await db.supplierPayment.findMany({
+      where: { supplierId, status: "POSTED", date: { lt: from } },
+      include: { allocations: true },
+    });
+    for (const p of priorPayments) {
+      opening -= p.allocations.reduce((a, x) => a + Number(money(x.cashApplied)) + Number(money(x.withholdingApplied)), 0);
+    }
+  }
 
   type Line =
     | { kind: "bill"; date: string; label: string; amount: string; id: string }
@@ -955,7 +996,7 @@ export async function getSupplierStatementPrintModel(
   }
   lines.sort((a, b) => a.date.localeCompare(b.date));
 
-  let running = 0;
+  let running = opening;
   const ledgerLines = lines.map((line) => {
     if (line.kind === "bill") running += Number(line.amount);
     else running -= Number(line.cash) + Number(line.ewt);
@@ -989,9 +1030,13 @@ export async function getSupplierStatementPrintModel(
       phone: null,
       email: null,
     },
-    meta: [],
+    meta: [
+      ...(from || to
+        ? [{ label: "Period", value: `${day(from ? ymd(from) : null)} – ${day(to ? ymd(to) : null)}` }]
+        : []),
+    ],
     ledger: {
-      openingBalance: "0.00",
+      openingBalance: opening.toFixed(2),
       closingBalance: closing,
       lines: ledgerLines,
     },

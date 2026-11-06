@@ -5,14 +5,19 @@ import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { customerArSnapshot } from "@/lib/billing/views";
 import { formatPeso } from "@/lib/format";
-import { editorCustomers, editorRates, editorSuppliers } from "../editor-data";
+import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../editor-data";
 import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const user = await requirePagePermission("edit_data");
   const { customer: customerParam } = await searchParams;
   const { settings } = await getSettingsSnapshot();
-  const [customers, rates, suppliers] = await Promise.all([editorCustomers(), editorRates(), editorSuppliers(user)]);
+  const [customers, rates, suppliers, staffUsers] = await Promise.all([
+    editorCustomers(),
+    editorRates(),
+    editorSuppliers(user),
+    editorStaffUsers(user.id),
+  ]);
   const today = manilaToday();
   const preset = customers.find((c) => c.id === customerParam);
   const presetAr = preset ? await customerArSnapshot(preset.id) : null;
@@ -44,9 +49,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           deliveryNotes: settings.print.deliveryNotes ?? "",
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
-        preparedByName={user.name}
-        preparedByPosition={user.position ?? null}
-        preparedSignatureUrl={user.signatureStorageKey ? `/files/user-signature/${user.id}` : null}
+        staffUsers={staffUsers}
+        preparedById={user.id}
         action={saveQuoteAction.bind(null, null)}
         cancelHref="/quotes"
         markSentAction={markQuoteSentAction}

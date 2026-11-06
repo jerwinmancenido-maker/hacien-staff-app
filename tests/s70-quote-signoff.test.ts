@@ -2,22 +2,28 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// S-70: quote sign-off — Prepared by auto-fills from the logged-in staff
-// (name + position), Approved by from the S-18 approval (name + date and
-// time), an optional uploaded signature image per user, the
-// "electronically generated, approved in HACIEN system" line, Conforme
-// staying a blank line, and an uploaded signed conforme saved on the quote.
+// S-70: quote sign-off — Prepared by is picked from staff (defaults to the
+// quote's creator; 2026-11-07 preparer picker), showing the chosen person's
+// name + position and their uploaded signature image, Approved by from the
+// S-18 approval (name + date and time), the "electronically generated,
+// approved in HACIEN system" line, Conforme staying a blank line, and an
+// uploaded signed conforme saved on the quote.
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
 describe("S-70 quote sign-off", () => {
   it("editor sign-off shows prepared position/signature and approver + time", () => {
     const src = read("src/components/docs/QuoteEditor.tsx");
-    expect(src).toContain("preparedByPosition");
-    expect(src).toContain("preparedSignatureUrl");
+    // Preparer picker (2026-11-07): the position/signature come from the
+    // chosen staff user, not from fixed creator props.
+    expect(src).toContain("staffUsers");
+    expect(src).toContain("preparedById");
+    expect(src).toContain("preparer?.position");
+    expect(src).toContain("hasSignature");
+    expect(src).toContain("/files/user-signature/");
     expect(src).toContain("approvedByName");
     expect(src).toContain("approvedAt");
-    expect(src).toContain("Electronically generated, approved in the HACIEN system.");
+    expect(src).toContain("System-generated and approved. No signature required.");
   });
 
   it("user profile has a position field and a signature upload", () => {
@@ -34,8 +40,8 @@ describe("S-70 quote sign-off", () => {
 
   it("quote print carries prepared position/signature, approver + time, and the generated line", () => {
     const views = read("src/lib/print/views.ts");
-    expect(views).toContain("quoteSignatories(q)");
-    expect(views).toContain("Electronically generated, approved in the HACIEN system.");
+    expect(views).toContain("quoteSignatories(q, preparer)");
+    expect(views).toContain("System-generated and approved. No signature required.");
     const doc = read("src/components/docs/ProfessionalPrintDocument.tsx");
     expect(doc).toContain("s.signatureUrl");
     expect(doc).toContain("doc.generatedNote");

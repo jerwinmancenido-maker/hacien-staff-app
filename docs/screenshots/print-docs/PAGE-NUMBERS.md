@@ -5,7 +5,7 @@ Print documents keep a footer row (thank-you / terms on the left, spacer in the 
 ```css
 @page {
   size: A4;
-  margin: 18mm;
+  margin: 0.25in 0.39in 0.63in;
   @bottom-center {
     content: "Page " counter(page) " of " counter(pages);
   }
