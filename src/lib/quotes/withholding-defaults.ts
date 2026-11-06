@@ -24,7 +24,6 @@
 // Rate percentages remain Unverified until an accountant confirms.
 
 import type { ItemKind, WithholdingLineKind, WithholdingSnapshot } from "./calc";
-import { BUSINESS_IS_VAT_REGISTERED } from "../tax/constants.ts";
 
 /** Staff-facing notice when the quote has no withholding pick yet. */
 export const WITHHOLDING_NOT_SET_NOTICE =
@@ -188,7 +187,9 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     lineKind: "GOV_VAT",
     rate: "0.0500",
     atcCode: "WV010/WV020",
-    active: false,
+    // Owner decision 2026-11-06: government contracts deduct 5% R-VAT even
+    // though HACIEN is Non-VAT — staff pick it per job, never auto-suggested.
+    active: true,
     sortOrder: 6,
   },
 };
@@ -381,9 +382,15 @@ export function defaultForItemKind(
   return ZERO;
 }
 
-/** Whether the business may offer the Gov VAT 5% option (existing non-VAT setting). */
-export function allowGovVatOption(businessIsVatRegistered: boolean = BUSINESS_IS_VAT_REGISTERED): boolean {
-  return businessIsVatRegistered;
+/**
+ * Whether the Gov VAT 5% option is offered as a pickable rate.
+ * Owner decision 2026-11-06: government contracts deduct 5% R-VAT (1% PO /
+ * 2% JO plus 5%) even though HACIEN is Non-VAT, so staff pick it per job.
+ * It is never part of the suggested pick (see defaultWithholdingPickFor).
+ * HACIEN's VAT registration itself is unchanged (still Non-VAT).
+ */
+export function allowGovVatOption(): boolean {
+  return true;
 }
 
 /**

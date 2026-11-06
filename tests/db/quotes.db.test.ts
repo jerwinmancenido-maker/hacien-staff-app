@@ -37,6 +37,7 @@ import { defaultWithholdingPickFor } from "@/lib/quotes/withholding-defaults";
 import { getQuotePrint, getQuoteView, getSalesOrderPrint, getSalesOrderView, listQuotesView } from "@/lib/quotes/views";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
 import { saveSettings } from "@/lib/settings";
+import { seedBase } from "@/lib/seed-base";
 import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
 /** Keys that must never reach a user without "Can see costs". */
@@ -278,10 +279,15 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(q.withholdingTotal.toFixed(2)).toBe("16600.00");
     });
 
-    it("VAT withheld 5% is inactive by default in Settings catalog", async () => {
+    it("VAT withheld 5% is active in Settings catalog (owner decision 2026-11-06)", async () => {
+      // Migrations alone leave the row inactive (Pass 3 set active=false);
+      // the base seed is what activates it on every build, so run the seed
+      // first and assert the post-seed state — otherwise this test depends
+      // on another test file having seeded the shared test DB first.
+      await seedBase(db);
       const vat = await db.withholdingRate.findUnique({ where: { code: "GOV_VAT_5" } });
       expect(vat).not.toBeNull();
-      expect(vat!.active).toBe(false);
+      expect(vat!.active).toBe(true);
       expect(vat!.label).toBe("VAT withheld 5% (WV010/WV020)");
       expect(vat!.atcCode).toBe("WV010/WV020");
     });
