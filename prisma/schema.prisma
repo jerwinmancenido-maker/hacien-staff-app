@@ -58,6 +58,7 @@ model User {
   quotesUpdated      Quote[]            @relation("QuoteUpdatedBy")
   quotesApproved     Quote[]            @relation("QuoteApprovedBy")
   quotesRejected     Quote[]            @relation("QuoteRejectedBy")
+  quotesPrepared     Quote[]            @relation("QuotePreparedBy")
   salesOrdersCreated SalesOrder[]       @relation("SalesOrderCreatedBy")
   salesOrdersUpdated SalesOrder[]       @relation("SalesOrderUpdatedBy")
   voids              DocumentVoid[]
@@ -105,6 +106,9 @@ model Session {
   revokedAt DateTime?
   ip        String?   @db.VarChar(64)
   userAgent String?   @db.VarChar(255)
+  // "Keep me signed in" (2026-11-07): remembered sessions idle out after
+  // 7 days and cap at 30 days instead of 30 minutes / 7 days. False = today.
+  rememberMe Boolean  @default(false)
 
   @@index([userId])
 }
@@ -199,6 +203,12 @@ model Customer {
   // The order texts themselves stay OFF until the go-live gate in Settings
   // (messaging.orderTextsEnabled) is turned on — see src/lib/messaging/order-texts.ts.
   orderTextUpdates   Boolean         @default(true)
+  // Modular terms (lawyer/CPA sign-off 2026-11-06): true = a private
+  // individual buying for personal use — point 6 (withholding) is omitted
+  // from their quotes. False (default) = business / organisation /
+  // government — point 6 prints. Existing customers default to business,
+  // so point 6 keeps printing for them exactly as before.
+  isIndividual       Boolean         @default(false)
   active             Boolean         @default(true)
   archivedAt         DateTime?
   createdAt          DateTime        @default(now())
@@ -674,6 +684,9 @@ model Quote {
   // tab. Null/empty = use the Settings print defaults on the print.
   deliveryNotes     String?     @db.Text
   warrantyNotes     String?     @db.Text
+  // Modular terms (lawyer/CPA sign-off 2026-11-06): estimated lead time in
+  // business days, printed in point 3. Null = no figure (no-figure variant).
+  leadTimeDays      Int?
   // Staff-only. NEVER prints. NEVER on customer-facing pages. (Brief 09)
   internalNotes     String?     @db.Text
   // Short subject / project line; prints when set.
@@ -721,6 +734,10 @@ model Quote {
   voidReason  String?   @db.Text
   createdById String
   createdBy   User      @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  // Preparer picker (2026-11-07): who prepared this quote. Null = the
+  // creator (old quotes + the default). Prints under "Prepared by".
+  preparedById String?
+  preparedBy   User?     @relation("QuotePreparedBy", fields: [preparedById], references: [id])
   updatedById String
   updatedBy   User      @relation("QuoteUpdatedBy", fields: [updatedById], references: [id])
   createdAt   DateTime  @default(now())
@@ -733,6 +750,28 @@ model Quote {
   @@index([status])
   @@index([approvalStatus])
   @@index([date])
+}
+
+// Item catalog, Step 1 (Option A): master list of products staff quote.
+// One row per product, recorded once and reused; quote/SO/PO lines keep
+// their own free-text descriptions until Steps 2–3 link them.
+model Item {
+  id               String    @id @default(cuid())
+  name             String    @db.VarChar(191)
+  brand            String?   @db.VarChar(120)
+  model            String?   @db.VarChar(120)
+  category         String?   @db.VarChar(120)
+  sku              String?   @db.VarChar(60)
+  unit             String    @db.VarChar(30)
+  kind             ItemKind  @default(GOODS)
+  details          String?   @db.Text
+  defaultUnitPrice Decimal?  @db.Decimal(15, 2)
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([active])
+  @@index([name])
 }
 
 // Items are never deleted: a line removed in the editor gets `removedAt`.
