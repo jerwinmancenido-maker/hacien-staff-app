@@ -137,37 +137,39 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
 
       <header className="pp-head">
         <CompanyLetterhead company={doc.company} />
-        <div className="pp-title-block">
-          <h1>
-            <span className="pp-title-pixel" aria-hidden="true" />
-            {doc.title}
-          </h1>
-          <table className="pp-meta">
-            <tbody>
-              <tr>
-                <th>{numberLabel}</th>
-                <td>{doc.number}</td>
-              </tr>
-              <tr>
-                <th>Date</th>
-                <td>{doc.date}</td>
-              </tr>
-              {hideStatus ? null : (
-                <tr className="pp-status-row">
-                  <th>Status</th>
-                  <td>{doc.status}</td>
-                </tr>
-              )}
-              {doc.meta.map((m) => (
-                <tr key={`${m.label}-${m.value}`}>
-                  <th>{m.label}</th>
-                  <td>{m.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </header>
+
+      {/* Letterhead Template v3: title + meta sit below the rule, title left, meta right. */}
+      <div className="pp-title-block">
+        <h1>
+          <span className="pp-title-pixel" aria-hidden="true" />
+          {doc.title}
+        </h1>
+        <table className="pp-meta">
+          <tbody>
+            <tr>
+              <th>{numberLabel}</th>
+              <td>{doc.number}</td>
+            </tr>
+            <tr>
+              <th>Date</th>
+              <td>{doc.date}</td>
+            </tr>
+            {hideStatus ? null : (
+              <tr className="pp-status-row">
+                <th>Status</th>
+                <td>{doc.status}</td>
+              </tr>
+            )}
+            {doc.meta.map((m) => (
+              <tr key={`${m.label}-${m.value}`}>
+                <th>{m.label}</th>
+                <td>{m.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <PartyBoxes party={doc.party} kind={doc.kind} hideCounterpartyTin={hideCounterpartyTin} />
 
