@@ -7,15 +7,16 @@ import { changePasswordSchema, newPasswordSchema, verifyPassword } from "@/lib/a
 import { checkLoginRateLimit, passwordChangeAttemptEmail, TOO_MANY_TRIES } from "@/lib/auth/rate-limit";
 import { createSession, currentTokenHash, destroyCurrentSession, idleRemainingMs as readIdleRemainingMs } from "@/lib/auth/session";
 import { decryptTotpSecret, verifyTotpCode } from "@/lib/auth/totp";
-import { clearPendingCookie, readPendingUserId, setPendingCookie } from "@/lib/auth/two-factor";
+import { clearPendingCookie, readPending, setPendingCookie } from "@/lib/auth/two-factor";
 import { getCurrentUser, requestMeta } from "@/lib/auth/current-user";
 import { UserRuleError, changePassword, requestPasswordReset, setPasswordWithToken } from "@/lib/services/users";
 import { ACCOUNT_OFF, RESET_SENT, WRONG_CREDENTIALS } from "@/lib/auth/messages";
-import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { bool, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
 export async function signIn(_prev: FormState, form: FormData): Promise<FormState> {
   const email = str(form, "email").trim().toLowerCase();
   const password = str(form, "password");
+  const rememberMe = bool(form, "rememberMe");
   const values = { email };
   if (!email || !password) {
     return {
@@ -63,13 +64,13 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
     await db.$transaction(async (tx) => {
       await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login_2fa_pending", ip, diff: false });
     });
-    await setPendingCookie(user.id);
+    await setPendingCookie(user.id, rememberMe);
     redirect("/login/verify");
   }
   await db.$transaction(async (tx) => {
     await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login", ip, diff: false });
   });
-  await createSession(user.id, { ip, userAgent });
+  await createSession(user.id, { ip, userAgent }, { rememberMe });
   redirect("/");
 }
 
@@ -77,8 +78,9 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
 export async function verifyTwoFactor(_prev: FormState, form: FormData): Promise<FormState> {
   const code = str(form, "code").trim();
   if (!/^\d{6}$/.test(code)) return { fieldErrors: { code: "Enter the 6-digit code from your authenticator app." } };
-  const userId = await readPendingUserId();
-  if (!userId) return { message: "Your sign-in expired. Sign in again with your password." };
+  const pending = await readPending();
+  if (!pending) return { message: "Your sign-in expired. Sign in again with your password." };
+  const userId = pending.userId;
   const { ip, userAgent } = await requestMeta();
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user || !user.active || !user.totpSecret) return { message: "Your sign-in expired. Sign in again with your password." };
@@ -100,7 +102,7 @@ export async function verifyTwoFactor(_prev: FormState, form: FormData): Promise
     await writeAudit(tx, { userId: user.id, entityType: "Session", entityId: user.id, action: "login", ip, diff: false });
   });
   await clearPendingCookie();
-  await createSession(user.id, { ip, userAgent });
+  await createSession(user.id, { ip, userAgent }, { rememberMe: pending.rememberMe });
   redirect("/");
 }
 

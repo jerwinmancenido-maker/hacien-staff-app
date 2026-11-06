@@ -10,6 +10,18 @@ export const SESSION_COOKIE = "hacien_session";
 export const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 /** Idle sign-out. Each signed-in request pushes the deadline forward by this much. */
 export const IDLE_MS = 30 * 60 * 1000;
+/** "Keep me signed in": idle sign-out for a remembered session. */
+export const REMEMBER_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+/** "Keep me signed in": absolute cap for a remembered session. */
+export const REMEMBER_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Per-session limits. A remembered session idles out after 7 days and caps
+ * at 30 days; anything else keeps today's 30-minute idle / 7-day cap.
+ */
+export function sessionLimits(rememberMe: boolean): { idleMs: number; maxMs: number } {
+  return rememberMe ? { idleMs: REMEMBER_IDLE_MS, maxMs: REMEMBER_SESSION_MS } : { idleMs: IDLE_MS, maxMs: SESSION_MS };
+}
 
 /** Next idle deadline, never past createdAt + the 7-day cap. */
 export function nextIdleExpiry(createdAt: Date, now: Date, idleMs = IDLE_MS, maxMs = SESSION_MS): Date {
@@ -28,16 +40,18 @@ export function cookieSecure(env: { NODE_ENV?: string; APP_URL?: string } = proc
   return env.NODE_ENV === "production" || /^https:/i.test((env.APP_URL ?? "").trim());
 }
 
-export async function createSession(userId: string, meta: { ip?: string; userAgent?: string }) {
+export async function createSession(userId: string, meta: { ip?: string; userAgent?: string }, opts: { rememberMe?: boolean } = {}) {
   const token = randomToken();
   const now = new Date();
-  const absolute = new Date(now.getTime() + SESSION_MS);
-  const expiresAt = nextIdleExpiry(now, now);
+  const { idleMs, maxMs } = sessionLimits(opts.rememberMe ?? false);
+  const absolute = new Date(now.getTime() + maxMs);
+  const expiresAt = nextIdleExpiry(now, now, idleMs, maxMs);
   await db.session.create({
     data: {
       tokenHash: hashToken(token),
       userId,
       expiresAt,
+      rememberMe: opts.rememberMe ?? false,
       ip: meta.ip?.slice(0, 64),
       userAgent: meta.userAgent?.slice(0, 255),
     },
@@ -64,7 +78,8 @@ export async function idleRemainingMs(): Promise<number> {
   const session = await db.session.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!session || session.revokedAt) return 0;
   const now = new Date();
-  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+  const { maxMs } = sessionLimits(session.rememberMe);
+  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now }, maxMs)) {
     await db.session.updateMany({
       where: { tokenHash: session.tokenHash, revokedAt: null },
       data: { revokedAt: now },
@@ -93,7 +108,8 @@ export async function getSessionUser() {
   });
   if (!session || session.revokedAt || !session.user.active) return null;
   const now = new Date();
-  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now })) {
+  const { idleMs, maxMs } = sessionLimits(session.rememberMe);
+  if (sessionPastIdle({ createdAt: session.createdAt, expiresAt: session.expiresAt, now }, maxMs)) {
     // Revoke only. Cookie writes are not allowed in a Server Component, and this
     // lookup runs from page renders. The row is dead, so the next render redirects
     // to login. Sign out (a Server Action) is what clears the cookie.
@@ -103,11 +119,20 @@ export async function getSessionUser() {
     });
     return null;
   }
-  const expiresAt = nextIdleExpiry(session.createdAt, now);
+  const expiresAt = nextIdleExpiry(session.createdAt, now, idleMs, maxMs);
   if (expiresAt.getTime() !== session.expiresAt.getTime()) {
     await db.session.update({ where: { id: session.id }, data: { expiresAt } });
   }
   return session.user;
+}
+
+/** The current session's limits, so the idle timer can arm for the right span. Signed out = standard limits. */
+export async function currentSessionLimits(): Promise<{ idleMs: number; maxMs: number }> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return sessionLimits(false);
+  const session = await db.session.findUnique({ where: { tokenHash: hashToken(token) }, select: { rememberMe: true } });
+  return sessionLimits(session?.rememberMe ?? false);
 }
 
 export async function destroyCurrentSession() {
