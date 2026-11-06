@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { BRAND_LETTERHEAD_LOGO, mergeCompanyLetterhead, printCompanyBlock } from "@/lib/print/company";
+import { quotePrintFixture } from "./fixtures/print-doc";
 
 const base = {
   name: "HACIEN Sample Trading Co.",
@@ -66,5 +72,31 @@ describe("brand letterhead logo", () => {
       logoStorageKey: "company-logo-abc",
     });
     expect(block.logoUrl).toBe("/files/company-logo");
+  });
+});
+
+describe("letterhead Template v3 layout", () => {
+  it("title block sits below the header rule, not inside the header", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() }),
+    );
+    const headerClose = markup.indexOf("</header>");
+    const titleBlock = markup.indexOf("pp-title-block");
+    expect(headerClose).toBeGreaterThan(-1);
+    expect(titleBlock).toBeGreaterThan(headerClose);
+    expect(markup.slice(0, headerClose)).not.toContain("pp-title-block");
+    expect(markup.slice(headerClose)).toContain("QUOTATION");
+  });
+
+  it("company details are right-aligned and the footer uses left contact / right page number", () => {
+    const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
+    expect(css).toContain(".pp-letterhead-text {\n  min-width: 0;\n  text-align: right;");
+    expect(css).toContain("justify-content: flex-end;");
+    expect((css.match(/@bottom-left \{/g) || []).length).toBe(2);
+    expect((css.match(/@bottom-right \{/g) || []).length).toBe(2);
+    expect((css.match(/@bottom-center \{/g) || []).length).toBe(0);
+    expect(css).toContain(
+      '@bottom-left {\n    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";',
+    );
   });
 });

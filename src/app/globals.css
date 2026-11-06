@@ -4295,7 +4295,13 @@ td.has-error input {
 @page {
   size: A4;
   margin: 18mm;
-  @bottom-center {
+  /* Letterhead Template v3 footer: contact line lower-left, page number lower-right. */
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
     content: "Page " counter(page) " of " counter(pages);
     font-size: 8pt;
     color: #525252;
@@ -4304,7 +4310,12 @@ td.has-error input {
 @page letter {
   size: letter;
   margin: 0.7in;
-  @bottom-center {
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
     content: "Page " counter(page) " of " counter(pages);
     font-size: 8pt;
     color: #525252;
@@ -4723,20 +4734,17 @@ button.contact-card-add {
   z-index: 0;
   text-transform: uppercase;
 }
+/* Letterhead Template v3: the header is logo left + company details right;
+   the title block sits below the rule (see .pp-title-block). */
 .pp-head {
   position: relative;
   z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
   border-bottom: 0.5pt solid var(--pp-rule);
   padding-bottom: 10px;
   min-width: 0;
 }
 .pp-letterhead {
-  flex: 1 1 auto;
   min-width: 0;
-  max-width: calc(100% - 11rem);
   font-size: 8.5pt;
   line-height: 1.35;
   color: var(--pp-label);
@@ -4744,6 +4752,7 @@ button.contact-card-add {
 .pp-letterhead-row {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   /* Gap ≥ clear space so company text never crowds the mark. */
   gap: 2.2mm;
 }
@@ -4766,7 +4775,7 @@ button.contact-card-add {
 }
 .pp-letterhead-text {
   min-width: 0;
-  text-align: left;
+  text-align: right;
 }
 .pp-company-line {
   font-size: 8.5pt;
@@ -4784,6 +4793,7 @@ button.contact-card-add {
 .pp-tin-row {
   display: flex;
   align-items: baseline;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
@@ -4803,11 +4813,15 @@ button.contact-card-add {
   color: var(--danger, #b91c1c);
   font-style: italic;
 }
+/* Title row below the header rule: title left, meta right. */
 .pp-title-block {
-  text-align: right;
-  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-top: 10px;
+  text-align: left;
   min-width: 0;
-  max-width: 40%;
 }
 .pp-title-block h1 {
   margin: 0 0 8px;
@@ -4820,7 +4834,7 @@ button.contact-card-add {
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   max-width: 100%;
   box-sizing: border-box;
@@ -5182,23 +5196,19 @@ button.contact-card-add {
     box-sizing: border-box;
   }
   /* Header stacks; money columns stay inside the page (Amount is not clipped). */
-  .pp-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  .pp-letterhead {
-    max-width: 100%;
-  }
   .pp-letterhead-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .pp-letterhead-text {
+    text-align: left;
   }
   .pp-logo {
     width: 36mm;
     max-width: 100%;
   }
   .pp-title-block {
+    flex-direction: column;
     text-align: left;
     max-width: 100%;
   }
