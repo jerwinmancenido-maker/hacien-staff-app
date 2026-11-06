@@ -106,6 +106,9 @@ model Session {
   revokedAt DateTime?
   ip        String?   @db.VarChar(64)
   userAgent String?   @db.VarChar(255)
+  // "Keep me signed in" (2026-11-07): remembered sessions idle out after
+  // 7 days and cap at 30 days instead of 30 minutes / 7 days. False = today.
+  rememberMe Boolean  @default(false)
 
   @@index([userId])
 }

@@ -16,18 +16,36 @@ function hmacKey(): string {
   return sessionSecret;
 }
 
-export function signPending(userId: string, nowMs = Date.now()): string {
-  const payload = `${userId}.${nowMs + PENDING_MS}`;
+export function signPending(userId: string, opts: { rememberMe?: boolean; nowMs?: number } = {}): string {
+  const { rememberMe = false, nowMs = Date.now() } = opts;
+  // The flag rides in the signed payload (owner 2026-11-07): "Keep me signed
+  // in" survives the two-step hop without a second cookie or a re-ask.
+  const payload = `${userId}.${rememberMe ? "1" : "0"}.${nowMs + PENDING_MS}`;
   const sig = createHmac("sha256", hmacKey()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
 
-export function verifyPending(value: string | undefined, nowMs = Date.now()): string | null {
+export function verifyPending(value: string | undefined, nowMs = Date.now()): { userId: string; rememberMe: boolean } | null {
   if (!value) return null;
   const parts = value.split(".");
-  if (parts.length !== 3) return null;
-  const [userId, exp, sig] = parts as [string, string, string];
-  const payload = `${userId}.${exp}`;
+  let userId: string;
+  let flag: string;
+  let exp: string;
+  let sig: string;
+  let payload: string;
+  if (parts.length === 3) {
+    // Issued before the remember-me flag existed; those cookies expire within
+    // 10 minutes anyway, so they carry rememberMe = false.
+    [userId, exp, sig] = parts as [string, string, string];
+    flag = "0";
+    payload = `${userId}.${exp}`;
+  } else if (parts.length === 4) {
+    [userId, flag, exp, sig] = parts as [string, string, string, string];
+    if (flag !== "0" && flag !== "1") return null;
+    payload = `${userId}.${flag}.${exp}`;
+  } else {
+    return null;
+  }
   const expected = createHmac("sha256", hmacKey()).update(payload).digest("base64url");
   try {
     if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
@@ -35,12 +53,12 @@ export function verifyPending(value: string | undefined, nowMs = Date.now()): st
     return null;
   }
   if (Number(exp) <= nowMs) return null;
-  return userId;
+  return { userId, rememberMe: flag === "1" };
 }
 
-export async function setPendingCookie(userId: string): Promise<void> {
+export async function setPendingCookie(userId: string, rememberMe = false): Promise<void> {
   const jar = await cookies();
-  jar.set(TWO_FACTOR_COOKIE, signPending(userId), {
+  jar.set(TWO_FACTOR_COOKIE, signPending(userId, { rememberMe }), {
     httpOnly: true,
     sameSite: "lax",
     path: "/login/verify",
@@ -53,7 +71,7 @@ export async function clearPendingCookie(): Promise<void> {
   jar.set(TWO_FACTOR_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/login/verify", maxAge: 0 });
 }
 
-export async function readPendingUserId(): Promise<string | null> {
+export async function readPending(): Promise<{ userId: string; rememberMe: boolean } | null> {
   const jar = await cookies();
   return verifyPending(jar.get(TWO_FACTOR_COOKIE)?.value);
 }
