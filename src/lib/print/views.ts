@@ -913,6 +913,8 @@ export async function getCustomerStatementPrintModel(
 export async function getSupplierStatementPrintModel(
   supplierId: string,
   viewer: PermissionUser,
+  from?: Date | null,
+  to?: Date | null,
 ): Promise<{ doc: ProfessionalPrintModel; missing: string[] } | null> {
   assertCosts(viewer);
   const supplier = await db.supplier.findUnique({
@@ -923,16 +925,48 @@ export async function getSupplierStatementPrintModel(
   });
   if (!supplier) return null;
   const letter = await letterhead();
+  // Date filter (2026-11-07, owner-approved): same from/to convention as the
+  // customer statement — no dates means all-time, as before.
   const bills = await db.supplierBill.findMany({
-    where: { supplierId, status: { not: "VOID" } },
+    where: {
+      supplierId,
+      status: { not: "VOID" },
+      ...(from || to
+        ? { billDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
+    },
     include: { allocations: { where: { supplierPayment: { status: "POSTED" } } } },
     orderBy: [{ billDate: "asc" }, { createdAt: "asc" }],
   });
   const payments = await db.supplierPayment.findMany({
-    where: { supplierId, status: "POSTED" },
+    where: {
+      supplierId,
+      status: "POSTED",
+      ...(from || to
+        ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
+    },
     include: { allocations: true },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
+
+  // Opening balance: bills before `from` minus payments before `from`, so a
+  // filtered statement still starts from what was really owed.
+  let opening = 0;
+  if (from) {
+    const priorBills = await db.supplierBill.findMany({
+      where: { supplierId, status: { not: "VOID" }, billDate: { lt: from } },
+      select: { amount: true },
+    });
+    for (const b of priorBills) opening += Number(money(b.amount));
+    const priorPayments = await db.supplierPayment.findMany({
+      where: { supplierId, status: "POSTED", date: { lt: from } },
+      include: { allocations: true },
+    });
+    for (const p of priorPayments) {
+      opening -= p.allocations.reduce((a, x) => a + Number(money(x.cashApplied)) + Number(money(x.withholdingApplied)), 0);
+    }
+  }
 
   type Line =
     | { kind: "bill"; date: string; label: string; amount: string; id: string }
@@ -962,7 +996,7 @@ export async function getSupplierStatementPrintModel(
   }
   lines.sort((a, b) => a.date.localeCompare(b.date));
 
-  let running = 0;
+  let running = opening;
   const ledgerLines = lines.map((line) => {
     if (line.kind === "bill") running += Number(line.amount);
     else running -= Number(line.cash) + Number(line.ewt);
@@ -996,9 +1030,13 @@ export async function getSupplierStatementPrintModel(
       phone: null,
       email: null,
     },
-    meta: [],
+    meta: [
+      ...(from || to
+        ? [{ label: "Period", value: `${day(from ? ymd(from) : null)} – ${day(to ? ymd(to) : null)}` }]
+        : []),
+    ],
     ledger: {
-      openingBalance: "0.00",
+      openingBalance: opening.toFixed(2),
       closingBalance: closing,
       lines: ledgerLines,
     },
