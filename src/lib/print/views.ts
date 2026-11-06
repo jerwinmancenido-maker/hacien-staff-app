@@ -255,7 +255,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
     signatories: quoteSignatories(q, preparer),
     // S-70: only an approved quote may claim approval on the print.
-    generatedNote: q.approvalStatus === "APPROVED" ? "Electronically generated, approved in the HACIEN system." : null,
+    generatedNote: q.approvalStatus === "APPROVED" ? "System-generated and approved. No signature required." : null,
     ...footer,
     thankYou: true,
   };

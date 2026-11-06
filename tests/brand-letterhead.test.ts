@@ -99,4 +99,11 @@ describe("letterhead Template v3 layout", () => {
       '@bottom-left {\n    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";',
     );
   });
+
+  it("letterhead address wraps in balanced lines, not one long line plus a short tail", () => {
+    const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
+    const start = css.indexOf(".pp-letterhead-text .pp-pre {");
+    expect(start).toBeGreaterThan(-1);
+    expect(css.slice(start, start + 300)).toContain("text-wrap: balance;");
+  });
 });

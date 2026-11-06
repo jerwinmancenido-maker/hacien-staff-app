@@ -23,7 +23,7 @@ describe("S-70 quote sign-off", () => {
     expect(src).toContain("/files/user-signature/");
     expect(src).toContain("approvedByName");
     expect(src).toContain("approvedAt");
-    expect(src).toContain("Electronically generated, approved in the HACIEN system.");
+    expect(src).toContain("System-generated and approved. No signature required.");
   });
 
   it("user profile has a position field and a signature upload", () => {
@@ -41,7 +41,7 @@ describe("S-70 quote sign-off", () => {
   it("quote print carries prepared position/signature, approver + time, and the generated line", () => {
     const views = read("src/lib/print/views.ts");
     expect(views).toContain("quoteSignatories(q, preparer)");
-    expect(views).toContain("Electronically generated, approved in the HACIEN system.");
+    expect(views).toContain("System-generated and approved. No signature required.");
     const doc = read("src/components/docs/ProfessionalPrintDocument.tsx");
     expect(doc).toContain("s.signatureUrl");
     expect(doc).toContain("doc.generatedNote");

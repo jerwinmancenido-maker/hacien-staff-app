@@ -4780,6 +4780,12 @@ button.contact-card-add {
   min-width: 0;
   text-align: right;
 }
+.pp-letterhead-text .pp-pre {
+  /* Balance the address wrap so the last line is not left short
+     (owner 2026-11-07: "Unit D … Pasig City," filled line 1 and only
+     "Metro Manila 1605" was left on line 2). */
+  text-wrap: balance;
+}
 .pp-company-line {
   font-size: 8.5pt;
   font-weight: 600;
@@ -4816,18 +4822,19 @@ button.contact-card-add {
   color: var(--danger, #b91c1c);
   font-style: italic;
 }
-/* Title row below the header rule: title left, meta right. */
+/* Title block below the header rule: big title on top, meta below it,
+   both right-aligned (owner 2026-11-07). */
 .pp-title-block {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   margin-top: 10px;
-  text-align: left;
+  text-align: right;
   min-width: 0;
 }
 .pp-title-block h1 {
-  margin: 0 0 8px auto;
+  margin: 0;
   font-family: var(--font-display);
   font-size: 18pt;
   text-transform: uppercase;
@@ -5056,6 +5063,12 @@ button.contact-card-add {
   margin: 0 0 4px;
   box-sizing: border-box;
 }
+.pp-sign-line--blank {
+  /* Same slot, no rule: for electronically generated signatories
+     (Prepared by / Approved by) so their labels stay aligned with
+     Conforme's line. */
+  border-bottom: none;
+}
 .pp-sign-role {
   font-weight: 600;
   text-transform: uppercase;
@@ -5213,11 +5226,11 @@ button.contact-card-add {
   }
   .pp-title-block {
     flex-direction: column;
+    align-items: flex-start;
     text-align: left;
     max-width: 100%;
   }
   .pp-title-block h1 {
-    order: -1;
     margin-left: 0;
     justify-content: flex-start;
     text-align: left;

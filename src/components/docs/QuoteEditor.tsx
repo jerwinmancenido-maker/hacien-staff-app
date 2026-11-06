@@ -1439,7 +1439,7 @@ export function QuoteEditor({
                   <div className="small faint">Name and signature</div>
                 </div>
               </div>
-              <div className="hint">Pick who prepared this quote — the name prints under Prepared by. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. Electronically generated, approved in the HACIEN system.</div>
+              <div className="hint">Pick who prepared this quote — the name prints under Prepared by. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. System-generated and approved. No signature required.</div>
               <p className="right small muted">{totalsSummary}</p>
             </div>
           )}

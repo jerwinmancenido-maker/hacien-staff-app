@@ -84,7 +84,23 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={s.signatureUrl} alt="" aria-hidden="true" style={{ maxHeight: 56, marginBottom: 2 }} />
             ) : null}
-            <div className="pp-sign-line" aria-hidden="true" />
+            {/* A signature line only where a hand signs: Conforme (the customer
+                signs to accept) and Received by (someone signs to acknowledge
+                receipt — on most documents the name is blank, so there is
+                nothing printed to stand as the signature). Prepared by /
+                Approved by are electronically generated — the printed name
+                (plus the uploaded signature image when the person has one)
+                is the signature, so a blank line would look unsigned
+                (owner 2026-11-07). The blank slot keeps the role labels
+                aligned with the lined ones. */}
+            <div
+              className={
+                s.role === "Conforme" || s.role === "Received by"
+                  ? "pp-sign-line"
+                  : "pp-sign-line pp-sign-line--blank"
+              }
+              aria-hidden="true"
+            />
             <div className="pp-sign-role">{s.role}</div>
             <div className="pp-sign-name">{name ?? "\u00a0"}</div>
             {s.role === "Prepared by" && <div className="pp-sign-position">{position ?? "\u00a0"}</div>}
@@ -140,9 +156,15 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       </header>
 
       {/* Letterhead Template v3: title + meta sit below the rule.
-          Title on the RIGHT, meta on the left (owner 2026-11-07;
-          the Template v3 doc shows the title on the left). */}
+          Big title on TOP, meta below it, both right-aligned
+          (owner 2026-11-07; the Template v3 doc shows the title on the
+          left with the meta beside it, and the earlier title-right
+          change had them side by side). */}
       <div className="pp-title-block">
+        <h1>
+          <span className="pp-title-pixel" aria-hidden="true" />
+          {doc.title}
+        </h1>
         <table className="pp-meta">
           <tbody>
             <tr>
@@ -167,10 +189,6 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
             ))}
           </tbody>
         </table>
-        <h1>
-          <span className="pp-title-pixel" aria-hidden="true" />
-          {doc.title}
-        </h1>
       </div>
 
       <PartyBoxes party={doc.party} kind={doc.kind} hideCounterpartyTin={hideCounterpartyTin} />
