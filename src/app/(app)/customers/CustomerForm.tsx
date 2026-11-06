@@ -7,7 +7,7 @@ import { formatAddress } from "@/lib/addresses/format";
 import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { Field } from "@/components/Field";
 import { BIR2303Upload } from "@/components/customers/BIR2303Upload";
-import type { Prefill } from "@/components/customers/BIR2303Upload";
+import type { Prefill } from "@/lib/2303/prefill";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { defaultWithholdingPickFor, parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
@@ -51,6 +51,10 @@ export function CustomerForm({
   const [tin, setTin] = useState(canSeeTin ? v("tin") : "");
   const [notes, setNotes] = useState(v("notes"));
   const [street, setStreet] = useState(state.values?.street ?? "");
+  const [barangay, setBarangay] = useState(state.values?.barangay ?? "");
+  const [cityMunicipality, setCityMunicipality] = useState(state.values?.cityMunicipality ?? "");
+  const [province, setProvince] = useState(state.values?.province ?? "");
+  const [zip, setZip] = useState(state.values?.zip ?? "");
   const [withholding, setWithholding] = useState(v("withholdingType"));
   const initialPick =
     state.values?.defaultWithholding !== undefined
@@ -82,6 +86,10 @@ export function CustomerForm({
     if (prefill.name && !name.trim()) setName(prefill.name);
     if (prefill.tin && canSeeTin && !tin.trim()) setTin(prefill.tin);
     if (prefill.street && !street.trim()) setStreet(prefill.street);
+    if (prefill.barangay && !barangay.trim()) setBarangay(prefill.barangay);
+    if (prefill.cityMunicipality && !cityMunicipality.trim()) setCityMunicipality(prefill.cityMunicipality);
+    if (prefill.province && !province.trim()) setProvince(prefill.province);
+    if (prefill.zip && !zip.trim()) setZip(prefill.zip);
     if (prefill.notes && !notes.trim()) setNotes(prefill.notes);
   }
 
@@ -111,8 +119,8 @@ export function CustomerForm({
           <Field label="Name" name="name" required error={e.name} full>
             <input id="name" name="name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} />
           </Field>
-          <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-000 · branch code optional">
-            <input id="tin" name="tin" type="text" value={tin} onChange={(ev) => setTin(ev.target.value)} inputMode="numeric" placeholder="000-000-000-000" />
+          <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-00000 · branch code optional (3 or 5 digits)">
+            <input id="tin" name="tin" type="text" value={tin} onChange={(ev) => setTin(ev.target.value)} inputMode="numeric" placeholder="000-000-000-00000" maxLength={17} />
           </Field>
           <Field
             label={WITHHOLDING_TYPE_FIELD_LABEL}
@@ -225,16 +233,16 @@ export function CustomerForm({
             <textarea id="street" name="street" rows={2} value={street} onChange={(ev) => setStreet(ev.target.value)} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
           </Field>
           <Field label="Barangay" name="barangay" error={e.barangay}>
-            <input id="barangay" name="barangay" type="text" defaultValue={state.values?.barangay ?? ""} placeholder="San Antonio" />
+            <input id="barangay" name="barangay" type="text" value={barangay} onChange={(ev) => setBarangay(ev.target.value)} placeholder="San Antonio" />
           </Field>
           <Field label="City / municipality" name="cityMunicipality" error={e.cityMunicipality}>
-            <input id="cityMunicipality" name="cityMunicipality" type="text" defaultValue={state.values?.cityMunicipality ?? ""} placeholder="Pasig" />
+            <input id="cityMunicipality" name="cityMunicipality" type="text" value={cityMunicipality} onChange={(ev) => setCityMunicipality(ev.target.value)} placeholder="Pasig" />
           </Field>
           <Field label="Province" name="province" error={e.province} hint="Metro Manila for NCR cities">
-            <input id="province" name="province" type="text" defaultValue={state.values?.province ?? ""} placeholder="Metro Manila" />
+            <input id="province" name="province" type="text" value={province} onChange={(ev) => setProvince(ev.target.value)} placeholder="Metro Manila" />
           </Field>
           <Field label="ZIP code" name="zip" error={e.zip}>
-            <input id="zip" name="zip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" defaultValue={state.values?.zip ?? ""} placeholder="1605" />
+            <input id="zip" name="zip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" value={zip} onChange={(ev) => setZip(ev.target.value)} placeholder="1605" />
           </Field>
 
           {!sameAsBilling && (

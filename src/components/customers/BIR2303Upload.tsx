@@ -10,12 +10,11 @@
 
 import { useState } from "react";
 import { FileInput } from "@/components/FileInput";
-import type { Parsed2303Field, Structured2303, StructureUsage } from "@/lib/2303/claude";
-
-export type Prefill = { name?: string; tin?: string; street?: string; notes?: string };
+import type { Structured2303, StructureUsage } from "@/lib/2303/claude";
+import { buildPrefill } from "@/lib/2303/prefill";
+import type { Filled, Prefill } from "@/lib/2303/prefill";
 
 type AiStatus = { available: boolean; error?: string };
-type Filled = { label: string; value: string; confidence: "high" | "medium" };
 
 type State =
   | { status: "idle" }
@@ -54,16 +53,6 @@ const SOURCE_LABEL = {
   "pdf-ocr": "(from the scanned PDF)",
 } as const;
 
-function fillable(field: Parsed2303Field): string | null {
-  return field.value && field.confidence !== "low" ? field.value : null;
-}
-
-function leftBlankReason(label: string, field: Parsed2303Field): string {
-  if (!field.value) return `${label} — not on the certificate`;
-  if (field.confidence === "low") return `${label} — low confidence, check the text and type it in`;
-  return `${label} — not filled in`;
-}
-
 export function BIR2303Upload({ onPrefill }: { onPrefill?: (prefill: Prefill) => void }) {
   const [state, setState] = useState<State>({ status: "idle" });
 
@@ -95,36 +84,13 @@ export function BIR2303Upload({ onPrefill }: { onPrefill?: (prefill: Prefill) =>
       return;
     }
     const fields = body.fields;
-    const filled: Filled[] = [];
-    const leftBlank: string[] = [];
-    const prefill: Prefill = {};
+    let filled: Filled[] = [];
+    let leftBlank: string[] = [];
     if (fields) {
-      const name = fillable(fields.registeredName);
-      if (name) {
-        filled.push({ label: "Name", value: name, confidence: fields.registeredName.confidence as "high" | "medium" });
-        prefill.name = name;
-      } else leftBlank.push(leftBlankReason("Name", fields.registeredName));
-      const tin = fillable(fields.tin);
-      if (tin) {
-        filled.push({ label: "TIN", value: tin, confidence: fields.tin.confidence as "high" | "medium" });
-        prefill.tin = tin;
-      } else leftBlank.push(leftBlankReason("TIN", fields.tin));
-      const street = fillable(fields.registeredAddress);
-      if (street) {
-        filled.push({ label: "Address", value: street, confidence: fields.registeredAddress.confidence as "high" | "medium" });
-        prefill.street = street;
-      } else leftBlank.push(leftBlankReason("Address", fields.registeredAddress));
-      const tradeName = fillable(fields.tradeName);
-      const sameAsRegistered =
-        !!tradeName && !!fields.registeredName.value && tradeName.trim().toLowerCase() === fields.registeredName.value.trim().toLowerCase();
-      if (tradeName && !sameAsRegistered) {
-        const notes = `Trade name: ${tradeName}`;
-        filled.push({ label: "Notes", value: notes, confidence: fields.tradeName.confidence as "high" | "medium" });
-        prefill.notes = notes;
-      } else if (fields.tradeName.value) {
-        // Same as the registered name, or low confidence: nothing to add.
-      }
-      if (Object.keys(prefill).length > 0) onPrefill?.(prefill);
+      const mapped = buildPrefill(fields);
+      filled = mapped.filled;
+      leftBlank = mapped.leftBlank;
+      if (Object.keys(mapped.prefill).length > 0) onPrefill?.(mapped.prefill);
     }
     setState({
       status: "done",
