@@ -4286,7 +4286,10 @@ td.has-error input {
   vertical-align: top;
 }
 
-/* A4 printable area: 18mm margins (brand kit). Browser date/title/URL chrome is
+/* Printable area: Letterhead Template v3 page setup (A4, portrait).
+   Top margin 1.5in holds the in-flow header (0.25in from the top edge);
+   sides 0.39in; bottom 0.63in (footer 0.25in from the bottom edge).
+   Browser date/title/URL chrome is
    off via the print dialog / --no-pdf-header-footer — not via empty @top/@bottom.
    Page numbers use @page margin boxes (counter(pages) resolves there). An
    in-flow .pp-page-num::after with counter(pages) paints "Page 0 of 0" in
@@ -4294,7 +4297,7 @@ td.has-error input {
    See docs/screenshots/print-docs/PAGE-NUMBERS.md. */
 @page {
   size: A4;
-  margin: 18mm;
+  margin: 0.25in 0.39in 0.63in;
   /* Letterhead Template v3 footer: contact line lower-left, page number lower-right. */
   @bottom-left {
     content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
@@ -4309,7 +4312,7 @@ td.has-error input {
 }
 @page letter {
   size: letter;
-  margin: 0.7in;
+  margin: 0.25in 0.39in 0.63in;
   @bottom-left {
     content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
@@ -4338,7 +4341,7 @@ td.has-error input {
     display: none !important;
   }
   /* Sheet sizing (width/padding) is owned by the trailing @media print after
-     .pp-page { width:210mm; padding:18mm } — do not reset width/padding here. */
+     .pp-page { width:210mm; padding:0.25in 0.39in 0.63in } — do not reset width/padding here. */
   .print-page,
   .pp-page {
     break-after: auto;
@@ -4701,7 +4704,7 @@ button.contact-card-add {
   min-height: 297mm;
   margin: 0 auto;
   background: var(--white, #fff);
-  padding: 18mm;
+  padding: 0.25in 0.39in 0.63in;
   box-sizing: border-box;
   box-shadow: var(--shadow-frame);
   font-size: 9.5pt;
@@ -4716,7 +4719,7 @@ button.contact-card-add {
 .print-shell-letter .pp-page {
   width: 8.5in;
   min-height: 11in;
-  padding: 0.7in;
+  padding: 0.25in 0.39in 0.63in;
   box-sizing: border-box;
 }
 .pp-watermark {
@@ -5132,9 +5135,9 @@ button.contact-card-add {
 }
 
 /*
- * MUST come after .pp-page { width:210mm; padding:18mm } above.
+ * MUST come after .pp-page { width:210mm; padding:0.25in 0.39in 0.63in } above.
  * An earlier @media print block cannot win the cascade; without this trailing
- * override, print keeps a full-sheet width + padding inside @page's 18mm
+ * override, print keeps a full-sheet width + padding inside @page's Template v3
  * margins, Chrome scales the box down, and one side looks emptier than the other.
  */
 @media print {

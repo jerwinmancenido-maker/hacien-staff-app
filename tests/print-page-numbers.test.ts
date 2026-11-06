@@ -8,7 +8,7 @@ describe("Page X of Y CSS", () => {
   it("uses @page margins; page nums in @bottom-right, contact line in @bottom-left (no browser chrome boxes)", () => {
     expect(css).toContain("@page {");
     expect(css).toContain("size: A4");
-    expect(css).toContain("margin: 18mm");
+    expect(css).toContain("margin: 0.25in 0.39in 0.63in");
     // Custom page label only — not Chrome's date/URL @top/@bottom chrome (dialog / --no-pdf-header-footer).
     expect(css).toContain("@bottom-right");
     expect(css).toContain("@bottom-left");
