@@ -278,10 +278,10 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(q.withholdingTotal.toFixed(2)).toBe("16600.00");
     });
 
-    it("VAT withheld 5% is inactive by default in Settings catalog", async () => {
+    it("VAT withheld 5% is active in Settings catalog (owner decision 2026-11-06)", async () => {
       const vat = await db.withholdingRate.findUnique({ where: { code: "GOV_VAT_5" } });
       expect(vat).not.toBeNull();
-      expect(vat!.active).toBe(false);
+      expect(vat!.active).toBe(true);
       expect(vat!.label).toBe("VAT withheld 5% (WV010/WV020)");
       expect(vat!.atcCode).toBe("WV010/WV020");
     });
