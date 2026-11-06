@@ -42,3 +42,22 @@ describe("extractText", () => {
     await expect(extractText(bytes, "application/pdf")).rejects.toThrow(/could not be read/);
   });
 });
+
+describe("extractText on a scanned PDF", () => {
+  it("renders the pages and OCRs them (first 3 pages only)", async () => {
+    // The fixture is stored base64 (push-files rejects binary files).
+    const pdf = Buffer.from(
+      readFileSync(join(process.cwd(), "tests", "fixtures", "2303-scanned-sample.pdf.b64"), "utf8").replace(/\s/g, ""),
+      "base64",
+    );
+    const { text, source } = await extractText(new Uint8Array(pdf), "application/pdf");
+    expect(source).toBe("pdf-ocr");
+    expect(text).toContain("FAKE SCANNED 2303 PAGE ONE");
+    expect(text).toContain("FAKE SCANNED COMPANY");
+    expect(text).toContain("111-222-333-000");
+    expect(text).toContain("FAKE SCANNED 2303 PAGE TWO");
+    expect(text).toContain("FAKE SCANNED 2303 PAGE THREE");
+    expect(text).not.toContain("PAGE FOUR");
+    expect(text).not.toContain("SHOULD NOT BE READ");
+  }, 180_000);
+});

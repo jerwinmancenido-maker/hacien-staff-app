@@ -56,7 +56,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 }
 
 export type ExtractMime = "application/pdf" | "image/jpeg" | "image/png";
-export type ExtractedText = { text: string; source: "pdf" | "ocr" };
+export type ExtractedText = { text: string; source: "pdf" | "ocr" | "pdf-ocr" };
 
 /** pdf-parse appends a "-- N of N --" marker after each page; drop those lines. */
 export function cleanPdfText(text: string): string {
@@ -77,13 +77,12 @@ export function tessdataDir(dir: string = uploadDir()): string {
   return path.join(dir, "tessdata");
 }
 
-async function extractPdf(bytes: Uint8Array): Promise<string> {
+async function extractPdf(bytes: Uint8Array, pdfWorkerSrc: string): Promise<string> {
   // workerSrc: pdf.js's fake worker loads this file with a native dynamic
   // import. Its bundled default points into .next/server/chunks, where
   // the file does not exist ("Setting up fake worker failed"). Set it
   // once per call (it is global state in pdf.js, idempotent).
-  const pdfWorker = findInstalledPath("pdfjs-dist", "legacy", "build", "pdf.worker.mjs");
-  PDFParse.setWorker(pathToFileURL(pdfWorker).href);
+  PDFParse.setWorker(pdfWorkerSrc);
   const parser = new PDFParse({ data: bytes });
   try {
     const { text } = await parser.getText();
@@ -98,10 +97,11 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
   }
 }
 
-async function extractOcr(bytes: Uint8Array): Promise<string> {
+/** The OCR worker, with the same path fixes as the photo read. */
+async function createOcrWorker() {
   await mkdir(tessdataDir(), { recursive: true });
   // workerPath: tesseract's node default resolves its worker script
-  // against a bundled `__dirname` of /ROOT, so the worker never starts
+  // against a bundled `__dirname` of `/ROOT`, so the worker never starts
   // and the request hangs until the host kills it. Point at the real
   // file. langPath: the English traineddata ships in the
   // @tesseract.js-data/eng package (installed with the app), so the
@@ -114,31 +114,77 @@ async function extractOcr(bytes: Uint8Array): Promise<string> {
   // Two separate caps with distinct messages: on staging the photo read
   // times out, and the stage that timed out is the diagnosis (worker
   // that never starts vs a read that never finishes).
-  const worker = await withTimeout(
+  return withTimeout(
     createWorker("eng", undefined, { cachePath: tessdataDir(), workerPath, langPath }),
     25_000,
     "The photo reader did not start. Type the details manually.",
   );
+}
+
+async function recognizePage(worker: Awaited<ReturnType<typeof createWorker>>, bytes: Uint8Array): Promise<string> {
+  const { data } = await withTimeout(
+    worker.recognize(Buffer.from(bytes)),
+    60_000,
+    "The photo reader started but did not finish reading. Type the details manually.",
+  );
+  return data.text.trim();
+}
+
+async function extractOcr(bytes: Uint8Array): Promise<string> {
+  const worker = await createOcrWorker();
   try {
-    const { data } = await withTimeout(
-      worker.recognize(Buffer.from(bytes)),
-      60_000,
-      "The photo reader started but did not finish reading. Type the details manually.",
-    );
-    return data.text.trim();
+    return await recognizePage(worker, bytes);
   } finally {
     await worker.terminate();
   }
 }
 
-export async function extractText(bytes: Uint8Array, mime: ExtractMime): Promise<ExtractedText> {
-  if (bytes.byteLength === 0) throw new Error("The file is empty.");
-  if (mime === "application/pdf") {
-    const text = await extractPdf(bytes);
-    if (!text) throw new Error("No text could be read from this PDF. It may be a scanned image — upload a photo instead, or type the details manually.");
-    return { text, source: "pdf" };
+/**
+ * Scanned PDF: no text layer, so the text read came back empty. Render
+ * the first pages to images and OCR them with the photo reader. Any
+ * failure here returns "" — the caller reports the same "upload a photo
+ * instead" message as before, so a scanned PDF that still can't be read
+ * behaves exactly as it did before this fallback existed.
+ */
+async function extractScannedPdf(bytes: Uint8Array, pdfWorkerSrc: string): Promise<string> {
+  const { renderPdfPages } = await import("./render");
+  try {
+    const pages = await withTimeout(renderPdfPages(bytes, pdfWorkerSrc), 60_000, "render timeout");
+    if (pages.length === 0) return "";
+    const worker = await createOcrWorker();
+    try {
+      const texts: string[] = [];
+      for (const page of pages) {
+        texts.push(await recognizePage(worker, new Uint8Array(page)));
+      }
+      return texts.filter(Boolean).join("\n\n");
+    } finally {
+      await worker.terminate();
+    }
+  } catch {
+    return "";
   }
-  const text = await extractOcr(bytes);
+}
+
+export async function extractText(bytes: Uint8Array, mime: ExtractMime): Promise<ExtractedText> {
+  // pdf.js rejects a Node Buffer outright ("provide binary data as
+  // `Uint8Array`, rather than `Buffer`") — and readFile / the upload
+  // path hand us Buffers. Normalize once: a plain Uint8Array works
+  // everywhere below (pdf-parse, pdf.js, tesseract).
+  const data = Uint8Array.from(bytes);
+  if (data.byteLength === 0) throw new Error("The file is empty.");
+  if (mime === "application/pdf") {
+    const pdfWorkerSrc = pathToFileURL(findInstalledPath("pdfjs-dist", "legacy", "build", "pdf.worker.mjs")).href;
+    const text = await extractPdf(data, pdfWorkerSrc);
+    if (text) return { text, source: "pdf" };
+    // No text layer — a scanned PDF. Render the pages and OCR them.
+    // Pass the ORIGINAL bytes: the text read above transfers (detaches)
+    // `data`'s ArrayBuffer to the pdf.js worker, so `data` is unusable now.
+    const scanned = await extractScannedPdf(bytes, pdfWorkerSrc);
+    if (scanned) return { text: scanned, source: "pdf-ocr" };
+    throw new Error("No text could be read from this PDF. It may be a scanned image — upload a photo instead, or type the details manually.");
+  }
+  const text = await extractOcr(data);
   if (!text) throw new Error("No text could be read from this photo. Try a clearer, straighter photo, or type the details manually.");
   return { text, source: "ocr" };
 }
