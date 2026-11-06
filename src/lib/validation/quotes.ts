@@ -133,6 +133,11 @@ const quoteInputObject = z.object({
       .optional()
       .transform((v) => v ?? null),
     /**
+     * Preparer picker (2026-11-07): staff user printed under "Prepared by".
+     * Omitted on update → keep the stored preparer; null → the creator.
+     */
+    preparedById: optionalId,
+    /**
      * Quote-level withholding pick (codes from Settings → Withholding).
      * null = not set; [] = explicit none; [codes] = picks.
      * Omitted on update → keep the stored pick.
@@ -187,13 +192,15 @@ export function quoteInputSchemaForSave(
   return quoteInputSchema;
 }
 /** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
-export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo" | "deliveryNotes" | "warrantyNotes"> & {
+export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo" | "deliveryNotes" | "warrantyNotes" | "preparedById"> & {
   internalNotes?: string | null;
   subject?: string | null;
   buyerPoNo?: string | null;
   deliveryNotes?: string | null;
   warrantyNotes?: string | null;
   validForDays?: number;
+  /** Preparer picker: omitted → keep the stored preparer (create: the creator). */
+  preparedById?: string | null;
 };
 
 export const convertInputSchema = z.object({

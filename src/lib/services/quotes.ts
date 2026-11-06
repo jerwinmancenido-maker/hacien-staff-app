@@ -153,6 +153,12 @@ export async function checkSuppliers(items: readonly Pick<ItemInput, "supplierId
   if (found !== ids.length) throw new DocRuleError("One of the suppliers no longer exists. Pick again.", "items");
 }
 
+/** Preparer picker: the chosen preparer must be a real, active staff user. */
+async function checkPreparedBy(id: string) {
+  const found = await db.user.count({ where: { id, active: true } });
+  if (found !== 1) throw new DocRuleError("Pick a staff member to prepare this quote.", "preparedById");
+}
+
 // ---------------------------------------------------------------------------
 // Create / edit
 // ---------------------------------------------------------------------------
@@ -163,6 +169,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const snap = await getSettingsSnapshot();
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
+  // Preparer picker: the chosen preparer, else the creator.
+  const preparedById = input.preparedById ?? actor.id;
+  await checkPreparedBy(preparedById);
 
   // Copy the customer's saved pick unless the payload overrides it.
   const customerPick = parseWithholdingPick(customer.defaultWithholding);
@@ -215,6 +224,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
           createdById: actor.id,
+          preparedById,
           updatedById: actor.id,
           items: { create: items.map(itemData) },
         },
@@ -272,6 +282,7 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           netMargin: original.netMargin,
           netMarginPct: original.netMarginPct,
           createdById: actor.id,
+          preparedById: actor.id,
           updatedById: actor.id,
           items: {
             create: original.items.map((item) => ({
@@ -307,6 +318,17 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   if (!current) throw new DocRuleError("Quote not found.");
   await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
+  // Preparer picker: omitted → keep the stored preparer; null → back to the
+  // creator; a NEW value must be an active staff user. The stored preparer
+  // may have been turned off since — saving without changing it stays valid.
+  const preparedByData: { preparedById?: string | null } = {};
+  if (input.preparedById !== undefined) {
+    if (input.preparedById === null) preparedByData.preparedById = null;
+    else if (input.preparedById !== current.preparedById) {
+      await checkPreparedBy(input.preparedById);
+      preparedByData.preparedById = input.preparedById;
+    }
+  }
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -422,6 +444,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
           ...(resetApproval ? quoteApprovalClearData() : {}),
+          ...preparedByData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
