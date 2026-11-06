@@ -22,6 +22,16 @@ export type Structured2303 = {
   /** Branch code as printed on the 2303, e.g. "000". Folded into tin. */
   branchCode: Parsed2303Field;
   registeredAddress: Parsed2303Field;
+  /**
+   * The registered address split into its parts. Each part is null when
+   * it is not on the certificate or cannot be separated confidently —
+   * the full registeredAddress string is always the fallback.
+   */
+  addressStreet: Parsed2303Field;
+  addressBarangay: Parsed2303Field;
+  addressCity: Parsed2303Field;
+  addressProvince: Parsed2303Field;
+  addressZip: Parsed2303Field;
   tradeName: Parsed2303Field;
   rdo: Parsed2303Field;
   dateRegistered: Parsed2303Field;
@@ -38,6 +48,11 @@ const structuredSchema = z.object({
   tin: fieldSchema,
   branchCode: fieldSchema,
   registeredAddress: fieldSchema,
+  addressStreet: fieldSchema.optional(),
+  addressBarangay: fieldSchema.optional(),
+  addressCity: fieldSchema.optional(),
+  addressProvince: fieldSchema.optional(),
+  addressZip: fieldSchema.optional(),
   tradeName: fieldSchema,
   rdo: fieldSchema,
   dateRegistered: fieldSchema,
@@ -45,9 +60,14 @@ const structuredSchema = z.object({
 
 const PROMPT = `You read the text of a Philippine BIR Certificate of Registration (Form 2303). Return ONLY a JSON object, no markdown fences, no other text, with exactly these fields. Each field is {"value": string or null, "confidence": "high" | "medium" | "low"}.
 - registeredName: the registered name of the taxpayer.
-- tin: the Tax Identification Number, digits and dashes as printed (9 digits; do not add a branch code here).
-- branchCode: the branch code printed with the TIN, if any (usually "000"); null when the certificate shows none.
+- tin: the Tax Identification Number, 9 digits, digits and dashes as printed; do not add a branch code here.
+- branchCode: the branch code printed with the TIN, if any (3 or 5 digits, usually "000"); null when the certificate shows none.
 - registeredAddress: the registered address as one full string.
+- addressStreet: the street part of the registered address — unit, floor, building name and street (e.g. "2F Building C, Metrowalk Commercial Complex, Meralco Avenue"); null when it cannot be separated confidently.
+- addressBarangay: the barangay (e.g. "Ugong"); null when absent or unclear.
+- addressCity: the city or municipality (e.g. "Pasig"); null when absent or unclear.
+- addressProvince: the province — "Metro Manila" for NCR cities; null when absent or unclear.
+- addressZip: the 4-digit postal code (e.g. "1604"); null when absent or unclear.
 - tradeName: the trade name, but ONLY when it is different from the registered name; null when it matches or is absent.
 - rdo: the Revenue District Office number (e.g. "043"); null when absent.
 - dateRegistered: the date registered, exactly as printed; null when absent.
@@ -120,24 +140,47 @@ export async function structure2303Text(
   } catch {
     throw new Error("Auto-fill gave an answer we couldn't use. Type the details manually.");
   }
-  const fields = structuredSchema.parse(parsed);
+  const parsedFields = structuredSchema.parse(parsed);
   const usageRaw = (body as { usage?: { input_tokens?: unknown; output_tokens?: unknown } })?.usage;
   const usage: StructureUsage = {
     inputTokens: typeof usageRaw?.input_tokens === "number" ? usageRaw.input_tokens : 0,
     outputTokens: typeof usageRaw?.output_tokens === "number" ? usageRaw.output_tokens : 0,
   };
-  // Fold the branch code into the TIN in the stored 000-000-000-000
-  // format. A TIN that doesn't fit the shape is never auto-filled: its
-  // confidence drops to low so the field stays blank for staff to type.
+  // Address parts default to null/low when the answer is in the old
+  // shape (without them) — the full string is still the fallback.
+  const noPart: Parsed2303Field = { value: null, confidence: "low" };
+  const fields: Structured2303 = {
+    ...parsedFields,
+    addressStreet: parsedFields.addressStreet ?? noPart,
+    addressBarangay: parsedFields.addressBarangay ?? noPart,
+    addressCity: parsedFields.addressCity ?? noPart,
+    addressProvince: parsedFields.addressProvince ?? noPart,
+    addressZip: parsedFields.addressZip ?? noPart,
+  };
+  // Fold the branch code into the TIN. Re-derive it from ALL the digits
+  // instead of trusting where Claude drew the line: a 5-digit branch
+  // ("00001") can arrive split as tin=...-000 + branch="01", and the old
+  // fold dropped the "01". 9 digits with no branch on the certificate
+  // keeps the existing head-office rule (append "000"). A TIN that
+  // doesn't fit the shape is never auto-filled: its confidence drops to
+  // low so the field stays blank for staff to type.
   const tin = fields.tin.value?.trim() ?? null;
   if (tin) {
-    const branch = fields.branchCode.value?.trim() ?? "";
-    const combined = branch && !/-\d{3}$|-\d{5}$/.test(tin) ? `${tin}-${branch}` : tin;
-    const normalized = normalizeTin(combined);
-    if (normalized === "invalid") {
+    const tinDigits = tin.replace(/\D/g, "");
+    const branchDigits = (fields.branchCode.value ?? "").replace(/\D/g, "");
+    let all = tinDigits;
+    if (branchDigits && !tinDigits.endsWith(branchDigits)) all += branchDigits;
+    if (all.length === 9) all += "000";
+    if (all.length === 12 || all.length === 14) {
+      const formatted = `${all.slice(0, 3)}-${all.slice(3, 6)}-${all.slice(6, 9)}-${all.slice(9)}`;
+      const normalized = normalizeTin(formatted);
+      if (normalized === "invalid" || !normalized) {
+        fields.tin = { value: tin, confidence: "low" };
+      } else {
+        fields.tin = { value: normalized, confidence: fields.tin.confidence };
+      }
+    } else {
       fields.tin = { value: tin, confidence: "low" };
-    } else if (normalized) {
-      fields.tin = { value: normalized, confidence: fields.tin.confidence };
     }
   }
   return { fields, usage };

@@ -83,4 +83,71 @@ describe("structure2303Text", () => {
     await expect(structure2303Text("   ", "sk-test", fetchImpl)).rejects.toThrow(/No text/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("keeps a 5-digit branch code in the TIN", async () => {
+    const { fetchImpl } = stubFetch(
+      claudeReply({ ...baseFields, tin: { value: "328-671-896", confidence: "high" }, branchCode: { value: "00001", confidence: "high" } }),
+    );
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.tin.value).toBe("328-671-896-00001");
+    expect(fields.tin.confidence).toBe("high");
+  });
+
+  it("repairs a branch split across the TIN and the branch code", async () => {
+    // Claude read the 5-digit branch "00001" as tin=...-000 + branch="01".
+    // The digits still add up to the full TIN — nothing is dropped.
+    const { fetchImpl } = stubFetch(
+      claudeReply({ ...baseFields, tin: { value: "328-671-896-000", confidence: "high" }, branchCode: { value: "01", confidence: "high" } }),
+    );
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.tin.value).toBe("328-671-896-00001");
+  });
+
+  it("uses the head-office 000 when no branch is on the certificate", async () => {
+    const { fetchImpl } = stubFetch(
+      claudeReply({ ...baseFields, tin: { value: "328-671-896", confidence: "high" }, branchCode: { value: null, confidence: "high" } }),
+    );
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.tin.value).toBe("328-671-896-000");
+  });
+
+  it("downgrades a TIN whose digits cannot make a 9+3 or 9+5 shape", async () => {
+    // 9 digits + a 2-digit branch code adds up to 11 — not a real shape.
+    const { fetchImpl } = stubFetch(
+      claudeReply({ ...baseFields, tin: { value: "328-671-896", confidence: "high" }, branchCode: { value: "01", confidence: "high" } }),
+    );
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.tin.confidence).toBe("low");
+  });
+
+  it("returns the split address parts when Claude provides them", async () => {
+    const { fetchImpl } = stubFetch(
+      claudeReply({
+        ...baseFields,
+        registeredAddress: { value: "Unit 7B, Sample Heights Tower, 88 Sampaguita Avenue, San Roque, Marikina City, Metro Manila 1801", confidence: "high" },
+        addressStreet: { value: "Unit 7B, Sample Heights Tower, 88 Sampaguita Avenue", confidence: "high" },
+        addressBarangay: { value: "San Roque", confidence: "high" },
+        addressCity: { value: "Marikina", confidence: "high" },
+        addressProvince: { value: "Metro Manila", confidence: "high" },
+        addressZip: { value: "1801", confidence: "high" },
+      }),
+    );
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.addressStreet.value).toBe("Unit 7B, Sample Heights Tower, 88 Sampaguita Avenue");
+    expect(fields.addressBarangay.value).toBe("San Roque");
+    expect(fields.addressCity.value).toBe("Marikina");
+    expect(fields.addressProvince.value).toBe("Metro Manila");
+    expect(fields.addressZip.value).toBe("1801");
+  });
+
+  it("defaults missing address parts to null when the answer is in the old shape", async () => {
+    const { fetchImpl } = stubFetch(claudeReply(baseFields));
+    const { fields } = await structure2303Text(TEXT, "sk-test", fetchImpl);
+    expect(fields.registeredAddress.value).toBe("123 Main Street, Pasig City");
+    expect(fields.addressStreet.value).toBeNull();
+    expect(fields.addressBarangay.value).toBeNull();
+    expect(fields.addressCity.value).toBeNull();
+    expect(fields.addressProvince.value).toBeNull();
+    expect(fields.addressZip.value).toBeNull();
+  });
 });

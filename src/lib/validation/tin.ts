@@ -12,4 +12,4 @@ export function normalizeTin(input: string | null | undefined): string | null | 
   return `${m[1]}-${m[2]}-${m[3]}-${m[4] ?? "000"}`;
 }
 
-export const TIN_FORMAT_MESSAGE = "Use the format 000-000-000-000 (branch code optional).";
+export const TIN_FORMAT_MESSAGE = "Use the format 000-000-000-000 (branch code optional, 3 or 5 digits).";
