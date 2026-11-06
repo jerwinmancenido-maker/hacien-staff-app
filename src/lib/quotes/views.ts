@@ -203,6 +203,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
       // Every SO made from this quote, voided ones included.
       salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
+      preparedBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, createdAt: true } },
       updatedBy: { select: { name: true } },
       approvedBy: { select: { name: true } },
@@ -269,6 +270,13 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     createdBy: q.createdBy.name,
     createdByPosition: q.createdBy.position,
     createdBySignatureUrl: q.createdBy.signatureStorageKey ? `/files/user-signature/${q.createdBy.id}` : null,
+    // Preparer picker: the chosen preparer, else the creator.
+    preparedById: q.preparedBy?.id ?? q.createdBy.id,
+    preparedBy: (q.preparedBy ?? q.createdBy).name,
+    preparedByPosition: (q.preparedBy ?? q.createdBy).position,
+    preparedBySignatureUrl: (q.preparedBy ?? q.createdBy).signatureStorageKey
+      ? `/files/user-signature/${(q.preparedBy ?? q.createdBy).id}`
+      : null,
     conformeFiles: q.attachments.map((a) => ({ id: a.id, fileName: a.fileName, href: `/files/attachments/${a.id}` })),
     updatedBy: q.updatedBy.name,
     updatedAt: q.updatedAt,

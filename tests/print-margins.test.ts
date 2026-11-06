@@ -32,8 +32,8 @@ function measurePdfSideMarginsMm(opts: {
   // Force the matching @page size so headless Chrome doesn't stay on A4 default.
   const pageSize =
     opts.paper === "letter"
-      ? `@page { size: letter; margin: 0.7in; }`
-      : `@page { size: A4; margin: 18mm; }`;
+      ? `@page { size: letter; margin: 0.25in 0.39in 0.63in; }`
+      : `@page { size: A4; margin: 0.25in 0.39in 0.63in; }`;
 
   writeFileSync(
     htmlPath,
@@ -53,9 +53,9 @@ body{margin:0;background:#fff}
     <div class="pp-pre">Unit 1, Sample St.
 Quezon City 1100</div></div>
   </div></div>
-  <div class="pp-title-block"><h1><span class="pp-title-pixel"></span>QUOTATION</h1>
-  <table class="pp-meta"><tbody><tr><th>Quote no.</th><td>QT-2026-MARG</td></tr></tbody></table></div>
 </header>
+<div class="pp-title-block"><h1><span class="pp-title-pixel"></span>QUOTATION</h1>
+<table class="pp-meta"><tbody><tr><th>Quote no.</th><td>QT-2026-MARG</td></tr></tbody></table></div>
 <section class="pp-party-grid"><div class="pp-party-box"><div class="pp-label">Bill to</div><div class="pp-strong">Sample</div></div>
 <div class="pp-party-box"><div class="pp-label">Deliver to</div><div class="pp-pre">Warehouse</div></div></section>
 <table class="pp-items"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
@@ -122,13 +122,13 @@ print(w, left, right, left*25.4/72, right*25.4/72)`,
 
 describe("print side margins", () => {
   it("keeps equal on-screen padding and a trailing print override after .pp-page sheet sizing", () => {
-    expect(css).toMatch(/\.pp-page\s*\{[^}]*padding:\s*18mm/s);
-    expect(css).toMatch(/\.print-shell-letter\s+\.pp-page\s*\{[^}]*padding:\s*0\.7in/s);
+    expect(css).toMatch(/\.pp-page\s*\{[^}]*padding:\s*0\.25in 0\.39in 0\.63in/s);
+    expect(css).toMatch(/\.print-shell-letter\s+\.pp-page\s*\{[^}]*padding:\s*0\.25in 0\.39in 0\.63in/s);
 
     const sheet = css.lastIndexOf(".pp-page {\n  /* HACIEN brand kit print");
     expect(sheet).toBeGreaterThan(0);
     const trailingPrint = css.indexOf(
-      "MUST come after .pp-page { width:210mm; padding:18mm } above.",
+      "MUST come after .pp-page { width:210mm; padding:0.25in 0.39in 0.63in } above.",
       sheet,
     );
     expect(trailingPrint).toBeGreaterThan(sheet);
@@ -148,7 +148,7 @@ describe("print side margins", () => {
         expect(css).toContain("padding: 0 !important");
         return;
       }
-      measurePdfSideMarginsMm({ paper: "a4", minMm: 14, maxMm: 20 });
+      measurePdfSideMarginsMm({ paper: "a4", minMm: 8, maxMm: 12 });
     },
     120_000,
   );
@@ -160,8 +160,8 @@ describe("print side margins", () => {
         expect(css).toContain("padding: 0 !important");
         return;
       }
-      // @page letter uses 0.7in ≈ 17.78mm
-      measurePdfSideMarginsMm({ paper: "letter", minMm: 14, maxMm: 20 });
+      // Template v3 sides are 0.39in ≈ 9.9mm on both papers.
+      measurePdfSideMarginsMm({ paper: "letter", minMm: 8, maxMm: 12 });
     },
     120_000,
   );
