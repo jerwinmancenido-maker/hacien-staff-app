@@ -25,7 +25,7 @@ type State =
       fileName: string;
       storageKey: string;
       text: string;
-      source: "pdf" | "ocr";
+      source: "pdf" | "ocr" | "pdf-ocr";
       ai: AiStatus;
       fields?: Structured2303;
       usage?: StructureUsage;
@@ -37,7 +37,7 @@ type State =
 type ParseBody = {
   ok?: boolean;
   text?: string;
-  source?: "pdf" | "ocr";
+  source?: "pdf" | "ocr" | "pdf-ocr";
   storageKey?: string;
   fileName?: string;
   message?: string;
@@ -47,6 +47,12 @@ type ParseBody = {
 };
 
 const CONFIDENCE_LABEL = { high: "high confidence", medium: "medium confidence" } as const;
+
+const SOURCE_LABEL = {
+  pdf: "(from the PDF)",
+  ocr: "(from the photo)",
+  "pdf-ocr": "(from the scanned PDF)",
+} as const;
 
 function fillable(field: Parsed2303Field): string | null {
   return field.value && field.confidence !== "low" ? field.value : null;
@@ -208,7 +214,7 @@ export function BIR2303Upload({ onPrefill }: { onPrefill?: (prefill: Prefill) =>
               </>
             )}
             <p className="small" style={{ margin: "0 0 4px" }}>
-              What was read from {state.fileName} {state.source === "pdf" ? "(from the PDF)" : "(from the photo)"}:
+              What was read from {state.fileName} {SOURCE_LABEL[state.source]}:
             </p>
             <pre className="small" style={{ whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto", background: "#f6f6f6", padding: 12, borderRadius: 8, margin: 0 }}>
               {state.text}

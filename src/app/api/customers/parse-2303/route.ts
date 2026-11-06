@@ -63,7 +63,7 @@ async function handleParse(req: NextRequest) {
   }
 
   let text: string;
-  let source: "pdf" | "ocr";
+  let source: "pdf" | "ocr" | "pdf-ocr";
   try {
     // Loaded here, not at the top of the file, so a failure to load the
     // extraction libraries (pdf-parse / tesseract.js) surfaces as a

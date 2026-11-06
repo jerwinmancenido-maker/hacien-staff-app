@@ -16,6 +16,11 @@ const hostingerBuild = process.env.HOSTINGER_BUILD === "1";
 const nextConfig: NextConfig = {
   // Plain Node.js server (Hostinger): no edge runtime, no Vercel-only features.
   poweredByHeader: false,
+  // @napi-rs/canvas is a native module (a .node binary): Turbopack cannot
+  // bundle it into the route chunk ("non-ecmascript placeable asset"), so
+  // it stays external and loads from node_modules at runtime — the same
+  // way the OCR worker files do (traced below for the standalone output).
+  serverExternalPackages: ["@napi-rs/canvas"],
   async headers() {
     return [
       {
@@ -45,6 +50,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/customers/parse-2303": [
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "./node_modules/@napi-rs/canvas/**/*",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
       "./node_modules/tesseract.js/**/*",
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/@tesseract.js-data/eng/4.0.0/**/*",
