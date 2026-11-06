@@ -117,14 +117,20 @@ describe("proxy public-asset allowlist (security)", () => {
     }
   });
 
-  it("logged out: /api/anything.png, /api/x.svg and /customers/foo.png still get the session redirect", () => {
-    for (const path of ["/api/anything.png", "/api/x.svg", "/customers/foo.png"]) {
+  it("logged out: /api/* answers 401 JSON (fetch clients can't show the login page), /customers/foo.png still gets the session redirect", () => {
+    for (const path of ["/api/anything.png", "/api/x.svg"]) {
       expect(shouldCheckSession(path)).toBe(true);
       expect(matcherHits(path)).toBe(true);
       const res = proxy(loggedOut(`http://localhost${path}`));
-      expect(res.status, path).toBe(307);
-      expect(res.headers.get("location"), path).toBe("http://localhost/login");
+      expect(res.status, path).toBe(401);
+      expect(res.headers.get("location"), path).toBeNull();
     }
+    const page = "/customers/foo.png";
+    expect(shouldCheckSession(page)).toBe(true);
+    expect(matcherHits(page)).toBe(true);
+    const res = proxy(loggedOut(`http://localhost${page}`));
+    expect(res.status, page).toBe(307);
+    expect(res.headers.get("location"), page).toBe("http://localhost/login");
   });
 
   it("logged out: /brand logos, favicon, icons and manifest pass without a session", () => {

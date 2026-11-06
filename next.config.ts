@@ -31,6 +31,31 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: bodyLimit },
     proxyClientMaxBodySize: bodyLimit,
   },
+  // The 2303 readers load files by path at runtime, so the standalone
+  // tracer cannot see them — Hostinger runs the standalone server,
+  // whose node_modules holds only traced files. Without these, both
+  // readers fail on staging with "Missing file in the app install".
+  // The whole tesseract packages are included because the worker
+  // thread loads its own helpers (getCore, gunzip, cache) and the
+  // core (tesseract.js-core) by relative require at runtime — and the
+  // worker's own dependencies (wasm-feature-detect, bmp-js, is-url,
+  // node-fetch, regenerator-runtime, zlibjs) the same way. A worker
+  // that cannot load its requires dies before answering, and the
+  // photo read then hangs until its timeout instead of failing fast.
+  outputFileTracingIncludes: {
+    "/api/customers/parse-2303": [
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/@tesseract.js-data/eng/4.0.0/**/*",
+      "./node_modules/wasm-feature-detect/**/*",
+      "./node_modules/bmp-js/**/*",
+      "./node_modules/is-url/**/*",
+      "./node_modules/node-fetch/**/*",
+      "./node_modules/regenerator-runtime/**/*",
+      "./node_modules/zlibjs/**/*",
+    ],
+  },
   ...(hostingerBuild ? { typescript: { ignoreBuildErrors: true } } : {}),
 };
 

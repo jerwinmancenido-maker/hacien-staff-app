@@ -6,6 +6,7 @@ import type { Address, Customer } from "@prisma/client";
 import { formatAddress } from "@/lib/addresses/format";
 import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { Field } from "@/components/Field";
+import { BIR2303Upload } from "@/components/customers/BIR2303Upload";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { defaultWithholdingPickFor, parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
@@ -92,6 +93,7 @@ export function CustomerForm({
         </div>
       )}
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
+        {!customer && <BIR2303Upload />}
         <div className="form-grid">
           <Field label="Name" name="name" required error={e.name} full>
             <input id="name" name="name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} />
