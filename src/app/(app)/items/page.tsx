@@ -17,16 +17,20 @@ import { SearchIcon } from "@/components/Icons";
 export default async function ItemsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; cq?: string; tab?: string }>;
+  searchParams: Promise<{ q?: string; cq?: string; tab?: string; showInactive?: string }>;
 }) {
   const user = await requirePagePermission("view");
-  const { q, cq, tab } = await searchParams;
+  const { q, cq, tab, showInactive } = await searchParams;
   const activeTab = tab === "history" ? "history" : "catalog";
   const showCosts = canSeeCosts(user);
   const canEdit = can(user, "edit_data");
 
   const rows = activeTab === "history" ? await listItemHistory({ q }) : [];
-  const items = activeTab === "catalog" ? await listItems({ q: cq, includeInactive: true }) : [];
+  // Inactive items stay hidden by default (they can still be picked up again
+  // via "Show inactive" — otherwise an inactive item could never be found
+  // to reactivate it).
+  const includeInactive = showInactive === "1";
+  const items = activeTab === "catalog" ? await listItems({ q: cq, includeInactive }) : [];
 
   return (
     <>
@@ -65,6 +69,9 @@ export default async function ItemsPage({
             <button className="btn secondary" type="submit">
               Search
             </button>
+            <label className="check">
+              <input type="checkbox" name="showInactive" value="1" defaultChecked={includeInactive} /> Show inactive
+            </label>
             {cq ? (
               <Link className="btn secondary" href="/items">
                 Clear
