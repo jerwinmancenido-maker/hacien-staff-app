@@ -735,6 +735,28 @@ model Quote {
   @@index([date])
 }
 
+// Item catalog, Step 1 (Option A): master list of products staff quote.
+// One row per product, recorded once and reused; quote/SO/PO lines keep
+// their own free-text descriptions until Steps 2–3 link them.
+model Item {
+  id               String    @id @default(cuid())
+  name             String    @db.VarChar(191)
+  brand            String?   @db.VarChar(120)
+  model            String?   @db.VarChar(120)
+  category         String?   @db.VarChar(120)
+  sku              String?   @db.VarChar(60)
+  unit             String    @db.VarChar(30)
+  kind             ItemKind  @default(GOODS)
+  details          String?   @db.Text
+  defaultUnitPrice Decimal?  @db.Decimal(15, 2)
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([active])
+  @@index([name])
+}
+
 // Items are never deleted: a line removed in the editor gets `removedAt`.
 model QuoteItem {
   id               String    @id @default(cuid())
