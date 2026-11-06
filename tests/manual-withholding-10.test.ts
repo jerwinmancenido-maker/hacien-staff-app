@@ -87,8 +87,8 @@ describe("manual withholding picks (build brief 10)", () => {
     ]);
   });
 
-  it("VAT withheld 5% is inactive by default", () => {
-    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.active).toBe(false);
+  it("VAT withheld 5% is active and pickable (owner decision 2026-11-06)", () => {
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.active).toBe(true);
     expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.label).toBe("VAT withheld 5% (WV010/WV020)");
     expect(WITHHOLDING_DEFAULT_ROWS.GOV_VAT_5.atcCode).toBe("WV010/WV020");
   });

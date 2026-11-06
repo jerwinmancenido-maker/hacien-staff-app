@@ -45,6 +45,10 @@ const empty = {
   withholdingType: "",
   defaultTerms: DEFAULT_TERMS[0],
   address: "",
+  barangay: "",
+  cityMunicipality: "",
+  province: "",
+  zip: "",
   contactName: "",
   contactRole: "",
   email: "",
@@ -208,10 +212,34 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
             {e.defaultTerms && <div className="error">{e.defaultTerms}</div>}
           </div>
           <div className={`field${e.address ? " has-error" : ""}`}>
-            <label htmlFor="acq-address">Address</label>
-            <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} placeholder="Unit, street, city..." />
-            <div className="hint">Saved as the default billing and delivery address.</div>
+            <label htmlFor="acq-address">Unit / building / street</label>
+            <textarea id="acq-address" rows={2} value={v.address} onChange={(ev) => setV({ ...v, address: ev.target.value })} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
           </div>
+          <div className="quote-drawer-row">
+            <div className={`field${e.barangay ? " has-error" : ""}`}>
+              <label htmlFor="acq-barangay">Barangay</label>
+              <input id="acq-barangay" type="text" value={v.barangay} onChange={(ev) => setV({ ...v, barangay: ev.target.value })} placeholder="San Antonio" />
+              {e.barangay && <div className="error">{e.barangay}</div>}
+            </div>
+            <div className={`field${e.cityMunicipality ? " has-error" : ""}`}>
+              <label htmlFor="acq-city">City / municipality</label>
+              <input id="acq-city" type="text" value={v.cityMunicipality} onChange={(ev) => setV({ ...v, cityMunicipality: ev.target.value })} placeholder="Pasig" />
+              {e.cityMunicipality && <div className="error">{e.cityMunicipality}</div>}
+            </div>
+          </div>
+          <div className="quote-drawer-row">
+            <div className={`field${e.province ? " has-error" : ""}`}>
+              <label htmlFor="acq-province">Province</label>
+              <input id="acq-province" type="text" value={v.province} onChange={(ev) => setV({ ...v, province: ev.target.value })} placeholder="Metro Manila" />
+              {e.province && <div className="error">{e.province}</div>}
+            </div>
+            <div className={`field${e.zip ? " has-error" : ""}`}>
+              <label htmlFor="acq-zip">ZIP code</label>
+              <input id="acq-zip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" value={v.zip} onChange={(ev) => setV({ ...v, zip: ev.target.value })} placeholder="1605" />
+              {e.zip && <div className="error">{e.zip}</div>}
+            </div>
+          </div>
+          <div className="hint">Saved as the default billing and delivery address.</div>
           <div className="quote-drawer-row">
             <div className={`field${e.contactName ? " has-error" : ""}`}>
               <label htmlFor="acq-contact">Contact person</label>

@@ -6,7 +6,8 @@
 
 /**
  * Existing business VAT registration setting. HACIEN is non-VAT (8% option).
- * Used to hide the Gov VAT 5% withholding option. Flip only when registration changes.
+ * It no longer gates the Gov VAT 5% withholding option — owner decision
+ * 2026-11-06: government contracts deduct 5% R-VAT, staff pick it per job.
  */
 export const BUSINESS_IS_VAT_REGISTERED = false;
 

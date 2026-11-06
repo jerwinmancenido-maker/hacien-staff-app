@@ -89,6 +89,10 @@ export async function createCustomerForQuoteAction(
     const withholdingType = str(form, "withholdingType");
     const defaultTerms = str(form, "defaultTerms");
     const address = str(form, "address");
+    const barangay = str(form, "barangay");
+    const cityMunicipality = str(form, "cityMunicipality");
+    const province = str(form, "province");
+    const zip = str(form, "zip");
     const contactName = str(form, "contactName");
     const contactRole = str(form, "contactRole");
     const email = str(form, "email");
@@ -143,6 +147,14 @@ export async function createCustomerForQuoteAction(
 
     // 3. Create all in ONE transaction
     const addressTrim = address.trim();
+    // Split address parts, same fields as the full customer form. Barangay is
+    // optional; the address counts as complete (no review needed) when street,
+    // city, province and ZIP are all filled.
+    const barangayTrim = barangay.trim().slice(0, 120);
+    const cityTrim = cityMunicipality.trim().slice(0, 120);
+    const provinceTrim = province.trim().slice(0, 120);
+    const zipTrim = zip.trim().slice(0, 4);
+    const addressComplete = Boolean(addressTrim && cityTrim && provinceTrim && zipTrim);
     const cData = parsedCustomer.data;
     const contactData = parsedContact.data;
 
@@ -172,8 +184,12 @@ export async function createCustomerForQuoteAction(
             customerId: created.id,
             kind: "BILLING",
             street: addressTrim.slice(0, 1000),
+            barangay: barangayTrim,
+            cityMunicipality: cityTrim,
+            province: provinceTrim,
+            zip: zipTrim,
             isDefault: true,
-            needsReview: true,
+            needsReview: !addressComplete,
           },
         });
         await writeAudit(tx, {
@@ -189,8 +205,12 @@ export async function createCustomerForQuoteAction(
             customerId: created.id,
             kind: "DELIVERY",
             street: addressTrim.slice(0, 1000),
+            barangay: barangayTrim,
+            cityMunicipality: cityTrim,
+            province: provinceTrim,
+            zip: zipTrim,
             isDefault: true,
-            needsReview: true,
+            needsReview: !addressComplete,
           },
         });
         await writeAudit(tx, {
