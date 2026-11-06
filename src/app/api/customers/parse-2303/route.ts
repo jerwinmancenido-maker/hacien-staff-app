@@ -1,9 +1,12 @@
-// POST /api/customers/parse-2303 — upload a BIR 2303 (PDF or photo) and
-// read its text (step 1 of the Claude 2303 parse: no AI, no pre-fill).
-// The file is staged on disk (no customer exists yet); the response
-// carries its storageKey so the New Customer save can attach it as the
+// POST /api/customers/parse-2303 — upload a BIR 2303 (PDF or photo), read
+// its text (step 1), and structure it with Claude when the key is set
+// (step 2: name, TIN, address, trade name + confidence per field). The
+// file is staged on disk (no customer exists yet); the response carries
+// its storageKey so the New Customer save can attach it as the
 // customer's BIR 2303 document. A file whose text can't be read is
-// discarded — the form never blocks on parsing.
+// discarded — the form never blocks on parsing. A Claude failure never
+// discards the file: the extracted text is still returned and staff
+// types manually. No key (staging) means extraction only.
 
 import type { NextRequest } from "next/server";
 import { requireActionPermission } from "@/lib/auth/current-user";
@@ -59,6 +62,8 @@ async function handleParse(req: NextRequest) {
     throw e;
   }
 
+  let text: string;
+  let source: "pdf" | "ocr";
   try {
     // Loaded here, not at the top of the file, so a failure to load the
     // extraction libraries (pdf-parse / tesseract.js) surfaces as a
@@ -66,11 +71,26 @@ async function handleParse(req: NextRequest) {
     // on staging the static import failed at route load, which the
     // uploader could only show as an unreadable answer.
     const { extractText } = await import("@/lib/2303/extract");
-    const { text, source } = await extractText(bytes, upload.mimeType as ExtractMime);
-    return json(200, { ok: true, text, source, storageKey: upload.storageKey, fileName: upload.fileName });
+    ({ text, source } = await extractText(bytes, upload.mimeType as ExtractMime));
   } catch (e) {
     // No row points at the staged file, so it isn't kept.
     await discardUploads([upload]);
     return json(200, { ok: false, message: e instanceof Error ? e.message : "Could not read the text from this file." });
+  }
+
+  // Step 2: structure with Claude when the key is set (live only). The
+  // file was read fine, so a Claude failure never discards it.
+  const { getAnthropicKey, structure2303Text } = await import("@/lib/2303/claude");
+  const apiKey = getAnthropicKey();
+  if (!apiKey) {
+    return json(200, { ok: true, text, source, storageKey: upload.storageKey, fileName: upload.fileName, ai: { available: false } });
+  }
+  try {
+    const { fields, usage } = await structure2303Text(text, apiKey);
+    return json(200, { ok: true, text, source, storageKey: upload.storageKey, fileName: upload.fileName, ai: { available: true }, fields, usage });
+  } catch (e) {
+    console.error("parse-2303 Claude structuring failed:", e);
+    const message = e instanceof Error ? e.message : "Auto-fill didn't work for this file.";
+    return json(200, { ok: true, text, source, storageKey: upload.storageKey, fileName: upload.fileName, ai: { available: true, error: message } });
   }
 }

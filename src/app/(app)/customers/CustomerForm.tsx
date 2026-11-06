@@ -7,6 +7,7 @@ import { formatAddress } from "@/lib/addresses/format";
 import { ADDRESS_KIND_LABELS } from "@/lib/validation/addresses";
 import { Field } from "@/components/Field";
 import { BIR2303Upload } from "@/components/customers/BIR2303Upload";
+import type { Prefill } from "@/components/customers/BIR2303Upload";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import type { WithholdingSnapshot } from "@/lib/quotes/calc";
 import { defaultWithholdingPickFor, parseWithholdingPick } from "@/lib/quotes/withholding-defaults";
@@ -47,6 +48,9 @@ export function CustomerForm({
   const { state, pending, onSubmit } = useFormAction(action);
   const v = (k: keyof Customer) => state.values?.[k] ?? (customer?.[k] as string | null) ?? "";
   const [name, setName] = useState(v("name"));
+  const [tin, setTin] = useState(canSeeTin ? v("tin") : "");
+  const [notes, setNotes] = useState(v("notes"));
+  const [street, setStreet] = useState(state.values?.street ?? "");
   const [withholding, setWithholding] = useState(v("withholdingType"));
   const initialPick =
     state.values?.defaultWithholding !== undefined
@@ -72,6 +76,15 @@ export function CustomerForm({
   const showPick = typeIsYes(withholding);
   const withholdingLocked = !canEditWithholding;
 
+  // BIR 2303 auto-fill: fill only fields staff left empty, never
+  // overwrite what they already typed.
+  function applyPrefill(prefill: Prefill) {
+    if (prefill.name && !name.trim()) setName(prefill.name);
+    if (prefill.tin && canSeeTin && !tin.trim()) setTin(prefill.tin);
+    if (prefill.street && !street.trim()) setStreet(prefill.street);
+    if (prefill.notes && !notes.trim()) setNotes(prefill.notes);
+  }
+
   function onTypeChange(next: string) {
     setWithholding(next);
     // Existing customers keep the saved pick. The suggestion is for a new record only.
@@ -93,13 +106,13 @@ export function CustomerForm({
         </div>
       )}
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
-        {!customer && <BIR2303Upload />}
+        {!customer && <BIR2303Upload onPrefill={applyPrefill} />}
         <div className="form-grid">
           <Field label="Name" name="name" required error={e.name} full>
             <input id="name" name="name" type="text" value={name} onChange={(ev) => setName(ev.target.value)} />
           </Field>
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-000 · branch code optional">
-            <input id="tin" name="tin" type="text" defaultValue={canSeeTin ? v("tin") : ""} inputMode="numeric" placeholder="000-000-000-000" />
+            <input id="tin" name="tin" type="text" value={tin} onChange={(ev) => setTin(ev.target.value)} inputMode="numeric" placeholder="000-000-000-000" />
           </Field>
           <Field
             label={WITHHOLDING_TYPE_FIELD_LABEL}
@@ -162,7 +175,7 @@ export function CustomerForm({
             <input id="creditLimit" name="creditLimit" type="text" inputMode="decimal" defaultValue={v("creditLimit") == null ? "" : String(v("creditLimit"))} placeholder="e.g. 500000" />
           </Field>
           <Field label="Notes" name="notes" error={e.notes} full>
-            <textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
+            <textarea id="notes" name="notes" value={notes} onChange={(ev) => setNotes(ev.target.value)} rows={3} />
           </Field>
           <div className="field full">
             <label>
@@ -209,7 +222,7 @@ export function CustomerForm({
             </div>
           </div>
           <Field label="Unit / building / street" name="street" error={e.street} full>
-            <textarea id="street" name="street" rows={2} defaultValue={state.values?.street ?? ""} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
+            <textarea id="street" name="street" rows={2} value={street} onChange={(ev) => setStreet(ev.target.value)} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
           </Field>
           <Field label="Barangay" name="barangay" error={e.barangay}>
             <input id="barangay" name="barangay" type="text" defaultValue={state.values?.barangay ?? ""} placeholder="San Antonio" />
