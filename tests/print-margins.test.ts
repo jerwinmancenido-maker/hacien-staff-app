@@ -53,9 +53,9 @@ body{margin:0;background:#fff}
     <div class="pp-pre">Unit 1, Sample St.
 Quezon City 1100</div></div>
   </div></div>
-  <div class="pp-title-block"><h1><span class="pp-title-pixel"></span>QUOTATION</h1>
-  <table class="pp-meta"><tbody><tr><th>Quote no.</th><td>QT-2026-MARG</td></tr></tbody></table></div>
 </header>
+<div class="pp-title-block"><h1><span class="pp-title-pixel"></span>QUOTATION</h1>
+<table class="pp-meta"><tbody><tr><th>Quote no.</th><td>QT-2026-MARG</td></tr></tbody></table></div>
 <section class="pp-party-grid"><div class="pp-party-box"><div class="pp-label">Bill to</div><div class="pp-strong">Sample</div></div>
 <div class="pp-party-box"><div class="pp-label">Deliver to</div><div class="pp-pre">Warehouse</div></div></section>
 <table class="pp-items"><thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
