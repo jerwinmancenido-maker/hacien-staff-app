@@ -5,6 +5,7 @@
 import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
 import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
@@ -163,10 +164,13 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         </div>
       )}
 
-      <header className="pp-head">
-        <CompanyLetterhead company={doc.company} />
-      </header>
-
+      <PrintHeaderRepeat
+        header={
+          <header className="pp-head">
+            <CompanyLetterhead company={doc.company} />
+          </header>
+        }
+      >
       {/* Letterhead Template v3: title + meta sit below the rule.
           Big title on TOP, meta below it, both right-aligned
           (owner 2026-11-07; the Template v3 doc shows the title on the
@@ -391,6 +395,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           <div className="pp-qr-spacer" aria-hidden="true" />
         )}
       </footer>
+      </PrintHeaderRepeat>
     </article>
   );
 }

@@ -10,6 +10,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import { printCompanyBlock } from "@/lib/print/company";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +42,7 @@ export default async function PrintCustomer2307Page({
         <b>{TAX_WORKSHEET_BANNER}</b>
       </div>
       <article className="print-doc books-register-doc">
-        <header className="print-header books-register-head">
-          <CompanyLetterhead company={printCompanyBlock(company)} />
+        <PrintHeaderRepeat header={<CompanyLetterhead company={printCompanyBlock(company)} />}>
           <div className="print-doc-title">
             <h1>{TAX_WORKSHEET_PAGES.received2307.title}</h1>
             <div className="small muted">{TAX_WORKSHEET_DISCLAIMER}</div>
@@ -51,7 +51,7 @@ export default async function PrintCustomer2307Page({
             </div>
             <div className="small books-draft-stamp">{TAX_WORKSHEET_BANNER}</div>
           </div>
-        </header>
+        
         {sheet.rows.length === 0 ? (
           <p className="faint">{TAX_WORKSHEET_PAGES.received2307.empty}</p>
         ) : (
@@ -94,6 +94,7 @@ export default async function PrintCustomer2307Page({
             </tfoot>
           </table>
         )}
+      </PrintHeaderRepeat>
       </article>
     </div>
   );

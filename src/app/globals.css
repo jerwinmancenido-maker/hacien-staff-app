@@ -4287,8 +4287,10 @@ td.has-error input {
 }
 
 /* Printable area: Letterhead Template v3 page setup (A4, portrait).
-   Top margin 1.5in holds the in-flow header (0.25in from the top edge);
-   sides 0.39in; bottom 0.63in (footer 0.25in from the bottom edge).
+   Top margin 0.25in; sides 0.39in; bottom 0.63in (footer 0.25in from the
+   bottom edge). The letterhead repeats on EVERY page: each print shell
+   wraps its document in a table (PrintHeaderRepeat) whose thead holds the
+   letterhead, and Chrome repeats the thead at the top of every page.
    Browser date/title/URL chrome is
    off via the print dialog / --no-pdf-header-footer — not via empty @top/@bottom.
    Page numbers use @page margin boxes (counter(pages) resolves there). An
@@ -4340,6 +4342,7 @@ td.has-error input {
   .pp-missing {
     display: none !important;
   }
+
   /* Sheet sizing (width/padding) is owned by the trailing @media print after
      .pp-page { width:210mm; padding:0.25in 0.39in 0.63in } — do not reset width/padding here. */
   .print-page,
@@ -4751,6 +4754,24 @@ button.contact-card-add {
   font-size: 8.5pt;
   line-height: 1.35;
   color: var(--pp-label);
+}
+/* PrintHeaderRepeat: a one-column table whose thead holds the letterhead.
+   Browsers repeat the thead at the top of every printed page, so the
+   header appears on all pages in normal flow (content starts below it).
+   On screen the table is a transparent container — previews are unchanged. */
+.pp-repeat {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pp-repeat-head {
+  padding: 0;
+  font-weight: normal;
+  text-align: left;
+  vertical-align: top;
+}
+.pp-repeat-body {
+  padding: 0;
+  vertical-align: top;
 }
 .pp-letterhead-row {
   display: flex;
