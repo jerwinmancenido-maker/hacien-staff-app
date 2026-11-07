@@ -48,6 +48,8 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
             withholdingRate: i.withholdingRate,
             withholdingAtc: i.withholdingAtc ?? null,
             withholdingOverride: i.withholdingOverride ?? false,
+            itemId: i.itemId ?? null,
+            itemName: i.itemName ?? null,
           })),
         }}
       />

@@ -14,13 +14,32 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId");
   if (!accountId) return NextResponse.json({ error: "Pick an account." }, { status: 400 });
-  const account = await db.cashAccount.findUnique({ where: { id: accountId } });
-  if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
 
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const fromYmd = from?.match(/^\d{4}-\d{2}-\d{2}$/) ? from : null;
   const toYmd = to?.match(/^\d{4}-\d{2}-\d{2}$/) ? to : null;
+
+  if (accountId === "unassigned") {
+    const entries = await ledgerEntriesForAccount(null);
+    const openingDate =
+      entries.length > 0
+        ? entries.reduce((m, e) => (e.date < m ? e.date : m), entries[0]!.date)
+        : ymd(new Date())!;
+    const rows = buildLedger({ openingBalance: "0.00", openingDate, entries, fromYmd, toYmd });
+    const csv = ledgerToCsv(rows);
+    return new NextResponse(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="unassigned-ledger.csv"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
+
+  const account = await db.cashAccount.findUnique({ where: { id: accountId } });
+  if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+
   const entries = await ledgerEntriesForAccount(accountId);
   const rows = buildLedger({
     openingBalance: money(account.openingBalance),

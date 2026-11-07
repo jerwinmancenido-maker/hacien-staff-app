@@ -21,40 +21,68 @@ export default async function CashLedgerPage({
   await requirePagePermission("view");
   const sp = await searchParams;
   const accounts = await listCashAccounts(true);
-  const accountId = sp.accountId && accounts.some((a) => a.id === sp.accountId) ? sp.accountId : accounts.find((a) => a.active)?.id ?? accounts[0]?.id;
-
-  if (!accountId) {
-    return (
-      <>
-        <PageHeader title="Account ledger" subtitle={CASH_DISCLAIMER} />
-        <CashNav active="ledger" />
-        <div className="card">
-          <EmptyState title="No accounts yet" line="Add a cash or bank account first, then the ledger will show money in and out." />
-          <p style={{ marginTop: 12 }}>
-            <Link className="btn" href="/cash/accounts/new">
-              Add your first bank account
-            </Link>
-          </p>
-        </div>
-      </>
-    );
-  }
-
-  const account = await db.cashAccount.findUniqueOrThrow({ where: { id: accountId } });
-  const entries = await ledgerEntriesForAccount(accountId);
   const from = sp.from?.match(/^\d{4}-\d{2}-\d{2}$/) ? sp.from : null;
   const to = sp.to?.match(/^\d{4}-\d{2}-\d{2}$/) ? sp.to : null;
-  const rows = buildLedger({
-    openingBalance: money(account.openingBalance),
-    openingDate: ymd(account.openingDate)!,
-    entries,
-    fromYmd: from,
-    toYmd: to,
-  });
+  // "unassigned" is a pseudo-account: money with no cash account yet. It is also the
+  // fallback when no accounts exist at all, so unassigned movement is never hidden.
+  const accountId =
+    sp.accountId === "unassigned"
+      ? "unassigned"
+      : sp.accountId && accounts.some((a) => a.id === sp.accountId)
+        ? sp.accountId
+        : (accounts.find((a) => a.active)?.id ?? accounts[0]?.id ?? "unassigned");
+  const isUnassigned = accountId === "unassigned";
+
+  let subtitle: string;
+  let rows: ReturnType<typeof buildLedger>;
+  if (isUnassigned) {
+    const entries = await ledgerEntriesForAccount(null);
+    subtitle = `Unassigned · ${CASH_DISCLAIMER}`;
+    if (entries.length === 0) {
+      return (
+        <>
+          <PageHeader title="Account ledger" subtitle={subtitle} />
+          <CashNav active="ledger" />
+          <div className="card">
+            <LedgerFilters
+              accounts={accounts.map((a) => ({ id: a.id, name: a.name, active: a.active }))}
+              accountId={accountId}
+              from={from}
+              to={to}
+            />
+            <EmptyState
+              title="No unassigned money movement yet"
+              line="Collections and supplier payments with no cash account will show here."
+            />
+            {accounts.length === 0 ? (
+              <p style={{ marginTop: 12 }}>
+                <Link className="btn" href="/cash/accounts/new">
+                  Add your first bank account
+                </Link>
+              </p>
+            ) : null}
+          </div>
+        </>
+      );
+    }
+    const openingDate = entries.reduce((m, e) => (e.date < m ? e.date : m), entries[0]!.date);
+    rows = buildLedger({ openingBalance: "0.00", openingDate, entries, fromYmd: from, toYmd: to });
+  } else {
+    const account = await db.cashAccount.findUniqueOrThrow({ where: { id: accountId } });
+    const entries = await ledgerEntriesForAccount(accountId);
+    subtitle = `${account.name} · ${CASH_DISCLAIMER}`;
+    rows = buildLedger({
+      openingBalance: money(account.openingBalance),
+      openingDate: ymd(account.openingDate)!,
+      entries,
+      fromYmd: from,
+      toYmd: to,
+    });
+  }
 
   return (
     <>
-      <PageHeader title="Account ledger" subtitle={`${account.name} · ${CASH_DISCLAIMER}`} />
+      <PageHeader title="Account ledger" subtitle={subtitle} />
       <CashNav active="ledger" />
       <div className="card">
         <LedgerFilters

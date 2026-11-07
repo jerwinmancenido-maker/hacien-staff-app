@@ -19,7 +19,7 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
   if (!(await isPayables2307Enabled())) redirect("/payables");
   const user = await requirePagePermission("view");
   const sp = await searchParams;
-  const status = (sp.status === "TO_ISSUE" || sp.status === "ISSUED" ? sp.status : "TO_ISSUE") as SupplierWithholding2307Status | "ALL";
+  const status = (sp.status === "TO_ISSUE" || sp.status === "ISSUED" || sp.status === "ALL" ? sp.status : "TO_ISSUE") as SupplierWithholding2307Status | "ALL";
   const rows = await listSupplier2307({ status });
   const canManage = can(user, "manage_payables");
   const today = ymd(manilaToday())!;
