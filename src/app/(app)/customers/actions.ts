@@ -55,6 +55,8 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       defaultTerms: str(form, "defaultTerms"),
       creditLimit: str(form, "creditLimit"),
       notes: str(form, "notes"),
+      // Customer type select: "individual" = private individual (personal use).
+      isIndividual: str(form, "customerKind") === "individual",
       // Checkbox: absent = unchecked = off. Present (checked) = on.
       orderTextUpdates: bool(form, "orderTextUpdates"),
     });

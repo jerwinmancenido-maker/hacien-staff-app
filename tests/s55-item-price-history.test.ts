@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { groupItemHistory, normalizeDescription } from "@/lib/items/history";
+import { groupItemDocuments, groupItemHistory, normalizeDescription } from "@/lib/items/history";
 
 const root = process.cwd();
 const src = (p: string) => readFileSync(join(root, p), "utf8");
@@ -32,12 +32,39 @@ describe("S-55 item history grouping", () => {
   });
 });
 
+describe("Step 2 item detail grouping", () => {
+  it("collapses several lines on one document to one where-used row", () => {
+    const docs = groupItemDocuments([
+      { description: "Widget A", date: "2026-11-03", ref: "QT-2", price: "120.00", docKind: "quote", docId: "q1" },
+      { description: "Widget A", date: "2026-11-03", ref: "QT-2", price: "110.00", docKind: "quote", docId: "q1" },
+      { description: "Widget A", date: "2026-11-02", ref: "PO-1", cost: "80.00", docKind: "purchase_order", docId: "p1" },
+    ]);
+    expect(docs).toEqual([
+      { docKind: "quote", docId: "q1", docNumber: "QT-2", date: "2026-11-03" },
+      { docKind: "purchase_order", docId: "p1", docNumber: "PO-1", date: "2026-11-02" },
+    ]);
+  });
+});
+
 describe("S-55 surfaces", () => {
   it("items page lists last price and last cost", () => {
     const page = src("src/app/(app)/items/page.tsx");
     expect(page).toContain("Last price");
     expect(page).toContain("Last cost");
     expect(page).toContain("listItemHistory");
+  });
+  it("history rows link to the history-only detail", () => {
+    const page = src("src/app/(app)/items/page.tsx");
+    expect(page).toContain("/items/history?item=");
+    const history = src("src/app/(app)/items/history/page.tsx");
+    expect(history).toContain("ItemHistoryDetail");
+    const detail = src("src/components/ItemHistoryDetail.tsx");
+    expect(detail).toContain("Price history");
+    expect(detail).toContain("Supplier comparison");
+    expect(detail).toContain("Where used");
+    expect(detail).toContain("listItemDetailEntries");
+    const itemPage = src("src/app/(app)/items/[id]/page.tsx");
+    expect(itemPage).toContain("ItemHistoryDetail");
   });
   it("sidebar links to Items", () => {
     expect(src("src/components/Sidebar.tsx")).toContain('href: "/items"');
