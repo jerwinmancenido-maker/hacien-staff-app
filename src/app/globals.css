@@ -4807,14 +4807,8 @@ button.contact-card-add {
      "Metro Manila 1605" was left on line 2). */
   text-wrap: balance;
 }
-.pp-company-line {
-  font-size: 8.5pt;
-  font-weight: 600;
-  color: var(--pp-label);
-  margin-bottom: 2px;
-}
 .pp-trade-name {
-  /* Legacy class kept for settings preview; letterhead uses .pp-company-line. */
+  /* Legacy class kept for settings preview. */
   font-size: 8.5pt;
   font-weight: 600;
   color: var(--pp-label);
