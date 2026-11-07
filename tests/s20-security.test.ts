@@ -214,6 +214,9 @@ describe("security headers", () => {
     expect(PAGE_CSP).toContain("frame-ancestors 'none'");
     expect(PAGE_CSP).toContain("font-src 'self'");
     expect(PAGE_CSP).toContain("style-src 'self' 'unsafe-inline'");
+    // Browser Sentry events POST to the ingest host; without this the
+    // browser blocks the send. Harmless when no DSN is set.
+    expect(PAGE_CSP).toContain("connect-src 'self' https://*.ingest.sentry.io");
     expect(PAGE_CSP).not.toContain("unsafe-eval");
     expect(pageCsp("production")).not.toContain("unsafe-eval");
     expect(pageCsp("development")).toContain("'unsafe-eval'");

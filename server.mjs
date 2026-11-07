@@ -55,6 +55,26 @@ function logLine(level, message, extra) {
 }
 
 /**
+ * Best-effort Sentry capture for boot failures (prepare / listen / crash).
+ * No-op when Sentry is off (no SENTRY_DSN) or the SDK cannot load — the JSON
+ * boot log already recorded the failure, so nothing is lost. The import is
+ * dynamic and local to this function so a Sentry problem can never break
+ * booting, and importing this file for its helpers (tests) never touches it.
+ * Only useful once the app has prepared (instrumentation.ts initialises
+ * Sentry); a prepare failure itself is covered by the boot log alone.
+ */
+async function captureBootError(err) {
+  if (!process.env.SENTRY_DSN) return;
+  try {
+    const Sentry = await import("@sentry/nextjs");
+    Sentry.captureException(err);
+    await Sentry.flush(2000);
+  } catch {
+    // Sentry unavailable — boot logs already recorded it.
+  }
+}
+
+/**
  * Listen on `port`, retrying on EADDRINUSE until `maxWaitMs` has passed.
  * Resolves with the attempt number that bound the port. Any other error,
  * or an EADDRINUSE that outlasts the budget, rejects.
@@ -114,6 +134,7 @@ async function start() {
       databaseUrl: Boolean(process.env.DATABASE_URL),
       sessionSecret: Boolean(process.env.SESSION_SECRET),
       appUrl: Boolean(process.env.APP_URL),
+      sentry: Boolean(process.env.SENTRY_DSN),
     },
   });
 
@@ -121,13 +142,13 @@ async function start() {
     logLine("fatal", "uncaught-exception", {
       error: err && err.stack ? err.stack : String(err),
     });
-    process.exit(1);
+    captureBootError(err).finally(() => process.exit(1));
   });
   process.on("unhandledRejection", (reason) => {
     logLine("fatal", "unhandled-rejection", {
       error: reason && reason.stack ? reason.stack : String(reason),
     });
-    process.exit(1);
+    captureBootError(reason).finally(() => process.exit(1));
   });
 
   // Loaded here, not at the top, so importing this file for its helpers
@@ -141,6 +162,7 @@ async function start() {
     logLine("fatal", "prepare-failed", {
       error: err && err.stack ? err.stack : String(err),
     });
+    await captureBootError(err);
     process.exit(1);
   }
   logLine("info", "prepared", { ms: Date.now() - startedAt });
@@ -162,7 +184,9 @@ async function start() {
   let attempts = 0;
   try {
     attempts = await listenWithRetry(server, port);
-  } catch {
+  } catch (err) {
+    // listen-failed was already logged inside listenWithRetry.
+    await captureBootError(err);
     process.exit(1);
   }
   logLine("info", "listening", { port, pid, attempts, ms: Date.now() - startedAt });
@@ -186,7 +210,7 @@ if (isMain) {
     logLine("fatal", "boot-failed", {
       error: err && err.stack ? err.stack : String(err),
     });
-    process.exit(1);
+    captureBootError(err).finally(() => process.exit(1));
   });
 }
 
