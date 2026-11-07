@@ -5,20 +5,23 @@ import { describe, expect, it } from "vitest";
 describe("Page X of Y CSS", () => {
   const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
 
-  it("uses @page margins; page nums in @bottom-center only (no browser chrome boxes)", () => {
+  it("uses @page margins; page nums in @bottom-right, contact line in @bottom-left (no browser chrome boxes)", () => {
     expect(css).toContain("@page {");
     expect(css).toContain("size: A4");
-    expect(css).toContain("margin: 18mm");
+    expect(css).toContain("margin: 0.25in 0.39in 0.63in");
     // Custom page label only — not Chrome's date/URL @top/@bottom chrome (dialog / --no-pdf-header-footer).
-    expect(css).toContain("@bottom-center");
-    expect(css).not.toContain("@bottom-right");
+    expect(css).toContain("@bottom-right");
+    expect(css).toContain("@bottom-left");
+    expect(css).not.toContain("@bottom-center");
     expect(css).not.toContain("@top-left");
     expect(css).not.toContain("@top-center");
   });
 
   it("puts Page x of y in @page margin boxes; never paints in-flow Page 0 of 0", () => {
     // Margin boxes resolve counter(pages) in browser print and headless PDF.
-    expect(css).toMatch(/@page\s*\{[\s\S]*?@bottom-center\s*\{[\s\S]*?content:\s*"Page " counter\(page\) " of " counter\(pages\)/);
+    expect(css).toMatch(/@page\s*\{[\s\S]*?@bottom-right\s*\{[\s\S]*?content:\s*"Page " counter\(page\) " of " counter\(pages\)/);
+    // Letterhead Template v3 footer: contact line lower-left.
+    expect(css).toMatch(/@bottom-left\s*\{[\s\S]*?content:\s*"HACIEN Information Technology Solutions/);
     // In-flow ::after with counter(pages) becomes "Page 0 of 0" in headless --print-to-pdf.
     expect(css).toMatch(/\.pp-page-num::after\s*\{[^}]*content:\s*none/s);
     expect(css).not.toMatch(

@@ -59,7 +59,11 @@ describe("quote phase 1 — notes split and print", () => {
       notes: CUSTOMER_NOTE,
     });
     expect(markup).toContain("Terms &amp; conditions:");
-    expect(markup).toContain("Valid until:");
+    // The validity date lives in the details block (meta), not as a duplicate
+    // line in the notes section (owner 2026-11-07: "Valid until" appeared 3×).
+    expect(markup).toContain("Valid until");
+    expect(markup).toContain("Nov 30, 2026");
+    expect(markup).not.toContain("Valid until:");
     expect(markup).toContain("Delivery lead time:");
     expect(markup).toContain("Warranty:");
     expect(markup).toContain("Notes:");

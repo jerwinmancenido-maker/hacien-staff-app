@@ -1,8 +1,8 @@
 // Shared company letterhead for every print: the 10 professional documents
 // (via ProfessionalPrintDocument) and the 5 book/tax prints (via their own
 // pages) all render this one component, so the letterhead cannot drift
-// between prints. S-86, option A: book/tax prints adopt this existing
-// letterhead; the 10 documents and their NON-VAT tag are unchanged.
+// between prints. Letterhead Template v3 layout: logo left, company details
+// right-aligned (CSS in globals.css); the NON-VAT tag stays in the TIN row.
 
 import { BRAND_LETTERHEAD_LOGO } from "@/lib/print/company";
 import { NON_VAT_LABEL } from "@/lib/print/tax-wording";

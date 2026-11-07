@@ -62,6 +62,8 @@ type QuoteEditorInitial = EditorInitial & {
   /** S-69: per-quote delivery/warranty notes; undefined = Settings default. */
   deliveryNotes?: string | null;
   warrantyNotes?: string | null;
+  /** Modular terms: estimated lead time in business days (point 3). Null = no figure. */
+  leadTimeDays?: number | null;
   subject?: string;
   buyerPoNo?: string;
   validForDays?: number | string | null;
@@ -82,10 +84,10 @@ export type QuoteEditorProps = {
   termsOptions: string[];
   defaultValidityDays: number;
   printDefaults: { quoteTerms: string; deliveryNotes: string; warrantyNotes: string };
-  preparedByName: string;
-  /** S-70: creator position / signature, approver + approval time. */
-  preparedByPosition?: string | null;
-  preparedSignatureUrl?: string | null;
+  /** Preparer picker (2026-11-07): staff users to choose from + the current preparer. */
+  staffUsers: { id: string; name: string; position: string | null; hasSignature: boolean }[];
+  preparedById: string;
+  /** S-70: approver + approval time. */
   approvedByName?: string | null;
   approvedAt?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -196,7 +198,7 @@ function DescTextarea({
 function customerTypeLabel(type: string): string {
   if (type === "GOVERNMENT") return "Government";
   if (type === "TOP_WITHHOLDING_AGENT") return "Top withholding agent";
-  if (type === "NONE") return "Private";
+  if (type === "NONE") return "No withholding";
   return type.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
@@ -226,9 +228,8 @@ export function QuoteEditor({
   termsOptions,
   defaultValidityDays,
   printDefaults,
-  preparedByName,
-  preparedByPosition = null,
-  preparedSignatureUrl = null,
+  staffUsers,
+  preparedById,
   approvedByName = null,
   approvedAt = null,
   action,
@@ -256,6 +257,9 @@ export function QuoteEditor({
   /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
   const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
+  /** Preparer picker: the chosen staff user; the preview below follows it. */
+  const [preparedByIdState, setPreparedByIdState] = useState(preparedById);
+  const preparer = staffUsers.find((u) => u.id === preparedByIdState) ?? null;
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
@@ -310,6 +314,9 @@ export function QuoteEditor({
         ? String(validityDaysFromDates(initial.date, initial.validUntil) ?? defaultValidityDays)
         : String(defaultValidityDays);
   const [validForDays, setValidForDays] = useState<string>(initialDays);
+
+  // Modular terms: estimated lead time in business days (point 3). Blank = no figure.
+  const [leadTimeDays, setLeadTimeDays] = useState<string>(initial.leadTimeDays != null ? String(initial.leadTimeDays) : "");
 
   function onValidForDaysChange(val: string) {
     setValidForDays(val);
@@ -543,9 +550,12 @@ export function QuoteEditor({
     notes: h.notes,
     deliveryNotes: h.deliveryNotes,
     warrantyNotes: h.warrantyNotes,
+    leadTimeDays: leadTimeDays.trim() === "" ? undefined : leadTimeDays.trim(),
     internalNotes: h.internalNotes,
     subject: h.subject,
     buyerPoNo: h.buyerPoNo,
+    // Preparer picker: who prepared this quote (prints under "Prepared by").
+    preparedById: preparedByIdState,
     // null = not set; [] = explicit none.
     withholdingCodes: pick,
     withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
@@ -558,6 +568,7 @@ export function QuoteEditor({
 
   const termsTabDot =
     Boolean(h.terms?.trim()) ||
+    Boolean(leadTimeDays.trim()) ||
     Boolean(printDefaults.quoteTerms?.trim()) ||
     Boolean(printDefaults.deliveryNotes?.trim()) ||
     Boolean(printDefaults.warrantyNotes?.trim());
@@ -1361,6 +1372,21 @@ export function QuoteEditor({
                 <span className="label">Validity</span>
                 <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
               </div>
+              <div className={`quote-f field${e.leadTimeDays ? " has-error" : ""}`}>
+                <label htmlFor="leadTimeDays">Lead time (business days)</label>
+                <input
+                  id="leadTimeDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  inputMode="numeric"
+                  value={leadTimeDays}
+                  onChange={(ev) => setLeadTimeDays(ev.target.value)}
+                  placeholder="No estimate"
+                />
+                <div className="hint">Prints in the terms as the estimated lead time · Leave blank for no figure</div>
+                {e.leadTimeDays && <div className="error">{e.leadTimeDays}</div>}
+              </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>
                 <textarea readOnly rows={4} value={printDefaults.quoteTerms ?? ""} aria-readonly />
@@ -1402,16 +1428,24 @@ export function QuoteEditor({
 
           {tab === "signoff" && (
             <div role="tabpanel" className="quote-fg">
-              <div className="quote-f field">
-                <span className="label">Prepared by</span>
-                {preparedSignatureUrl ? (
-                  <div style={{ marginBottom: 4 }}>
+              <div className={`quote-f field${e.preparedById ? " has-error" : ""}`}>
+                <label htmlFor="preparedById">Prepared by</label>
+                <select id="preparedById" value={preparedByIdState} onChange={(ev) => setPreparedByIdState(ev.target.value)}>
+                  {staffUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                      {u.position ? ` — ${u.position}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {preparer?.hasSignature ? (
+                  <div style={{ marginTop: 4 }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={preparedSignatureUrl} alt="Preparer signature" style={{ maxHeight: 56, border: "1px solid var(--border)", background: "#fff" }} />
+                    <img src={`/files/user-signature/${preparer.id}`} alt="Preparer signature" style={{ maxHeight: 56, border: "1px solid var(--border)", background: "#fff" }} />
                   </div>
                 ) : null}
-                <div className="strong">{preparedByName}</div>
-                {preparedByPosition ? <div className="small muted">{preparedByPosition}</div> : null}
+                {preparer?.position ? <div className="small muted">{preparer.position}</div> : null}
+                {e.preparedById && <div className="error">{e.preparedById}</div>}
               </div>
               {approvedByName ? (
                 <div className="quote-f field">
@@ -1427,7 +1461,7 @@ export function QuoteEditor({
                   <div className="small faint">Name and signature</div>
                 </div>
               </div>
-              <div className="hint">Names fill in automatically from the staff who prepared and approved this quote. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. Electronically generated, approved in the HACIEN system.</div>
+              <div className="hint">Pick who prepared this quote — the name prints under Prepared by. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. System-generated and approved. No signature required.</div>
               <p className="right small muted">{totalsSummary}</p>
             </div>
           )}
