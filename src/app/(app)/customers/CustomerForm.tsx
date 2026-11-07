@@ -56,6 +56,11 @@ export function CustomerForm({
   const [province, setProvince] = useState(state.values?.province ?? "");
   const [zip, setZip] = useState(state.values?.zip ?? "");
   const [withholding, setWithholding] = useState(v("withholdingType"));
+  // Modular terms: "business" (default) prints point 6 on quotes;
+  // "individual" (private individual, personal use) omits it.
+  const [customerKind, setCustomerKind] = useState(
+    state.values?.customerKind ?? (customer?.isIndividual ? "individual" : "business"),
+  );
   const initialPick =
     state.values?.defaultWithholding !== undefined
       ? parseWithholdingPick(state.values.defaultWithholding)
@@ -121,6 +126,17 @@ export function CustomerForm({
           </Field>
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-00000 · branch code optional (3 or 5 digits)">
             <input id="tin" name="tin" type="text" value={tin} onChange={(ev) => setTin(ev.target.value)} inputMode="numeric" placeholder="000-000-000-00000" maxLength={17} />
+          </Field>
+          <Field
+            label="Customer type"
+            name="customerKind"
+            error={e.isIndividual}
+            hint="Private individuals buying for personal use don't get the withholding-tax point on their quotes."
+          >
+            <select id="customerKind" name="customerKind" value={customerKind} onChange={(ev) => setCustomerKind(ev.target.value)}>
+              <option value="business">Business / organisation / government</option>
+              <option value="individual">Private individual — personal use</option>
+            </select>
           </Field>
           <Field
             label={WITHHOLDING_TYPE_FIELD_LABEL}

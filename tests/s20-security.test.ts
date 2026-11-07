@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { changePasswordSchema } from "@/lib/auth/password";
 import { isLoginBlocked, LOGIN_ATTEMPT_EMAIL_MAX, MAX_FAILED_LOGINS, passwordChangeAttemptEmail } from "@/lib/auth/rate-limit";
-import { IDLE_MS, nextIdleExpiry, SESSION_MS, sessionPastIdle } from "@/lib/auth/session";
+import { IDLE_MS, nextIdleExpiry, REMEMBER_IDLE_MS, REMEMBER_SESSION_MS, SESSION_MS, sessionLimits, sessionPastIdle } from "@/lib/auth/session";
 import { DocRuleError } from "@/lib/documents/common";
 import {
   assertCanMaintainPurchaseOrder,
@@ -139,6 +139,34 @@ describe("idle sign-out", () => {
     const late = new Date(start.getTime() + SESSION_MS - 60_000);
     expect(nextIdleExpiry(start, late).getTime()).toBe(start.getTime() + SESSION_MS);
     expect(sessionPastIdle({ createdAt: start, expiresAt: nextIdleExpiry(start, late), now: new Date(start.getTime() + SESSION_MS) })).toBe(true);
+  });
+
+  it("remembered sessions idle out after 7 days and cap at 30 days", () => {
+    const limits = sessionLimits(true);
+    expect(limits).toEqual({ idleMs: REMEMBER_IDLE_MS, maxMs: REMEMBER_SESSION_MS });
+    expect(REMEMBER_IDLE_MS).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(REMEMBER_SESSION_MS).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(sessionLimits(false)).toEqual({ idleMs: IDLE_MS, maxMs: SESSION_MS });
+    const deadline = nextIdleExpiry(start, start, limits.idleMs, limits.maxMs);
+    expect(deadline.getTime() - start.getTime()).toBe(REMEMBER_IDLE_MS);
+    // 8 days after sign-in with a fresh deadline: still alive — a standard
+    // session is already dead at its 7-day cap.
+    const eightDays = new Date(start.getTime() + 8 * 24 * 60 * 60 * 1000);
+    expect(
+      sessionPastIdle(
+        { createdAt: start, expiresAt: nextIdleExpiry(start, eightDays, limits.idleMs, limits.maxMs), now: eightDays },
+        limits.maxMs,
+      ),
+    ).toBe(false);
+    expect(sessionPastIdle({ createdAt: start, expiresAt: nextIdleExpiry(start, eightDays), now: eightDays })).toBe(true);
+    // 31 days after sign-in: past the 30-day cap even with a fresh deadline.
+    const thirtyOne = new Date(start.getTime() + 31 * 24 * 60 * 60 * 1000);
+    expect(
+      sessionPastIdle(
+        { createdAt: start, expiresAt: nextIdleExpiry(start, thirtyOne, limits.idleMs, limits.maxMs), now: thirtyOne },
+        limits.maxMs,
+      ),
+    ).toBe(true);
   });
 });
 
