@@ -19,8 +19,8 @@ const rateStr = z
   .refine((v) => /^\d{1,2}(\.\d{1,4})?$/.test(v), "Enter a rate with up to 4 decimals.")
   .transform((v) => {
     const n = Number(v);
-    // Values > 1 are treated as percent (e.g. 1 → 0.01, 2.5 → 0.025).
-    if (n > 1) return (n / 100).toFixed(4);
+    // Values >= 1 are treated as percent (e.g. 1 → 0.01, 2.5 → 0.025).
+    if (n >= 1) return (n / 100).toFixed(4);
     return Number(v).toFixed(4);
   });
 
@@ -104,6 +104,12 @@ export const supplierPaymentInputSchema = z
     if (v.method === "E_WALLET" && !v.reference) {
       ctx.addIssue({ code: "custom", message: "Reference number is required.", path: ["reference"] });
     }
+    // A withheld amount without a rate saves as 0.00% on the 2307 row — fail closed.
+    v.allocations.forEach((a, i) => {
+      if (Number(a.withholdingApplied) > 0 && Number(a.withholdingRate) <= 0) {
+        ctx.addIssue({ code: "custom", message: "Enter the withholding rate for this bill.", path: ["allocations", i, "withholdingRate"] });
+      }
+    });
   });
 
 export type SupplierPaymentInput = z.infer<typeof supplierPaymentInputSchema>;

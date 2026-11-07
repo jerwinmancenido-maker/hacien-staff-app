@@ -23,6 +23,8 @@ export type PlannedItem = LineAmounts & {
   qty: string;
   unit: string;
   supplierId: string | null;
+  /** Catalog Step 3: the linked catalog item, or null for a free-text line. */
+  itemId: string | null;
   supplierUnitCost: string;
   unitPrice: string;
   withholdingRate: string | null;
@@ -111,6 +113,8 @@ export function planItems(
       kind: input.kind,
       qty: input.qty,
       unit: input.unit,
+      // The editor always sends itemId (null = unlinked); null/"" clears a link.
+      itemId: input.itemId || null,
       supplierId,
       supplierUnitCost,
       unitPrice: input.unitPrice,

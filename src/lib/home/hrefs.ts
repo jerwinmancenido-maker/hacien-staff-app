@@ -50,11 +50,11 @@ export function customersNoWithholdingHref(): string {
   return "/customers?wh=NOT_SET";
 }
 
-/** Billings that still need a customer 2307 recorded (count banner on /billing/2307). */
+/** PENDING 2307 certificates awaiting receipt (the count on Home and /billing). */
 export function pending2307Href(): string {
-  // Do not use ?status=PENDING — that filter lists certificates already recorded
-  // and awaiting receipt, not billings that still need a 2307.
-  return "/billing/2307";
+  // The count is certificates already recorded and awaiting receipt, so link
+  // straight to that filtered list.
+  return "/billing/2307?status=PENDING";
 }
 
 export function owedByCustomersHref(): string {

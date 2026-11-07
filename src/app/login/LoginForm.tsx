@@ -20,6 +20,10 @@ export function LoginForm() {
       <Field label="Password" name="password" error={state.fieldErrors?.password}>
         <input id="password" name="password" type="password" autoComplete="current-password" />
       </Field>
+      <label className="check">
+        <input type="checkbox" name="rememberMe" />
+        <span>Keep me signed in</span>
+      </label>
       <button className="btn" type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>

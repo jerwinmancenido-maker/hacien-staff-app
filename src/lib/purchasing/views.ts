@@ -529,7 +529,7 @@ export async function listReceivingView(filter: { q?: string; history?: boolean 
   const q = filter.q?.trim();
   const rows = await db.purchaseOrder.findMany({
     where: {
-      status: { in: filter.history ? ["PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"] : RECEIVABLE },
+      status: { in: filter.history ? ["RECEIVED", "CLOSED"] : RECEIVABLE },
       ...(q
         ? {
             OR: [
