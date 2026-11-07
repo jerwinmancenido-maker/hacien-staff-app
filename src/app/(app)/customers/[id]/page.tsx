@@ -108,7 +108,7 @@ export default async function CustomerPage({
             <Chip tone="grey">{pickChip}</Chip>
             {!(savedPick && savedPick.length > 0 && customer.withholdingType === "NONE") && (
               <Chip tone="grey">
-                {customer.withholdingType === "NONE" ? "Private" : WITHHOLDING_LABELS[customer.withholdingType]}
+                {WITHHOLDING_LABELS[customer.withholdingType]}
               </Chip>
             )}
             {!customer.active ? (

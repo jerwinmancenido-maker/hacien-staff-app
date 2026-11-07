@@ -64,6 +64,24 @@ export const itemSchema = z.object({
   qty: amount("Qty", { positive: true }),
   unit: z.string().trim().min(1, "Unit is required.").max(30),
   supplierId: optionalId,
+  /** Catalog Step 3: the picked catalog item, or null for a free-text line.
+   * No transform here (unlike optionalId): the key must stay optional in the
+   * inferred output type, or every ItemInput literal in the suite needs it. */
+  itemId: z.string().trim().max(64).nullable().optional(),
+  /**
+   * Catalog Step 3: fields typed in the editor for a line that is not in the
+   * catalog yet. Any field filled in creates a catalog item on save (name =
+   * the line description) and links the line to it; all blank = no item.
+   */
+  newCatalog: z
+    .object({
+      brand: optionalText(120),
+      model: optionalText(120),
+      category: optionalText(120),
+      sku: optionalText(60),
+      details: optionalText(5000),
+    })
+    .optional(),
   supplierUnitCost: amount("Supplier unit cost").optional().default("0"),
   unitPrice: amount("Unit price"),
   /** Snapshotted withholding fraction ("0.0100"); null = not snapshotted; omitted → server defaults. */
@@ -87,7 +105,14 @@ export const itemSchema = z.object({
   withholdingAtc: z.string().trim().max(20).nullable().optional(),
   /** Explicit staff override vs the customer's usual default for this kind. */
   withholdingOverride: z.boolean().optional(),
-});
+}).refine(
+  (v) => {
+    const nc = v.newCatalog;
+    const hasFields = nc != null && [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((f) => f != null && f !== "");
+    return !hasFields || v.description.trim().length <= 191;
+  },
+  { message: "To save this as a catalog item, keep the description under 191 characters.", path: ["description"] },
+);
 export type ItemInput = z.infer<typeof itemSchema>;
 
 const items = z.array(itemSchema).min(1, "Add at least one item.").max(200, "At most 200 items.");
@@ -120,6 +145,14 @@ const quoteInputObject = z.object({
     warrantyNotes: optionalText(1000)
       .optional()
       .transform((v) => v ?? null),
+    /** Modular terms: estimated lead time in business days (point 3). Empty = no figure. */
+    leadTimeDays: z
+      .coerce
+      .number()
+      .int("Lead time must be a whole number of business days.")
+      .min(1, "Lead time must be at least 1 business day.")
+      .max(365, "Lead time must be at most 365 business days.")
+      .optional(),
     /** Staff-only. Never prints. Never on customer-facing pages. Omitted → null. */
     internalNotes: optionalText(5000)
       .optional()
@@ -132,6 +165,11 @@ const quoteInputObject = z.object({
     buyerPoNo: optionalText(64)
       .optional()
       .transform((v) => v ?? null),
+    /**
+     * Preparer picker (2026-11-07): staff user printed under "Prepared by".
+     * Omitted on update → keep the stored preparer; null → the creator.
+     */
+    preparedById: optionalId,
     /**
      * Quote-level withholding pick (codes from Settings → Withholding).
      * null = not set; [] = explicit none; [codes] = picks.
@@ -187,13 +225,15 @@ export function quoteInputSchemaForSave(
   return quoteInputSchema;
 }
 /** Parsed quote write shape. New Phase 1 fields are optional so older callers/fixtures still typecheck. */
-export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo" | "deliveryNotes" | "warrantyNotes"> & {
+export type QuoteInput = Omit<z.infer<typeof quoteInputSchema>, "internalNotes" | "subject" | "buyerPoNo" | "deliveryNotes" | "warrantyNotes" | "preparedById"> & {
   internalNotes?: string | null;
   subject?: string | null;
   buyerPoNo?: string | null;
   deliveryNotes?: string | null;
   warrantyNotes?: string | null;
   validForDays?: number;
+  /** Preparer picker: omitted → keep the stored preparer (create: the creator). */
+  preparedById?: string | null;
 };
 
 export const convertInputSchema = z.object({
