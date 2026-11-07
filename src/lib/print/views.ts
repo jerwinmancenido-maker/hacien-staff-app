@@ -450,7 +450,8 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   const totals: PrintMoneyLine[] = [{ label: "Amount received", amount: received, emphasize: true }];
   if (Number(whTotal) > 0) totals.unshift({ label: "EWT (2307) applied", amount: whTotal });
   const footer = await baseFooter("collection", letter, { thankYou: true });
-  const refs = c.allocations.map((a) => `BL ${a.billing.number} / booklet #${a.billing.invoiceNo}`);
+  // Billing numbers already carry their "BL-" prefix — do not add another.
+  const refs = c.allocations.map((a) => `${a.billing.number} / booklet #${a.billing.invoiceNo}`);
   const doc: ProfessionalPrintModel = {
     kind: "collection",
     title: "Collection Acknowledgement",
