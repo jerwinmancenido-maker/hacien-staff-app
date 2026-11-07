@@ -610,3 +610,41 @@ describe("Q06 S-41: We-owe totals, sorting, labels, and voided payment exclusion
     expect(maskBankAccountNumber(null)).toBe("");
   });
 });
+
+describe("supplier payment withholding rate", () => {
+  const base = (rate: string, withholdingApplied = "100.00") => ({
+    supplierId: "s1",
+    date: "2026-11-07",
+    method: "CASH" as const,
+    amountPaid: "10000.00",
+    allocations: [
+      {
+        supplierBillId: "b1",
+        cashApplied: "9900.00",
+        withholdingApplied,
+        withholdingRate: rate,
+        atcCode: null,
+      },
+    ],
+  });
+
+  it("stores a typed percent as a fraction (1 → 0.0100, 2.5 → 0.0250) and keeps a fraction as-is", () => {
+    expect(supplierPaymentInputSchema.safeParse(base("1")).data?.allocations[0]?.withholdingRate).toBe("0.0100");
+    expect(supplierPaymentInputSchema.safeParse(base("2.5")).data?.allocations[0]?.withholdingRate).toBe("0.0250");
+    expect(supplierPaymentInputSchema.safeParse(base("0.01")).data?.allocations[0]?.withholdingRate).toBe("0.0100");
+    // Rate 0 is only valid when nothing is withheld.
+    expect(supplierPaymentInputSchema.safeParse(base("0", "0")).data?.allocations[0]?.withholdingRate).toBe("0.0000");
+  });
+
+  it("rejects a withheld amount with no rate (stops 0.00% on the 2307 row)", () => {
+    const parsed = supplierPaymentInputSchema.safeParse(base("0"));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((i) => i.message).join(" ")).toMatch(/withholding rate/i);
+    }
+  });
+
+  it("accepts no withholding with no rate", () => {
+    expect(supplierPaymentInputSchema.safeParse(base("0", "0")).success).toBe(true);
+  });
+});

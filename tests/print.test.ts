@@ -55,7 +55,10 @@ describe("print document", () => {
       const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc }));
       expect(html).toContain("<svg");
       expect(html).toContain("https://haciensolutions.com/policies");
-      expect(html).not.toContain("haciensolutions.com/terms");
+      // Point 7 of the terms block links the full Terms of Sale page.
+      expect(html).toContain("haciensolutions.com/terms-of-sale");
+      const withoutTermsOfSale = html.replaceAll("haciensolutions.com/terms-of-sale", "");
+      expect(withoutTermsOfSale).not.toContain("haciensolutions.com/terms");
     }
   });
 });

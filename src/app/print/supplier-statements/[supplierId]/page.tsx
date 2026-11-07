@@ -12,14 +12,24 @@ export async function generateMetadata({ params }: { params: Promise<{ supplierI
   return { title: `Supplier statement ${supplierId.slice(0, 8)}` };
 }
 
-export default async function PrintSupplierStatementPage({ params }: { params: Promise<{ supplierId: string }> }) {
+export default async function PrintSupplierStatementPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ supplierId: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const user = await requireCostPage("view");
   const { supplierId } = await params;
-  const result = await getSupplierStatementPrintModel(supplierId, user);
+  const sp = await searchParams;
+  const from = sp.from ? new Date(`${sp.from}T00:00:00.000Z`) : null;
+  const to = sp.to ? new Date(`${sp.to}T00:00:00.000Z`) : null;
+  const result = await getSupplierStatementPrintModel(supplierId, user, from, to);
   if (!result) notFound();
+  const backQs = [sp.from ? `from=${sp.from}` : null, sp.to ? `to=${sp.to}` : null].filter(Boolean).join("&");
   return (
     <PrintShell
-      backHref={`/suppliers/${supplierId}?tab=balances`}
+      backHref={`/suppliers/${supplierId}?tab=balances${backQs ? `&${backQs}` : ""}`}
       doc={result.doc}
       missing={result.missing}
       canManageSettings={can(user, "manage_settings")}

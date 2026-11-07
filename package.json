@@ -11,7 +11,7 @@
     "build": "prisma generate && next build",
     "staging:build": "prisma generate && prisma migrate deploy && next build",
     "live:build": "prisma generate && prisma migrate deploy && node --experimental-strip-types prisma/seed.mts && next build",
-    "start": "next start",
+    "start": "node server.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -28,9 +28,10 @@
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "@prisma/client": "^6.19.3",
+    "@sentry/nextjs": "^11.11.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "bcryptjs": "^3.0.3",
-    "next": "^16.4.3",
+    "next": "^16.4.5",
     "nodemailer": "^10.3.1",
     "pdf-parse": "^2.4.5",
     "qrcode": "^1.5.4",
@@ -46,9 +47,12 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.4.3",
+    "eslint-config-next": "^16.4.5",
     "prisma": "^6.19.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
   }
 }

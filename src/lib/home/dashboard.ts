@@ -2,7 +2,7 @@
 // totals use uncapped DB aggregates with the same filters as the list pages
 // (lists themselves stay take:200 for paging).
 
-import { arAgingSummary, countPending2307Expected, getAllBookletWarnings, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
+import { arAgingSummary, countPending2307Certificates, getAllBookletWarnings, listBillings, sumCollectionsReceived, sumWithholdingCredited } from "../billing/views";
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
@@ -552,7 +552,7 @@ export async function loadHomeDashboard(
     listBillings({ status: "OVERDUE" }),
     listCustomers({ withholdingPick: "NOT_SET" }),
     arAgingSummary(),
-    countPending2307Expected(),
+    countPending2307Certificates(),
     sumCollectionsReceived({ status: "POSTED", fromYmd: period.fromYmd, toYmd: period.toYmd }),
     sumCollectionsReceived({
       status: "POSTED",

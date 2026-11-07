@@ -56,6 +56,11 @@ export function CustomerForm({
   const [province, setProvince] = useState(state.values?.province ?? "");
   const [zip, setZip] = useState(state.values?.zip ?? "");
   const [withholding, setWithholding] = useState(v("withholdingType"));
+  // Modular terms: "business" (default) prints point 6 on quotes;
+  // "individual" (private individual, personal use) omits it.
+  const [customerKind, setCustomerKind] = useState(
+    state.values?.customerKind ?? (customer?.isIndividual ? "individual" : "business"),
+  );
   const initialPick =
     state.values?.defaultWithholding !== undefined
       ? parseWithholdingPick(state.values.defaultWithholding)
@@ -73,6 +78,20 @@ export function CustomerForm({
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [isBilling, setIsBilling] = useState(true);
   const [isDelivery, setIsDelivery] = useState(true);
+  // Add-address fields: always shown for a new customer; on an existing
+  // customer they hide behind an "Add address" button. A failed save with
+  // address errors, or a 2303 prefill that fills an address field, re-opens them.
+  const [addAddressOpen, setAddAddressOpen] = useState(false);
+  const hasSavedAddresses = addresses?.some((a) => !a.archivedAt) ?? false;
+  const addressFieldErrors =
+    e.street || e.barangay || e.cityMunicipality || e.province || e.zip ||
+    e.deliveryStreet || e.deliveryBarangay || e.deliveryCityMunicipality ||
+    e.deliveryProvince || e.deliveryZip;
+  const showAddAddress =
+    customer == null ||
+    addAddressOpen ||
+    Boolean((state.values?.street ?? "").trim()) ||
+    Boolean(addressFieldErrors);
 
   // Blank withholding (type unset, or Yes with rates still null) blocks save — never silent "No".
   const withholdingBlank = !withholding || (typeIsYes(withholding) && pick == null);
@@ -85,11 +104,13 @@ export function CustomerForm({
   function applyPrefill(prefill: Prefill) {
     if (prefill.name && !name.trim()) setName(prefill.name);
     if (prefill.tin && canSeeTin && !tin.trim()) setTin(prefill.tin);
-    if (prefill.street && !street.trim()) setStreet(prefill.street);
-    if (prefill.barangay && !barangay.trim()) setBarangay(prefill.barangay);
-    if (prefill.cityMunicipality && !cityMunicipality.trim()) setCityMunicipality(prefill.cityMunicipality);
-    if (prefill.province && !province.trim()) setProvince(prefill.province);
-    if (prefill.zip && !zip.trim()) setZip(prefill.zip);
+    let filledAddress = false;
+    if (prefill.street && !street.trim()) { setStreet(prefill.street); filledAddress = true; }
+    if (prefill.barangay && !barangay.trim()) { setBarangay(prefill.barangay); filledAddress = true; }
+    if (prefill.cityMunicipality && !cityMunicipality.trim()) { setCityMunicipality(prefill.cityMunicipality); filledAddress = true; }
+    if (prefill.province && !province.trim()) { setProvince(prefill.province); filledAddress = true; }
+    if (prefill.zip && !zip.trim()) { setZip(prefill.zip); filledAddress = true; }
+    if (filledAddress) setAddAddressOpen(true);
     if (prefill.notes && !notes.trim()) setNotes(prefill.notes);
   }
 
@@ -121,6 +142,17 @@ export function CustomerForm({
           </Field>
           <Field label="TIN" name="tin" error={e.tin} hint="000-000-000-00000 · branch code optional (3 or 5 digits)">
             <input id="tin" name="tin" type="text" value={tin} onChange={(ev) => setTin(ev.target.value)} inputMode="numeric" placeholder="000-000-000-00000" maxLength={17} />
+          </Field>
+          <Field
+            label="Customer type"
+            name="customerKind"
+            error={e.isIndividual}
+            hint="Private individuals buying for personal use don't get the withholding-tax point on their quotes."
+          >
+            <select id="customerKind" name="customerKind" value={customerKind} onChange={(ev) => setCustomerKind(ev.target.value)}>
+              <option value="business">Business / organisation / government</option>
+              <option value="individual">Private individual — personal use</option>
+            </select>
           </Field>
           <Field
             label={WITHHOLDING_TYPE_FIELD_LABEL}
@@ -199,9 +231,9 @@ export function CustomerForm({
 
           <div className="field full">
             <div className="label">Addresses</div>
-            {addresses && addresses.some((a) => !a.archivedAt) && (
+            {hasSavedAddresses && (
               <ul className="plain-list">
-                {addresses.filter((a) => !a.archivedAt).map((a) => (
+                {addresses!.filter((a) => !a.archivedAt).map((a) => (
                   <li key={a.id}>
                     {ADDRESS_KIND_LABELS[a.kind]}
                     {a.isDefault ? " · Default" : ""}
@@ -212,64 +244,78 @@ export function CustomerForm({
               </ul>
             )}
             <div className="hint">
-              {addresses && addresses.some((a) => !a.archivedAt)
-                ? "Saved addresses stay as they are. Use the fields below to add another. One default billing and one default delivery."
-                : "Optional. Fill this in to save a billing address and a delivery address."}
+              {showAddAddress
+                ? hasSavedAddresses
+                  ? "Saved addresses stay as they are. Use the fields below to add another. One default billing and one default delivery."
+                  : "Optional. Fill this in to save a billing address and a delivery address."
+                : hasSavedAddresses
+                  ? "Saved addresses stay as they are. One default billing and one default delivery."
+                  : "No addresses saved yet."}
             </div>
             <input type="hidden" name="isBilling" value={isBilling ? "true" : "false"} />
             <input type="hidden" name="sameAsBilling" value={sameAsBilling ? "true" : "false"} />
-            <div className="check-row">
-              <label className="check">
-                <input type="checkbox" checked={isBilling} onChange={(ev) => setIsBilling(ev.target.checked)} />
-                Default billing address
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={sameAsBilling} onChange={(ev) => setSameAsBilling(ev.target.checked)} />
-                Same as billing
-              </label>
-            </div>
-          </div>
-          <Field label="Unit / building / street" name="street" error={e.street} full>
-            <textarea id="street" name="street" rows={2} value={street} onChange={(ev) => setStreet(ev.target.value)} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
-          </Field>
-          <Field label="Barangay" name="barangay" error={e.barangay}>
-            <input id="barangay" name="barangay" type="text" value={barangay} onChange={(ev) => setBarangay(ev.target.value)} placeholder="San Antonio" />
-          </Field>
-          <Field label="City / municipality" name="cityMunicipality" error={e.cityMunicipality}>
-            <input id="cityMunicipality" name="cityMunicipality" type="text" value={cityMunicipality} onChange={(ev) => setCityMunicipality(ev.target.value)} placeholder="Pasig" />
-          </Field>
-          <Field label="Province" name="province" error={e.province} hint="Metro Manila for NCR cities">
-            <input id="province" name="province" type="text" value={province} onChange={(ev) => setProvince(ev.target.value)} placeholder="Metro Manila" />
-          </Field>
-          <Field label="ZIP code" name="zip" error={e.zip}>
-            <input id="zip" name="zip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" value={zip} onChange={(ev) => setZip(ev.target.value)} placeholder="1605" />
-          </Field>
-
-          {!sameAsBilling && (
-            <>
-              <div className="field full">
-                <div className="label">Delivery address</div>
-                <input type="hidden" name="isDelivery" value={isDelivery ? "true" : "false"} />
+            {showAddAddress ? (
+              <div className="check-row">
                 <label className="check">
-                  <input type="checkbox" checked={isDelivery} onChange={(ev) => setIsDelivery(ev.target.checked)} />
-                  Default delivery address
+                  <input type="checkbox" checked={isBilling} onChange={(ev) => setIsBilling(ev.target.checked)} />
+                  Default billing address
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={sameAsBilling} onChange={(ev) => setSameAsBilling(ev.target.checked)} />
+                  Same as billing
                 </label>
               </div>
-              <Field label="Unit / building / street" name="deliveryStreet" error={e.deliveryStreet} full>
-                <textarea id="deliveryStreet" name="deliveryStreet" rows={2} defaultValue={state.values?.deliveryStreet ?? ""} placeholder="Warehouse 2, 88 Commerce Ave." />
-              </Field>
-              <Field label="Barangay" name="deliveryBarangay" error={e.deliveryBarangay}>
-                <input id="deliveryBarangay" name="deliveryBarangay" type="text" defaultValue={state.values?.deliveryBarangay ?? ""} placeholder="Manggahan" />
-              </Field>
-              <Field label="City / municipality" name="deliveryCityMunicipality" error={e.deliveryCityMunicipality}>
-                <input id="deliveryCityMunicipality" name="deliveryCityMunicipality" type="text" defaultValue={state.values?.deliveryCityMunicipality ?? ""} placeholder="Pasig" />
-              </Field>
-              <Field label="Province" name="deliveryProvince" error={e.deliveryProvince}>
-                <input id="deliveryProvince" name="deliveryProvince" type="text" defaultValue={state.values?.deliveryProvince ?? ""} placeholder="Metro Manila" />
-              </Field>
-              <Field label="ZIP code" name="deliveryZip" error={e.deliveryZip}>
-                <input id="deliveryZip" name="deliveryZip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" defaultValue={state.values?.deliveryZip ?? ""} placeholder="1611" />
-              </Field>
+            ) : (
+              <button type="button" className="btn btn-secondary" onClick={() => setAddAddressOpen(true)}>
+                Add address
+              </button>
+            )}
+          </div>
+          {showAddAddress && (
+            <>
+            <Field label="Unit / building / street" name="street" error={e.street} full>
+              <textarea id="street" name="street" rows={2} value={street} onChange={(ev) => setStreet(ev.target.value)} placeholder="Unit 4B, Sample Tower, 12 Rizal St." />
+            </Field>
+            <Field label="Barangay" name="barangay" error={e.barangay}>
+              <input id="barangay" name="barangay" type="text" value={barangay} onChange={(ev) => setBarangay(ev.target.value)} placeholder="San Antonio" />
+            </Field>
+            <Field label="City / municipality" name="cityMunicipality" error={e.cityMunicipality}>
+              <input id="cityMunicipality" name="cityMunicipality" type="text" value={cityMunicipality} onChange={(ev) => setCityMunicipality(ev.target.value)} placeholder="Pasig" />
+            </Field>
+            <Field label="Province" name="province" error={e.province} hint="Metro Manila for NCR cities">
+              <input id="province" name="province" type="text" value={province} onChange={(ev) => setProvince(ev.target.value)} placeholder="Metro Manila" />
+            </Field>
+            <Field label="ZIP code" name="zip" error={e.zip}>
+              <input id="zip" name="zip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" value={zip} onChange={(ev) => setZip(ev.target.value)} placeholder="1605" />
+            </Field>
+
+            {!sameAsBilling && (
+              <>
+                <div className="field full">
+                  <div className="label">Delivery address</div>
+                  <input type="hidden" name="isDelivery" value={isDelivery ? "true" : "false"} />
+                  <label className="check">
+                    <input type="checkbox" checked={isDelivery} onChange={(ev) => setIsDelivery(ev.target.checked)} />
+                    Default delivery address
+                  </label>
+                </div>
+                <Field label="Unit / building / street" name="deliveryStreet" error={e.deliveryStreet} full>
+                  <textarea id="deliveryStreet" name="deliveryStreet" rows={2} defaultValue={state.values?.deliveryStreet ?? ""} placeholder="Warehouse 2, 88 Commerce Ave." />
+                </Field>
+                <Field label="Barangay" name="deliveryBarangay" error={e.deliveryBarangay}>
+                  <input id="deliveryBarangay" name="deliveryBarangay" type="text" defaultValue={state.values?.deliveryBarangay ?? ""} placeholder="Manggahan" />
+                </Field>
+                <Field label="City / municipality" name="deliveryCityMunicipality" error={e.deliveryCityMunicipality}>
+                  <input id="deliveryCityMunicipality" name="deliveryCityMunicipality" type="text" defaultValue={state.values?.deliveryCityMunicipality ?? ""} placeholder="Pasig" />
+                </Field>
+                <Field label="Province" name="deliveryProvince" error={e.deliveryProvince}>
+                  <input id="deliveryProvince" name="deliveryProvince" type="text" defaultValue={state.values?.deliveryProvince ?? ""} placeholder="Metro Manila" />
+                </Field>
+                <Field label="ZIP code" name="deliveryZip" error={e.deliveryZip}>
+                  <input id="deliveryZip" name="deliveryZip" type="text" inputMode="numeric" maxLength={4} pattern="\d{4}" defaultValue={state.values?.deliveryZip ?? ""} placeholder="1611" />
+                </Field>
+            </>
+          )}
             </>
           )}
         </div>

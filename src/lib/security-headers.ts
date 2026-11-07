@@ -5,7 +5,9 @@ export const PAGE_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data:",
-  "connect-src 'self'",
+  // Sentry browser events POST to the ingest host (only used when a DSN is
+  // set; harmless otherwise). Without this the browser blocks the send.
+  "connect-src 'self' https://*.ingest.sentry.io",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

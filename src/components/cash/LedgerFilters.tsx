@@ -51,6 +51,7 @@ export function LedgerFilters({
             router.push(build({ accountId: e.target.value }));
           }}
         >
+          <option value="unassigned">Unassigned</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}

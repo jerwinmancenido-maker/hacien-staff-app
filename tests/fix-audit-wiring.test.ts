@@ -90,11 +90,13 @@ describe("audit fix: last activity counts transactions", () => {
   });
 });
 
-describe("audit fix: billing 2307 card names both figures", () => {
-  it("foot separates billings still missing a 2307 from certificates awaiting receipt", () => {
+describe("audit fix: billing 2307 card names the pending certificates", () => {
+  it("foot names the pending certificates and their peso total", () => {
     const f = src("src/app/(app)/billing/page.tsx");
-    expect(f).toContain("still need a 2307 recorded");
-    expect(f).toContain("in certificates awaiting receipt");
+    expect(f).toContain("certificates");
+    expect(f).toContain("awaiting receipt");
+    expect(f).toContain("total");
+    expect(f).not.toContain("still need a 2307 recorded");
   });
 });
 
