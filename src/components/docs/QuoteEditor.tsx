@@ -198,7 +198,7 @@ function DescTextarea({
 function customerTypeLabel(type: string): string {
   if (type === "GOVERNMENT") return "Government";
   if (type === "TOP_WITHHOLDING_AGENT") return "Top withholding agent";
-  if (type === "NONE") return "Private";
+  if (type === "NONE") return "No withholding";
   return type.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
