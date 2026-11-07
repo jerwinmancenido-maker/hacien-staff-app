@@ -149,6 +149,12 @@ export const collectionPrintFixture = (): ProfessionalPrintModel =>
     number: "CR-2026-0001",
     thankYou: true,
     taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
+    // Mirrors views.ts: Prepared by is electronic (no line), Received by
+    // keeps its line — someone signs by hand to acknowledge receipt.
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Received by", name: null },
+    ],
   });
 
 export const poPrintFixture = (): ProfessionalPrintModel =>
@@ -164,6 +170,11 @@ export const poPrintFixture = (): ProfessionalPrintModel =>
       { label: "Total", amount: "400000.00", emphasize: true },
     ],
     totalInWords: "Four hundred thousand pesos only",
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Approved by", name: null },
+      { role: "Received by", name: null },
+    ],
   });
 
 /** Default RR print: qty only (costs hidden). */
@@ -177,6 +188,11 @@ export const rrPrintFixture = (): ProfessionalPrintModel =>
     items: [{ description: "Laptop i5 (sample)", qty: "10.00", unit: "pc", unitPrice: "0.00", amount: "0.00" }],
     totals: undefined,
     totalInWords: undefined,
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Received by", name: "Jerwin" },
+      { role: "Approved by", name: null },
+    ],
   });
 
 /** RR print with costs (setting ON + cost-view user). */
@@ -194,6 +210,11 @@ export const rrPrintWithCostsFixture = (): ProfessionalPrintModel =>
       { label: "Total", amount: "400000.00", emphasize: true },
     ],
     totalInWords: "Four hundred thousand pesos only",
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Received by", name: "Jerwin" },
+      { role: "Approved by", name: null },
+    ],
   });
 
 export const supplierPaymentPrintFixture = (): ProfessionalPrintModel =>
@@ -211,6 +232,11 @@ export const supplierPaymentPrintFixture = (): ProfessionalPrintModel =>
     ],
     totalInWords: "Four hundred thousand pesos only",
     ewtNote: "Expanded withholding tax (EWT) applied. BIR Form 2307 will be issued / was issued separately.",
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Approved by", name: null },
+      { role: "Received by", name: null },
+    ],
   });
 
 export const expensePrintFixture = (): ProfessionalPrintModel =>
@@ -223,6 +249,11 @@ export const expensePrintFixture = (): ProfessionalPrintModel =>
     items: [{ description: "Office rent — sample month", qty: "1.00", unit: "lot", unitPrice: "15000.00", amount: "15000.00" }],
     totals: [{ label: "Total", amount: "15000.00", emphasize: true }],
     totalInWords: "Fifteen thousand pesos only",
+    signatories: [
+      { role: "Prepared by", name: "Jerwin", position: null },
+      { role: "Approved by", name: null },
+      { role: "Received by", name: null },
+    ],
   });
 
 export const customerStatementFixture = (): ProfessionalPrintModel =>
@@ -249,6 +280,10 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
       aging: [{ label: "Current", amount: "10000.00" }],
     },
     totalInWords: "Ten thousand pesos only",
+    signatories: [
+      { role: "Prepared by", name: null },
+      { role: "Approved by", name: null },
+    ],
   });
 
 export const supplierStatementFixture = (): ProfessionalPrintModel =>
@@ -274,6 +309,10 @@ export const supplierStatementFixture = (): ProfessionalPrintModel =>
       ],
     },
     totalInWords: "Five thousand pesos only",
+    signatories: [
+      { role: "Prepared by", name: null },
+      { role: "Approved by", name: null },
+    ],
   });
 
 export const voidQuoteFixture = (): ProfessionalPrintModel => ({

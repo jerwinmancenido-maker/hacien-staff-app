@@ -145,12 +145,66 @@ async function checkCustomerAndContact(customerId: string, contactId: string | n
   return customer;
 }
 
+/** Catalog links must point at real items (only the picker can set them). */
+export async function checkItems(items: readonly Pick<ItemInput, "itemId">[]) {
+  const ids = [...new Set(items.map((i) => i.itemId).filter((v): v is string => !!v))];
+  if (!ids.length) return;
+  const found = await db.item.count({ where: { id: { in: ids } } });
+  if (found !== ids.length) throw new DocRuleError("One of the linked products no longer exists. Pick again.", "items");
+}
+
+function hasNewCatalogFields(nc: NonNullable<ItemInput["newCatalog"]> | undefined): boolean {
+  if (!nc) return false;
+  return [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((v) => v != null && v !== "");
+}
+
+/**
+ * Catalog Step 3: lines typed with catalog fields (and no link yet) get a
+ * catalog item created in the same transaction, and the line links to it.
+ * Returns the item id per input index (null = no link). Runs inside the
+ * quote transaction so a failed save never leaves an orphan catalog row.
+ */
+async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Promise<(string | null)[]> {
+  const out: (string | null)[] = [];
+  for (const input of inputs) {
+    if (input.itemId) {
+      out.push(input.itemId);
+      continue;
+    }
+    if (!hasNewCatalogFields(input.newCatalog)) {
+      out.push(null);
+      continue;
+    }
+    const nc = input.newCatalog!;
+    const created = await tx.item.create({
+      data: {
+        name: input.description.trim(),
+        brand: nc.brand ?? null,
+        model: nc.model ?? null,
+        category: nc.category ?? null,
+        sku: nc.sku ?? null,
+        unit: input.unit.trim(),
+        kind: input.kind,
+        details: nc.details ?? null,
+      },
+    });
+    out.push(created.id);
+  }
+  return out;
+}
+
 /** Suppliers on items must exist (only cost users can set them). */
 export async function checkSuppliers(items: readonly Pick<ItemInput, "supplierId">[]) {
   const ids = [...new Set(items.map((i) => i.supplierId).filter((v): v is string => !!v))];
   if (!ids.length) return;
   const found = await db.supplier.count({ where: { id: { in: ids } } });
   if (found !== ids.length) throw new DocRuleError("One of the suppliers no longer exists. Pick again.", "items");
+}
+
+/** Preparer picker: the chosen preparer must be a real, active staff user. */
+async function checkPreparedBy(id: string) {
+  const found = await db.user.count({ where: { id, active: true } });
+  if (found !== 1) throw new DocRuleError("Pick a staff member to prepare this quote.", "preparedById");
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +217,10 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const snap = await getSettingsSnapshot();
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
+  await checkItems(input.items);
+  // Preparer picker: the chosen preparer, else the creator.
+  const preparedById = input.preparedById ?? actor.id;
+  await checkPreparedBy(preparedById);
 
   // Copy the customer's saved pick unless the payload overrides it.
   const customerPick = parseWithholdingPick(customer.defaultWithholding);
@@ -196,6 +254,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
       const number = await allocateDocNumber(tx, "QUOTE", year, format);
+      // New-catalog lines get their item created here; planned items share
+      // input order, so the resolved ids line up by index.
+      const catalogIds = await resolveNewCatalogItems(tx, input.items);
       const quote = await tx.quote.create({
         data: {
           number,
@@ -208,6 +269,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           internalNotes: input.internalNotes ?? null,
           deliveryNotes: input.deliveryNotes ?? null,
           warrantyNotes: input.warrantyNotes ?? null,
+          leadTimeDays: input.leadTimeDays ?? null,
           subject: input.subject ?? null,
           buyerPoNo: input.buyerPoNo ?? null,
           settingsVersionId: snap.versionId,
@@ -215,8 +277,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
           createdById: actor.id,
+          preparedById,
           updatedById: actor.id,
-          items: { create: items.map(itemData) },
+          items: { create: items.map((p, idx) => ({ ...itemData(p), itemId: catalogIds[idx] ?? p.itemId })) },
         },
         include: { items: true },
       });
@@ -260,6 +323,7 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           terms: original.terms,
           notes: original.notes,
           internalNotes: original.internalNotes,
+          leadTimeDays: original.leadTimeDays,
           subject: original.subject,
           buyerPoNo: null,
           settingsVersionId: snap.versionId,
@@ -272,6 +336,7 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           netMargin: original.netMargin,
           netMarginPct: original.netMarginPct,
           createdById: actor.id,
+          preparedById: actor.id,
           updatedById: actor.id,
           items: {
             create: original.items.map((item) => ({
@@ -281,6 +346,7 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
               qty: item.qty,
               unit: item.unit,
               supplierId: item.supplierId,
+              itemId: item.itemId,
               supplierUnitCost: item.supplierUnitCost,
               unitPrice: item.unitPrice,
               total: item.total,
@@ -307,6 +373,18 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   if (!current) throw new DocRuleError("Quote not found.");
   await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
+  await checkItems(input.items);
+  // Preparer picker: omitted → keep the stored preparer; null → back to the
+  // creator; a NEW value must be an active staff user. The stored preparer
+  // may have been turned off since — saving without changing it stays valid.
+  const preparedByData: { preparedById?: string | null } = {};
+  if (input.preparedById !== undefined) {
+    if (input.preparedById === null) preparedByData.preparedById = null;
+    else if (input.preparedById !== current.preparedById) {
+      await checkPreparedBy(input.preparedById);
+      preparedByData.preparedById = input.preparedById;
+    }
+  }
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -323,10 +401,13 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
+      // New-catalog lines get their item created here, before planning.
+      const catalogIds = await resolveNewCatalogItems(tx, input.items);
+      const inputsWithCatalog = input.items.map((inp, idx) => ({ ...inp, itemId: catalogIds[idx] ?? inp.itemId ?? null }));
       const existingPick = parseWithholdingPick(before.withholdingPick);
       const pick = resolveWithholdingPickInput(input, existingPick);
       const pickSnapshots = await resolvePickSnapshots(pick);
-      const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
+      const { items: planned, removedIds } = planItems(stored, inputsWithCatalog, withCosts, {
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
       });
@@ -347,8 +428,8 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
       }
       for (const item of items) {
-        if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: itemData(item) });
-        else await tx.quoteItem.create({ data: { ...itemData(item), quoteId: id } });
+        if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: { ...itemData(item), itemId: item.itemId } });
+        else await tx.quoteItem.create({ data: { ...itemData(item), itemId: item.itemId, quoteId: id } });
       }
       const withholdingKeyOf = (rows: readonly WithholdingSnapshot[]) =>
         [...rows]
@@ -416,12 +497,14 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           internalNotes: input.internalNotes ?? null,
           deliveryNotes: input.deliveryNotes ?? null,
           warrantyNotes: input.warrantyNotes ?? null,
+          leadTimeDays: input.leadTimeDays ?? null,
           subject: input.subject ?? null,
           buyerPoNo: input.buyerPoNo ?? null,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
           ...(resetApproval ? quoteApprovalClearData() : {}),
+          ...preparedByData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

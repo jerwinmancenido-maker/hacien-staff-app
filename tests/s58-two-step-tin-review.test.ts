@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -60,11 +61,34 @@ describe("S-58 TOTP (RFC 6238 test vectors, SHA-1, 6 digits)", () => {
 describe("S-58 pending sign-in cookie", () => {
   it("verifies, rejects tampering, and expires", () => {
     const now = 1_700_000_000_000;
-    const cookie = signPending("user-1", now);
-    expect(verifyPending(cookie, now)).toBe("user-1");
+    const cookie = signPending("user-1", { nowMs: now });
+    expect(verifyPending(cookie, now)).toEqual({ userId: "user-1", rememberMe: false });
     expect(verifyPending(cookie.replace(/.$/, "x"), now)).toBe(null);
     expect(verifyPending(cookie, now + 11 * 60 * 1000)).toBe(null);
     expect(verifyPending(undefined, now)).toBe(null);
+  });
+
+  it("carries the remember-me flag through the two-step hop", () => {
+    const now = 1_700_000_000_000;
+    expect(verifyPending(signPending("user-1", { rememberMe: true, nowMs: now }), now)).toEqual({
+      userId: "user-1",
+      rememberMe: true,
+    });
+    expect(verifyPending(signPending("user-1", { rememberMe: false, nowMs: now }), now)).toEqual({
+      userId: "user-1",
+      rememberMe: false,
+    });
+    // A tampered flag fails the signature.
+    const tampered = signPending("user-1", { rememberMe: true, nowMs: now }).replace(".1.", ".0.");
+    expect(verifyPending(tampered, now)).toBe(null);
+  });
+
+  it("still accepts a cookie issued before the flag existed", () => {
+    const now = 1_700_000_000_000;
+    const payload = `user-1.${now + 10 * 60 * 1000}`;
+    // The old 3-part format, signed with the same secret the verifier reads.
+    const sig = createHmac("sha256", process.env.SESSION_SECRET ?? "").update(payload).digest("base64url");
+    expect(verifyPending(`${payload}.${sig}`, now)).toEqual({ userId: "user-1", rememberMe: false });
   });
 });
 

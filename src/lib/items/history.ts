@@ -29,6 +29,32 @@ export type ItemHistoryEntry = {
   cost?: string | null;
 };
 
+/** One document line for an item detail: which document it came from, so the detail can link to it. */
+export type ItemHistoryDetailEntry = ItemHistoryEntry & {
+  docKind: "quote" | "sales_order" | "purchase_order";
+  docId: string;
+};
+
+/** One document in the where-used list: a document appears once no matter how many lines of the item it has. */
+export type ItemHistoryDocument = {
+  docKind: "quote" | "sales_order" | "purchase_order";
+  docId: string;
+  docNumber: string;
+  date: string;
+};
+
+/** Pure grouping: newest-first entries collapse to one row per document. */
+export function groupItemDocuments(entries: readonly ItemHistoryDetailEntry[]): ItemHistoryDocument[] {
+  const seen = new Map<string, ItemHistoryDocument>();
+  for (const entry of entries) {
+    const key = `${entry.docKind}:${entry.docId}`;
+    if (!seen.has(key)) {
+      seen.set(key, { docKind: entry.docKind, docId: entry.docId, docNumber: entry.ref, date: entry.date });
+    }
+  }
+  return [...seen.values()];
+}
+
 export function normalizeDescription(description: string): string {
   return description.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -135,6 +161,84 @@ export async function listSupplierPriceComparison(description: string): Promise<
         cost: String(l.unitCost),
       })),
   );
+}
+
+/**
+ * Step 2: every document line for one item, newest first, with the document
+ * it came from. Matches the normalized description exactly (the same rule
+ * as the supplier compare) — a contains-search would also match longer names.
+ * Used by the catalog item detail and the history-only detail.
+ */
+export async function listItemDetailEntries(description: string): Promise<ItemHistoryDetailEntry[]> {
+  const want = normalizeDescription(description);
+  if (!want) return [];
+  const like = { contains: description.trim() };
+  const [quoteLines, soLines, poLines] = await Promise.all([
+    db.quoteItem.findMany({
+      where: { removedAt: null, description: like, quote: { status: { not: "VOID" } } },
+      select: {
+        description: true,
+        unitPrice: true,
+        quote: { select: { id: true, number: true, date: true } },
+      },
+      orderBy: [{ quote: { date: "desc" } }],
+      take: 1000,
+    }),
+    db.salesOrderItem.findMany({
+      where: { removedAt: null, description: like, salesOrder: { status: { not: "VOID" } } },
+      select: {
+        description: true,
+        unitPrice: true,
+        salesOrder: { select: { id: true, number: true, date: true } },
+      },
+      orderBy: [{ salesOrder: { date: "desc" } }],
+      take: 1000,
+    }),
+    db.purchaseOrderItem.findMany({
+      where: { description: like, purchaseOrder: { status: { not: "VOID" } } },
+      select: {
+        description: true,
+        unitCost: true,
+        purchaseOrder: { select: { id: true, number: true, date: true } },
+      },
+      orderBy: [{ purchaseOrder: { date: "desc" } }],
+      take: 1000,
+    }),
+  ]);
+  const entries: ItemHistoryDetailEntry[] = [
+    ...quoteLines
+      .filter((l) => normalizeDescription(l.description) === want)
+      .map((l) => ({
+        description: l.description,
+        date: ymd(l.quote.date) ?? "",
+        ref: l.quote.number,
+        price: String(l.unitPrice),
+        docKind: "quote" as const,
+        docId: l.quote.id,
+      })),
+    ...soLines
+      .filter((l) => normalizeDescription(l.description) === want)
+      .map((l) => ({
+        description: l.description,
+        date: ymd(l.salesOrder.date) ?? "",
+        ref: l.salesOrder.number,
+        price: String(l.unitPrice),
+        docKind: "sales_order" as const,
+        docId: l.salesOrder.id,
+      })),
+    ...poLines
+      .filter((l) => normalizeDescription(l.description) === want)
+      .map((l) => ({
+        description: l.description,
+        date: ymd(l.purchaseOrder.date) ?? "",
+        ref: l.purchaseOrder.number,
+        cost: String(l.unitCost),
+        docKind: "purchase_order" as const,
+        docId: l.purchaseOrder.id,
+      })),
+  ];
+  entries.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return entries;
 }
 
 export async function listItemHistory(opts: { q?: string; customerId?: string } = {}): Promise<ItemHistoryRow[]> {
