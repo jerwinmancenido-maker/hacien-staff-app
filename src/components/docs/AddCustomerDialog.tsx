@@ -171,7 +171,7 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
                 <option value="">Pick one…</option>
                 {WITHHOLDING_TYPE_FORM_ORDER.map((t) => (
                   <option key={t} value={t}>
-                    {t === "NONE" ? "Private" : WITHHOLDING_TYPE_FORM_LABELS[t]}
+                    {WITHHOLDING_TYPE_FORM_LABELS[t]}
                   </option>
                 ))}
               </select>

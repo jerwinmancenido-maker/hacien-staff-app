@@ -6,7 +6,7 @@
 // quote-trow, quote-int2, quote-tbox, edit-topbar, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
-import { useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
@@ -54,6 +54,8 @@ import {
   type EditorItem,
 } from "./DocumentEditor";
 import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
+import { Modal } from "./Dialogs";
+import type { CatalogSearchResult } from "@/lib/items/search";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -62,6 +64,8 @@ type QuoteEditorInitial = EditorInitial & {
   /** S-69: per-quote delivery/warranty notes; undefined = Settings default. */
   deliveryNotes?: string | null;
   warrantyNotes?: string | null;
+  /** Modular terms: estimated lead time in business days (point 3). Null = no figure. */
+  leadTimeDays?: number | null;
   subject?: string;
   buyerPoNo?: string;
   validForDays?: number | string | null;
@@ -82,10 +86,10 @@ export type QuoteEditorProps = {
   termsOptions: string[];
   defaultValidityDays: number;
   printDefaults: { quoteTerms: string; deliveryNotes: string; warrantyNotes: string };
-  preparedByName: string;
-  /** S-70: creator position / signature, approver + approval time. */
-  preparedByPosition?: string | null;
-  preparedSignatureUrl?: string | null;
+  /** Preparer picker (2026-11-07): staff users to choose from + the current preparer. */
+  staffUsers: { id: string; name: string; position: string | null; hasSignature: boolean }[];
+  preparedById: string;
+  /** S-70: approver + approval time. */
   approvedByName?: string | null;
   approvedAt?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -147,6 +151,9 @@ function blankItem(picks: readonly WithholdingSnapshot[], key: string): EditorIt
     withholdingRate: wh.withholdingRate,
     withholdingAtc: wh.withholdingAtc,
     withholdingOverride: false,
+    itemId: null,
+    itemName: null,
+    newCatalog: null,
   };
 }
 
@@ -196,7 +203,7 @@ function DescTextarea({
 function customerTypeLabel(type: string): string {
   if (type === "GOVERNMENT") return "Government";
   if (type === "TOP_WITHHOLDING_AGENT") return "Top withholding agent";
-  if (type === "NONE") return "Private";
+  if (type === "NONE") return "No withholding";
   return type.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
@@ -226,9 +233,8 @@ export function QuoteEditor({
   termsOptions,
   defaultValidityDays,
   printDefaults,
-  preparedByName,
-  preparedByPosition = null,
-  preparedSignatureUrl = null,
+  staffUsers,
+  preparedById,
   approvedByName = null,
   approvedAt = null,
   action,
@@ -256,6 +262,9 @@ export function QuoteEditor({
   /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
   const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
+  /** Preparer picker: the chosen staff user; the preview below follows it. */
+  const [preparedByIdState, setPreparedByIdState] = useState(preparedById);
+  const preparer = staffUsers.find((u) => u.id === preparedByIdState) ?? null;
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
@@ -294,6 +303,9 @@ export function QuoteEditor({
           withholdingRate: i.withholdingRate,
           withholdingAtc: i.withholdingAtc ?? null,
           withholdingOverride: i.withholdingOverride ?? false,
+          itemId: i.itemId ?? null,
+          itemName: i.itemName ?? null,
+          newCatalog: null,
         }))
       : [blankItem(initialPickSnaps, "init-0")],
   );
@@ -310,6 +322,9 @@ export function QuoteEditor({
         ? String(validityDaysFromDates(initial.date, initial.validUntil) ?? defaultValidityDays)
         : String(defaultValidityDays);
   const [validForDays, setValidForDays] = useState<string>(initialDays);
+
+  // Modular terms: estimated lead time in business days (point 3). Blank = no figure.
+  const [leadTimeDays, setLeadTimeDays] = useState<string>(initial.leadTimeDays != null ? String(initial.leadTimeDays) : "");
 
   function onValidForDaysChange(val: string) {
     setValidForDays(val);
@@ -404,6 +419,174 @@ export function QuoteEditor({
   const notSet = pick == null && customer != null;
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+
+  // Catalog Step 3: product picker (search as you type) + product drawer.
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerResults, setPickerResults] = useState<CatalogSearchResult[]>([]);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [drawerFor, setDrawerFor] = useState<string | null>(null);
+  const [drawerItem, setDrawerItem] = useState<CatalogSearchResult | null>(null);
+  const [drawerBusy, setDrawerBusy] = useState(false);
+  const pickerSeq = useRef(0);
+
+  // The effect only fetches (state changes live in the async callback, never
+  // in the effect body). Short queries clear their results where the query
+  // is set instead — see onDescription and the Pick a product button.
+  useEffect(() => {
+    if (pickerFor == null) return;
+    const q = pickerQuery.trim();
+    if (q.length < 2) return;
+    const seq = ++pickerSeq.current;
+    const t = setTimeout(async () => {
+      if (pickerSeq.current === seq) setPickerBusy(true);
+      try {
+        const res = await fetch(`/api/items/search?q=${encodeURIComponent(q)}`);
+        const body = await res.json();
+        if (pickerSeq.current !== seq) return;
+        setPickerResults(body.ok && Array.isArray(body.items) ? body.items : []);
+      } catch {
+        if (pickerSeq.current === seq) setPickerResults([]);
+      } finally {
+        if (pickerSeq.current === seq) setPickerBusy(false);
+      }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [pickerFor, pickerQuery]);
+
+  /** Typing a description searches the catalog (unlinked lines only). */
+  function onDescription(line: EditorItem, v: string) {
+    setItem(line.key, { description: v });
+    if (line.itemId) return;
+    if (v.trim().length >= 2) {
+      setPickerFor(line.key);
+      setPickerQuery(v);
+    } else if (pickerFor === line.key) {
+      setPickerFor(null);
+      setPickerQuery("");
+      setPickerResults([]);
+    }
+  }
+
+  /** Picking a catalog item fills the line from it and links the line. */
+  function applyCatalogPick(line: EditorItem, item: CatalogSearchResult) {
+    setItems((xs) =>
+      xs.map((x) => {
+        if (x.key !== line.key) return x;
+        const next: EditorItem = {
+          ...x,
+          itemId: item.id,
+          itemName: item.name,
+          description: item.name,
+          unit: item.unit,
+          newCatalog: null,
+        };
+        if (item.defaultUnitPrice != null) next.unitPrice = item.defaultUnitPrice;
+        if (item.kind !== x.kind) {
+          next.kind = item.kind;
+          if (!x.withholdingOverride) {
+            const wh = lineWithholdingSnapshotFromPicks(linePicks, item.kind);
+            next.withholdingRate = wh.withholdingRate;
+            next.withholdingAtc = wh.withholdingAtc;
+            next.withholdingOverride = false;
+          }
+        }
+        return next;
+      }),
+    );
+    setPickerFor(null);
+    setPickerQuery("");
+    setPickerResults([]);
+  }
+
+  async function openDrawer(line: EditorItem) {
+    setDrawerFor(line.key);
+    if (!line.itemId) {
+      setDrawerItem(null);
+      return;
+    }
+    setDrawerBusy(true);
+    try {
+      const res = await fetch(`/api/items/${line.itemId}`);
+      const body = await res.json();
+      setDrawerItem(body.ok ? body.item : null);
+    } catch {
+      setDrawerItem(null);
+    } finally {
+      setDrawerBusy(false);
+    }
+  }
+
+  function closePicker() {
+    setPickerFor(null);
+    setPickerQuery("");
+    setPickerResults([]);
+  }
+
+  /** The search box under a line's description (desktop + mobile share it). */
+  function pickerBox(line: EditorItem) {
+    if (pickerFor !== line.key) return null;
+    return (
+      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+        {pickerBusy ? (
+          <div className="small muted">Searching the catalog…</div>
+        ) : pickerResults.length === 0 ? (
+          <div className="small muted">No catalog matches — this saves as a free-text line.</div>
+        ) : (
+          <ul className="plain-list">
+            {pickerResults.map((r) => {
+              const meta = [r.brand, r.model, r.sku].filter(Boolean).join(" · ");
+              return (
+                <li key={r.id}>
+                  <button type="button" className="btn-link" role="option" aria-selected={false} onClick={() => applyCatalogPick(line, r)}>
+                    {r.name}
+                    {meta ? ` — ${meta}` : ""}
+                    {r.defaultUnitPrice != null ? ` — ₱${Number(r.defaultUnitPrice).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : ""}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <button type="button" className="btn-link small" onClick={closePicker}>
+          Close
+        </button>
+      </div>
+    );
+  }
+
+  /** Linked chip / pick + details buttons under a line's description. */
+  function productRow(line: EditorItem) {
+    return (
+      <div className="quote-ln-product">
+        {line.itemId ? (
+          <>
+            <button type="button" className="btn-link" onClick={() => openDrawer(line)}>
+              🔗 {line.itemName ?? "Linked product"}
+            </button>
+            <button type="button" className="btn-link" aria-label="Unlink product" onClick={() => setItem(line.key, { itemId: null, itemName: null })}>
+              ✕
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => {
+              setPickerFor(line.key);
+              setPickerQuery(line.description);
+              setPickerResults([]);
+            }}
+          >
+            Pick a product
+          </button>
+        )}
+        <button type="button" className="btn-link" onClick={() => openDrawer(line)}>
+          Product details
+        </button>
+      </div>
+    );
+  }
   const move = (idx: number, by: number) =>
     setItems((xs) => {
       const next = [...xs];
@@ -519,6 +702,9 @@ export function QuoteEditor({
   }
 
   function itemPayload(i: EditorItem) {
+    const nc = i.newCatalog;
+    const hasCatalogFields =
+      nc != null && [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((v) => v.trim() !== "");
     const base = {
       id: i.id,
       description: i.description,
@@ -529,6 +715,11 @@ export function QuoteEditor({
       withholdingRate: i.withholdingRate,
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
+      itemId: i.itemId,
+      // Only send typed catalog fields; blank ones mean "no catalog item".
+      newCatalog: hasCatalogFields
+        ? { brand: nc.brand, model: nc.model, category: nc.category, sku: nc.sku, details: nc.details }
+        : undefined,
     };
     return withCosts ? { ...base, supplierId: i.supplierId, supplierUnitCost: i.supplierUnitCost || "0" } : base;
   }
@@ -543,9 +734,12 @@ export function QuoteEditor({
     notes: h.notes,
     deliveryNotes: h.deliveryNotes,
     warrantyNotes: h.warrantyNotes,
+    leadTimeDays: leadTimeDays.trim() === "" ? undefined : leadTimeDays.trim(),
     internalNotes: h.internalNotes,
     subject: h.subject,
     buyerPoNo: h.buyerPoNo,
+    // Preparer picker: who prepared this quote (prints under "Prepared by").
+    preparedById: preparedByIdState,
     // null = not set; [] = explicit none.
     withholdingCodes: pick,
     withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
@@ -558,6 +752,7 @@ export function QuoteEditor({
 
   const termsTabDot =
     Boolean(h.terms?.trim()) ||
+    Boolean(leadTimeDays.trim()) ||
     Boolean(printDefaults.quoteTerms?.trim()) ||
     Boolean(printDefaults.deliveryNotes?.trim()) ||
     Boolean(printDefaults.warrantyNotes?.trim());
@@ -958,8 +1153,10 @@ export function QuoteEditor({
                       <div className="quote-lr">
                         <div className="quote-ln-no">{idx + 1}</div>
                         <div className="quote-ln-dsc">
-                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
+                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
                           {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                          {productRow(i)}
+                          {pickerBox(i)}
                           <div className="quote-ln-tags">
                             <select
                               className="quote-tg"
@@ -1118,8 +1315,10 @@ export function QuoteEditor({
                         </button>
                       </div>
                       <div className="quote-line-card-desc">
-                        <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
+                        <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
                         {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                        {productRow(i)}
+                        {pickerBox(i)}
                       </div>
                       <div className="quote-line-card-row3">
                         <div className="field">
@@ -1361,6 +1560,21 @@ export function QuoteEditor({
                 <span className="label">Validity</span>
                 <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
               </div>
+              <div className={`quote-f field${e.leadTimeDays ? " has-error" : ""}`}>
+                <label htmlFor="leadTimeDays">Lead time (business days)</label>
+                <input
+                  id="leadTimeDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  inputMode="numeric"
+                  value={leadTimeDays}
+                  onChange={(ev) => setLeadTimeDays(ev.target.value)}
+                  placeholder="No estimate"
+                />
+                <div className="hint">Prints in the terms as the estimated lead time · Leave blank for no figure</div>
+                {e.leadTimeDays && <div className="error">{e.leadTimeDays}</div>}
+              </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>
                 <textarea readOnly rows={4} value={printDefaults.quoteTerms ?? ""} aria-readonly />
@@ -1402,16 +1616,24 @@ export function QuoteEditor({
 
           {tab === "signoff" && (
             <div role="tabpanel" className="quote-fg">
-              <div className="quote-f field">
-                <span className="label">Prepared by</span>
-                {preparedSignatureUrl ? (
-                  <div style={{ marginBottom: 4 }}>
+              <div className={`quote-f field${e.preparedById ? " has-error" : ""}`}>
+                <label htmlFor="preparedById">Prepared by</label>
+                <select id="preparedById" value={preparedByIdState} onChange={(ev) => setPreparedByIdState(ev.target.value)}>
+                  {staffUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                      {u.position ? ` — ${u.position}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {preparer?.hasSignature ? (
+                  <div style={{ marginTop: 4 }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={preparedSignatureUrl} alt="Preparer signature" style={{ maxHeight: 56, border: "1px solid var(--border)", background: "#fff" }} />
+                    <img src={`/files/user-signature/${preparer.id}`} alt="Preparer signature" style={{ maxHeight: 56, border: "1px solid var(--border)", background: "#fff" }} />
                   </div>
                 ) : null}
-                <div className="strong">{preparedByName}</div>
-                {preparedByPosition ? <div className="small muted">{preparedByPosition}</div> : null}
+                {preparer?.position ? <div className="small muted">{preparer.position}</div> : null}
+                {e.preparedById && <div className="error">{e.preparedById}</div>}
               </div>
               {approvedByName ? (
                 <div className="quote-f field">
@@ -1427,7 +1649,7 @@ export function QuoteEditor({
                   <div className="small faint">Name and signature</div>
                 </div>
               </div>
-              <div className="hint">Names fill in automatically from the staff who prepared and approved this quote. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. Electronically generated, approved in the HACIEN system.</div>
+              <div className="hint">Pick who prepared this quote — the name prints under Prepared by. Conforme stays a blank line for a wet signature or the customer&apos;s signed PO; a signed conforme can be uploaded from the quote page. System-generated and approved. No signature required.</div>
               <p className="right small muted">{totalsSummary}</p>
             </div>
           )}
@@ -1467,6 +1689,111 @@ export function QuoteEditor({
         onCancel={() => setSaveNoneConfirmOpen(false)}
         onConfirm={confirmSaveNone}
       />
+
+      {drawerFor != null &&
+        (() => {
+          const line = items.find((x) => x.key === drawerFor);
+          if (!line) return null;
+          const nc = line.newCatalog ?? { brand: "", model: "", category: "", sku: "", details: "" };
+          const setNc = (patch: Partial<typeof nc>) => setItem(line.key, { newCatalog: { ...nc, ...patch } });
+          return (
+            <Modal title="Product details" labelId="product-details-title" onClose={() => setDrawerFor(null)}>
+              {line.itemId ? (
+                <>
+                  {drawerBusy ? (
+                    <p className="small muted">Loading the catalog item…</p>
+                  ) : drawerItem ? (
+                    <dl className="quote-product-dl">
+                      <dt>Name</dt>
+                      <dd>{drawerItem.name}</dd>
+                      {drawerItem.brand ? (
+                        <>
+                          <dt>Brand</dt>
+                          <dd>{drawerItem.brand}</dd>
+                        </>
+                      ) : null}
+                      {drawerItem.model ? (
+                        <>
+                          <dt>Model</dt>
+                          <dd>{drawerItem.model}</dd>
+                        </>
+                      ) : null}
+                      {drawerItem.category ? (
+                        <>
+                          <dt>Category</dt>
+                          <dd>{drawerItem.category}</dd>
+                        </>
+                      ) : null}
+                      {drawerItem.sku ? (
+                        <>
+                          <dt>SKU / part no.</dt>
+                          <dd>{drawerItem.sku}</dd>
+                        </>
+                      ) : null}
+                      <dt>Unit</dt>
+                      <dd>{drawerItem.unit}</dd>
+                      <dt>Kind</dt>
+                      <dd>{drawerItem.kind === "GOODS" ? "Goods" : "Services"}</dd>
+                      {drawerItem.details ? (
+                        <>
+                          <dt>Details</dt>
+                          <dd>{drawerItem.details}</dd>
+                        </>
+                      ) : null}
+                      {drawerItem.defaultUnitPrice != null ? (
+                        <>
+                          <dt>Default unit price</dt>
+                          <dd>₱{Number(drawerItem.defaultUnitPrice).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                  ) : (
+                    <p className="small muted">Couldn&apos;t load the catalog item — the line stays linked as “{line.itemName ?? "Linked product"}”.</p>
+                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <a className="btn btn-secondary" href={`/items/${line.itemId}`} target="_blank" rel="noreferrer">
+                      Open in catalog
+                    </a>
+                    <button type="button" className="btn btn-secondary" onClick={() => setItem(line.key, { itemId: null, itemName: null })}>
+                      Unlink
+                    </button>
+                    <button type="button" className="btn" onClick={() => setDrawerFor(null)}>
+                      Done
+                    </button>
+                  </div>
+                  <p className="hint">Catalog fields are edited on the item&apos;s catalog page, so there is one place to change them.</p>
+                </>
+              ) : (
+                <>
+                  <p className="small muted">“{line.description || "This line"}” isn&apos;t linked to the catalog yet. Fill in the fields below and saving this quote adds it as a new catalog item; leave them blank and it stays a free-text line.</p>
+                  <div className="field">
+                    <label className="label" htmlFor="nc-brand">Brand</label>
+                    <input id="nc-brand" type="text" value={nc.brand} onChange={(ev) => setNc({ brand: ev.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label className="label" htmlFor="nc-model">Model</label>
+                    <input id="nc-model" type="text" value={nc.model} onChange={(ev) => setNc({ model: ev.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label className="label" htmlFor="nc-category">Category</label>
+                    <input id="nc-category" type="text" value={nc.category} onChange={(ev) => setNc({ category: ev.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label className="label" htmlFor="nc-sku">SKU / part no.</label>
+                    <input id="nc-sku" type="text" value={nc.sku} onChange={(ev) => setNc({ sku: ev.target.value })} />
+                  </div>
+                  <div className="field full">
+                    <label className="label" htmlFor="nc-details">Details</label>
+                    <textarea id="nc-details" rows={2} value={nc.details} onChange={(ev) => setNc({ details: ev.target.value })} placeholder="e.g. 12 months" />
+                  </div>
+                  <button type="button" className="btn" onClick={() => setDrawerFor(null)}>
+                    Done
+                  </button>
+                </>
+              )}
+            </Modal>
+          );
+        })()}
     </>
   );
 }

@@ -102,6 +102,9 @@ export function customerSchema(
         ])
         .optional(),
       defaultTerms: termsRequired ? requiredTermsField(allowedTerms) : termsField(allowedTerms),
+      // Modular terms: true = private individual buying for personal use
+      // (point 6 omitted from their quotes). False = business (default).
+      isIndividual: z.boolean().optional(),
       // S-54: blank = no limit; otherwise a non-negative peso amount.
       creditLimit: z
         .string()

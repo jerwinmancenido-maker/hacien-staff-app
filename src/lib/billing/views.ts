@@ -489,25 +489,15 @@ async function customerCreditsGrouped(): Promise<Map<string, { name: string; cre
 }
 
 /**
- * Count of billings that expect a customer 2307 and do not have one recorded yet
- * (posted collection with amount > 0). Same number on Home and /billing/2307.
+ * Count of PENDING 2307 certificates awaiting receipt (amount > 0, collection
+ * POSTED). Same rows as the pending2307 sum below and the PENDING rows on
+ * /billing/2307, so the count, the peso total, and the list always agree.
+ * Same number on Home and /billing/2307.
  */
-export async function countPending2307Expected(): Promise<number> {
-  const billings = await db.billing.findMany({
-    where: {
-      status: { not: "VOID" },
-      withholdingExpected: { gt: 0 },
-    },
-    select: {
-      id: true,
-      withholdings: {
-        where: { amount: { gt: 0 }, collection: { status: "POSTED" } },
-        select: { id: true },
-        take: 1,
-      },
-    },
+export async function countPending2307Certificates(): Promise<number> {
+  return db.withholding2307.count({
+    where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
   });
-  return billings.filter((b) => b.withholdings.length === 0).length;
 }
 
 export async function arAgingSummary(): Promise<{
@@ -519,7 +509,7 @@ export async function arAgingSummary(): Promise<{
   openCount: number;
   /** Peso sum of PENDING 2307 amounts (kept for billing hub; count is separate). */
   pending2307: string;
-  /** Billings expecting a 2307 with none recorded yet. */
+  /** Count of PENDING 2307 certificates awaiting receipt (same rows as pending2307). */
   pending2307Count: number;
   credit: string;
   byCustomer: CustomerAgingRow[];
@@ -563,7 +553,7 @@ export async function arAgingSummary(): Promise<{
       where: { status: "PENDING", amount: { gt: 0 }, collection: { status: "POSTED" } },
       _sum: { amount: true },
     }),
-    countPending2307Expected(),
+    countPending2307Certificates(),
     customerCreditsGrouped(),
   ]);
 
@@ -645,11 +635,11 @@ export async function list2307(filters: { status?: Withholding2307Status | "ALL"
         : w.lines.length === 0
           ? [{ id: w.id, rate: w.rate, atcCode: w.atcCode, amount: w.amount }]
           : [];
-    return lines.map((line, i) => ({
+    return lines.map((line) => ({
       ...base,
       id: line.id,
-      // Mark-received acts on the parent; first line carries the action control.
-      markId: i === 0 ? w.id : null,
+      // Mark-received acts on the parent; every line carries the action control.
+      markId: w.id,
       amount: money(line.amount),
       rate: String(line.rate),
       atcCode: line.atcCode,
