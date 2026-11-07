@@ -546,6 +546,18 @@ export function QuoteEditor({
             })}
           </ul>
         )}
+        {pickerQuery.trim() ? (
+          <button
+            type="button"
+            className="quote-picker-add"
+            onClick={() => {
+              closePicker();
+              void openDrawer(line);
+            }}
+          >
+            + Add “{pickerQuery.trim().length > 42 ? `${pickerQuery.trim().slice(0, 42)}…` : pickerQuery.trim()}” as a new item
+          </button>
+        ) : null}
         <button type="button" className="btn-link small" onClick={closePicker}>
           Close
         </button>
@@ -1133,10 +1145,12 @@ export function QuoteEditor({
                       <div className="quote-lr">
                         <div className="quote-ln-no">{idx + 1}</div>
                         <div className="quote-ln-dsc">
-                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                          <div className="quote-ln-descwrap">
+                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                            {pickerBox(i)}
+                          </div>
                           {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                           {productRow(i)}
-                          {pickerBox(i)}
                           <div className="quote-ln-tags">
                             <select
                               className="quote-tg"
@@ -1295,10 +1309,12 @@ export function QuoteEditor({
                         </button>
                       </div>
                       <div className="quote-line-card-desc">
-                        <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                        <div className="quote-ln-descwrap">
+                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                          {pickerBox(i)}
+                        </div>
                         {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                         {productRow(i)}
-                        {pickerBox(i)}
                       </div>
                       <div className="quote-line-card-row3">
                         <div className="field">
@@ -1694,7 +1710,7 @@ export function QuoteEditor({
           const nc = line.newCatalog ?? { brand: "", model: "", category: "", sku: "", details: "" };
           const setNc = (patch: Partial<typeof nc>) => setItem(line.key, { newCatalog: { ...nc, ...patch } });
           return (
-            <Modal title="Product details" labelId="product-details-title" onClose={() => setDrawerFor(null)}>
+            <Modal title="Product details" labelId="product-details-title" variant="drawer-right" onClose={() => setDrawerFor(null)}>
               {line.itemId ? (
                 <>
                   {drawerBusy ? (
