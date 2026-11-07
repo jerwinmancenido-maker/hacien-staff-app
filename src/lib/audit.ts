@@ -26,6 +26,7 @@ export type AuditEntityType =
   | "Billing"
   | "Collection"
   | "Withholding2307"
+  | "Item"
   | "SupplierPayment"
   | "SupplierWithholding2307"
   | "CashAccount"

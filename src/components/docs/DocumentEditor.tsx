@@ -58,6 +58,14 @@ export type EditorCustomer = {
   contacts: { id: string; name: string; isMain: boolean }[];
 };
 
+export type EditorNewCatalog = {
+  brand: string;
+  model: string;
+  category: string;
+  sku: string;
+  details: string;
+};
+
 export type EditorItem = {
   key: string;
   id: string | null;
@@ -71,6 +79,11 @@ export type EditorItem = {
   withholdingRate: string | null;
   withholdingAtc: string | null;
   withholdingOverride: boolean;
+  /** Catalog Step 3: the linked catalog item, or null for a free-text line. */
+  itemId: string | null;
+  itemName: string | null;
+  /** Catalog Step 3 (quote editor only): fields for a not-yet-catalogued line. */
+  newCatalog?: EditorNewCatalog | null;
 };
 
 export type EditorInitial = {
@@ -158,6 +171,9 @@ function blankItem(picks: readonly WithholdingSnapshot[]): EditorItem {
     withholdingRate: wh.withholdingRate,
     withholdingAtc: wh.withholdingAtc,
     withholdingOverride: false,
+    itemId: null,
+    itemName: null,
+    newCatalog: null,
   };
 }
 
@@ -216,6 +232,8 @@ function lineMoneyInput(row: { kind: ItemKind; qty: string; unitPrice: string; s
     description: "",
     unit: "",
     supplierId: null,
+    itemId: null,
+    itemName: null,
     withholdingOverride: false,
     ...row,
   });
@@ -278,6 +296,9 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           withholdingRate: i.withholdingRate,
           withholdingAtc: i.withholdingAtc ?? null,
           withholdingOverride: i.withholdingOverride ?? false,
+          itemId: i.itemId ?? null,
+          itemName: i.itemName ?? null,
+          newCatalog: null,
         }))
       : [blankItem(initialPickSnaps)],
   );

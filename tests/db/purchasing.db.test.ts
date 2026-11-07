@@ -505,6 +505,40 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       await expect(postReceivingReport(po.id, receipt(year, [{ lineId: lines[0]!.id, qty: "1" }], staff.id), staff, [{ name: "x.png", size: fake.length, bytes: fake }])).rejects.toThrow(/real PDF, JPG or PNG/);
       expect(await db.receivingReport.count({ where: { purchaseOrderId: po.id } })).toBe(1);
     });
+
+    it("receiving history shows only received and closed POs; the open list keeps sent and partially received ones", async () => {
+      const year = await freshYear();
+      // SENT: nothing received yet.
+      const sent = await sentPo(year);
+      // PARTIALLY_RECEIVED: half of one line.
+      const partial = await sentPo(year);
+      await postReceivingReport(partial.po.id, receipt(year, [{ lineId: partial.lines[0]!.id, qty: "5" }], staff.id), staff);
+      expect((await db.purchaseOrder.findUniqueOrThrow({ where: { id: partial.po.id } })).status).toBe("PARTIALLY_RECEIVED");
+      // RECEIVED: both lines fully received.
+      const received = await sentPo(year);
+      await postReceivingReport(received.po.id, receipt(year, [{ lineId: received.lines[0]!.id, qty: "10" }, { lineId: received.lines[1]!.id, qty: "10" }], staff.id), staff);
+      expect((await db.purchaseOrder.findUniqueOrThrow({ where: { id: received.po.id } })).status).toBe("RECEIVED");
+      // CLOSED: partially received, then short-closed.
+      const closed = await sentPo(year);
+      await postReceivingReport(closed.po.id, receipt(year, [{ lineId: closed.lines[0]!.id, qty: "5" }], staff.id), staff);
+      await closePurchaseOrder(closed.po.id, "Supplier out of stock", buyer);
+      expect((await db.purchaseOrder.findUniqueOrThrow({ where: { id: closed.po.id } })).status).toBe("CLOSED");
+
+      const open = await listReceivingView({}, admin);
+      const openIds = open.map((r) => r.id);
+      expect(openIds).toContain(sent.po.id);
+      expect(openIds).toContain(partial.po.id);
+      expect(openIds).not.toContain(received.po.id);
+      expect(openIds).not.toContain(closed.po.id);
+
+      const history = await listReceivingView({ history: true }, admin);
+      const historyIds = history.map((r) => r.id);
+      expect(historyIds).toContain(received.po.id);
+      expect(historyIds).toContain(closed.po.id);
+      // The bug: PARTIALLY_RECEIVED used to leak into the history list.
+      expect(historyIds).not.toContain(partial.po.id);
+      expect(historyIds).not.toContain(sent.po.id);
+    });
   });
 
   // -------------------------------------------------------------------------
