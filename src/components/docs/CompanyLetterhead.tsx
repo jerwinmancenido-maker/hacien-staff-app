@@ -9,9 +9,7 @@ import { NON_VAT_LABEL } from "@/lib/print/tax-wording";
 import type { ProfessionalPrintModel } from "@/lib/print/types";
 
 export function CompanyLetterhead({ company }: { company: ProfessionalPrintModel["company"] }) {
-  // Registered name is kept for the logo's alt text only — the visible name
-  // line above the address was removed (owner 2026-11-07): the logo already
-  // carries the HACIEN name, so the header goes straight to the address.
+  // Prefer registered name for the text line; never treat this as a font stand-in for the logo.
   const companyLine = company.registeredName.trim() || company.tradeName.trim() || "—";
   const contactBits = [company.email?.trim(), company.phone?.trim()].filter(Boolean);
   // Settings upload overrides; otherwise brand kit logo-full.svg (SVG only — never retype HACIEN).
@@ -30,6 +28,7 @@ export function CompanyLetterhead({ company }: { company: ProfessionalPrintModel
           />
         </div>
         <div className="pp-letterhead-text">
+          <div className="pp-company-line">{companyLine}</div>
           {/* Empty address/TIN: omit the line. Warning lives only in PrintShell toolbar. */}
           {company.address ? <div className="pp-pre">{company.address}</div> : null}
           <div className="pp-tin-row">
