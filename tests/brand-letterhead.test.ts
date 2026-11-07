@@ -106,4 +106,14 @@ describe("letterhead Template v3 layout", () => {
     expect(start).toBeGreaterThan(-1);
     expect(css.slice(start, start + 300)).toContain("text-wrap: balance;");
   });
+
+  it("no company name line above the address (owner 2026-11-07 — the logo carries the name)", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProfessionalPrintDocument, { doc: quotePrintFixture() }),
+    );
+    expect(markup).not.toContain("pp-company-line");
+    expect(markup).not.toContain("HACIEN Sample Trading Co.");
+    // The header still renders the letterhead text block (address/TIN/contact).
+    expect(markup).toContain("pp-letterhead-text");
+  });
 });
