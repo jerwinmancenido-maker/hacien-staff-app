@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // S-67: new quote page redesign — no withholding warning before a
-// customer is picked; withholding as one summary line in Quote details
-// (the picker itself moved to its own tab in the 2026-11-07 UI plan —
-// no more Change link / expand-in-place); tidy 2-column grid with even
-// field widths; full width; Items visible without scrolling (Items is
-// the default tab).
+// customer is picked; the withholding picker lives on its own tab
+// (2026-11-07 UI plan; the Quote details summary line was removed
+// 2026-11-08 — withholding lives only in its tab); tidy 2-column grid
+// with even field widths; full width; Items visible without scrolling
+// (Items is the default tab).
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -17,9 +17,10 @@ describe("S-67 new quote page redesign", () => {
     expect(src).toContain("const notSet = pick == null && customer != null;");
   });
 
-  it("withholding is one summary line in details; the picker lives on its own tab", () => {
+  it("no withholding summary line in details; the picker lives on its own tab", () => {
     const src = read("src/components/docs/QuoteEditor.tsx");
-    expect(src).toContain('className="wh-collapsed-row"');
+    // The details-card summary row was removed 2026-11-08 (owner call).
+    expect(src).not.toContain("wh-collapsed-row");
     // No expand-in-place Change link anymore.
     expect(src).not.toContain("WITHHOLDING_PICK_CHANGE_LABEL");
     expect(src).not.toContain("whPickOpen");
