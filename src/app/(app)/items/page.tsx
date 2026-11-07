@@ -12,7 +12,7 @@ import { SearchIcon } from "@/components/Icons";
 /**
  * S-55: item list with last cost and price, from document lines.
  * Catalog (Step 1): the master list staff maintain once and reuse.
- * History rows become links in Step 2, once the detail page shows them.
+ * Step 2: history rows link to the history-only detail page.
  */
 export default async function ItemsPage({
   searchParams,
@@ -160,7 +160,7 @@ export default async function ItemsPage({
                   {rows.map((row) => (
                     <tr key={row.key}>
                       <td>
-                        {row.description}
+                        <Link href={`/items/history?item=${encodeURIComponent(row.description)}`}>{row.description}</Link>
                         {showCosts ? (
                           <div className="small">
                             <Link href={`/items/compare?item=${encodeURIComponent(row.description)}`}>Compare suppliers →</Link>

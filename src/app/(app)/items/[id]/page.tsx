@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canSeeCosts } from "@/lib/permissions";
 import { getItem } from "@/lib/services/items";
 import { Chip, PageHeader } from "@/components/ui";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { ItemForm } from "@/components/ItemForm";
+import ItemHistoryDetail from "@/components/ItemHistoryDetail";
 import { saveItemAction, setItemActiveAction } from "../actions";
 
-/** Step 1: the edit form. Step 2 adds price history, suppliers and where-used here. */
+/** Step 1: the edit form. Step 2 adds price history, suppliers and where-used below it. */
 export default async function ItemPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
   const item = await getItem(id);
   if (!item) notFound();
   const canEdit = can(user, "edit_data");
+  const showCosts = canSeeCosts(user);
 
   return (
     <>
@@ -50,6 +52,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
       <div className="card">
         <ItemForm item={item} action={saveItemAction.bind(null, id)} canEdit={canEdit} />
       </div>
+      <ItemHistoryDetail description={item.name} showCosts={showCosts} />
     </>
   );
 }
