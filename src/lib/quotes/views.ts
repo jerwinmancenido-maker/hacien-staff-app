@@ -55,6 +55,9 @@ type ItemRow = {
   withholdingAtc?: string | null;
   withholdingOverride?: boolean;
   deliveredQty?: Dec | null;
+  /** Catalog Step 3 (quotes only; SO rows have neither). */
+  itemId?: string | null;
+  item?: { name: string } | null;
 };
 
 export type ItemView = {
@@ -76,6 +79,9 @@ export type ItemView = {
   supplierUnitCost?: string;
   supplierTotal?: string;
   margin?: string;
+  /** Catalog Step 3: the linked catalog item (quotes only). */
+  itemId?: string | null;
+  itemName?: string | null;
 };
 
 export type TotalsView = {
@@ -103,6 +109,8 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
     withholdingAtc: i.withholdingAtc ?? null,
     withholdingOverride: i.withholdingOverride ?? false,
+    itemId: i.itemId ?? null,
+    itemName: i.item?.name ?? null,
   };
   if (!withCosts) return base;
   return {
@@ -186,6 +194,13 @@ const itemsInclude = {
   include: { supplier: { select: { name: true } } },
 } satisfies Prisma.QuoteItemFindManyArgs;
 
+/** Quotes only: SO lines have no catalog link, so they keep itemsInclude. */
+const quoteItemsInclude = {
+  where: { removedAt: null },
+  orderBy: { sortOrder: "asc" },
+  include: { supplier: { select: { name: true } }, item: { select: { name: true } } },
+} satisfies Prisma.QuoteItemFindManyArgs;
+
 const contactSelect = { id: true, name: true, email: true, phone: true } as const;
 
 // ---------------------------------------------------------------------------
@@ -197,12 +212,13 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   const q = await db.quote.findUnique({
     where: { id },
     include: {
-      items: itemsInclude,
+      items: quoteItemsInclude,
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
       salesOrders: { select: { id: true, number: true, status: true, date: true, buyerPoNo: true, voidReason: true }, orderBy: [{ createdAt: "desc" }, { number: "desc" }] },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
+      preparedBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, createdAt: true } },
       updatedBy: { select: { name: true } },
       approvedBy: { select: { name: true } },
@@ -248,6 +264,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     notes: q.notes,
     deliveryNotes: q.deliveryNotes,
     warrantyNotes: q.warrantyNotes,
+    leadTimeDays: q.leadTimeDays,
     internalNotes: q.internalNotes,
     subject: q.subject,
     buyerPoNo: q.buyerPoNo,
@@ -269,6 +286,13 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     createdBy: q.createdBy.name,
     createdByPosition: q.createdBy.position,
     createdBySignatureUrl: q.createdBy.signatureStorageKey ? `/files/user-signature/${q.createdBy.id}` : null,
+    // Preparer picker: the chosen preparer, else the creator.
+    preparedById: q.preparedBy?.id ?? q.createdBy.id,
+    preparedBy: (q.preparedBy ?? q.createdBy).name,
+    preparedByPosition: (q.preparedBy ?? q.createdBy).position,
+    preparedBySignatureUrl: (q.preparedBy ?? q.createdBy).signatureStorageKey
+      ? `/files/user-signature/${(q.preparedBy ?? q.createdBy).id}`
+      : null,
     conformeFiles: q.attachments.map((a) => ({ id: a.id, fileName: a.fileName, href: `/files/attachments/${a.id}` })),
     updatedBy: q.updatedBy.name,
     updatedAt: q.updatedAt,
@@ -624,6 +648,9 @@ export type EditableItem = {
   withholdingOverride: boolean;
   supplierId?: string | null;
   supplierUnitCost?: string;
+  /** Catalog Step 3: the linked catalog item (quotes only; null for SO). */
+  itemId?: string | null;
+  itemName?: string | null;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
@@ -638,6 +665,8 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
       withholdingRate: i.withholdingRate,
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
+      itemId: i.itemId ?? null,
+      itemName: i.itemName ?? null,
     };
     return withCosts ? { ...base, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "0.00" } : base;
   });

@@ -46,3 +46,32 @@ export async function editorSuppliers(user: PermissionUser) {
   if (!canSeeCosts(user)) return null;
   return db.supplier.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
 }
+
+export type EditorStaffUser = {
+  id: string;
+  name: string;
+  position: string | null;
+  hasSignature: boolean;
+};
+
+/**
+ * Preparer picker: every active staff user, for the quote "Prepared by" choice.
+ * includeId keeps a stored preparer listed even after they were turned off,
+ * so an old quote can still be saved without changing its preparer.
+ */
+export async function editorStaffUsers(includeId?: string | null): Promise<EditorStaffUser[]> {
+  const users = await db.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, position: true, signatureStorageKey: true },
+    orderBy: { name: "asc" },
+  });
+  const list = users.map((u) => ({ id: u.id, name: u.name, position: u.position, hasSignature: u.signatureStorageKey !== null }));
+  if (includeId && !list.some((u) => u.id === includeId)) {
+    const kept = await db.user.findUnique({
+      where: { id: includeId },
+      select: { id: true, name: true, position: true, signatureStorageKey: true },
+    });
+    if (kept) list.push({ id: kept.id, name: kept.name, position: kept.position, hasSignature: kept.signatureStorageKey !== null });
+  }
+  return list;
+}

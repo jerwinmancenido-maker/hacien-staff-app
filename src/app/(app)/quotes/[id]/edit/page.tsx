@@ -6,7 +6,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
-import { editorCustomers, editorRates, editorSuppliers } from "../../editor-data";
+import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../../editor-data";
 import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,11 +17,12 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
   if (quote.status !== "DRAFT" && quote.status !== "SENT") redirect(`/quotes/${id}`);
   const { settings } = await getSettingsSnapshot();
   const withCosts = canSeeCosts(user);
-  const [active, inactiveCurrent, rates, suppliers] = await Promise.all([
+  const [active, inactiveCurrent, rates, suppliers, staffUsers] = await Promise.all([
     editorCustomers(),
     editorCustomers({ id: quote.customer.id }),
     editorRates(quote.withholding),
     editorSuppliers(user),
+    editorStaffUsers(quote.preparedById),
   ]);
   const customers = active.some((c) => c.id === quote.customer.id) ? active : [...inactiveCurrent, ...active];
 
@@ -45,9 +46,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           deliveryNotes: settings.print.deliveryNotes ?? "",
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
-        preparedByName={quote.createdBy}
-        preparedByPosition={quote.createdByPosition}
-        preparedSignatureUrl={quote.createdBySignatureUrl}
+        staffUsers={staffUsers}
+        preparedById={quote.preparedById}
         approvedByName={quote.approvedBy}
         approvedAt={quote.approvedAt ? formatDateTime(quote.approvedAt) : null}
         action={saveQuoteAction.bind(null, id)}
@@ -65,6 +65,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           internalNotes: quote.internalNotes ?? "",
           deliveryNotes: quote.deliveryNotes ?? "",
           warrantyNotes: quote.warrantyNotes ?? "",
+          leadTimeDays: quote.leadTimeDays ?? null,
           subject: quote.subject ?? "",
           withholdingPick: quote.withholdingPick,
           withholdingCodes: quote.withholdingPick,
@@ -78,6 +79,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
             withholdingRate: i.withholdingRate,
             withholdingAtc: i.withholdingAtc ?? null,
             withholdingOverride: i.withholdingOverride ?? false,
+            itemId: i.itemId ?? null,
+            itemName: i.itemName ?? null,
           })),
         }}
       />

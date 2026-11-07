@@ -8,7 +8,7 @@ import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
-import { IDLE_MS } from "@/lib/auth/session";
+import { currentSessionLimits } from "@/lib/auth/session";
 import { IdleSignOut } from "@/components/IdleSignOut";
 import { idleRemainingMs, signOut } from "../auth-actions";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -24,6 +24,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  const sessionLimits = await currentSessionLimits();
   const { settings } = await getSettingsSnapshot();
   const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
   // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
@@ -111,7 +112,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb />} topbarRight={topbarRight}>
-      <IdleSignOut idleMs={IDLE_MS} signOutAction={signOut} remainingMs={idleRemainingMs} />
+      <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
       {children}
     </AppFrame>
   );

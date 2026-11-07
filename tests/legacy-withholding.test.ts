@@ -14,6 +14,7 @@ function line(partial: Partial<PlannedItem> & Pick<PlannedItem, "kind" | "withho
     qty: "1.00",
     unit: "pc",
     supplierId: null,
+    itemId: null,
     supplierUnitCost: "0.00",
     unitPrice: "100.00",
     total: "100.00",

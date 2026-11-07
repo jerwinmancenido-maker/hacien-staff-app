@@ -35,11 +35,15 @@ export default async function SupplierPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; archived?: string } & TransactionsSearch>;
+  searchParams: Promise<{ tab?: string; archived?: string; from?: string; to?: string } & TransactionsSearch>;
 }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
   const search = await searchParams;
+  // Statement period filter (2026-11-07): carried to the print view; empty = all-time.
+  const stmtQs = [search.from ? `from=${search.from}` : null, search.to ? `to=${search.to}` : null]
+    .filter(Boolean)
+    .join("&");
   const rawTab = search.tab === "history" ? "transactions" : search.tab;
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const supplier = await getSupplier(id);
@@ -295,10 +299,33 @@ export default async function SupplierPage({
         <div className="card">
           <div className="card-head">
             <h2>Balances</h2>
-            <Link className="btn btn-secondary" href={`/print/supplier-statements/${id}`} target="_blank">
+            <Link
+              className="btn btn-secondary"
+              href={`/print/supplier-statements/${id}${stmtQs ? `?${stmtQs}` : ""}`}
+              target="_blank"
+            >
               Print statement
             </Link>
           </div>
+          <form className="toolbar txn-filters" method="get" action={`/suppliers/${id}`} style={{ marginBottom: 16 }}>
+            <input type="hidden" name="tab" value="balances" />
+            <label className="field">
+              <span>From</span>
+              <input className="input" type="date" name="from" defaultValue={search.from ?? ""} />
+            </label>
+            <label className="field">
+              <span>To</span>
+              <input className="input" type="date" name="to" defaultValue={search.to ?? ""} />
+            </label>
+            <button className="btn btn-secondary" type="submit">
+              Filter
+            </button>
+            {(search.from || search.to) && (
+              <Link className="btn-link small" href={`/suppliers/${id}?tab=balances`}>
+                Clear
+              </Link>
+            )}
+          </form>
           <dl className="kv">
             <dt>We owe</dt>
             <dd className="num strong" style={{ textAlign: "left" }}>

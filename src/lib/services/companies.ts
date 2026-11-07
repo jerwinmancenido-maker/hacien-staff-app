@@ -111,6 +111,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
     defaultTerms: input.defaultTerms,
     creditLimit: input.creditLimit,
     notes: input.notes,
+    isIndividual: input.isIndividual ?? false,
     orderTextUpdates: input.orderTextUpdates ?? true,
   };
   try {
@@ -167,6 +168,7 @@ export async function duplicateCustomer(id: string, actor: CustomerSaveActor | s
         withholdingType: original.withholdingType,
         defaultWithholding: original.defaultWithholding ?? Prisma.DbNull,
         defaultTerms: original.defaultTerms,
+        isIndividual: original.isIndividual,
         notes: original.notes,
       },
     });
