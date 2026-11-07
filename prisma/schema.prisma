@@ -203,6 +203,12 @@ model Customer {
   // The order texts themselves stay OFF until the go-live gate in Settings
   // (messaging.orderTextsEnabled) is turned on — see src/lib/messaging/order-texts.ts.
   orderTextUpdates   Boolean         @default(true)
+  // Modular terms (lawyer/CPA sign-off 2026-11-06): true = a private
+  // individual buying for personal use — point 6 (withholding) is omitted
+  // from their quotes. False (default) = business / organisation /
+  // government — point 6 prints. Existing customers default to business,
+  // so point 6 keeps printing for them exactly as before.
+  isIndividual       Boolean         @default(false)
   active             Boolean         @default(true)
   archivedAt         DateTime?
   createdAt          DateTime        @default(now())
@@ -678,6 +684,9 @@ model Quote {
   // tab. Null/empty = use the Settings print defaults on the print.
   deliveryNotes     String?     @db.Text
   warrantyNotes     String?     @db.Text
+  // Modular terms (lawyer/CPA sign-off 2026-11-06): estimated lead time in
+  // business days, printed in point 3. Null = no figure (no-figure variant).
+  leadTimeDays      Int?
   // Staff-only. NEVER prints. NEVER on customer-facing pages. (Brief 09)
   internalNotes     String?     @db.Text
   // Short subject / project line; prints when set.

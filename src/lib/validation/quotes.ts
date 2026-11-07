@@ -120,6 +120,14 @@ const quoteInputObject = z.object({
     warrantyNotes: optionalText(1000)
       .optional()
       .transform((v) => v ?? null),
+    /** Modular terms: estimated lead time in business days (point 3). Empty = no figure. */
+    leadTimeDays: z
+      .coerce
+      .number()
+      .int("Lead time must be a whole number of business days.")
+      .min(1, "Lead time must be at least 1 business day.")
+      .max(365, "Lead time must be at most 365 business days.")
+      .optional(),
     /** Staff-only. Never prints. Never on customer-facing pages. Omitted → null. */
     internalNotes: optionalText(5000)
       .optional()

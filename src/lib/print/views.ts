@@ -28,7 +28,7 @@ import {
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
 import { POLICY_VERSION_LINE } from "./policies";
-import { getQuoteSoTermsPoints } from "./terms-block";
+import { buildQuoteSoTermsPoints } from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
@@ -245,7 +245,17 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     }),
     totalInWords: amountInWords(total),
     terms: q.terms || letter.print.quoteTerms || null,
-    termsBlock: getQuoteSoTermsPoints(validityDays),
+    // Modular terms (lawyer/CPA sign-off 2026-11-06): point 2 follows the
+    // quote's payment terms, point 3 the per-quote lead time, point 5 the
+    // goods/services variant, point 6 only for business customers. A quote
+    // with lines that are all services has no physical delivery (no point 4).
+    termsBlock: buildQuoteSoTermsPoints({
+      validityDays,
+      paymentTerms: q.terms,
+      leadTimeDays: q.leadTimeDays,
+      isServicesOnly: q.items.length > 0 && q.items.every((i) => i.kind === "SERVICES"),
+      isIndividual: q.customer.isIndividual,
+    }),
     versionLine: POLICY_VERSION_LINE,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
@@ -270,7 +280,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
-      quote: { select: { number: true } },
+      quote: { select: { number: true, terms: true, leadTimeDays: true, date: true, validUntil: true } },
       createdBy: { select: { name: true } },
     },
   });
@@ -325,7 +335,15 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
     }),
     totalInWords: amountInWords(total),
     terms: so.terms,
-    termsBlock: getQuoteSoTermsPoints(null),
+    // Modular terms, same as the quote: the SO carries the source quote's
+    // validity, lead time and payment terms (terms is copied at conversion).
+    termsBlock: buildQuoteSoTermsPoints({
+      validityDays: so.quote ? validityDaysFromDates(so.quote.date, so.quote.validUntil) : null,
+      paymentTerms: so.terms,
+      leadTimeDays: so.quote?.leadTimeDays ?? null,
+      isServicesOnly: so.items.length > 0 && so.items.every((i) => i.kind === "SERVICES"),
+      isIndividual: so.customer.isIndividual,
+    }),
     versionLine: POLICY_VERSION_LINE,
     notes: so.notes,
     deliveryNotes: letter.print.deliveryNotes || null,

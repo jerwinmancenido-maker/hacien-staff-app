@@ -424,15 +424,17 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     expect(defaultPoints).toHaveLength(7);
     expect(defaultPoints[0]).toContain("1. This quotation is valid for 15 days unless the quote states otherwise.");
     expect(defaultPoints[1]).toContain("2. Payment: 50% down payment when you order, 50% on delivery.");
-    expect(defaultPoints[2]).toContain("3. Lead times are estimates.");
+    expect(defaultPoints[2]).toContain("3. Lead times are estimates, not fixed deadlines, and are subject to supplier stock.");
     expect(defaultPoints[3]).toContain("4. On delivery, note any missing boxes");
-    expect(defaultPoints[4]).toContain("5. Warranty is the manufacturer's or distributor's");
-    expect(defaultPoints[5]).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+    expect(defaultPoints[4]).toContain("5. Unless specific warranty notes on this quotation state otherwise, warranty is the manufacturer's or distributor's");
+    expect(defaultPoints[5]).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307 upon payment.");
     expect(defaultPoints[6]).toContain("7. HACIEN keeps ownership of the goods until they are fully paid.");
+    expect(defaultPoints[6]).toContain("Accounts unpaid past their due date are charged 24% interest a year");
+    expect(defaultPoints[6]).toContain("Full Terms of Sale apply: haciensolutions.com/terms-of-sale");
 
     const quoteHtml = html(quotePrintFixture());
     expect(quoteHtml).toContain(TERMS_AND_CONDITIONS_HEADING);
-    expect(quoteHtml).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307.");
+    expect(quoteHtml).toContain("6. If you withhold tax, tell us before paying and give us a signed BIR Form 2307 upon payment.");
 
     // Custom validity override on quote
     const customQuoteHtml = html({
@@ -442,12 +444,19 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     expect(customQuoteHtml).toContain("1. This quotation is valid for 7 days.");
   });
 
-  it("no print contains haciensolutions.com/terms", async () => {
+  // Lawyer/CPA sign-off 2026-11-06: point 7 of the quote/SO terms block ends
+  // with the approved "Full Terms of Sale apply: haciensolutions.com/terms-of-sale"
+  // line. No other print may link to the terms page.
+  it("only quote and SO prints contain haciensolutions.com/terms-of-sale", async () => {
     const svg = await qrSvg();
-    for (const [, fixture] of docs) {
+    for (const [name, fixture] of docs) {
       const doc = { ...fixture(), qrSvg: svg, termsUrl: TERMS_URL };
       const markup = html(doc);
-      expect(markup).not.toContain("haciensolutions.com/terms");
+      if (name === "quote" || name === "sales_order") {
+        expect(markup).toContain("Full Terms of Sale apply: haciensolutions.com/terms-of-sale");
+      } else {
+        expect(markup).not.toContain("haciensolutions.com/terms");
+      }
     }
   });
 });

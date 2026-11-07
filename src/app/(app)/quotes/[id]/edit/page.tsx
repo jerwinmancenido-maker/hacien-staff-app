@@ -65,6 +65,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           internalNotes: quote.internalNotes ?? "",
           deliveryNotes: quote.deliveryNotes ?? "",
           warrantyNotes: quote.warrantyNotes ?? "",
+          leadTimeDays: quote.leadTimeDays ?? null,
           subject: quote.subject ?? "",
           withholdingPick: quote.withholdingPick,
           withholdingCodes: quote.withholdingPick,

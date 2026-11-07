@@ -62,6 +62,8 @@ type QuoteEditorInitial = EditorInitial & {
   /** S-69: per-quote delivery/warranty notes; undefined = Settings default. */
   deliveryNotes?: string | null;
   warrantyNotes?: string | null;
+  /** Modular terms: estimated lead time in business days (point 3). Null = no figure. */
+  leadTimeDays?: number | null;
   subject?: string;
   buyerPoNo?: string;
   validForDays?: number | string | null;
@@ -313,6 +315,9 @@ export function QuoteEditor({
         : String(defaultValidityDays);
   const [validForDays, setValidForDays] = useState<string>(initialDays);
 
+  // Modular terms: estimated lead time in business days (point 3). Blank = no figure.
+  const [leadTimeDays, setLeadTimeDays] = useState<string>(initial.leadTimeDays != null ? String(initial.leadTimeDays) : "");
+
   function onValidForDaysChange(val: string) {
     setValidForDays(val);
     const n = parseTypedValidityDays(val);
@@ -545,6 +550,7 @@ export function QuoteEditor({
     notes: h.notes,
     deliveryNotes: h.deliveryNotes,
     warrantyNotes: h.warrantyNotes,
+    leadTimeDays: leadTimeDays.trim() === "" ? undefined : leadTimeDays.trim(),
     internalNotes: h.internalNotes,
     subject: h.subject,
     buyerPoNo: h.buyerPoNo,
@@ -562,6 +568,7 @@ export function QuoteEditor({
 
   const termsTabDot =
     Boolean(h.terms?.trim()) ||
+    Boolean(leadTimeDays.trim()) ||
     Boolean(printDefaults.quoteTerms?.trim()) ||
     Boolean(printDefaults.deliveryNotes?.trim()) ||
     Boolean(printDefaults.warrantyNotes?.trim());
@@ -1364,6 +1371,21 @@ export function QuoteEditor({
               <div className="quote-f field">
                 <span className="label">Validity</span>
                 <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
+              </div>
+              <div className={`quote-f field${e.leadTimeDays ? " has-error" : ""}`}>
+                <label htmlFor="leadTimeDays">Lead time (business days)</label>
+                <input
+                  id="leadTimeDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  inputMode="numeric"
+                  value={leadTimeDays}
+                  onChange={(ev) => setLeadTimeDays(ev.target.value)}
+                  placeholder="No estimate"
+                />
+                <div className="hint">Prints in the terms as the estimated lead time · Leave blank for no figure</div>
+                {e.leadTimeDays && <div className="error">{e.leadTimeDays}</div>}
               </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>
