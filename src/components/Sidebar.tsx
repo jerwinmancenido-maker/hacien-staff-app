@@ -134,6 +134,9 @@ export function SidebarNav({
 }
 
 const CRUMB_LABELS: Record<string, string> = {
+  account: "My account",
+  password: "Change password",
+  "two-step": "Two-step sign-in",
   customers: "Customers",
   suppliers: "Suppliers",
   contacts: "Contacts",

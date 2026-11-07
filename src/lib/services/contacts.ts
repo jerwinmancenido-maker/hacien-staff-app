@@ -193,3 +193,32 @@ export async function ownerName(o: ContactOwner): Promise<string | null> {
       : await db.supplier.findUnique({ where: { id: o.id }, select: { name: true } });
   return row?.name ?? null;
 }
+
+export type ListedContact = Contact & { ownerName: string };
+
+/** Every contact across customers and suppliers, for the /contacts directory page. */
+export async function listAllContacts(opts: { q?: string; showInactive?: boolean } = {}): Promise<ListedContact[]> {
+  const q = opts.q?.trim() || undefined;
+  const rows = await db.contact.findMany({
+    where: {
+      ...(opts.showInactive ? {} : { active: true }),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q } },
+              { email: { contains: q } },
+              { phone: { contains: q } },
+              { customer: { name: { contains: q } } },
+              { supplier: { name: { contains: q } } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      customer: { select: { name: true } },
+      supplier: { select: { name: true } },
+    },
+    orderBy: [{ name: "asc" }],
+  });
+  return rows.map(({ customer, supplier, ...c }) => ({ ...c, ownerName: customer?.name ?? supplier?.name ?? "" }));
+}

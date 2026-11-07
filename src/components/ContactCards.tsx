@@ -48,17 +48,20 @@ export function ContactCards({
   const transactionsHref = (contactId: string) =>
     ownerKind && ownerId ? `/${ownerKind === "customer" ? "customers" : "suppliers"}/${ownerId}?tab=transactions&contact=${contactId}` : null;
 
+  // A contact always belongs to a customer or supplier — without an owner
+  // there is nowhere to add one (bare /contacts/new 404s by design), so the
+  // add links are hidden instead of pointing at a dead page.
   const newContactHref =
     ownerKind && ownerId
       ? `/contacts/new?${ownerKind}=${ownerId}`
-      : "/contacts/new";
+      : null;
 
   return (
     <div className="contact-cards-wrap">
       {contacts.length === 0 ? (
         <div className="card">
           <EmptyState title="No contacts yet" line={emptyLine} />
-          {canEdit && (
+          {canEdit && newContactHref && (
             <div style={{ textAlign: "center", marginTop: 14 }}>
               <Link className="btn btn-secondary btn-sm" href={newContactHref}>
                 <PlusIcon size={14} /> Add first contact
@@ -81,7 +84,7 @@ export function ContactCards({
               />
             ))}
 
-            {canEdit && (
+            {canEdit && newContactHref && (
               <Link href={newContactHref} className="contact-card-add">
                 <PlusIcon size={18} />
                 <span>Add contact</span>
