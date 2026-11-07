@@ -11,6 +11,7 @@ import { ConfirmAction } from "@/components/ConfirmAction";
 import { ContactCards } from "@/components/ContactCards";
 import { CustomerOverview } from "@/components/CustomerOverview";
 import { PillTabs } from "@/components/PillTabs";
+import { Activity } from "@/components/Activity";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { AddressCards } from "@/components/AddressCards";
 import { DocumentsTab } from "@/components/DocumentsTab";
@@ -189,6 +190,7 @@ export default async function CustomerPage({
           { key: "transactions", label: "Transactions", href: `/customers/${id}?tab=transactions` },
           { key: "balances", label: "Balances", href: `/customers/${id}?tab=balances` },
           { key: "prices", label: "Price history", href: `/customers/${id}?tab=prices` },
+          { key: "activity", label: "Activity", href: `/customers/${id}?tab=activity` },
         ]}
       />
 
@@ -200,7 +202,6 @@ export default async function CustomerPage({
           canEdit={canEdit}
           lastActivityDate={lastActivityAt}
           addresses={addresses}
-          docIds={docIds}
           docCounts={docCounts}
           docStats={docStats}
           warnDays={warnDays}
@@ -245,6 +246,18 @@ export default async function CustomerPage({
 
       {tab === "balances" && <CustomerBalances customerId={id} canManage={can(user, "manage_billing")} />}
       {tab === "prices" && <CustomerPriceHistory customerId={id} />}
+
+      {tab === "activity" && (
+        <Activity
+          targets={[
+            { entityType: "Customer", ids: [id] },
+            { entityType: "Contact", ids: contacts.map((c) => c.id) },
+            { entityType: "Address", ids: addresses.map((a) => a.id) },
+            { entityType: "BusinessDocument", ids: docIds },
+          ]}
+          title="Recent activity"
+        />
+      )}
     </>
   );
 }

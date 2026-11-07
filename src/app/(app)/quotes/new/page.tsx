@@ -70,6 +70,12 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           buyerPoNo: "",
           buyerPoDate: "",
           deliveryAddress: "",
+          // Terms snapshot (owner 2026-11-07): a new quote starts with the
+          // current Settings print defaults as its own Delivery/Warranty
+          // text, so later Settings edits do not rewrite this quote.
+          // Staff can still edit or clear them per quote before saving.
+          deliveryNotes: settings.print.deliveryNotes ?? "",
+          warrantyNotes: settings.print.warrantyNotes ?? "",
           items: [],
         }}
       />

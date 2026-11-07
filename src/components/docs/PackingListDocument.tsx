@@ -1,4 +1,5 @@
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import type { AttachmentSheet } from "@/lib/print/attachment";
 
 /**
@@ -9,7 +10,7 @@ import type { AttachmentSheet } from "@/lib/print/attachment";
 export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
   return (
     <article className="print-page" aria-label={`Packing list attachment for DR ${sheet.drNumber}`}>
-      <CompanyLetterhead company={sheet.company} />
+      <PrintHeaderRepeat header={<CompanyLetterhead company={sheet.company} />}>
       <div className="print-title" style={{ textAlign: "center", margin: "16px 0" }}>
         <h1>PACKING LIST &amp; DELIVERY DETAILS</h1>
         <div>
@@ -96,6 +97,7 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div>{sheet.policiesUrl}</div>
         <div>{sheet.versionLine}</div>
       </div>
+      </PrintHeaderRepeat>
     </article>
   );
 }

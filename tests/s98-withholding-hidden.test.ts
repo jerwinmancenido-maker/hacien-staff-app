@@ -15,10 +15,12 @@ describe("S-98 withholding boxes stay hidden for NONE (No withholding) customers
     expect(withholdingPickBoxesHidden(undefined)).toBe(false);
   });
 
-  it("the quote editor gates both the Change button and the expanded boxes", () => {
+  it("the quote editor gates the withholding tab's boxes for NONE customers", () => {
     const editor = src("src/components/docs/QuoteEditor.tsx");
     expect(editor).toContain("withholdingPickBoxesHidden(customer?.withholdingType)");
-    expect(editor).toContain("{whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (");
+    // The picker lives on its own tab now (2026-11-07 UI plan); for NONE
+    // customers the panel shows a note instead of the boxes.
+    expect(editor).toContain("{withholdingPickBoxesHidden(customer?.withholdingType) ? (");
     // NONE displays as "No withholding" — the same customer the row names.
     expect(editor).toContain('if (type === "NONE") return "No withholding"');
   });

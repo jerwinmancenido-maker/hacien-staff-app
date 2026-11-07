@@ -17,6 +17,22 @@ function termsTab(src: string): string {
 }
 
 describe("S-69 quote Terms tab", () => {
+  it("a NEW quote snapshots the Settings Delivery/Warranty defaults into its own fields (owner 2026-11-07)", () => {
+    const newPage = read("src/app/(app)/quotes/new/page.tsx");
+    expect(newPage).toContain("deliveryNotes: settings.print.deliveryNotes ?? \"\"");
+    expect(newPage).toContain("warrantyNotes: settings.print.warrantyNotes ?? \"\"");
+    // Existing quotes are NOT re-snapshotted: the edit page seeds the
+    // editor's initial values from the quote's stored fields. (Its
+    // printDefaults prop still carries the Settings text for display
+    // fallback, so scope this check to the initial block.)
+    const editPage = read("src/app/(app)/quotes/[id]/edit/page.tsx");
+    const editInitial = editPage.slice(editPage.indexOf("initial={{"));
+    expect(editInitial).toContain("deliveryNotes: quote.deliveryNotes ?? \"\"");
+    expect(editInitial).toContain("warrantyNotes: quote.warrantyNotes ?? \"\"");
+    expect(editInitial).not.toContain("settings.print.deliveryNotes");
+    expect(editInitial).not.toContain("settings.print.warrantyNotes");
+  });
+
   it("Delivery and Warranty are editable textareas, defaulting to Settings", () => {
     const src = read("src/components/docs/QuoteEditor.tsx");
     const tab = termsTab(src);

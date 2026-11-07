@@ -20,6 +20,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import { printCompanyBlock } from "@/lib/print/company";
 
 export const dynamic = "force-dynamic";
@@ -93,15 +94,14 @@ export default async function PrintIncomeTaxPage({
       </div>
 
       <article className="print-doc books-register-doc">
-        <header className="print-header books-register-head">
-          <CompanyLetterhead company={printCompanyBlock(company)} />
+        <PrintHeaderRepeat header={<CompanyLetterhead company={printCompanyBlock(company)} />}>
           <div className="print-doc-title">
             <h1>{TAX_WORKSHEET_PAGES.income.title}</h1>
             <div className="small muted">{TAX_WORKSHEET_DISCLAIMER}</div>
             <div className="small">Period: {sheet.bounds.label}</div>
             <div className="small books-draft-stamp">{TAX_WORKSHEET_BANNER}</div>
           </div>
-        </header>
+        
 
         <p>
           <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
@@ -138,6 +138,7 @@ export default async function PrintIncomeTaxPage({
             ))}
           </tbody>
         </table>
+      </PrintHeaderRepeat>
       </article>
     </div>
   );

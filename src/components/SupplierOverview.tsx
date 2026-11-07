@@ -3,7 +3,6 @@ import type { Address, Contact, Supplier, SupplierTaxType } from "@prisma/client
 import { formatDateTime, formatPeso, initials } from "@/lib/format";
 import { missingBankDetails, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { Avatar, Chip, type ChipTone } from "./ui";
-import { Activity } from "./Activity";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
 import { formatAddress } from "@/lib/addresses/format";
 import { maskBankAccountNumber } from "@/lib/bank-mask";
@@ -24,7 +23,6 @@ export async function SupplierOverview({
   isAdmin,
   lastActivityDate,
   addresses,
-  docIds,
   docCounts,
   docStats,
   warnDays,
@@ -38,7 +36,6 @@ export async function SupplierOverview({
   isAdmin?: boolean;
   lastActivityDate?: Date | null;
   addresses: Address[];
-  docIds: string[];
   docCounts: DocCounts;
   docStats: OpenDocStats;
   warnDays: number;
@@ -195,7 +192,7 @@ export async function SupplierOverview({
         </div>
       </div>
 
-      {/* 4. Contacts Strip & Activity */}
+      {/* 4. Contacts Strip */}
       <div className="overview-split-grid">
         <div className="card">
           <div className="card-head">
@@ -241,16 +238,6 @@ export async function SupplierOverview({
         </div>
       </div>
 
-      {/* 5. Recent Activity */}
-      <Activity
-        targets={[
-          { entityType: "Supplier", ids: [supplier.id] },
-          { entityType: "Contact", ids: contacts.map((c) => c.id) },
-          { entityType: "Address", ids: addresses.map((a) => a.id) },
-          { entityType: "BusinessDocument", ids: docIds },
-        ]}
-        title="Recent activity"
-      />
     </div>
   );
 }

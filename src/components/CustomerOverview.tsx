@@ -6,7 +6,6 @@ import { customerWithholdingChipLabel, parseWithholdingPick } from "@/lib/quotes
 import { listWithholdingRates, toSnapshot } from "@/lib/services/withholding";
 import type { AgingAmounts } from "@/lib/billing/aging";
 import { Avatar, Chip, type ChipTone } from "./ui";
-import { Activity } from "./Activity";
 import { OverdueBadge } from "./billing/BillingParts";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
 import { formatAddress } from "@/lib/addresses/format";
@@ -31,7 +30,6 @@ export async function CustomerOverview({
   canEdit,
   lastActivityDate,
   addresses,
-  docIds,
   docCounts,
   docStats,
   warnDays,
@@ -42,7 +40,6 @@ export async function CustomerOverview({
   canEdit?: boolean;
   lastActivityDate?: Date | null;
   addresses: Address[];
-  docIds: string[];
   docCounts: DocCounts;
   docStats: OpenDocStats;
   warnDays: number;
@@ -238,16 +235,6 @@ export async function CustomerOverview({
         </div>
       </div>
 
-      {/* 4. Recent Activity */}
-      <Activity
-        targets={[
-          { entityType: "Customer", ids: [customer.id] },
-          { entityType: "Contact", ids: contacts.map((c) => c.id) },
-          { entityType: "Address", ids: addresses.map((a) => a.id) },
-          { entityType: "BusinessDocument", ids: docIds },
-        ]}
-        title="Recent activity"
-      />
     </div>
   );
 }

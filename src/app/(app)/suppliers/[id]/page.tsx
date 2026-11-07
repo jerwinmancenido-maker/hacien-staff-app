@@ -12,6 +12,7 @@ import { ConfirmAction } from "@/components/ConfirmAction";
 import { ContactCards } from "@/components/ContactCards";
 import { SupplierOverview } from "@/components/SupplierOverview";
 import { PillTabs } from "@/components/PillTabs";
+import { Activity } from "@/components/Activity";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { AddressCards } from "@/components/AddressCards";
 import { DocumentsTab } from "@/components/DocumentsTab";
@@ -27,7 +28,7 @@ import { SupplierForm } from "../SupplierForm";
 import { saveSupplierAction, setSupplierActiveAction } from "../actions";
 
 // Addresses after Details; payments stays (payables). history → transactions.
-const TABS = ["overview", "details", "addresses", "contacts", "documents", "transactions", "payments", "balances"] as const;
+const TABS = ["overview", "details", "addresses", "contacts", "documents", "transactions", "payments", "balances", "activity"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function SupplierPage({
@@ -179,6 +180,7 @@ export default async function SupplierPage({
             ? [{ key: "payments", label: "Payments", count: supplierPayments.length || undefined, href: `/suppliers/${id}?tab=payments` }]
             : []),
           { key: "balances", label: "Balances", href: `/suppliers/${id}?tab=balances` },
+          { key: "activity", label: "Activity", href: `/suppliers/${id}?tab=activity` },
         ]}
       />
 
@@ -191,7 +193,6 @@ export default async function SupplierPage({
           isAdmin={user.isAdmin}
           lastActivityDate={lastActivityAt}
           addresses={addresses}
-          docIds={docIds}
           docCounts={docCounts}
           docStats={docStats}
           warnDays={warnDays}
@@ -342,6 +343,18 @@ export default async function SupplierPage({
             </p>
           )}
         </div>
+      )}
+
+      {tab === "activity" && (
+        <Activity
+          targets={[
+            { entityType: "Supplier", ids: [id] },
+            { entityType: "Contact", ids: contacts.map((c) => c.id) },
+            { entityType: "Address", ids: addresses.map((a) => a.id) },
+            { entityType: "BusinessDocument", ids: docIds },
+          ]}
+          title="Recent activity"
+        />
       )}
     </>
   );

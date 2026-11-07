@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // S-67: new quote page redesign — no withholding warning before a
-// customer is picked; withholding as one line with a Change link (no
-// bare checkboxes); tidy 2-column grid with even field widths; full
-// width; Items visible without scrolling (Items is the default tab).
+// customer is picked; withholding as one summary line in Quote details
+// (the picker itself moved to its own tab in the 2026-11-07 UI plan —
+// no more Change link / expand-in-place); tidy 2-column grid with even
+// field widths; full width; Items visible without scrolling (Items is
+// the default tab).
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -15,12 +17,16 @@ describe("S-67 new quote page redesign", () => {
     expect(src).toContain("const notSet = pick == null && customer != null;");
   });
 
-  it("withholding is one line with a Change link, checkboxes only on expand", () => {
+  it("withholding is one summary line in details; the picker lives on its own tab", () => {
     const src = read("src/components/docs/QuoteEditor.tsx");
     expect(src).toContain('className="wh-collapsed-row"');
-    expect(src).toContain("WITHHOLDING_PICK_CHANGE_LABEL");
-    // The checkbox field only renders when the user opens it.
-    expect(src).toContain("{whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (");
+    // No expand-in-place Change link anymore.
+    expect(src).not.toContain("WITHHOLDING_PICK_CHANGE_LABEL");
+    expect(src).not.toContain("whPickOpen");
+    // A dedicated Withholding tab, second after Items, holds the picker.
+    expect(src).toContain('"withholding"');
+    expect(src).toContain('onClick={() => setTab("withholding")}');
+    expect(src).toContain('{tab === "withholding" && (');
     expect(src).toContain("<WithholdingPickField");
   });
 
