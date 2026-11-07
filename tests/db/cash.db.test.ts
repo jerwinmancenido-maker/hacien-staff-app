@@ -20,7 +20,14 @@ import { DocRuleError, money } from "@/lib/documents/common";
 import { ForbiddenError } from "@/lib/permissions";
 import { toScaled } from "@/lib/quotes/calc";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { cashAccountBalance, createCashAccount, updateCashAccount, type CashActor } from "@/lib/services/cash-accounts";
+import {
+  cashAccountBalance,
+  cashPositionSummary,
+  createCashAccount,
+  ledgerEntriesForAccount,
+  updateCashAccount,
+  type CashActor,
+} from "@/lib/services/cash-accounts";
 import { recordCashTransfer, voidCashTransfer } from "@/lib/services/cash-transfers";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
@@ -611,5 +618,155 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
     expect(bad.length).toBe(2);
     expect((await db.supplierBill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe("PARTIALLY_PAID");
     expect(await cashAccountBalance(account.id)).toBe("14000.00");
+  });
+
+  it("unassigned ledger: null-account collection and payment appear; account-linked rows do not", async () => {
+    const year = await freshYear();
+    const account = await mkAccount("Unassigned", "10000.00", new Date(Date.UTC(year, 0, 1)));
+    const { customer, billing } = await openSoBilling(year, "1000.00");
+    const { supplier, bill } = await openPayableBill(year, "10000.00");
+
+    const unassignedCollection = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-UNASSIGNED-${tag()}`,
+        amountReceived: "400.00",
+        notes: null,
+        cashAccountId: null,
+        allocations: [{ billingId: billing.id, cashApplied: "400.00", withholdingApplied: "0.00" }],
+      },
+      admin,
+    );
+    const unassignedPayment = await recordSupplierPayment(
+      {
+        supplierId: supplier.id,
+        date: new Date(Date.UTC(year, 2, 10)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "250.00",
+        notes: null,
+        cashAccountId: null,
+        allocations: [
+          {
+            supplierBillId: bill.id,
+            cashApplied: "250.00",
+            withholdingApplied: "0",
+            withholdingRate: "0.0000",
+            atcCode: null,
+          },
+        ],
+      },
+      admin,
+    );
+    const linkedCollection = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 7)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-LINKED-${tag()}`,
+        amountReceived: "100.00",
+        notes: null,
+        cashAccountId: account.id,
+        allocations: [{ billingId: billing.id, cashApplied: "100.00", withholdingApplied: "0.00" }],
+      },
+      admin,
+    );
+
+    const unassigned = await ledgerEntriesForAccount(null);
+    const unassignedIds = unassigned.map((r) => r.id);
+    expect(unassignedIds).toContain(unassignedCollection.id);
+    expect(unassignedIds).toContain(unassignedPayment.id);
+    expect(unassignedIds).not.toContain(linkedCollection.id);
+    expect(unassigned.find((r) => r.id === unassignedCollection.id)).toMatchObject({
+      direction: "IN",
+      amount: "400.00",
+    });
+    expect(unassigned.find((r) => r.id === unassignedPayment.id)).toMatchObject({
+      direction: "OUT",
+      amount: "250.00",
+    });
+
+    const linked = await ledgerEntriesForAccount(account.id);
+    const linkedIds = linked.map((r) => r.id);
+    expect(linkedIds).toContain(linkedCollection.id);
+    expect(linkedIds).not.toContain(unassignedCollection.id);
+    expect(linkedIds).not.toContain(unassignedPayment.id);
+  });
+
+  it("cash position: unassigned net counts null-account collections minus null-account payments only", async () => {
+    const year = await freshYear();
+    const account = await mkAccount("UnassignedNet", "10000.00", new Date(Date.UTC(year, 0, 1)));
+    const { customer, billing } = await openSoBilling(year, "1000.00");
+    const { supplier, bill } = await openPayableBill(year, "10000.00");
+
+    const before = await cashPositionSummary();
+    await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-NET-${tag()}`,
+        amountReceived: "400.00",
+        notes: null,
+        cashAccountId: null,
+        allocations: [{ billingId: billing.id, cashApplied: "400.00", withholdingApplied: "0.00" }],
+      },
+      admin,
+    );
+    await recordSupplierPayment(
+      {
+        supplierId: supplier.id,
+        date: new Date(Date.UTC(year, 2, 10)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        amountPaid: "250.00",
+        notes: null,
+        cashAccountId: null,
+        allocations: [
+          {
+            supplierBillId: bill.id,
+            cashApplied: "250.00",
+            withholdingApplied: "0",
+            withholdingRate: "0.0000",
+            atcCode: null,
+          },
+        ],
+      },
+      admin,
+    );
+    // Account-linked money must not move the unassigned net.
+    await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 7)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-NET-LINKED-${tag()}`,
+        amountReceived: "100.00",
+        notes: null,
+        cashAccountId: account.id,
+        allocations: [{ billingId: billing.id, cashApplied: "100.00", withholdingApplied: "0.00" }],
+      },
+      admin,
+    );
+    const after = await cashPositionSummary();
+    expect(toScaled(after.unassignedNet, 2) - toScaled(before.unassignedNet, 2)).toBe(toScaled("150.00", 2));
   });
 });

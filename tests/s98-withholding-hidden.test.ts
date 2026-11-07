@@ -6,7 +6,7 @@ import { withholdingPickBoxesHidden } from "@/lib/quotes/withholding-defaults";
 const root = process.cwd();
 const src = (p: string) => readFileSync(join(root, p), "utf8");
 
-describe("S-98 withholding boxes stay hidden for NONE (Private) customers", () => {
+describe("S-98 withholding boxes stay hidden for NONE (No withholding) customers", () => {
   it("hides the boxes for NONE only — government and top agents keep them", () => {
     expect(withholdingPickBoxesHidden("NONE")).toBe(true);
     expect(withholdingPickBoxesHidden("GOVERNMENT")).toBe(false);
@@ -19,7 +19,7 @@ describe("S-98 withholding boxes stay hidden for NONE (Private) customers", () =
     const editor = src("src/components/docs/QuoteEditor.tsx");
     expect(editor).toContain("withholdingPickBoxesHidden(customer?.withholdingType)");
     expect(editor).toContain("{whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (");
-    // NONE displays as "Private" — the same customer the row names.
-    expect(editor).toContain('if (type === "NONE") return "Private"');
+    // NONE displays as "No withholding" — the same customer the row names.
+    expect(editor).toContain('if (type === "NONE") return "No withholding"');
   });
 });

@@ -76,7 +76,7 @@ export async function CustomerOverview({
               <Chip tone={pickTone(pick)}>{pickLabel}</Chip>
               {!(pick && pick.length > 0 && customer.withholdingType === "NONE") && (
                 <Chip tone={TONE[customer.withholdingType]}>
-                  {customer.withholdingType === "NONE" ? "Private" : WITHHOLDING_LABELS[customer.withholdingType]}
+                  {WITHHOLDING_LABELS[customer.withholdingType]}
                 </Chip>
               )}
               {!customer.active ? (

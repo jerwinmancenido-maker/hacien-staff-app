@@ -172,8 +172,13 @@ async function accountActivityCount(tx: Tx, id: string) {
   return c + p + e + tFrom + tTo;
 }
 
-/** Ledger source rows for one account (voided flagged, still returned for display filters). */
-export async function ledgerEntriesForAccount(accountId: string): Promise<LedgerSourceRow[]> {
+/** Ledger source rows for one account (voided flagged, still returned for display filters).
+ * Pass null for the unassigned ledger: rows whose cashAccountId is null (collections,
+ * supplier payments, expenses). Transfers always have both accounts, so none match. */
+export async function ledgerEntriesForAccount(accountId: string | null): Promise<LedgerSourceRow[]> {
+  // Expenses and transfers always have an account (required FK), so they can never
+  // be unassigned — and Prisma rejects a null filter on a required field. Only the
+  // nullable collections / supplier payments take the null directly.
   const [collections, payments, expenses, transfersFrom, transfersTo] = await Promise.all([
     db.collection.findMany({
       where: { cashAccountId: accountId },
@@ -185,21 +190,27 @@ export async function ledgerEntriesForAccount(accountId: string): Promise<Ledger
       include: { supplier: { select: { name: true } } },
       orderBy: { date: "asc" },
     }),
-    db.expense.findMany({
-      where: { cashAccountId: accountId },
-      include: { category: { select: { label: true } }, supplier: { select: { name: true } } },
-      orderBy: { date: "asc" },
-    }),
-    db.cashTransfer.findMany({
-      where: { fromAccountId: accountId },
-      include: { toAccount: { select: { name: true } } },
-      orderBy: { date: "asc" },
-    }),
-    db.cashTransfer.findMany({
-      where: { toAccountId: accountId },
-      include: { fromAccount: { select: { name: true } } },
-      orderBy: { date: "asc" },
-    }),
+    accountId === null
+      ? Promise.resolve([])
+      : db.expense.findMany({
+          where: { cashAccountId: accountId },
+          include: { category: { select: { label: true } }, supplier: { select: { name: true } } },
+          orderBy: { date: "asc" },
+        }),
+    accountId === null
+      ? Promise.resolve([])
+      : db.cashTransfer.findMany({
+          where: { fromAccountId: accountId },
+          include: { toAccount: { select: { name: true } } },
+          orderBy: { date: "asc" },
+        }),
+    accountId === null
+      ? Promise.resolve([])
+      : db.cashTransfer.findMany({
+          where: { toAccountId: accountId },
+          include: { fromAccount: { select: { name: true } } },
+          orderBy: { date: "asc" },
+        }),
   ]);
 
   const rows: LedgerSourceRow[] = [];

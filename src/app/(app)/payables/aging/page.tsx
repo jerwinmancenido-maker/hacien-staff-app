@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { apAgingSummary } from "@/lib/payables/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { PayablesNav } from "@/components/payables/PayablesNav";
@@ -9,10 +9,11 @@ import { PageHeader } from "@/components/ui";
 export default async function PayablesAgingPage() {
   await requirePagePermission("view");
   const summary = await apAgingSummary();
+  const asOf = formatDate(manilaToday());
 
   return (
     <>
-      <PageHeader title="AP aging" subtitle="Balances by days past due from supplier bill due dates (Manila)." />
+      <PageHeader title="AP aging" subtitle={`Balances by days past due from supplier bill due dates (Manila). As of ${asOf}.`} />
       <PayablesNav active="aging" />
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
