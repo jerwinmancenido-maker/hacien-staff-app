@@ -16,6 +16,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import { printCompanyBlock } from "@/lib/print/company";
 
 export const dynamic = "force-dynamic";
@@ -73,8 +74,7 @@ export default async function PrintBooksPage({
       </div>
 
       <article className="print-doc books-register-doc">
-        <header className="print-header books-register-head">
-          <CompanyLetterhead company={printCompanyBlock(company)} />
+        <PrintHeaderRepeat header={<CompanyLetterhead company={printCompanyBlock(company)} />}>
           <div className="print-doc-title">
             <h1>{config.title}</h1>
             <div className="small muted">{BOOKS_DISCLAIMER}</div>
@@ -83,7 +83,7 @@ export default async function PrintBooksPage({
             </div>
             <div className="small books-draft-stamp">{BOOKS_DRAFT_BANNER}</div>
           </div>
-        </header>
+        
 
         {register.rowCount === 0 ? (
           <p className="faint">{config.emptyFeeds}</p>
@@ -200,6 +200,7 @@ export default async function PrintBooksPage({
             )}
           </div>
         )}
+      </PrintHeaderRepeat>
       </article>
     </div>
   );
