@@ -604,6 +604,11 @@ export function QuoteEditor({
       next.splice(Math.max(0, Math.min(next.length, idx + by)), 0, it!);
       return next;
     });
+  // Deleting is always allowed (owner call, 2026-11-08): removing the last
+  // remaining line swaps in a fresh blank line, so the editor never sits at
+  // zero lines and a wrong product can always be cleared.
+  const removeItem = (line: EditorItem) =>
+    setItems((xs) => (xs.length === 1 ? [blankItem(linePicks, allocLineKey())] : xs.filter((x) => x.key !== line.key)));
 
   function applyPickDefaults(
     nextPick: string[] | null,
@@ -1226,8 +1231,7 @@ export function QuoteEditor({
                             type="button"
                             className="btn-link danger"
                             aria-label={`Remove line ${idx + 1}`}
-                            disabled={items.length === 1}
-                            onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}
+                            onClick={() => removeItem(i)}
                           >
                             ✕
                           </button>
@@ -1302,8 +1306,7 @@ export function QuoteEditor({
                           type="button"
                           className="btn-link danger"
                           aria-label={`Remove line ${idx + 1}`}
-                          disabled={items.length === 1}
-                          onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}
+                          onClick={() => removeItem(i)}
                         >
                           ✕
                         </button>
