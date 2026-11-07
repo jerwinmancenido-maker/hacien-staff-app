@@ -4807,8 +4807,14 @@ button.contact-card-add {
      "Metro Manila 1605" was left on line 2). */
   text-wrap: balance;
 }
+.pp-company-line {
+  font-size: 8.5pt;
+  font-weight: 600;
+  color: var(--pp-label);
+  margin-bottom: 2px;
+}
 .pp-trade-name {
-  /* Legacy class kept for settings preview. */
+  /* Legacy class kept for settings preview; letterhead uses .pp-company-line. */
   font-size: 8.5pt;
   font-weight: 600;
   color: var(--pp-label);
@@ -7376,12 +7382,54 @@ button.contact-card-add {
   align-items: center;
   margin-top: 4px;
 }
+/* The description cell anchors the catalog picker dropdown (item 5). */
+.quote-ln-descwrap {
+  position: relative;
+}
 .quote-picker {
-  margin-top: 6px;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
   background: #fff;
+  box-shadow: var(--shadow-overlay);
+}
+.quote-picker-add {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.quote-picker-add:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+/* Right slide-over variant of the shared modal (product details only). */
+.modal-backdrop.drawer {
+  place-items: stretch end;
+}
+.modal.drawer-right {
+  width: min(460px, 100vw);
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+  border-radius: 0;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
 }
 .quote-picker ul {
   margin: 4px 0;

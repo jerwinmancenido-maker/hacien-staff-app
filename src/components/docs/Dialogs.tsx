@@ -5,15 +5,34 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FormState } from "@/lib/validation/forms";
 
-export function Modal({ title, children, onClose, labelId }: { title: string; children: ReactNode; onClose: () => void; labelId: string }) {
+export function Modal({
+  title,
+  children,
+  onClose,
+  labelId,
+  variant,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+  labelId: string;
+  /** "drawer-right": slide-over panel pinned to the right edge (product details). Default: centered. */
+  variant?: "drawer-right";
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide" role="dialog" aria-modal="true" aria-labelledby={labelId} onClick={(e) => e.stopPropagation()}>
+    <div className={variant === "drawer-right" ? "modal-backdrop drawer" : "modal-backdrop"} onClick={onClose}>
+      <div
+        className={variant === "drawer-right" ? "modal wide drawer-right" : "modal wide"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 id={labelId}>{title}</h3>
         {children}
       </div>
