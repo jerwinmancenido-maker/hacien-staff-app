@@ -906,7 +906,7 @@ table.list {
 table.list th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: var(--grey-100);
   font-size: 11px;
   font-weight: 600;
@@ -2426,10 +2426,10 @@ pre.json {
   inset: 0;
   z-index: 0;
 }
-.row-has-link td > *:not(.row-stretched-link),
-.record-card-row.clickable > *:not(.row-stretched-link),
-.record-compact-row.clickable > *:not(.row-stretched-link),
-.record-tile-card.clickable > *:not(.row-stretched-link) {
+.row-has-link td > *:not(.row-stretched-link):not([data-no-row-click]),
+.record-card-row.clickable > *:not(.row-stretched-link):not([data-no-row-click]),
+.record-compact-row.clickable > *:not(.row-stretched-link):not([data-no-row-click]),
+.record-tile-card.clickable > *:not(.row-stretched-link):not([data-no-row-click]) {
   position: relative;
   z-index: 1;
 }
