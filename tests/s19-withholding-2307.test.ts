@@ -69,9 +69,8 @@ describe("S-19 WB080 not an auto-default", () => {
 });
 
 describe("S-19 pending 2307 href", () => {
-  it("does not deep-link to status=PENDING (that filter is certificates awaiting receipt)", async () => {
+  it("deep-links to status=PENDING (the count is certificates awaiting receipt)", async () => {
     const { pending2307Href } = await import("@/lib/home/hrefs");
-    expect(pending2307Href()).toBe("/billing/2307");
-    expect(pending2307Href()).not.toContain("status=PENDING");
+    expect(pending2307Href()).toBe("/billing/2307?status=PENDING");
   });
 });
