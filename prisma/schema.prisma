@@ -769,6 +769,7 @@ model Item {
   active           Boolean   @default(true)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  quoteItems       QuoteItem[]
 
   @@index([active])
   @@index([name])
@@ -786,6 +787,9 @@ model QuoteItem {
   unit             String    @db.VarChar(30)
   supplierId       String?
   supplier         Supplier? @relation(fields: [supplierId], references: [id])
+  // Catalog Step 3: the picked catalog item, or null for a free-text line.
+  itemId           String?
+  item             Item?     @relation(fields: [itemId], references: [id])
   supplierUnitCost Decimal   @default(0) @db.Decimal(15, 2)
   // HACIEN (buyer-facing) unit price.
   unitPrice        Decimal   @db.Decimal(15, 2)

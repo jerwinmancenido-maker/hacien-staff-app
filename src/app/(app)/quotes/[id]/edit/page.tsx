@@ -79,6 +79,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
             withholdingRate: i.withholdingRate,
             withholdingAtc: i.withholdingAtc ?? null,
             withholdingOverride: i.withholdingOverride ?? false,
+            itemId: i.itemId ?? null,
+            itemName: i.itemName ?? null,
           })),
         }}
       />

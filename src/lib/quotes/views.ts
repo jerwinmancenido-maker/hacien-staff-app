@@ -55,6 +55,9 @@ type ItemRow = {
   withholdingAtc?: string | null;
   withholdingOverride?: boolean;
   deliveredQty?: Dec | null;
+  /** Catalog Step 3 (quotes only; SO rows have neither). */
+  itemId?: string | null;
+  item?: { name: string } | null;
 };
 
 export type ItemView = {
@@ -76,6 +79,9 @@ export type ItemView = {
   supplierUnitCost?: string;
   supplierTotal?: string;
   margin?: string;
+  /** Catalog Step 3: the linked catalog item (quotes only). */
+  itemId?: string | null;
+  itemName?: string | null;
 };
 
 export type TotalsView = {
@@ -103,6 +109,8 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
     withholdingAtc: i.withholdingAtc ?? null,
     withholdingOverride: i.withholdingOverride ?? false,
+    itemId: i.itemId ?? null,
+    itemName: i.item?.name ?? null,
   };
   if (!withCosts) return base;
   return {
@@ -186,6 +194,13 @@ const itemsInclude = {
   include: { supplier: { select: { name: true } } },
 } satisfies Prisma.QuoteItemFindManyArgs;
 
+/** Quotes only: SO lines have no catalog link, so they keep itemsInclude. */
+const quoteItemsInclude = {
+  where: { removedAt: null },
+  orderBy: { sortOrder: "asc" },
+  include: { supplier: { select: { name: true } }, item: { select: { name: true } } },
+} satisfies Prisma.QuoteItemFindManyArgs;
+
 const contactSelect = { id: true, name: true, email: true, phone: true } as const;
 
 // ---------------------------------------------------------------------------
@@ -197,7 +212,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   const q = await db.quote.findUnique({
     where: { id },
     include: {
-      items: itemsInclude,
+      items: quoteItemsInclude,
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
@@ -633,6 +648,9 @@ export type EditableItem = {
   withholdingOverride: boolean;
   supplierId?: string | null;
   supplierUnitCost?: string;
+  /** Catalog Step 3: the linked catalog item (quotes only; null for SO). */
+  itemId?: string | null;
+  itemName?: string | null;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
@@ -647,6 +665,8 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
       withholdingRate: i.withholdingRate,
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
+      itemId: i.itemId ?? null,
+      itemName: i.itemName ?? null,
     };
     return withCosts ? { ...base, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "0.00" } : base;
   });

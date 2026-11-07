@@ -7353,6 +7353,37 @@ button.contact-card-add {
 .quote-ln-dsc {
   min-width: 0;
 }
+/* Catalog Step 3: picker + product buttons under a line's description. */
+.quote-ln-product {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 4px;
+}
+.quote-picker {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.quote-picker ul {
+  margin: 4px 0;
+}
+.quote-product-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+}
+.quote-product-dl dt {
+  font-weight: 700;
+  color: var(--muted);
+}
+.quote-product-dl dd {
+  margin: 0;
+}
 .quote-ln-tags {
   display: flex;
   flex-wrap: wrap;
