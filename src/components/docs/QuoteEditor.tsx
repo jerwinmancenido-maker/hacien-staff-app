@@ -37,7 +37,6 @@ import {
   INTERNAL_CASH_AFTER_WH_LABEL,
   OVERRIDE_NOTE,
   REAPPLY_WITHHOLDING_LABEL,
-  WITHHOLDING_PICK_CHANGE_LABEL,
   withholdingPickBoxesHidden,
   allowGovVatOption,
   WITHHOLDING_DEFAULT_CODES,
@@ -101,7 +100,7 @@ export type QuoteEditorProps = {
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
 };
 
-type TabId = "items" | "terms" | "notes" | "signoff";
+type TabId = "items" | "withholding" | "terms" | "notes" | "signoff";
 
 function filterGovVatCodes(codes: string[] | null): string[] | null {
   if (codes == null) return null;
@@ -313,7 +312,6 @@ export function QuoteEditor({
   const [whPctErrors, setWhPctErrors] = useState<Record<string, string>>({});
   const [whPctDrafts, setWhPctDrafts] = useState<Record<string, string>>({});
   /** Expanded withholding checkboxes under Quote details (collapsed by default). */
-  const [whPickOpen, setWhPickOpen] = useState(() => resolveInitialPick(initial) == null);
 
   const initialDays =
     initial.validForDays != null
@@ -1038,31 +1036,9 @@ export function QuoteEditor({
                 <span className="label">Withholding</span>
                 <div className="wh-collapsed-line">
                   <span>{quotePickHint}</span>
-                  {!withholdingPickBoxesHidden(customer?.withholdingType) && (
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => setWhPickOpen((o) => !o)}
-                      aria-expanded={whPickOpen}
-                    >
-                      {WITHHOLDING_PICK_CHANGE_LABEL}
-                    </button>
-                  )}
                 </div>
               </div>
-              {whPickOpen && !withholdingPickBoxesHidden(customer?.withholdingType) ? (
-                <WithholdingPickField
-                  rates={visibleRates(rates)}
-                  value={pick}
-                  onChange={changeQuotePick}
-                  error={e.withholdingCodes ?? e.withholding}
-                  clearToNotSet
-                  showLabel={false}
-                />
-              ) : (
-                <input type="hidden" name="defaultWithholdingJson" value={pick == null ? "" : JSON.stringify(pick)} />
-              )}
-              {(e.withholdingCodes || e.withholding) && !whPickOpen ? (
+              {e.withholdingCodes || e.withholding ? (
                 <div className="error">{e.withholdingCodes ?? e.withholding}</div>
               ) : null}
             </div>
@@ -1075,6 +1051,10 @@ export function QuoteEditor({
               <button type="button" role="tab" aria-selected={tab === "items"} className={`quote-tab${tab === "items" ? " quote-tab-on" : ""}`} onClick={() => setTab("items")}>
                 Items
                 {items.length > 0 ? <span className="quote-tab-badge">{items.length}</span> : null}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "withholding"} className={`quote-tab${tab === "withholding" ? " quote-tab-on" : ""}`} onClick={() => setTab("withholding")}>
+                Withholding
+                {e.withholdingCodes || e.withholding ? <span className="quote-tab-dot" aria-hidden /> : null}
               </button>
               <button type="button" role="tab" aria-selected={tab === "terms"} className={`quote-tab${tab === "terms" ? " quote-tab-on" : ""}`} onClick={() => setTab("terms")}>
                 Terms &amp; conditions
@@ -1516,6 +1496,23 @@ export function QuoteEditor({
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === "withholding" && (
+            <div role="tabpanel">
+              {withholdingPickBoxesHidden(customer?.withholdingType) ? (
+                <p className="faint">This customer does not withhold — there is nothing to pick here.</p>
+              ) : (
+                <WithholdingPickField
+                  rates={visibleRates(rates)}
+                  value={pick}
+                  onChange={changeQuotePick}
+                  error={e.withholdingCodes ?? e.withholding}
+                  clearToNotSet
+                  showLabel={false}
+                />
+              )}
             </div>
           )}
 
