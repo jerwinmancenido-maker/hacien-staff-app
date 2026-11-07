@@ -1053,17 +1053,9 @@ export function QuoteEditor({
               <input id="subject" type="text" value={h.subject} onChange={(ev) => setH({ ...h, subject: ev.target.value })} />
               {e.subject && <div className="error">{e.subject}</div>}
             </div>
-            <div className={`quote-f field full${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
-              <div className="wh-collapsed-row">
-                <span className="label">Withholding</span>
-                <div className="wh-collapsed-line">
-                  <span>{quotePickHint}</span>
-                </div>
-              </div>
-              {e.withholdingCodes || e.withholding ? (
-                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
-              ) : null}
-            </div>
+            {/* No withholding row here: withholding lives only in its tab
+                (owner call 2026-11-08). Pick errors still surface as the
+                Withholding tab's dot and inside the tab itself. */}
           </div>
         </div>
 
