@@ -28,7 +28,7 @@ import {
   withholdingCodesFromSo,
 } from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
-import { arAgingSummary, countPending2307Expected, getStatement, list2307 } from "@/lib/billing/views";
+import { arAgingSummary, countPending2307Certificates, getStatement, list2307 } from "@/lib/billing/views";
 import { getBillingPrintModel } from "@/lib/print/views";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import { saveCustomer } from "@/lib/services/companies";
@@ -980,7 +980,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       admin,
     );
 
-    const beforePending = await countPending2307Expected();
+    const beforePending = await countPending2307Certificates();
 
     const col = await recordCollection(
       {
@@ -1023,9 +1023,12 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const forCol = listed.filter((r) => r.parentId === parent.id);
     expect(forCol).toHaveLength(2);
     expect(forCol.map((r) => r.atcCode).sort()).toEqual(["WI157", "WI640"]);
+    // Mark-received acts on the parent; every line carries the action control.
+    expect(forCol.map((r) => r.markId)).toEqual([parent.id, parent.id]);
 
-    const afterPending = await countPending2307Expected();
-    expect(afterPending).toBe(beforePending - 1);
+    const afterPending = await countPending2307Certificates();
+    // Recording the collection created one new PENDING certificate.
+    expect(afterPending).toBe(beforePending + 1);
   });
 
   it("S-19 migration backfill keeps parent totals equal to sum of lines", async () => {

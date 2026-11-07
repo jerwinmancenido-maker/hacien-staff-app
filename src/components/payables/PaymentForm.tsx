@@ -353,6 +353,7 @@ export function PaymentForm({
                           onChange={(ev) => updateAlloc(i, { rate: ev.target.value })}
                           style={{ width: 64, textAlign: "right" }}
                         />
+                        {e[`allocations.${i}.withholdingRate`] && <div className="error">{e[`allocations.${i}.withholdingRate`]}</div>}
                       </td>
                       <td>
                         <input

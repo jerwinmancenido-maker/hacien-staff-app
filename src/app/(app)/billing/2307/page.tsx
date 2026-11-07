@@ -3,7 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { ratePctLabel } from "@/lib/quotes/calc";
-import { countPending2307Expected, list2307 } from "@/lib/billing/views";
+import { countPending2307Certificates, list2307 } from "@/lib/billing/views";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { Mark2307Form } from "@/components/billing/Mark2307Form";
 import { Chip, PageHeader } from "@/components/ui";
@@ -19,14 +19,14 @@ export default async function Withholding2307Page({
   const user = await requirePagePermission("view");
   const sp = await searchParams;
   const status = (sp.status === "PENDING" || sp.status === "RECEIVED" ? sp.status : "ALL") as Withholding2307Status | "ALL";
-  const [rows, pendingCount] = await Promise.all([list2307({ status, customerId: sp.customerId }), countPending2307Expected()]);
+  const [rows, pendingCount] = await Promise.all([list2307({ status, customerId: sp.customerId }), countPending2307Certificates()]);
   const canManage = can(user, "manage_billing");
 
   return (
     <>
       <PageHeader
         title="BIR 2307"
-        subtitle={`Creditable tax withheld. Pending until the certificate is received. ${pendingCount} billing${pendingCount === 1 ? "" : "s"} still need a 2307.`}
+        subtitle={`Creditable tax withheld. Pending until the certificate is received. ${pendingCount} certificate${pendingCount === 1 ? "" : "s"} awaiting receipt.`}
       />
       <BillingNav active="2307" />
       <p className="faint small" style={{ marginBottom: 12 }}>
