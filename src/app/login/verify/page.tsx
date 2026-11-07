@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -17,6 +18,9 @@ export default async function LoginVerifyPage() {
         <h1>Two-step sign-in</h1>
         <div className="subtitle">Enter the 6-digit code from your authenticator app.</div>
         <LoginVerifyForm />
+        <div className="links">
+          <Link href="/login">Back to sign in</Link>
+        </div>
       </div>
     </main>
   );
