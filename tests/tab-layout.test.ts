@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // Tab layout for the doc pages (quote / SO / PO / billing / collection /
-// expense / cash account). Source-level assertions: the pages are server
-// components, so the tests pin the tab keys, the labels, and which sections
-// live inside which tab.
+// expense / cash account) and the company pages (customer / supplier).
+// Source-level assertions: the pages are server components, so the tests
+// pin the tab keys, the labels, and which sections live inside which tab.
 
 const read = (p: string) => readFileSync(`src/app/(app)/${p}`, "utf8");
 
@@ -160,5 +160,56 @@ describe("cash account detail tabs", () => {
     expect(ledger).toBeGreaterThan(0);
     expect(ledger).toBeLessThan(activity);
     expect(activity).toBeLessThan(edit);
+  });
+});
+
+describe("supplier detail tabs", () => {
+  const src = read("suppliers/[id]/page.tsx");
+  const overview = readFileSync("src/components/SupplierOverview.tsx", "utf8");
+  it("has an Activity tab last, after Balances", () => {
+    expect(src).toContain('{ key: "activity", label: "Activity"');
+    expect(src).toContain('"balances", "activity"] as const');
+    const balances = src.indexOf('key: "balances"');
+    const activity = src.indexOf('key: "activity"');
+    expect(balances).toBeGreaterThan(0);
+    expect(balances).toBeLessThan(activity);
+  });
+  it("keeps Recent activity off Overview and renders it in the Activity tab", () => {
+    expect(overview).not.toContain("<Activity");
+    expect(overview).not.toContain("docIds");
+    const start = src.indexOf('{tab === "activity" && (');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const tab = src.slice(start);
+    expect(tab).toContain("<Activity");
+    expect(tab).toContain('entityType: "Supplier"');
+    expect(tab).toContain('entityType: "BusinessDocument"');
+    expect(tab).toContain('title="Recent activity"');
+  });
+});
+
+describe("customer detail tabs", () => {
+  const src = read("customers/[id]/page.tsx");
+  const overview = readFileSync("src/components/CustomerOverview.tsx", "utf8");
+  it("has an Activity tab last, after Price history", () => {
+    expect(src).toContain('{ key: "activity", label: "Activity"');
+    const prices = src.indexOf('key: "prices"');
+    const activity = src.indexOf('key: "activity"');
+    expect(prices).toBeGreaterThan(0);
+    expect(prices).toBeLessThan(activity);
+  });
+  it("keeps Recent activity off Overview and renders it in the Activity tab", () => {
+    expect(overview).not.toContain("<Activity");
+    expect(overview).not.toContain("docIds");
+    const start = src.indexOf('{tab === "activity" && (');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const tab = src.slice(start);
+    expect(tab).toContain("<Activity");
+    expect(tab).toContain('entityType: "Customer"');
+    expect(tab).toContain('entityType: "BusinessDocument"');
+    expect(tab).toContain('title="Recent activity"');
+  });
+  it("resolves ?tab=activity through the shared company tab list", () => {
+    const tabs = readFileSync("src/lib/company-tabs.ts", "utf8");
+    expect(tabs).toContain('"activity"');
   });
 });
