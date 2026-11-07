@@ -323,6 +323,9 @@ export function QuoteEditor({
 
   // Modular terms: estimated lead time in business days (point 3). Blank = no figure.
   const [leadTimeDays, setLeadTimeDays] = useState<string>(initial.leadTimeDays != null ? String(initial.leadTimeDays) : "");
+  // Terms tab: the Delivery/Warranty boxes collapse behind an Add button while
+  // both are empty (owner call 2026-11-08 — empty boxes are confusing clutter).
+  const [termsNotesOpen, setTermsNotesOpen] = useState(false);
 
   function onValidForDaysChange(val: string) {
     setValidForDays(val);
@@ -387,6 +390,8 @@ export function QuoteEditor({
         : null;
 
   const e = state.fieldErrors ?? {};
+  const deliveryWarrantyText = `${h.deliveryNotes || printDefaults.deliveryNotes || ""} ${h.warrantyNotes || printDefaults.warrantyNotes || ""}`.trim();
+  const showDeliveryWarranty = termsNotesOpen || deliveryWarrantyText !== "" || !!e.deliveryNotes || !!e.warrantyNotes;
   const customer = customerList.find((c) => c.id === h.customerId);
   const contacts = customer?.contacts ?? [];
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
@@ -1550,28 +1555,42 @@ export function QuoteEditor({
                 <div className="hint">Prints on the quote · From Settings, edit for this quote</div>
                 {e.terms && <div className="error">{e.terms}</div>}
               </div>
-              <div className="quote-f quote-f-w2 field">
-                <label htmlFor="deliveryNotes">Delivery</label>
-                <textarea
-                  id="deliveryNotes"
-                  rows={2}
-                  value={h.deliveryNotes || printDefaults.deliveryNotes || ""}
-                  onChange={(ev) => setH({ ...h, deliveryNotes: ev.target.value })}
-                />
-                {e.deliveryNotes && <div className="error">{e.deliveryNotes}</div>}
-                <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
-              </div>
-              <div className="quote-f quote-f-w2 field">
-                <label htmlFor="warrantyNotes">Warranty</label>
-                <textarea
-                  id="warrantyNotes"
-                  rows={2}
-                  value={h.warrantyNotes || printDefaults.warrantyNotes || ""}
-                  onChange={(ev) => setH({ ...h, warrantyNotes: ev.target.value })}
-                />
-                {e.warrantyNotes && <div className="error">{e.warrantyNotes}</div>}
-                <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
-              </div>
+              {showDeliveryWarranty ? (
+                <>
+                  <div className="quote-f quote-f-w2 field">
+                    <label htmlFor="deliveryNotes">Delivery</label>
+                    <textarea
+                      id="deliveryNotes"
+                      rows={2}
+                      value={h.deliveryNotes || printDefaults.deliveryNotes || ""}
+                      onChange={(ev) => setH({ ...h, deliveryNotes: ev.target.value })}
+                    />
+                    {e.deliveryNotes && <div className="error">{e.deliveryNotes}</div>}
+                    <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
+                  </div>
+                  <div className="quote-f quote-f-w2 field">
+                    <label htmlFor="warrantyNotes">Warranty</label>
+                    <textarea
+                      id="warrantyNotes"
+                      rows={2}
+                      value={h.warrantyNotes || printDefaults.warrantyNotes || ""}
+                      onChange={(ev) => setH({ ...h, warrantyNotes: ev.target.value })}
+                    />
+                    {e.warrantyNotes && <div className="error">{e.warrantyNotes}</div>}
+                    <div className="hint">Filled from Settings, edit for this quote · Prints on the quote</div>
+                  </div>
+                </>
+              ) : (
+                <div className="quote-f field full">
+                  <span className="label">Delivery &amp; warranty</span>
+                  <div className="faint">No delivery or warranty text for this quote.</div>
+                  <div>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTermsNotesOpen(true)}>
+                      Add delivery / warranty
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="quote-f field">
                 <span className="label">Validity</span>
                 <div>{derivedDays != null && derivedDays >= 0 ? `${derivedDays} ${derivedDays === 1 ? "day" : "days"}` : "—"}</div>
@@ -1593,8 +1612,14 @@ export function QuoteEditor({
               </div>
               <div className="quote-f field full">
                 <span className="label">Terms &amp; conditions</span>
-                <textarea readOnly rows={4} value={printDefaults.quoteTerms ?? ""} aria-readonly />
-                <div className="hint">From Settings · Read-only in Phase 1</div>
+                {printDefaults.quoteTerms?.trim() ? (
+                  <>
+                    <textarea readOnly rows={4} value={printDefaults.quoteTerms} aria-readonly />
+                    <div className="hint">From Settings · Read-only in Phase 1</div>
+                  </>
+                ) : (
+                  <div className="faint">No standard terms set in Settings.</div>
+                )}
               </div>
               <div className="quote-f field full">
                 <label htmlFor="termsRemarks">Remarks</label>
