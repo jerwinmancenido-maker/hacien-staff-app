@@ -561,17 +561,17 @@ export function QuoteEditor({
       <div className="quote-ln-product">
         {line.itemId ? (
           <>
-            <button type="button" className="btn-link" onClick={() => openDrawer(line)}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDrawer(line)}>
               🔗 {line.itemName ?? "Linked product"}
             </button>
-            <button type="button" className="btn-link" aria-label="Unlink product" onClick={() => setItem(line.key, { itemId: null, itemName: null })}>
+            <button type="button" className="btn btn-secondary btn-sm" aria-label="Unlink product" onClick={() => setItem(line.key, { itemId: null, itemName: null })}>
               ✕
             </button>
           </>
         ) : (
           <button
             type="button"
-            className="btn-link"
+            className="btn btn-secondary btn-sm"
             onClick={() => {
               setPickerFor(line.key);
               setPickerQuery(line.description);
@@ -581,7 +581,7 @@ export function QuoteEditor({
             Pick a product
           </button>
         )}
-        <button type="button" className="btn-link" onClick={() => openDrawer(line)}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDrawer(line)}>
           Product details
         </button>
       </div>
