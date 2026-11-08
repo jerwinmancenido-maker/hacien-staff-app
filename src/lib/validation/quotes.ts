@@ -57,6 +57,19 @@ export const dateOnly = (label: string) =>
       return d;
     });
 
+/** One internal component of a lot (bundle) line: never printed, each with
+ * its own supplier and cost. Mirrors the line field rules. */
+export const componentSchema = z.object({
+  id: optionalId,
+  itemId: z.string().trim().max(64).nullable().optional(),
+  description: z.string().trim().min(1, "Component description is required.").max(2000),
+  qty: amount("Component qty", { positive: true }),
+  unit: z.string().trim().min(1, "Component unit is required.").max(30),
+  supplierId: optionalId,
+  unitCost: amount("Component unit cost").optional().default("0"),
+});
+export type ComponentInput = z.infer<typeof componentSchema>;
+
 export const itemSchema = z.object({
   id: optionalId,
   description: z.string().trim().min(1, "Description is required.").max(2000),
@@ -83,6 +96,9 @@ export const itemSchema = z.object({
     })
     .optional(),
   supplierUnitCost: amount("Supplier unit cost").optional().default("0"),
+  /** Lot (bundle) line: prints as one row; its cost comes from components. */
+  isLot: z.boolean().optional(),
+  components: z.array(componentSchema).max(50, "At most 50 components in one lot.").optional(),
   unitPrice: amount("Unit price"),
   /** Snapshotted withholding fraction ("0.0100"); null = not snapshotted; omitted → server defaults. */
   withholdingRate: z
@@ -112,6 +128,12 @@ export const itemSchema = z.object({
     return !hasFields || v.description.trim().length <= 191;
   },
   { message: "To save this as a catalog item, keep the description under 191 characters.", path: ["description"] },
+).refine(
+  (v) => v.isLot !== true || (v.components != null && v.components.length >= 1),
+  { message: "A lot line needs at least one component.", path: ["components"] },
+).refine(
+  (v) => v.isLot === true || v.components == null || v.components.length === 0,
+  { message: "Only lot lines can have components.", path: ["components"] },
 );
 export type ItemInput = z.infer<typeof itemSchema>;
 

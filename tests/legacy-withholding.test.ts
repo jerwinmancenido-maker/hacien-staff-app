@@ -16,6 +16,8 @@ function line(partial: Partial<PlannedItem> & Pick<PlannedItem, "kind" | "withho
     supplierId: null,
     itemId: null,
     supplierUnitCost: "0.00",
+    isLot: false,
+    components: [],
     unitPrice: "100.00",
     total: "100.00",
     supplierTotal: "0.00",

@@ -7607,6 +7607,37 @@ button.contact-card-add {
 .quote-ln-more .field.grow select {
   width: 100%;
 }
+/* Lot (bundle) lines: toggle bar + the internal components editor. */
+.quote-ln-lotbar {
+  display: flex;
+  align-items: center;
+}
+.quote-ln-components {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quote-ln-comp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: end;
+}
+.quote-ln-comp .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.quote-ln-comp .field.grow {
+  flex: 1 1 200px;
+  position: relative;
+}
+.quote-ln-comp-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .quote-ln-more-note {
   margin: 0;
   align-self: center;

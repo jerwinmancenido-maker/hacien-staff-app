@@ -13,9 +13,10 @@ import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import {
   COST_NOT_SET_LABEL,
+  componentsTotal,
   docTotals,
+  fromScaled,
   lineAmounts,
-  linesMissingSupplierCost,
   ratePctLabel,
   supplierCostMissing,
   toScaled,
@@ -51,6 +52,7 @@ import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddContactDialog } from "./AddContactDialog";
 import {
   type EditorAddressOption,
+  type EditorComponent,
   type EditorCustomer,
   type EditorInitial,
   type EditorItem,
@@ -165,15 +167,32 @@ function blankItem(picks: readonly WithholdingSnapshot[], key: string): EditorIt
     itemId: null,
     itemName: null,
     newCatalog: null,
+    isLot: false,
+    components: [],
   };
 }
 
 function safeLine(i: EditorItem) {
   try {
+    if (i.isLot) {
+      const total = lineAmounts({ kind: i.kind, qty: i.qty || "0", unitPrice: i.unitPrice || "0", supplierUnitCost: "0" }).total;
+      const supplierTotal = componentsTotal((i.components ?? []).map((c) => ({ qty: c.qty || "0", unitCost: c.unitCost || "0" })));
+      return { total, supplierTotal, margin: fromScaled(toScaled(total, 2) - toScaled(supplierTotal, 2), 2) };
+    }
     return lineAmounts({ kind: i.kind, qty: i.qty || "0", unitPrice: i.unitPrice || "0", supplierUnitCost: i.supplierUnitCost || "0" });
   } catch {
     return { total: "0.00", supplierTotal: "0.00", margin: "0.00" };
   }
+}
+
+/** The save-warning / chip test, lot-aware: a lot is missing cost when it
+ * has no components or any component has no cost yet. */
+function lineCostMissing(i: EditorItem): boolean {
+  if (i.isLot) {
+    const comps = i.components ?? [];
+    return comps.length === 0 || comps.some((c) => supplierCostMissing(c.unitCost));
+  }
+  return supplierCostMissing(i.supplierUnitCost);
 }
 
 /** Grow a description textarea to fit its content (no clipped 2nd line). */
@@ -332,6 +351,17 @@ export function QuoteEditor({
           itemId: i.itemId ?? null,
           itemName: i.itemName ?? null,
           newCatalog: null,
+          isLot: i.isLot ?? false,
+          components: (i.components ?? []).map((c, ci) => ({
+            key: c.id ?? `init-c-${idx}-${ci}`,
+            id: c.id ?? null,
+            itemId: c.itemId,
+            description: c.description,
+            qty: c.qty,
+            unit: c.unit,
+            supplierId: c.supplierId,
+            unitCost: c.unitCost,
+          })),
         }))
       : [blankItem(initialPickSnaps, "init-0")],
   );
@@ -467,6 +497,7 @@ export function QuoteEditor({
   const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
   const [costHints, setCostHints] = useState<Record<string, string>>({});
   const costCacheRef = useRef<Map<string, SupplierCostRow[]>>(new Map());
+  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[] } | null>(null);
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
@@ -492,10 +523,31 @@ export function QuoteEditor({
     return () => clearTimeout(t);
   }, [pickerFor, pickerQuery]);
 
-  /** Typing a description searches the catalog (unlinked lines only). */
+  // Component catalog search: same endpoint + debounce as the line picker.
+  useEffect(() => {
+    if (!compPicker) return;
+    const q = compPicker.query.trim();
+    if (q.length < 2) return;
+    const seq = ++pickerSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/items/search?q=${encodeURIComponent(q)}`);
+        const data = (await res.json()) as { ok?: boolean; items?: CatalogSearchResult[] };
+        if (pickerSeq.current !== seq) return;
+        setCompPicker((p) => (p ? { ...p, results: data.ok && Array.isArray(data.items) ? data.items : [] } : p));
+      } catch {
+        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [] } : p));
+      }
+    }, 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compPicker?.query, compPicker?.lineKey, compPicker?.compKey]);
+
+  /** Typing a description searches the catalog (unlinked lines only).
+   * Lot lines skip it: their description is the printed spec text. */
   function onDescription(line: EditorItem, v: string) {
     setItem(line.key, { description: v });
-    if (line.itemId) return;
+    if (line.itemId || line.isLot) return;
     if (v.trim().length >= 2) {
       setPickerFor(line.key);
       setPickerQuery(v);
@@ -575,6 +627,88 @@ export function QuoteEditor({
   function onSupplierPick(line: EditorItem, supplierId: string | null) {
     setItem(line.key, { supplierId });
     if (supplierId) void maybeAutoFillCost({ ...line, supplierId });
+  }
+
+  // ---- Lot (bundle) components -------------------------------------------
+
+  function blankComponent(): EditorComponent {
+    return { key: allocLineKey(), id: null, itemId: null, description: "", qty: "1", unit: "pc", supplierId: null, unitCost: "" };
+  }
+
+  function toggleLot(line: EditorItem, on: boolean) {
+    setItems((xs) =>
+      xs.map((x) => {
+        if (x.key !== line.key) return x;
+        if (!on) return { ...x, isLot: false };
+        const comps = x.components && x.components.length ? x.components : [blankComponent()];
+        return { ...x, isLot: true, components: comps };
+      }),
+    );
+  }
+
+  function setComponent(lineKey: string, compKey: string, patch: Partial<EditorComponent>) {
+    setItems((xs) =>
+      xs.map((x) =>
+        x.key === lineKey
+          ? { ...x, components: (x.components ?? []).map((c) => (c.key === compKey ? { ...c, ...patch } : c)) }
+          : x,
+      ),
+    );
+  }
+
+  function addComponent(line: EditorItem) {
+    setItems((xs) => xs.map((x) => (x.key === line.key ? { ...x, components: [...(x.components ?? []), blankComponent()] } : x)));
+  }
+
+  function removeComponent(lineKey: string, compKey: string) {
+    setItems((xs) =>
+      xs.map((x) => (x.key === lineKey ? { ...x, components: (x.components ?? []).filter((c) => c.key !== compKey) } : x)),
+    );
+  }
+
+  /** Phase A auto-fill, per component: same last-PO-cost lookup as lines. */
+  async function maybeAutoFillComponentCost(line: EditorItem, comp: EditorComponent) {
+    if (!withCosts || !comp.supplierId) return;
+    const description = comp.description.trim();
+    if (!description || !costIsEmpty(comp.unitCost)) return;
+    const supplierId = comp.supplierId;
+    try {
+      let rows = costCacheRef.current.get(description);
+      if (!rows) {
+        const res = await fetch(`/api/items/supplier-costs?description=${encodeURIComponent(description)}`);
+        const data = (await res.json()) as { ok?: boolean; rows?: SupplierCostRow[] };
+        rows = data.ok && Array.isArray(data.rows) ? data.rows : [];
+        costCacheRef.current.set(description, rows);
+      }
+      const row = pickSupplierCost(rows, supplierId);
+      if (!row) return;
+      setCostHints((h) => ({ ...h, [`${line.key}:${comp.key}`]: lastCostHint(row) }));
+      setItems((xs) =>
+        xs.map((x) =>
+          x.key === line.key
+            ? {
+                ...x,
+                components: (x.components ?? []).map((c) =>
+                  c.key === comp.key && c.supplierId === supplierId && costIsEmpty(c.unitCost) ? { ...c, unitCost: row.lastCost } : c,
+                ),
+              }
+            : x,
+        ),
+      );
+    } catch {
+      // Auto-fill is a convenience: a failed lookup leaves the box as-is.
+    }
+  }
+
+  function onComponentSupplierPick(line: EditorItem, comp: EditorComponent, supplierId: string | null) {
+    setComponent(line.key, comp.key, { supplierId });
+    if (supplierId) void maybeAutoFillComponentCost(line, { ...comp, supplierId });
+  }
+
+  function applyComponentPick(line: EditorItem, comp: EditorComponent, item: CatalogSearchResult) {
+    setComponent(line.key, comp.key, { itemId: item.id, description: item.name, unit: item.unit });
+    setCompPicker(null);
+    void maybeAutoFillComponentCost(line, { ...comp, itemId: item.id, description: item.name });
   }
 
   async function openDrawer(line: EditorItem) {
@@ -927,7 +1061,25 @@ export function QuoteEditor({
         ? { brand: nc.brand, model: nc.model, category: nc.category, sku: nc.sku, details: nc.details }
         : undefined,
     };
-    return withCosts ? { ...base, supplierId: i.supplierId, supplierUnitCost: i.supplierUnitCost || "0" } : base;
+    if (!withCosts) return base;
+    return {
+      ...base,
+      supplierId: i.supplierId,
+      supplierUnitCost: i.supplierUnitCost || "0",
+      isLot: i.isLot === true,
+      components:
+        i.isLot === true
+          ? (i.components ?? []).map((c) => ({
+              id: c.id,
+              itemId: c.itemId,
+              description: c.description,
+              qty: c.qty,
+              unit: c.unit,
+              supplierId: c.supplierId,
+              unitCost: c.unitCost || "0",
+            }))
+          : undefined,
+    };
   }
 
   const payload = {
@@ -1013,7 +1165,7 @@ export function QuoteEditor({
     // skipCostWarn set, so the withholding question still follows it.
     const gate = quoteSaveGate({
       withholdingUnset: pick == null,
-      supplierCostMissing: !skipCostWarn.current && withCosts && linesMissingSupplierCost(items),
+      supplierCostMissing: !skipCostWarn.current && withCosts && items.some(lineCostMissing),
     });
     if (gate === "cost-warning") {
       e.preventDefault();
@@ -1079,7 +1231,7 @@ export function QuoteEditor({
       const gate = quoteMarkSentGate({
         approved: true,
         withholdingUnset: pick == null,
-        supplierCostMissing: withCosts && linesMissingSupplierCost(items),
+        supplierCostMissing: withCosts && items.some(lineCostMissing),
       });
       if (gate === "cost-warning") {
         setCostConfirmNext("sent");
@@ -1355,7 +1507,7 @@ export function QuoteEditor({
                     ? i.withholdingAtc
                     : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
-                  const costMissing = supplierCostMissing(i.supplierUnitCost);
+                  const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
                   const marginText = costMissing
@@ -1498,6 +1650,137 @@ export function QuoteEditor({
                           {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
+                            <div className="quote-ln-lotbar">
+                              <label className="small">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Line ${idx + 1} lot bundle`}
+                                  checked={i.isLot === true}
+                                  onChange={(ev) => toggleLot(i, ev.target.checked)}
+                                />{" "}
+                                Lot (bundle) — one printed line; cost comes from its components
+                              </label>
+                            </div>
+                          ) : null}
+                          {withCosts && i.isLot ? (
+                            <div className="quote-ln-components">
+                              {(i.components ?? []).map((c, cIdx) => (
+                                <div className="quote-ln-comp" key={c.key}>
+                                  <div className="field grow">
+                                    <label className="label" htmlFor={`comp-desc-${c.key}`}>
+                                      Component {cIdx + 1}
+                                    </label>
+                                    <input
+                                      id={`comp-desc-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
+                                      value={c.description}
+                                      placeholder="Product or service inside the lot"
+                                      onChange={(ev) => {
+                                        const v = ev.target.value;
+                                        setComponent(i.key, c.key, { description: v, itemId: null });
+                                        if (v.trim().length >= 2) {
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                        } else if (compPicker?.compKey === c.key) {
+                                          setCompPicker(null);
+                                        }
+                                      }}
+                                      onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                    />
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        <ul className="plain-list">
+                                          {compPicker.results.map((r) => {
+                                            const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
+                                            return (
+                                              <li key={r.id}>
+                                                <button type="button" className="quote-picker-opt" onClick={() => applyComponentPick(i, c, r)}>
+                                                  <span className="quote-picker-name">
+                                                    <span>{r.name}</span>
+                                                  </span>
+                                                  {rest ? <span className="quote-picker-meta">{rest}</span> : null}
+                                                </button>
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`comp-qty-${c.key}`}>
+                                      Qty
+                                    </label>
+                                    <input
+                                      id={`comp-qty-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} qty`}
+                                      inputMode="decimal"
+                                      value={c.qty}
+                                      onChange={(ev) => setComponent(i.key, c.key, { qty: ev.target.value })}
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`comp-unit-${c.key}`}>
+                                      Unit
+                                    </label>
+                                    <input
+                                      id={`comp-unit-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} unit`}
+                                      value={c.unit}
+                                      onChange={(ev) => setComponent(i.key, c.key, { unit: ev.target.value })}
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`comp-sup-${c.key}`}>
+                                      Supplier
+                                    </label>
+                                    <select
+                                      id={`comp-sup-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      value={c.supplierId ?? ""}
+                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
+                                    >
+                                      <option value="">—</option>
+                                      {suppliers!.map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                          {s.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`comp-cost-${c.key}`}>
+                                      Unit cost
+                                    </label>
+                                    <input
+                                      id={`comp-cost-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} unit cost`}
+                                      inputMode="decimal"
+                                      value={c.unitCost}
+                                      onChange={(ev) => setComponent(i.key, c.key, { unitCost: formatMoneyInput(ev.target.value) })}
+                                    />
+                                    {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btn-link danger"
+                                    aria-label={`Remove component ${cIdx + 1} from line ${idx + 1}`}
+                                    onClick={() => removeComponent(i.key, c.key)}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <div className="quote-ln-comp-foot">
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => addComponent(i)}>
+                                  Add component
+                                </button>
+                                <span className="small muted">
+                                  Lot cost {formatPeso(a.supplierTotal)} · Margin {formatPeso(a.margin)}
+                                </span>
+                              </div>
+                            </div>
+                          ) : null}
+                          {withCosts && !i.isLot ? (
                             <div className="quote-ln-more-row">
                               <div className="field grow">
                                 <label className="label" htmlFor={`sup-${i.key}`}>
@@ -1559,7 +1842,7 @@ export function QuoteEditor({
                   const usePickChips = !showOverride && pickChips.length > 0;
                   const displayAtc = showOverride ? i.withholdingAtc : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
-                  const costMissing = supplierCostMissing(i.supplierUnitCost);
+                  const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
                   const marginText = costMissing
@@ -1722,6 +2005,137 @@ export function QuoteEditor({
                           {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
+                            <div className="quote-ln-lotbar">
+                              <label className="small">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Line ${idx + 1} lot bundle`}
+                                  checked={i.isLot === true}
+                                  onChange={(ev) => toggleLot(i, ev.target.checked)}
+                                />{" "}
+                                Lot (bundle) — one printed line; cost comes from its components
+                              </label>
+                            </div>
+                          ) : null}
+                          {withCosts && i.isLot ? (
+                            <div className="quote-ln-components">
+                              {(i.components ?? []).map((c, cIdx) => (
+                                <div className="quote-ln-comp" key={c.key}>
+                                  <div className="field grow">
+                                    <label className="label" htmlFor={`m-comp-desc-${c.key}`}>
+                                      Component {cIdx + 1}
+                                    </label>
+                                    <input
+                                      id={`m-comp-desc-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
+                                      value={c.description}
+                                      placeholder="Product or service inside the lot"
+                                      onChange={(ev) => {
+                                        const v = ev.target.value;
+                                        setComponent(i.key, c.key, { description: v, itemId: null });
+                                        if (v.trim().length >= 2) {
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                        } else if (compPicker?.compKey === c.key) {
+                                          setCompPicker(null);
+                                        }
+                                      }}
+                                      onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                    />
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        <ul className="plain-list">
+                                          {compPicker.results.map((r) => {
+                                            const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
+                                            return (
+                                              <li key={r.id}>
+                                                <button type="button" className="quote-picker-opt" onClick={() => applyComponentPick(i, c, r)}>
+                                                  <span className="quote-picker-name">
+                                                    <span>{r.name}</span>
+                                                  </span>
+                                                  {rest ? <span className="quote-picker-meta">{rest}</span> : null}
+                                                </button>
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`m-comp-qty-${c.key}`}>
+                                      Qty
+                                    </label>
+                                    <input
+                                      id={`m-comp-qty-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} qty`}
+                                      inputMode="decimal"
+                                      value={c.qty}
+                                      onChange={(ev) => setComponent(i.key, c.key, { qty: ev.target.value })}
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`m-comp-unit-${c.key}`}>
+                                      Unit
+                                    </label>
+                                    <input
+                                      id={`m-comp-unit-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} unit`}
+                                      value={c.unit}
+                                      onChange={(ev) => setComponent(i.key, c.key, { unit: ev.target.value })}
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`m-comp-sup-${c.key}`}>
+                                      Supplier
+                                    </label>
+                                    <select
+                                      id={`m-comp-sup-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      value={c.supplierId ?? ""}
+                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
+                                    >
+                                      <option value="">—</option>
+                                      {suppliers!.map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                          {s.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="field">
+                                    <label className="label" htmlFor={`m-comp-cost-${c.key}`}>
+                                      Unit cost
+                                    </label>
+                                    <input
+                                      id={`m-comp-cost-${c.key}`}
+                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} unit cost`}
+                                      inputMode="decimal"
+                                      value={c.unitCost}
+                                      onChange={(ev) => setComponent(i.key, c.key, { unitCost: formatMoneyInput(ev.target.value) })}
+                                    />
+                                    {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btn-link danger"
+                                    aria-label={`Remove component ${cIdx + 1} from line ${idx + 1}`}
+                                    onClick={() => removeComponent(i.key, c.key)}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <div className="quote-ln-comp-foot">
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => addComponent(i)}>
+                                  Add component
+                                </button>
+                                <span className="small muted">
+                                  Lot cost {formatPeso(a.supplierTotal)} · Margin {formatPeso(a.margin)}
+                                </span>
+                              </div>
+                            </div>
+                          ) : null}
+                          {withCosts && !i.isLot ? (
                             <>
                               <div className="field">
                                 <label className="label" htmlFor={`m-sup-${i.key}`}>

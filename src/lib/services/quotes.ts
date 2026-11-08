@@ -2,7 +2,7 @@
 // draft. Every function checks permissions itself (server-side), runs in one
 // transaction with its audit row, and never deletes anything.
 
-import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
+import { Prisma, type Quote, type QuoteItem, type QuoteItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
@@ -16,7 +16,7 @@ import {
   quoteNotApprovedError,
 } from "../quotes/approval";
 import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
-import { itemData, planItems, type PlannedItem } from "../quotes/items";
+import { componentData, itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
@@ -35,7 +35,7 @@ import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
 
 export type DocActor = PermissionUser & { id: string };
 
-type QuoteWithItems = Quote & { items: QuoteItem[] };
+type QuoteWithItems = Quote & { items: (QuoteItem & { components?: QuoteItemComponent[] })[] };
 
 export const EDITABLE_QUOTE_STATUSES = ["DRAFT", "SENT"] as const;
 
@@ -126,7 +126,10 @@ function resolveWithholdingPickInput(
 
 async function lockQuote(tx: Tx, id: string): Promise<QuoteWithItems> {
   await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${id} FOR UPDATE`;
-  const q = await tx.quote.findUnique({ where: { id }, include: { items: { where: { removedAt: null } } } });
+  const q = await tx.quote.findUnique({
+    where: { id },
+    include: { items: { where: { removedAt: null }, include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } } } },
+  });
   if (!q) throw new DocRuleError("Quote not found.");
   return q;
 }
@@ -251,6 +254,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const pickSnapshots = await resolvePickSnapshots(pick);
   // Line rates drive totals; document withholding JSON is a read-only summary.
   const { items } = planItems([], input.items, withCosts, {
+    lots: true,
     withholdingPicks: pickSnapshots,
     // Always apply the pick on create so blank lines get the customer's rates.
     reapplyWithholding: input.reapplyWithholding === true || input.items.every((i) => i.withholdingRate === undefined),
@@ -304,7 +308,16 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           createdById: actor.id,
           preparedById,
           updatedById: actor.id,
-          items: { create: items.map((p, idx) => ({ ...itemData(p), itemId: catalogIds[idx] ?? p.itemId })) },
+          items: {
+            create: items.map((p, idx) => ({
+              ...itemData(p),
+              isLot: p.isLot,
+              itemId: catalogIds[idx] ?? p.itemId,
+              components: p.isLot
+                ? { create: p.components.map((c, ci) => ({ ...componentData(c), sortOrder: ci + 1 })) }
+                : undefined,
+            })),
+          },
         },
         include: { items: true },
       });
@@ -325,7 +338,13 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
   assertCan(actor, "edit_data");
   const original = await db.quote.findUnique({
     where: { id },
-    include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+    include: {
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+      },
+    },
   });
   if (!original) throw new DocRuleError("Quote not found.");
   if (original.status === "VOID") throw new DocRuleError("A void quote cannot be copied.");
@@ -375,6 +394,20 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
               unit: item.unit,
               supplierId: item.supplierId,
               itemId: item.itemId,
+              isLot: item.isLot,
+              components: item.isLot
+                ? {
+                    create: (item.components ?? []).map((c) => ({
+                      sortOrder: c.sortOrder,
+                      itemId: c.itemId,
+                      description: c.description,
+                      qty: c.qty,
+                      unit: c.unit,
+                      supplierId: c.supplierId,
+                      unitCost: c.unitCost,
+                    })),
+                  }
+                : undefined,
               supplierUnitCost: item.supplierUnitCost,
               unitPrice: item.unitPrice,
               total: item.total,
@@ -438,6 +471,15 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         kind: i.kind,
         supplierId: i.supplierId,
         supplierUnitCost: money(i.supplierUnitCost),
+        isLot: i.isLot,
+        components: (i.components ?? []).map((c) => ({
+          itemId: c.itemId,
+          description: c.description,
+          qty: money(c.qty),
+          unit: c.unit,
+          supplierId: c.supplierId,
+          unitCost: money(c.unitCost),
+        })),
         withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
@@ -449,6 +491,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const pick = resolveWithholdingPickInput(input, existingPick);
       const pickSnapshots = await resolvePickSnapshots(pick);
       const { items: planned, removedIds } = planItems(stored, inputsWithCatalog, withCosts, {
+        lots: true,
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
       });
@@ -467,10 +510,23 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
+        await tx.quoteItemComponent.updateMany({ where: { quoteItemId: { in: removedIds }, removedAt: null }, data: { removedAt: new Date() } });
       }
       for (const item of items) {
-        if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: { ...itemData(item), itemId: item.itemId } });
-        else await tx.quoteItem.create({ data: { ...itemData(item), itemId: item.itemId, quoteId: id } });
+        let itemId = item.id;
+        if (itemId) await tx.quoteItem.update({ where: { id: itemId }, data: { ...itemData(item), isLot: item.isLot, itemId: item.itemId } });
+        else {
+          const created = await tx.quoteItem.create({ data: { ...itemData(item), isLot: item.isLot, itemId: item.itemId, quoteId: id } });
+          itemId = created.id;
+        }
+        // Components are replaced wholesale per save (soft-remove + create),
+        // matching how the editor always sends a lot's full make-up.
+        await tx.quoteItemComponent.updateMany({ where: { quoteItemId: itemId, removedAt: null }, data: { removedAt: new Date() } });
+        if (item.isLot && item.components.length) {
+          await tx.quoteItemComponent.createMany({
+            data: item.components.map((c, ci) => ({ ...componentData(c), sortOrder: ci + 1, quoteItemId: itemId! })),
+          });
+        }
       }
       const withholdingKeyOf = (rows: readonly WithholdingSnapshot[]) =>
         [...rows]
