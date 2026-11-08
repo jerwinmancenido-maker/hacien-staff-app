@@ -5061,6 +5061,12 @@ button.contact-card-add {
 .pp-items tr.pp-lot-start td {
   padding-top: 13px;
 }
+.pp-items tr.pp-lot-start td.pp-desc {
+  /* No rule under the lot title — its own border would stop at the
+     description column edge (the merged cells draw theirs at the
+     block's end), echoing the old broken-grid look. */
+  border-bottom: none;
+}
 .pp-items td.pp-comp-cell {
   padding: 5px 10px 5px 26px;
   border-bottom: none;
