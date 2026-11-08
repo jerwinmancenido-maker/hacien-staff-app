@@ -45,6 +45,19 @@ import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 
+/** One saved address of a customer, shaped for the quote editor's
+ * delivery-address picker (label matches the Convert dialog's options). */
+export type EditorAddressOption = {
+  id: string;
+  kind: string;
+  label: string;
+  isDefault: boolean;
+  /** Multi-line formatted text — what prints. */
+  text: string;
+  /** One-line formatted text. */
+  oneLine: string;
+};
+
 export type EditorCustomer = {
   id: string;
   name: string;
@@ -56,6 +69,11 @@ export type EditorCustomer = {
   /** S-54: null = no limit. Money string from Prisma Decimal. */
   creditLimit: string | null;
   contacts: { id: string; name: string; isMain: boolean }[];
+  /** Quote editor only: the customer's saved addresses (delivery first),
+   * its default DELIVERY address id, and the billing block text. */
+  addresses?: EditorAddressOption[];
+  defaultDeliveryId?: string | null;
+  billingText?: string | null;
 };
 
 export type EditorNewCatalog = {

@@ -197,7 +197,9 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const prepared = printablePersonName(preparer.name);
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
-  const deliveryAddress = await suggestedDeliveryAddress(q.customer);
+  // The quote's own pick wins: its text was snapshotted at save time, so
+  // later edits to the customer's address record don't change reprints.
+  const deliveryAddress = q.deliveryAddressText?.trim() ? q.deliveryAddressText : await suggestedDeliveryAddress(q.customer);
   const validityDays = validityDaysFromDates(q.date, q.validUntil);
   const doc: ProfessionalPrintModel = {
     kind: "quote",
