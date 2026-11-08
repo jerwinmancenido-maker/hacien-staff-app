@@ -1,21 +1,32 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { canSeeCosts } from "@/lib/permissions";
-import ItemHistoryDetail from "@/components/ItemHistoryDetail";
+import ItemHistoryDetail, { itemTabCounts } from "@/components/ItemHistoryDetail";
+import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
+import { resolveItemTab } from "@/lib/items/tabs";
 
 /**
  * Step 2: history-only detail for a free-text description with no catalog
  * row yet — same sections as the catalog item detail, from the derived
  * document lines, without the edit form. Reached from the "From document
  * lines" tab; ?item= carries the description.
+ * Tabs (2026-11-08): same tabs as the catalog item page, minus the form.
  */
-export default async function ItemHistoryPage({ searchParams }: { searchParams: Promise<{ item?: string }> }) {
+export default async function ItemHistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string; tab?: string }>;
+}) {
   const user = await requirePagePermission("view");
-  const { item } = await searchParams;
+  const { item, tab: rawTab } = await searchParams;
   const description = (item ?? "").trim();
   const showCosts = canSeeCosts(user);
+  let tab = resolveItemTab(rawTab);
+  if (tab === "suppliers" && !showCosts) tab = "details";
+  const counts = description ? await itemTabCounts(description, showCosts) : { prices: 0, used: 0, suppliers: 0 };
+  const base = `/items/history?item=${encodeURIComponent(description)}`;
 
   return (
     <>
@@ -45,7 +56,21 @@ export default async function ItemHistoryPage({ searchParams }: { searchParams: 
           <p className="faint">Type an item description, or follow a row from the Items page.</p>
         </>
       ) : (
-        <ItemHistoryDetail description={description} showCosts={showCosts} />
+        <>
+          <PillTabs
+            active={tab}
+            ariaLabel="Item sections"
+            tabs={[
+              { key: "details", label: "Details", href: base },
+              { key: "prices", label: "Price history", count: counts.prices, href: `${base}&tab=prices` },
+              ...(showCosts
+                ? [{ key: "suppliers", label: "Suppliers", count: counts.suppliers, href: `${base}&tab=suppliers` }]
+                : []),
+              { key: "used", label: "Where used", count: counts.used, href: `${base}&tab=used` },
+            ]}
+          />
+          <ItemHistoryDetail description={description} showCosts={showCosts} section={tab} />
+        </>
       )}
     </>
   );
