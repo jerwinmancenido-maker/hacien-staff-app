@@ -320,7 +320,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           <section className="pp-notes">
             {doc.terms && (
               <div>
-                <span className="pp-label-inline">Terms &amp; conditions: </span>
+                <span className="pp-label-inline">Remarks: </span>
                 {doc.terms}
               </div>
             )}
