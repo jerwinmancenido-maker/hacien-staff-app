@@ -34,6 +34,13 @@ export const deliveryInputSchema = z.object({
     .nullable()
     .optional(),
   receivedDate: optionalYmd.optional(),
+  notes: z
+    .string()
+    .trim()
+    .max(2000, "Keep notes under 2000 characters.")
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
   idSightChecked: z.coerce.boolean().default(false),
   items: z.array(deliveryItemInputSchema).default([]),
 });
@@ -63,6 +70,7 @@ export function parseDeliveryForm(form: FormData):
     deliveryDate: String(form.get("deliveryDate") ?? ""),
     receivedBy: String(form.get("receivedBy") ?? ""),
     receivedDate: String(form.get("receivedDate") ?? ""),
+    notes: String(form.get("notes") ?? ""),
     idSightChecked: form.has("idSightChecked") ? "true" : "false",
   };
 

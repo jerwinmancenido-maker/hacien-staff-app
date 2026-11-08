@@ -254,6 +254,7 @@ export default async function SalesOrderPage({
               idCheckedAt: d.idCheckedAt,
               voidedAt: d.voidedAt,
               voidReason: d.voidReason,
+              notes: d.notes,
               items: d.items.map((di) => ({
                 id: di.id,
                 salesOrderItemId: di.salesOrderItemId,

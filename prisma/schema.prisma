@@ -929,6 +929,7 @@ model Delivery {
   idCheckedAt    DateTime?
   voidedAt       DateTime?
   voidReason     String?          @db.Text
+  notes          String?          @db.Text
   createdById    String
   createdBy      User             @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime         @default(now())
