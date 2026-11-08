@@ -77,14 +77,15 @@ describe("professional print documents", () => {
     expect(html(draftPoFixture())).toContain("DRAFT");
   });
 
-  it("statements label the meta row with the party, not a document number", () => {
+  it("statements label the number block with the party, not a document number", () => {
     // Statements have no number — the "number" is the party name (owner 2026-11-07).
+    // The label lives in the doc-number block since the v8 print redesign.
     const customer = html(customerStatementFixture());
-    expect(customer).toContain("<th>Customer</th>");
-    expect(customer).not.toContain("<th>No.</th>");
+    expect(customer).toContain('<div class="pp-docnum-label">Customer</div>');
+    expect(customer).not.toContain('<div class="pp-docnum-label">No.</div>');
     const supplier = html(supplierStatementFixture());
-    expect(supplier).toContain("<th>Supplier</th>");
-    expect(supplier).not.toContain("<th>No.</th>");
+    expect(supplier).toContain('<div class="pp-docnum-label">Supplier</div>');
+    expect(supplier).not.toContain('<div class="pp-docnum-label">No.</div>');
   });
 
   it("customer prints never show supplier costs or margins", () => {

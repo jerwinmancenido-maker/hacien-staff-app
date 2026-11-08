@@ -17,7 +17,10 @@ describe("print document", () => {
     expect(html).toContain("<svg");
     expect(html).toContain("QT-2026-0001");
     expect(html).toContain("₱520,000.00");
-    expect(html).toContain("Terms:");
+    // Footer renders (thank-you + version line). The footer used to also
+    // print a separate "Terms: <url>" line — removed in the v8 redesign
+    // because the version line already ends with the policies host.
+    expect(html).toContain("Thank you for your business");
   });
 
   it("has no costs, margins, or supplier info on customer quote", async () => {
@@ -48,13 +51,18 @@ describe("print document", () => {
     expect(TERMS_URL).toBe("https://haciensolutions.com/policies");
   });
 
-  it("quote and sales order print HTML use the policies URL", async () => {
+  it("quote and sales order print HTML reference the policies page once", async () => {
     const svg = await qrSvg();
     for (const fixture of [quotePrintFixture, salesOrderPrintFixture]) {
       const doc = { ...fixture(), qrSvg: svg, termsUrl: TERMS_URL };
       const html = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc }));
       expect(html).toContain("<svg");
-      expect(html).toContain("https://haciensolutions.com/policies");
+      // The QR encodes the full policies URL; as readable text the policies
+      // page appears exactly once — at the end of the version line (v8
+      // redesign removed the duplicate "Terms: <url>" footer line).
+      expect(html).toContain("haciensolutions.com/policies");
+      expect(html).not.toContain("Terms: https://haciensolutions.com/policies");
+      expect(html.split("haciensolutions.com/policies").length - 1).toBe(1);
       // Point 7 of the terms block links the full Terms of Sale page.
       expect(html).toContain("haciensolutions.com/terms-of-sale");
       const withoutTermsOfSale = html.replaceAll("haciensolutions.com/terms-of-sale", "");
