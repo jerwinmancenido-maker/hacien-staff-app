@@ -41,14 +41,19 @@ describe("catalog Step 3: picker, drawer and catalog link", () => {
 
   it("the editor wires the picker, the drawer and the save payload", () => {
     const editor = src("src/components/docs/QuoteEditor.tsx");
-    expect(editor).toContain("Pick a product");
+    // Phase 1 (2026-11-08): typing opens the picker — there is no
+    // "Pick a product" button; the drawer is "Add to Products" in create
+    // mode and "Product details" for a linked line.
+    expect(editor).not.toContain("Pick a product");
     expect(editor).toContain("Product details");
+    expect(editor).toContain("Add to Products");
     expect(editor).toContain("applyCatalogPick");
     expect(editor).toContain("/api/items/search?q=");
     expect(editor).toContain("Open in catalog");
     expect(editor).toContain("itemId: i.itemId");
     expect(editor).toContain("newCatalog: hasCatalogFields");
-    expect(editor).toContain("No catalog matches — this saves as a free-text line.");
+    expect(editor).toContain("No product found for");
+    expect(editor).toContain("this saves as a free-text line.");
   });
 
   it("the search and item routes exist and are staff-only", () => {
