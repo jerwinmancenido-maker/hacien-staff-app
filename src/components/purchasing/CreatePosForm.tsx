@@ -12,6 +12,18 @@ import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/c
 import { planPurchaseOrders } from "@/lib/purchasing/plan";
 import type { FormState } from "@/lib/validation/forms";
 
+export type PreviewComponent = {
+  id: string;
+  sortOrder: number;
+  description: string;
+  qty: string;
+  unit: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  unitCost: string;
+  purchaseOrder: { id: string; number: string } | null;
+};
+
 export type PreviewLine = {
   id: string;
   sortOrder: number;
@@ -23,6 +35,9 @@ export type PreviewLine = {
   supplierName: string | null;
   supplierUnitCost: string;
   purchaseOrder: { id: string; number: string } | null;
+  /** Lot (bundle) line: the PO lines come from its components. */
+  isLot?: boolean;
+  components?: PreviewComponent[];
 };
 
 const qty = (q: string) => q.replace(/\.00$/, "");
@@ -46,14 +61,22 @@ export function CreatePosForm({
   const { state, pending, onSubmit } = useFormAction(action);
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [skip, setSkip] = useState<Set<string>>(new Set());
+  const [skipComps, setSkipComps] = useState<Set<string>>(new Set());
   const [h, setH] = useState({ date: defaultDate, expectedDate: "", deliveryAddressText: defaultAddress });
-  const names = new Map([...suppliers.map((s) => [s.id, s.name] as const), ...lines.flatMap((l) => (l.supplierId && l.supplierName ? [[l.supplierId, l.supplierName] as const] : []))]);
+  const names = new Map([
+    ...suppliers.map((s) => [s.id, s.name] as const),
+    ...lines.flatMap((l) => (l.supplierId && l.supplierName ? [[l.supplierId, l.supplierName] as const] : [])),
+    ...lines.flatMap((l) =>
+      (l.components ?? []).flatMap((c) => (c.supplierId && c.supplierName ? [[c.supplierId, c.supplierName] as const] : [])),
+    ),
+  ]);
 
   const ordered = new Set(lines.filter((l) => l.purchaseOrder).map((l) => l.id));
+  const orderedComps = new Set(lines.flatMap((l) => (l.components ?? []).filter((c) => c.purchaseOrder).map((c) => c.id)));
   const include = new Set(lines.filter((l) => !skip.has(l.id)).map((l) => l.id));
-  const plan = planPurchaseOrders(lines, ordered, picks, include);
+  const plan = planPurchaseOrders(lines, ordered, picks, include, orderedComps, skipComps);
   const e = state.fieldErrors ?? {};
-  const payload = { ...h, supplierPicks: picks, lineIds: [...include] };
+  const payload = { ...h, supplierPicks: picks, lineIds: [...include], excludeComponentIds: [...skipComps] };
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -113,9 +136,18 @@ export function CreatePosForm({
                 </thead>
                 <tbody>
                   {po.lines.map((l) => (
-                    <tr key={l.salesOrderItemId}>
+                    <tr key={l.salesOrderItemComponentId ?? l.salesOrderItemId}>
                       <td>
-                        <input type="checkbox" checked aria-label={`Include ${l.description}`} onChange={() => setSkip(new Set(skip).add(l.salesOrderItemId))} />
+                        <input
+                          type="checkbox"
+                          checked
+                          aria-label={`Include ${l.description}`}
+                          onChange={() =>
+                            l.salesOrderItemComponentId
+                              ? setSkipComps(new Set(skipComps).add(l.salesOrderItemComponentId))
+                              : setSkip(new Set(skip).add(l.salesOrderItemId))
+                          }
+                        />
                       </td>
                       <td style={{ whiteSpace: "pre-wrap" }}>{l.description}</td>
                       <td className="num">{qty(l.qty)}</td>
@@ -169,7 +201,7 @@ export function CreatePosForm({
             <table className="list">
               <tbody>
                 {lines
-                  .filter((l) => l.purchaseOrder || skip.has(l.id))
+                  .filter((l) => l.purchaseOrder || skip.has(l.id) || plan.alreadyOrdered.some((a) => a.id === l.id))
                   .map((l) => (
                     <tr key={l.id} className="inactive">
                       <td style={{ whiteSpace: "pre-wrap" }}>{l.description}</td>
@@ -177,7 +209,9 @@ export function CreatePosForm({
                         {qty(l.qty)} {l.unit}
                       </td>
                       <td>
-                        {l.purchaseOrder ? (
+                        {l.isLot && !l.purchaseOrder ? (
+                          <>Components already on a PO</>
+                        ) : l.purchaseOrder ? (
                           <>
                             Already on <Link href={`/purchase-orders/${l.purchaseOrder.id}`}>{l.purchaseOrder.number}</Link>
                           </>

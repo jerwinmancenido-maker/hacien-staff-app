@@ -338,10 +338,12 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           itemId: i.itemId ?? null,
           itemName: i.itemName ?? null,
           newCatalog: null,
-          // The SO editor does not edit lot components (they live on the
-          // quote; conversion carries them in the service, not the payload).
-          isLot: false,
-          components: [],
+          // Lot lines arrive only via conversion. The SO editor never edits
+          // components, but carries the flag + components through state so
+          // the lot-aware cost checks see the line's real cost make-up; the
+          // payload never sends them (the service preserves stored lots).
+          isLot: i.isLot ?? false,
+          components: (i.components ?? []).map((c, ci) => ({ ...c, key: c.id ?? `init-c-${ci}` })),
         }))
       : [blankItem(initialPickSnaps)],
   );

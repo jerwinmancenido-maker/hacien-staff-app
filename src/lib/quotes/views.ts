@@ -58,7 +58,7 @@ type ItemRow = {
   /** Catalog Step 3 (quotes only; SO rows have neither). */
   itemId?: string | null;
   item?: { name: string } | null;
-  /** Lot (bundle) lines (quotes only; SO rows have neither). */
+  /** Lot (bundle) lines and their internal components (quotes and SOs). */
   isLot?: boolean;
   components?: {
     id: string;
@@ -231,7 +231,22 @@ const itemsInclude = {
   include: { supplier: { select: { name: true } } },
 } satisfies Prisma.QuoteItemFindManyArgs;
 
-/** Quotes only: SO lines have no catalog link, so they keep itemsInclude. */
+/** Sales orders: items plus their lot components (SO lines have no catalog link). */
+const soItemsInclude = {
+  where: { removedAt: null },
+  orderBy: { sortOrder: "asc" },
+  include: {
+    supplier: { select: { name: true } },
+    components: {
+      where: { removedAt: null },
+      orderBy: { sortOrder: "asc" },
+      include: { supplier: { select: { name: true } } },
+    },
+  },
+} satisfies Prisma.SalesOrderItemFindManyArgs;
+
+/** Quotes only: the catalog link exists only on quote lines. Prints use
+ * itemsInclude (line face only; components never print). */
 const quoteItemsInclude = {
   where: { removedAt: null },
   orderBy: { sortOrder: "asc" },
@@ -437,7 +452,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
   const so = await db.salesOrder.findUnique({
     where: { id },
     include: {
-      items: itemsInclude,
+      items: soItemsInclude,
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true, date: true, contractPrice: true } },
