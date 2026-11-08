@@ -13,6 +13,8 @@ const docEditor = read("src/components/docs/DocumentEditor.tsx");
 const poEditor = read("src/components/purchasing/PoEditor.tsx");
 const contactDialog = read("src/components/docs/AddContactDialog.tsx");
 const contactActions = read("src/app/(app)/contacts/actions.ts");
+const supplierDialog = read("src/components/purchasing/AddSupplierDialog.tsx");
+const supplierActions = read("src/app/(app)/suppliers/actions.ts");
 
 function srcFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
@@ -66,6 +68,25 @@ describe("PO editor entry points", () => {
   });
   it("the supplier list is local state so added records can join it", () => {
     expect(poEditor).toContain("useState(suppliers)");
+  });
+  it("supplier: Add supplier button + dialog on the new-PO form (PR-2)", () => {
+    expect(poEditor).toContain("setAddSupplierOpen(true)");
+    expect(poEditor).toContain("Add supplier");
+    expect(poEditor).toContain("<AddSupplierDialog");
+    expect(poEditor).toContain("function onSupplierAdded");
+  });
+});
+
+describe("inline supplier plumbing (PR-2)", () => {
+  it("the dialog calls the inline action, which reuses saveSupplier", () => {
+    expect(supplierDialog).toContain("createInlineSupplierAction");
+    expect(supplierActions).toContain("export async function createInlineSupplierAction");
+    const body = supplierActions.slice(supplierActions.indexOf("createInlineSupplierAction"));
+    expect(body).toContain("await saveSupplier(null, parsed.data");
+    // Bank details are never collected inline: the action blanks them and
+    // the dialog has no bank fields (they stay Admin-only on the record).
+    expect(body).toContain('bankAccountNumber: ""');
+    expect(supplierDialog).not.toContain("bankAccount");
   });
 });
 
