@@ -25,6 +25,7 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
             <div className="alert error">This link has expired or was already used. Ask for a new one.</div>
             <div className="links">
               <Link href="/forgot-password">Send a new link</Link>
+              <Link href="/login">Back to sign in</Link>
             </div>
           </>
         )}
