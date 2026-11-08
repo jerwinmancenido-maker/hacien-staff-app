@@ -88,8 +88,34 @@ export function supplierCostMissing(value: string | null | undefined): boolean {
   return toScaled(s, CENTS) === 0n;
 }
 
-export function linesMissingSupplierCost(lines: readonly { supplierUnitCost?: string | null }[]): boolean {
-  return lines.some((l) => supplierCostMissing(l.supplierUnitCost));
+/** Minimal shape of a lot component for cost checks. */
+export type CostComponent = { unitCost?: string | null };
+
+/** Whether one line's cost is missing. A lot line's own unit cost is always
+ * 0 by design — its cost lives in its components — so a lot is missing cost
+ * when it has no components or any component has no cost. Any other line
+ * uses its supplier unit cost. */
+export function lineCostMissing(line: {
+  supplierUnitCost?: string | null;
+  isLot?: boolean;
+  components?: readonly CostComponent[] | null;
+}): boolean {
+  if (line.isLot) {
+    const comps = line.components ?? [];
+    if (comps.length === 0) return true;
+    return comps.some((c) => supplierCostMissing(c.unitCost));
+  }
+  return supplierCostMissing(line.supplierUnitCost);
+}
+
+export function linesMissingSupplierCost(
+  lines: readonly {
+    supplierUnitCost?: string | null;
+    isLot?: boolean;
+    components?: readonly CostComponent[] | null;
+  }[],
+): boolean {
+  return lines.some((l) => lineCostMissing(l));
 }
 
 export function supplierCostStateFromSupplierTotals(totals: readonly string[]): SupplierCostState {
