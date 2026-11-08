@@ -963,6 +963,24 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
                 total: i.total,
                 supplierTotal: i.supplierTotal,
                 margin: i.margin,
+                // Lot lines carry their internal make-up to the SO; Create
+                // POs will buy the components, never the lot line itself.
+                isLot: i.isLot,
+                components: i.isLot
+                  ? {
+                      create: [...(i.components ?? [])]
+                        .sort((a, b) => a.sortOrder - b.sortOrder)
+                        .map((c, ci) => ({
+                          sortOrder: ci + 1,
+                          itemId: c.itemId,
+                          description: c.description,
+                          qty: c.qty,
+                          unit: c.unit,
+                          supplierId: c.supplierId,
+                          unitCost: c.unitCost,
+                        })),
+                    }
+                  : undefined,
                 // Copy line rates and ATCs exactly — never re-derive from the customer.
                 withholdingRate: i.withholdingRate,
                 withholdingAtc: i.withholdingAtc,

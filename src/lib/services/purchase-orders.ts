@@ -96,7 +96,10 @@ async function checkSupplier(supplierId: string, contactId: string | null, opts:
   return supplier;
 }
 
-const itemCreate = (l: PlannedPoLine | (PoLineInput & { salesOrderItemId?: string | null }), sortOrder: number) => ({
+const itemCreate = (
+  l: PlannedPoLine | (PoLineInput & { salesOrderItemId?: string | null; salesOrderItemComponentId?: string | null }),
+  sortOrder: number,
+) => ({
   sortOrder,
   description: l.description,
   kind: l.kind,
@@ -105,7 +108,11 @@ const itemCreate = (l: PlannedPoLine | (PoLineInput & { salesOrderItemId?: strin
   unitCost: l.unitCost,
   total: lineTotal(l.qty, l.unitCost),
   salesOrderItemId: l.salesOrderItemId ?? null,
-  activeSalesOrderItemId: l.salesOrderItemId ?? null,
+  // A component line links its live claim to the component, not the lot
+  // line (many components share one lot line; the line link is unique).
+  activeSalesOrderItemId: "salesOrderItemComponentId" in l && l.salesOrderItemComponentId ? null : (l.salesOrderItemId ?? null),
+  salesOrderItemComponentId: "salesOrderItemComponentId" in l ? (l.salesOrderItemComponentId ?? null) : null,
+  activeSalesOrderItemComponentId: "salesOrderItemComponentId" in l ? (l.salesOrderItemComponentId ?? null) : null,
 });
 
 // ---------------------------------------------------------------------------
@@ -117,6 +124,16 @@ export async function orderedSoLineIds(soLineIds: readonly string[], client: Tx 
   if (!soLineIds.length) return new Set();
   const rows = await client.purchaseOrderItem.findMany({ where: { activeSalesOrderItemId: { in: [...soLineIds] } }, select: { activeSalesOrderItemId: true } });
   return new Set(rows.map((r) => r.activeSalesOrderItemId!));
+}
+
+/** Lot component ids already on a live (non-void, not removed) PO line. */
+export async function orderedSoComponentIds(componentIds: readonly string[], client: Tx | typeof db = db): Promise<Set<string>> {
+  if (!componentIds.length) return new Set();
+  const rows = await client.purchaseOrderItem.findMany({
+    where: { activeSalesOrderItemComponentId: { in: [...componentIds] } },
+    select: { activeSalesOrderItemComponentId: true },
+  });
+  return new Set(rows.map((r) => r.activeSalesOrderItemComponentId!));
 }
 
 /**
@@ -144,7 +161,13 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
         await tx.$queryRaw`SELECT \`id\` FROM \`SalesOrder\` WHERE \`id\` = ${salesOrderId} FOR UPDATE`;
         const so = await tx.salesOrder.findUnique({
           where: { id: salesOrderId },
-          include: { quote: { select: { status: true } }, items: { where: { removedAt: null } } },
+          include: {
+            quote: { select: { status: true } },
+            items: {
+              where: { removedAt: null },
+              include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+            },
+          },
         });
         if (!so) throw new DocRuleError("Sales order not found.");
         if (so.status !== "OPEN") throw new DocRuleError("POs can only be created from an open sales order.");
@@ -153,11 +176,30 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
           so.items.map((i) => i.id),
           tx,
         );
+        const orderedComponents = await orderedSoComponentIds(
+          so.items.flatMap((i) => i.components.map((c) => c.id)),
+          tx,
+        );
         const plan = planPurchaseOrders(
-          so.items.map((i) => ({ ...i, qty: money(i.qty), supplierUnitCost: money(i.supplierUnitCost) })),
+          so.items.map((i) => ({
+            ...i,
+            qty: money(i.qty),
+            supplierUnitCost: money(i.supplierUnitCost),
+            components: i.components.map((c) => ({
+              id: c.id,
+              sortOrder: c.sortOrder,
+              description: c.description,
+              qty: money(c.qty),
+              unit: c.unit,
+              supplierId: c.supplierId,
+              unitCost: money(c.unitCost),
+            })),
+          })),
           ordered,
           input.supplierPicks,
           input.lineIds ? new Set(input.lineIds) : undefined,
+          orderedComponents,
+          input.excludeComponentIds ? new Set(input.excludeComponentIds) : undefined,
         );
         if (!plan.pos.length) {
           throw new DocRuleError(
@@ -282,7 +324,10 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
       const keep = new Set(input.items.map((l) => l.id).filter(Boolean));
       const removed = before.items.filter((i) => !keep.has(i.id)).map((i) => i.id);
       if (removed.length) {
-        await tx.purchaseOrderItem.updateMany({ where: { id: { in: removed }, purchaseOrderId: id }, data: { removedAt: new Date(), activeSalesOrderItemId: null } });
+        await tx.purchaseOrderItem.updateMany({
+          where: { id: { in: removed }, purchaseOrderId: id },
+          data: { removedAt: new Date(), activeSalesOrderItemId: null, activeSalesOrderItemComponentId: null },
+        });
       }
       for (const [n, l] of input.items.entries()) {
         const data = { sortOrder: n, description: l.description, kind: l.kind, qty: l.qty, unit: l.unit, unitCost: l.unitCost, total: lineTotal(l.qty, l.unitCost) };
@@ -444,7 +489,10 @@ export async function voidPurchaseOrder(id: string, reason: string, actor: PoAct
     const now = new Date();
     const after = await tx.purchaseOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
     // Free the SO lines so they can go on a new PO.
-    await tx.purchaseOrderItem.updateMany({ where: { purchaseOrderId: id }, data: { activeSalesOrderItemId: null } });
+    await tx.purchaseOrderItem.updateMany({
+      where: { purchaseOrderId: id },
+      data: { activeSalesOrderItemId: null, activeSalesOrderItemComponentId: null },
+    });
     await tx.documentVoid.create({
       data: {
         docType: "PURCHASE_ORDER",

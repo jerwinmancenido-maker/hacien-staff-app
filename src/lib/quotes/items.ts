@@ -64,6 +64,10 @@ export type PlanItemsOpts = {
    * passes true. Sales orders share planItems but never plan lots (their
    * components arrive with conversion, a separate step). */
   lots?: boolean;
+  /** Sales orders pass true: a stored lot line always keeps its stored
+   * components and costs (the SO editor never edits components; they were
+   * copied at conversion), whatever the payload's cost fields say. */
+  preserveLots?: boolean;
 };
 
 function fromInputFields(input: ItemInput): { withholdingRate: string | null; withholdingAtc: string | null; withholdingOverride: boolean } {
@@ -130,7 +134,10 @@ export function planItems(
     // its own supplier/cost stay empty. A costs user plans lots from the
     // payload; a no-costs save keeps a stored lot exactly as it was.
     const lotFromInput = opts.lots === true && withCosts && input.isLot === true;
-    const lotFromStored = !withCosts && old?.isLot === true;
+    // Keep a stored lot when the payload cannot carry its components: a
+    // no-costs save (quotes), or any SO save (preserveLots — SO lots arrive
+    // only via conversion and are never edited as lots).
+    const lotFromStored = old?.isLot === true && !lotFromInput && (!withCosts || opts.preserveLots === true);
     const isLot = lotFromInput || lotFromStored;
     let components: PlannedComponent[] = [];
     if (lotFromInput) {

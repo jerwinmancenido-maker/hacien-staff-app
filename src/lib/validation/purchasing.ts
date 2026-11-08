@@ -69,6 +69,8 @@ export const createFromSoSchema = z
     supplierPicks: z.record(z.string().max(64), z.string().max(64).nullable()).default({}),
     /** SO lines to include (unticked ones are skipped). Omitted = all. */
     lineIds: z.array(z.string().max(64)).max(500).optional(),
+    /** Lot component ids to skip in this run (unticked in the preview). */
+    excludeComponentIds: z.array(z.string().max(64)).max(500).optional(),
   })
   .refine((v) => !v.expectedDate || v.expectedDate >= v.date, { message: "Expected date can't be before the PO date.", path: ["expectedDate"] });
 export type CreateFromSoInput = z.infer<typeof createFromSoSchema>;

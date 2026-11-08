@@ -1,7 +1,7 @@
 // Sales orders: created only by converting a quote (see quotes.ts). Open SOs can
 // be edited by Staff+ (audited); voiding returns the quote to Sent.
 
-import type { Prisma, SalesOrder, SalesOrderItem } from "@prisma/client";
+import type { Prisma, SalesOrder, SalesOrderItem, SalesOrderItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
@@ -16,7 +16,7 @@ import { voidReasonSchema, type GovDealInput, type SalesOrderInput } from "../va
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 
-type SoWithItems = SalesOrder & { items: SalesOrderItem[] };
+type SoWithItems = SalesOrder & { items: (SalesOrderItem & { components?: SalesOrderItemComponent[] })[] };
 
 export type SoPriceLine = {
   id: string | null;
@@ -112,7 +112,15 @@ export function salesOrderAudit(so: SoWithItems) {
 
 async function lockSalesOrder(tx: Tx, id: string): Promise<SoWithItems> {
   await tx.$queryRaw`SELECT \`id\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
-  const so = await tx.salesOrder.findUnique({ where: { id }, include: { items: { where: { removedAt: null } } } });
+  const so = await tx.salesOrder.findUnique({
+    where: { id },
+    include: {
+      items: {
+        where: { removedAt: null },
+        include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+      },
+    },
+  });
   if (!so) throw new DocRuleError("Sales order not found.");
   return so;
 }
@@ -189,6 +197,17 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         kind: i.kind,
         supplierId: i.supplierId,
         supplierUnitCost: money(i.supplierUnitCost),
+        // Lot lines: planItems (preserveLots) keeps these components and
+        // their costs; the SO editor's payload never carries them.
+        isLot: i.isLot,
+        components: (i.components ?? []).map((c) => ({
+          itemId: c.itemId,
+          description: c.description,
+          qty: money(c.qty),
+          unit: c.unit,
+          supplierId: c.supplierId,
+          unitCost: money(c.unitCost),
+        })),
         withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
@@ -207,6 +226,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
+        preserveLots: true,
       });
       // Legacy NULL line rates must not recompute stored WH to ₱0 on save.
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
@@ -281,6 +301,11 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       const pricesChanged = salesOrderPricesChanged(beforePrices, afterPrices);
       if (removedIds.length) {
         await tx.salesOrderItem.updateMany({ where: { id: { in: removedIds }, salesOrderId: id }, data: { removedAt: new Date() } });
+        // A removed lot line takes its components with it (soft-remove).
+        await tx.salesOrderItemComponent.updateMany({
+          where: { salesOrderItemId: { in: removedIds }, removedAt: null },
+          data: { removedAt: new Date() },
+        });
       }
       for (const item of items) {
         if (item.id) await tx.salesOrderItem.update({ where: { id: item.id }, data: itemData(item) });
