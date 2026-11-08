@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { AddContactDialog } from "@/components/docs/AddContactDialog";
+import { AddSupplierDialog } from "./AddSupplierDialog";
 import { useFormAction } from "@/components/useFormAction";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
@@ -65,6 +66,7 @@ export function PoEditor({
   const [items, setItems] = useState<Row[]>(() => (initial.items.length ? initial.items.map((i) => ({ ...i, key: newKey() })) : [blank()]));
   const [supplierList, setSupplierList] = useState(suppliers);
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [addSupplierOpen, setAddSupplierOpen] = useState(false);
   const e = state.fieldErrors ?? {};
   const supplier = supplierList.find((s) => s.id === h.supplierId);
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
@@ -96,6 +98,19 @@ export function PoEditor({
       ),
     );
     setH((v) => ({ ...v, supplierContactId: c.id }));
+  }
+
+  /** A just-saved supplier joins the list and is picked, with the same
+   * defaults pickSupplier would apply (main contact, terms, address). */
+  function onSupplierAdded(s: PoEditorSupplier) {
+    setSupplierList((xs) => (xs.some((x) => x.id === s.id) ? xs : [...xs, s].sort((a, b) => a.name.localeCompare(b.name))));
+    setH((v) => ({
+      ...v,
+      supplierId: s.id,
+      supplierContactId: s.contacts.find((c) => c.isMain)?.id ?? "",
+      terms: s.defaultTerms ?? v.terms,
+      supplierAddressText: s.address ?? "",
+    }));
   }
 
   const payload = {
@@ -141,14 +156,19 @@ export function PoEditor({
               <label htmlFor="supplierId">
                 Supplier<span className="req"> *</span>
               </label>
-              <select id="supplierId" value={h.supplierId} onChange={(ev) => pickSupplier(ev.target.value)}>
-                <option value="">Pick a supplier…</option>
-                {supplierList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <select id="supplierId" value={h.supplierId} onChange={(ev) => pickSupplier(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
+                  <option value="">Pick a supplier…</option>
+                  {supplierList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddSupplierOpen(true)}>
+                  Add supplier
+                </button>
+              </div>
               {e.supplierId && <div className="error">{e.supplierId}</div>}
             </div>
           ) : (
@@ -300,6 +320,9 @@ export function PoEditor({
         roles={contactRoles}
         onSaved={onContactAdded}
       />
+    )}
+    {addSupplierOpen && (
+      <AddSupplierDialog open={addSupplierOpen} onClose={() => setAddSupplierOpen(false)} termsOptions={termsOptions} onSaved={onSupplierAdded} />
     )}
     </>
   );
