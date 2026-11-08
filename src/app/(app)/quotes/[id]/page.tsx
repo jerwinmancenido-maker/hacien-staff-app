@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canVoid } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -66,7 +67,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           <>
             {q.number}
             <Chip>Rev {q.revision}</Chip>
-            <QuoteStatusChip status={q.status} />
+            {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && <QuoteStatusChip status={q.status} />}
             {q.status !== "VOID" && (
               <QuoteWorkflowApprovalChip status={q.approvalStatus} label={q.approvalLabel} />
             )}
