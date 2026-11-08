@@ -165,7 +165,7 @@ export function AddCustomerDialog({ open, onClose, onSaved, rates, terms }: Prop
             </div>
             <div className={`field${e.withholdingType ? " has-error" : ""}`}>
               <label htmlFor="acq-type">
-                Type<span className="req"> *</span>
+                Withholding<span className="req"> *</span>
               </label>
               <select id="acq-type" value={v.withholdingType} onChange={(ev) => onTypeChange(ev.target.value)}>
                 <option value="">Pick one…</option>

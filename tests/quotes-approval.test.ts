@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   quoteApprovalBackfill,
+  quoteHeaderShowsStatusChip,
   quoteMarkSentGate,
   quoteMoneyFieldsChanged,
   quoteNotApprovedError,
@@ -207,5 +208,15 @@ describe("quoteMoneyFieldsChanged", () => {
       items: [a],
     });
     expect(quoteMoneyFieldsChanged(before, removed)).toBe(true);
+  });
+});
+
+describe("quoteHeaderShowsStatusChip (A2: no Draft+Approved chip pair)", () => {
+  it("hides the status chip only for an approved draft", () => {
+    expect(quoteHeaderShowsStatusChip("DRAFT", "APPROVED")).toBe(false);
+    expect(quoteHeaderShowsStatusChip("DRAFT", "PENDING")).toBe(true);
+    expect(quoteHeaderShowsStatusChip("DRAFT", "REJECTED")).toBe(true);
+    expect(quoteHeaderShowsStatusChip("SENT", "APPROVED")).toBe(true);
+    expect(quoteHeaderShowsStatusChip("VOID", "APPROVED")).toBe(true);
   });
 });

@@ -31,6 +31,17 @@ export type QuoteSaveGate = "cost-warning" | "withholding-unset" | "save";
  * "No withholding on this quote?" when no pick is set, exactly like Mark as sent.
  * Approval is not a gate here: saving is what submits the quote for approval.
  */
+/**
+ * Whether the quote record header shows the status chip next to the
+ * workflow approval chip. An approved quote that was never sent is still
+ * DRAFT, and the two pills side by side ("Draft" + "Approved") read as a
+ * contradiction — the approval chip alone carries the state until the
+ * status moves on (2026-11-08, test-3 friction A2).
+ */
+export function quoteHeaderShowsStatusChip(status: string, approvalStatus: string): boolean {
+  return !(status === "DRAFT" && approvalStatus === "APPROVED");
+}
+
 export function quoteSaveGate(input: {
   withholdingUnset: boolean;
   supplierCostMissing: boolean;
