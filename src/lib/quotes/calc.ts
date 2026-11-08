@@ -76,9 +76,13 @@ export type DocTotals = {
   supplierCostState: SupplierCostState;
 };
 
-/** Blank or ₱0.00 supplier unit cost. A typed zero uses the same path as a blank. */
+/** Blank or ₱0.00 supplier unit cost. A typed zero uses the same path as a blank.
+ * The money inputs group thousands with commas (formatMoneyInput), so strip
+ * them before the decimal test — the same leniency toScaled applies. Without
+ * this, any typed cost of ₱1,000+ read as "missing" in the editor (badge,
+ * margin label and the save warning) while totals computed it correctly. */
 export function supplierCostMissing(value: string | null | undefined): boolean {
-  const s = String(value ?? "").trim();
+  const s = String(value ?? "").trim().replace(/,/g, "");
   if (s === "") return true;
   if (!DECIMAL.test(s)) return true;
   return toScaled(s, CENTS) === 0n;

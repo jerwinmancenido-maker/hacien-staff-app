@@ -162,6 +162,18 @@ describe("document totals (per-line rates)", () => {
     expect(COST_NOT_SET_LABEL).toBe("Cost not set");
     expect(linesMissingSupplierCost([{ supplierUnitCost: "" }, { supplierUnitCost: "0.00" }])).toBe(true);
     expect(linesMissingSupplierCost([{ supplierUnitCost: "0.01" }])).toBe(false);
+    // Comma-grouped input (what formatMoneyInput produces while typing):
+    // a cost of ₱1,000+ is present, not missing — the editor's badge, margin
+    // label and save gate all read supplierCostMissing (blocker fix 2026-11-08).
+    expect(supplierCostMissing("2,100")).toBe(false);
+    expect(supplierCostMissing("1,000.50")).toBe(false);
+    expect(supplierCostMissing("1,000,000")).toBe(false);
+    expect(supplierCostMissing("3,000,000.00")).toBe(false);
+    expect(supplierCostMissing("0,000")).toBe(true);
+    expect(supplierCostMissing("")).toBe(true);
+    expect(supplierCostMissing("0")).toBe(true);
+    expect(linesMissingSupplierCost([{ supplierUnitCost: "2,100" }, { supplierUnitCost: "3,300" }])).toBe(false);
+    expect(linesMissingSupplierCost([{ supplierUnitCost: "2,100" }, { supplierUnitCost: "" }])).toBe(true);
     expect(supplierCostStateFromSupplierTotals(["0.00", "10.00"])).toBe("partial");
     const mixed = docTotals([
       { kind: "GOODS", qty: "1", unitPrice: "100", supplierUnitCost: "0" },
