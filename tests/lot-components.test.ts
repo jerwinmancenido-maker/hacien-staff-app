@@ -1,7 +1,9 @@
-// Lot (bundle) lines, Phase B1: a lot line prints as one row while its
-// internal components (each with its own supplier and cost) drive the
-// line's cost and margin. These tests pin the money math, the schema
-// rules, the planner behaviour and the editor wiring.
+// Lot (bundle) lines, Phase B1: a lot line's internal components (each
+// with its own supplier and cost) drive the line's cost and margin; on
+// customer prints the component DESCRIPTIONS list one per row under the
+// lot line with merged qty/price cells (owner decision 2026-11-09 — see
+// tests/lot-print-items.test.ts). These tests pin the money math, the
+// schema rules, the planner behaviour and the editor wiring.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { componentsTotal } from "@/lib/quotes/calc";
@@ -122,7 +124,7 @@ describe("planItems lot planning", () => {
 describe("editor wiring", () => {
   it("the quote editor has the lot toggle, the components editor and the lot payload", () => {
     const editor = read("src/components/docs/QuoteEditor.tsx");
-    expect(editor.match(/Lot \(bundle\) — one printed line/g)).toHaveLength(2); // desktop + mobile
+    expect(editor.match(/Lot \(bundle\) — items listed on the print under one lot price/g)).toHaveLength(2); // desktop + mobile
     expect(editor).toContain("toggleLot");
     expect(editor).toContain("Add component");
     expect(editor).toContain("lineCostMissing");

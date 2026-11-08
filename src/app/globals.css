@@ -4958,6 +4958,11 @@ button.contact-card-add {
   text-align: left;
   vertical-align: top;
 }
+/* Lot blocks: the rowSpan-merged #, qty, unit and price cells centre
+   vertically against the lot's component rows. */
+.pp-items td.pp-merged {
+  vertical-align: middle;
+}
 .pp-items thead th {
   /* Receipt-style: plain black caps + thin rule, no grey fill band. */
   border-bottom: 1px solid #e5e5e5;
