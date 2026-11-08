@@ -1658,7 +1658,7 @@ export function QuoteEditor({
                                   checked={i.isLot === true}
                                   onChange={(ev) => toggleLot(i, ev.target.checked)}
                                 />{" "}
-                                Lot (bundle) — one printed line; cost comes from its components
+                                Lot (bundle) — items listed on the print under one lot price; cost comes from its components
                               </label>
                             </div>
                           ) : null}
@@ -2013,7 +2013,7 @@ export function QuoteEditor({
                                   checked={i.isLot === true}
                                   onChange={(ev) => toggleLot(i, ev.target.checked)}
                                 />{" "}
-                                Lot (bundle) — one printed line; cost comes from its components
+                                Lot (bundle) — items listed on the print under one lot price; cost comes from its components
                               </label>
                             </div>
                           ) : null}

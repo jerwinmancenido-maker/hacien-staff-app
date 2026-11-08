@@ -2,6 +2,7 @@
 // Customer docs must never show supplier costs/margins; supplier docs must never
 // show customer selling prices. Tax wording comes only from lib/print/tax-wording.
 
+import { Fragment } from "react";
 import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
@@ -229,19 +230,51 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
             </tr>
           </thead>
           <tbody>
-            {doc.items.map((i, n) => (
-              <tr key={n}>
-                <td className="pp-n">{n + 1}</td>
-                <td className="pp-desc">
-                  <div className="pp-pre">{i.description}</div>
-                  {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
-                </td>
-                <td className="num pp-qty">{qty(i.qty)}</td>
-                <td className="pp-unit">{i.unit}</td>
-                {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
-                {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
-              </tr>
-            ))}
+            {doc.items.map((i, n) => {
+              const comps = i.components ?? [];
+              if (comps.length === 0) {
+                return (
+                  <tr key={n}>
+                    <td className="pp-n">{n + 1}</td>
+                    <td className="pp-desc">
+                      <div className="pp-pre">{i.description}</div>
+                      {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
+                    </td>
+                    <td className="num pp-qty">{qty(i.qty)}</td>
+                    <td className="pp-unit">{i.unit}</td>
+                    {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
+                    {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
+                  </tr>
+                );
+              }
+              // Lot (bundle) line: component descriptions print one per row
+              // under the lot line; #, qty, unit and both price cells merge
+              // (rowSpan) across the whole block, so the lot shows ONE qty
+              // and ONE price (owner decision 2026-11-09).
+              const span = comps.length + 1;
+              return (
+                <Fragment key={n}>
+                  <tr>
+                    <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
+                    <td className="pp-desc">
+                      <div className="pp-pre">{i.description}</div>
+                      {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
+                    </td>
+                    <td className="num pp-qty pp-merged" rowSpan={span}>{qty(i.qty)}</td>
+                    <td className="pp-unit pp-merged" rowSpan={span}>{i.unit}</td>
+                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>}
+                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>}
+                  </tr>
+                  {comps.map((c, m) => (
+                    <tr key={m}>
+                      <td className="pp-desc">
+                        <div className="pp-pre">{c}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}

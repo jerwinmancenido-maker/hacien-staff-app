@@ -157,8 +157,19 @@ async function baseFooter(
 }
 
 const itemRow = (
-  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string },
+  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string; components?: string[] },
 ): PrintLineItem => i;
+
+/** Print include for a line's lot components: descriptions only, in order. */
+const lotComponentsInclude = {
+  where: { removedAt: null },
+  orderBy: { sortOrder: "asc" },
+  select: { description: true },
+} as const;
+
+/** Component descriptions for a lot line; undefined for normal lines. */
+const lotComponentNames = (isLot: boolean, components: readonly { description: string }[]): string[] | undefined =>
+  isLot && components.length > 0 ? components.map((c) => c.description) : undefined;
 
 /**
  * Subtotal + optional mid-lines + Total.
@@ -180,7 +191,11 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const q = await db.quote.findUnique({
     where: { id },
     include: {
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: lotComponentsInclude },
+      },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
@@ -236,6 +251,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
+        components: lotComponentNames(i.isLot, i.components),
       });
     }),
     unitPriceLabel: "Unit price",
@@ -279,7 +295,11 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const so = await db.salesOrder.findUnique({
     where: { id },
     include: {
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: lotComponentsInclude },
+      },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       quote: { select: { number: true, terms: true, leadTimeDays: true, date: true, validUntil: true } },
@@ -327,6 +347,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
+        components: lotComponentNames(i.isLot, i.components),
       });
     }),
     totals: customerMoneyTotals({
