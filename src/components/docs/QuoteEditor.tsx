@@ -42,6 +42,7 @@ import {
   WITHHOLDING_DEFAULT_CODES,
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
+import { costIsEmpty, lastCostHint, pickSupplierCost, type SupplierCostRow } from "@/lib/quotes/last-cost";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
@@ -464,6 +465,8 @@ export function QuoteEditor({
   const [pickerActive, setPickerActive] = useState(0);
   const [expandedLines, setExpandedLines] = useState<Record<string, boolean>>({});
   const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
+  const [costHints, setCostHints] = useState<Record<string, string>>({});
+  const costCacheRef = useRef<Map<string, SupplierCostRow[]>>(new Map());
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
@@ -531,10 +534,47 @@ export function QuoteEditor({
       }),
     );
     setPickedMeta((m) => ({ ...m, [line.key]: { sku: item.sku, brand: item.brand, model: item.model } }));
+    if (line.supplierId) void maybeAutoFillCost({ ...line, description: item.name });
     setPickerFor(null);
     setPickerQuery("");
     setPickerResults([]);
     setPickerActive(0);
+  }
+
+  /** Lot plan Phase A: when a line has a supplier and a description but no
+   * cost yet, fill the cost from that supplier's last PO for the same
+   * description. Never overwrites a typed cost; silent with no history. */
+  async function maybeAutoFillCost(line: EditorItem) {
+    if (!withCosts || !line.supplierId) return;
+    const description = line.description.trim();
+    if (!description || !costIsEmpty(line.supplierUnitCost)) return;
+    const supplierId = line.supplierId;
+    try {
+      let rows = costCacheRef.current.get(description);
+      if (!rows) {
+        const res = await fetch(`/api/items/supplier-costs?description=${encodeURIComponent(description)}`);
+        const data = (await res.json()) as { ok?: boolean; rows?: SupplierCostRow[] };
+        rows = data.ok && Array.isArray(data.rows) ? data.rows : [];
+        costCacheRef.current.set(description, rows);
+      }
+      const row = pickSupplierCost(rows, supplierId);
+      if (!row) return;
+      setCostHints((h) => ({ ...h, [line.key]: lastCostHint(row) }));
+      setItems((xs) =>
+        xs.map((x) =>
+          x.key === line.key && x.supplierId === supplierId && costIsEmpty(x.supplierUnitCost)
+            ? { ...x, supplierUnitCost: row.lastCost }
+            : x,
+        ),
+      );
+    } catch {
+      // Auto-fill is a convenience: a failed lookup leaves the box as-is.
+    }
+  }
+
+  function onSupplierPick(line: EditorItem, supplierId: string | null) {
+    setItem(line.key, { supplierId });
+    if (supplierId) void maybeAutoFillCost({ ...line, supplierId });
   }
 
   async function openDrawer(line: EditorItem) {
@@ -1468,7 +1508,7 @@ export function QuoteEditor({
                                   aria-label={`Line ${idx + 1} supplier`}
                                   title={supplierName || undefined}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
                                 >
                                   <option value="">—</option>
                                   {suppliers!.map((s) => (
@@ -1489,6 +1529,7 @@ export function QuoteEditor({
                                   value={i.supplierUnitCost}
                                   onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
                                 />
+                                {costHints[i.key] ? <div className="hint">{costHints[i.key]}</div> : null}
                               </div>
                               <div className="field">
                                 <span className="label">Margin</span>
@@ -1691,7 +1732,7 @@ export function QuoteEditor({
                                   aria-label={`Line ${idx + 1} supplier`}
                                   title={supplierName || undefined}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
                                 >
                                   <option value="">Supplier —</option>
                                   {suppliers!.map((s) => (
@@ -1713,6 +1754,7 @@ export function QuoteEditor({
                                   placeholder="Unit cost"
                                   onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
                                 />
+                                {costHints[i.key] ? <div className="hint">{costHints[i.key]}</div> : null}
                               </div>
                               <div className="field">
                                 <span className="label">Margin</span>
