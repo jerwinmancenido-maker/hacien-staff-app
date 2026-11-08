@@ -58,7 +58,7 @@ describe("quote phase 1 — notes split and print", () => {
       warrantyNotes: "1 year parts and labor",
       notes: CUSTOMER_NOTE,
     });
-    expect(markup).toContain("Terms &amp; conditions:");
+    expect(markup).toContain("Remarks:");
     // The validity date lives in the details block (meta), not as a duplicate
     // line in the notes section (owner 2026-11-07: "Valid until" appeared 3×).
     expect(markup).toContain("Valid until");
