@@ -35,6 +35,7 @@ type DeliveryRecord = {
   idCheckedAt?: Date | string | null;
   voidedAt?: Date | string | null;
   voidReason?: string | null;
+  notes?: string | null;
   items: {
     id: string;
     salesOrderItemId: string;
@@ -227,6 +228,12 @@ export function DeliverySection({
             </div>
           </div>
 
+          <div className={`field${e.notes ? " has-error" : ""}`} style={{ marginBottom: "16px" }}>
+            <label htmlFor="notes">Notes</label>
+            <textarea id="notes" name="notes" className="input" rows={2} maxLength={2000} placeholder="Optional — gate instructions, partial-delivery remarks…" />
+            {e.notes && <div className="error">{e.notes}</div>}
+          </div>
+
           <div style={{ marginBottom: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
               <h4>Items delivered</h4>
@@ -362,7 +369,10 @@ export function DeliverySection({
               <tbody>
                 {deliveries.map((d) => (
                   <tr key={d.id} className={d.voidedAt ? "inactive" : undefined}>
-                    <td className="strong">{d.drNumber}</td>
+                    <td className="strong">
+                      {d.drNumber}
+                      {d.notes && <div className="faint" style={{ whiteSpace: "pre-wrap" }}>{d.notes}</div>}
+                    </td>
                     <td>{day(d.deliveryDate)}</td>
                     <td>
                       <ul className="plain-list small">

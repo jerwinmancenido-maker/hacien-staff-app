@@ -9,7 +9,7 @@ const env = vi.hoisted(() => {
 import { db } from "@/lib/db";
 import { customerDeliveryAddressId, makeCustomer, makeUser, quoteInput } from "./fixtures";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
-import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
+import { listSalesOrderDeliveries, recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { updateSalesOrder, voidSalesOrder } from "@/lib/services/sales-orders";
 import { expectedPaymentDateFromIar, isOverdue } from "@/lib/billing/dates";
 import { overdueInfo } from "@/lib/billing/views";
@@ -150,6 +150,46 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
       admin,
     );
     expect(del2).toBeDefined();
+  });
+
+  it("delivery notes are stored and listed; absent notes stay null", async () => {
+    const admin = await makeUser("costs");
+    await ensureWideDrBooklet(admin.id);
+    const so = await makeTestSalesOrder(admin, "10");
+    const soWithItems = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      include: { items: true },
+    });
+    const itemId = soWithItems.items[0]!.id;
+
+    const withNotes = await recordDelivery(
+      so.id,
+      {
+        drNumber: nextDr(),
+        deliveryDate: new Date(),
+        idSightChecked: false,
+        notes: "Gate pass under customer name",
+        items: [{ salesOrderItemId: itemId, qty: "4.00" }],
+      },
+      admin,
+    );
+    expect(withNotes.notes).toBe("Gate pass under customer name");
+
+    const withoutNotes = await recordDelivery(
+      so.id,
+      {
+        drNumber: nextDr(),
+        deliveryDate: new Date(),
+        idSightChecked: false,
+        items: [{ salesOrderItemId: itemId, qty: "4.00" }],
+      },
+      admin,
+    );
+    expect(withoutNotes.notes).toBeNull();
+
+    const listed = await listSalesOrderDeliveries(so.id);
+    expect(listed.find((d) => d.id === withNotes.id)?.notes).toBe("Gate pass under customer name");
+    expect(listed.find((d) => d.id === withoutNotes.id)?.notes).toBeNull();
   });
 
   it("DR number is required", async () => {

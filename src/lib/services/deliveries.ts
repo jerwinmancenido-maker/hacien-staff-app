@@ -136,6 +136,7 @@ export async function recordDelivery(
             deliveryDate: input.deliveryDate,
             receivedBy: input.receivedBy ?? null,
             receivedDate: input.receivedDate ?? null,
+            notes: input.notes ?? null,
             idSightChecked: input.idSightChecked === true,
             idCheckedById,
             idCheckedAt,
