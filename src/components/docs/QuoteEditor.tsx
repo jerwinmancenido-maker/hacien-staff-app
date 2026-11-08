@@ -6,7 +6,7 @@
 // quote-trow, quote-int2, quote-tbox, edit-topbar, quote-fg, quote-f, quote-f-w2, quote-f-w3
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
@@ -175,10 +175,12 @@ function DescTextarea({
   label,
   value,
   onValue,
+  onKeyDown,
 }: {
   label: string;
   value: string;
   onValue: (v: string) => void;
+  onKeyDown?: (ev: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -191,10 +193,12 @@ function DescTextarea({
       className="quote-desc"
       rows={1}
       value={value}
+      placeholder="Search by product name or SKU…"
       onChange={(ev) => {
         onValue(ev.target.value);
         growDesc(ev.target);
       }}
+      onKeyDown={onKeyDown}
     />
   );
 }
@@ -432,10 +436,15 @@ export function QuoteEditor({
   const [drawerItem, setDrawerItem] = useState<CatalogSearchResult | null>(null);
   const [drawerBusy, setDrawerBusy] = useState(false);
   const pickerSeq = useRef(0);
+  // Phase 1 compact lines: keyboard highlight in the picker, per-line
+  // expanded "More" section, and catalog meta for the linked caption.
+  const [pickerActive, setPickerActive] = useState(0);
+  const [expandedLines, setExpandedLines] = useState<Record<string, boolean>>({});
+  const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
-  // is set instead — see onDescription and the Pick a product button.
+  // is set instead — see onDescription.
   useEffect(() => {
     if (pickerFor == null) return;
     const q = pickerQuery.trim();
@@ -464,6 +473,7 @@ export function QuoteEditor({
     if (v.trim().length >= 2) {
       setPickerFor(line.key);
       setPickerQuery(v);
+      setPickerActive(0);
     } else if (pickerFor === line.key) {
       setPickerFor(null);
       setPickerQuery("");
@@ -497,9 +507,11 @@ export function QuoteEditor({
         return next;
       }),
     );
+    setPickedMeta((m) => ({ ...m, [line.key]: { sku: item.sku, brand: item.brand, model: item.model } }));
     setPickerFor(null);
     setPickerQuery("");
     setPickerResults([]);
+    setPickerActive(0);
   }
 
   async function openDrawer(line: EditorItem) {
@@ -524,34 +536,104 @@ export function QuoteEditor({
     setPickerFor(null);
     setPickerQuery("");
     setPickerResults([]);
+    setPickerActive(0);
   }
 
-  /** The search box under a line's description (desktop + mobile share it). */
+  /** Picker keyboard flow: ↑/↓ move the highlight, Enter picks, Esc closes. */
+  function onDescKeyDown(line: EditorItem, ev: KeyboardEvent<HTMLTextAreaElement>) {
+    if (line.itemId || pickerFor !== line.key) return;
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      closePicker();
+      return;
+    }
+    if (pickerResults.length === 0) return;
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      setPickerActive((a) => (a + 1) % pickerResults.length);
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      setPickerActive((a) => (a - 1 + pickerResults.length) % pickerResults.length);
+    } else if (ev.key === "Enter") {
+      ev.preventDefault();
+      const r = pickerResults[pickerActive] ?? pickerResults[0];
+      if (r) applyCatalogPick(line, r);
+    }
+  }
+
+  /** Focus the (visible) description box of line idx — desktop and mobile
+   *  branches both render one, so pick the one on screen. */
+  function focusLineDesc(idx: number) {
+    const root = formRef.current;
+    if (!root) return;
+    const areas = [...root.querySelectorAll<HTMLTextAreaElement>("textarea.quote-desc")].filter((el) => el.offsetParent !== null);
+    const el = areas[idx];
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ block: "center" });
+    }
+  }
+
+  /** Enter on a price field jumps to the next line's search box, adding a
+   *  fresh line first when the last line already has text. */
+  function onPriceKeyDown(idx: number, ev: KeyboardEvent<HTMLInputElement>) {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    if (idx === items.length - 1 && items[idx]!.description.trim() !== "") {
+      setItems((xs) => [...xs, blankItem(linePicks, allocLineKey())]);
+    }
+    requestAnimationFrame(() => focusLineDesc(idx + 1));
+  }
+
+  /** The search dropdown under a line's description (desktop + mobile share
+   *  it). Two-line results: name + price, then SKU · brand · model · unit. */
   function pickerBox(line: EditorItem) {
     if (pickerFor !== line.key) return null;
+    const q = pickerQuery.trim();
     return (
       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
         {pickerBusy ? (
           <div className="small muted">Searching the catalog…</div>
         ) : pickerResults.length === 0 ? (
-          <div className="small muted">No catalog matches — this saves as a free-text line.</div>
+          <div className="small muted">No product found for “{q}” — this saves as a free-text line.</div>
         ) : (
           <ul className="plain-list">
-            {pickerResults.map((r) => {
-              const meta = [r.brand, r.model, r.sku].filter(Boolean).join(" · ");
+            {pickerResults.map((r, ix) => {
+              const rest = [r.brand, r.model, r.unit].filter(Boolean).join(" · ");
               return (
                 <li key={r.id}>
-                  <button type="button" className="btn-link" role="option" aria-selected={false} onClick={() => applyCatalogPick(line, r)}>
-                    {r.name}
-                    {meta ? ` — ${meta}` : ""}
-                    {r.defaultUnitPrice != null ? ` — ₱${Number(r.defaultUnitPrice).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : ""}
+                  <button
+                    type="button"
+                    className={`quote-picker-opt${ix === pickerActive ? " is-active" : ""}`}
+                    role="option"
+                    aria-selected={ix === pickerActive}
+                    onMouseEnter={() => setPickerActive(ix)}
+                    onClick={() => applyCatalogPick(line, r)}
+                  >
+                    <span className="quote-picker-name">
+                      <span>{r.name}</span>
+                      {r.defaultUnitPrice != null ? (
+                        <span className="num">₱{Number(r.defaultUnitPrice).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                      ) : null}
+                    </span>
+                    {r.sku || rest ? (
+                      <span className="quote-picker-meta">
+                        {r.sku ? (
+                          <>
+                            SKU <b>{r.sku}</b>
+                            {rest ? " · " : ""}
+                          </>
+                        ) : null}
+                        {rest}
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               );
             })}
           </ul>
         )}
-        {pickerQuery.trim() ? (
+        {q ? (
           <button
             type="button"
             className="quote-picker-add"
@@ -560,7 +642,7 @@ export function QuoteEditor({
               void openDrawer(line);
             }}
           >
-            + Add “{pickerQuery.trim().length > 42 ? `${pickerQuery.trim().slice(0, 42)}…` : pickerQuery.trim()}” as a new item
+            + Add to Products
           </button>
         ) : null}
         <button type="button" className="btn-link small" onClick={closePicker}>
@@ -570,37 +652,47 @@ export function QuoteEditor({
     );
   }
 
-  /** Linked chip / pick + details buttons under a line's description. */
-  function productRow(line: EditorItem) {
-    return (
-      <div className="quote-ln-product">
-        {line.itemId ? (
-          <>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDrawer(line)}>
-              🔗 {line.itemName ?? "Linked product"}
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm" aria-label="Unlink product" onClick={() => setItem(line.key, { itemId: null, itemName: null })}>
-              ✕
-            </button>
-          </>
-        ) : (
+  /** Quiet caption under the search box: a linked product, or a product that
+   *  will be added to the catalog when the quote saves. Plain free-text
+   *  lines show nothing — the search box itself is the whole control. */
+  function productMeta(line: EditorItem) {
+    if (line.itemId) {
+      const meta = pickedMeta[line.key];
+      const metaText = meta ? [meta.sku ? `SKU ${meta.sku}` : null, meta.brand, meta.model].filter(Boolean).join(" · ") : "";
+      return (
+        <div className="quote-ln-meta-line">
+          <button type="button" className="btn-link quote-linked" onClick={() => openDrawer(line)}>
+            🔗 Linked · {line.itemName ?? "Linked product"}
+            {metaText ? ` · ${metaText}` : ""}
+          </button>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="btn-link danger"
+            aria-label="Unlink product"
             onClick={() => {
-              setPickerFor(line.key);
-              setPickerQuery(line.description);
-              setPickerResults([]);
+              setItem(line.key, { itemId: null, itemName: null });
+              setPickedMeta((m) => {
+                const next = { ...m };
+                delete next[line.key];
+                return next;
+              });
             }}
           >
-            Pick a product
+            ✕
           </button>
-        )}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDrawer(line)}>
-          Product details
-        </button>
-      </div>
-    );
+        </div>
+      );
+    }
+    if (line.newCatalog) {
+      return (
+        <div className="quote-ln-meta-line">
+          <button type="button" className="btn-link quote-linked" onClick={() => openDrawer(line)}>
+            + New product — will be added to Products when saved{line.newCatalog.sku ? ` · SKU ${line.newCatalog.sku}` : ""}
+          </button>
+        </div>
+      );
+    }
+    return null;
   }
   const move = (idx: number, by: number) =>
     setItems((xs) => {
@@ -1109,7 +1201,7 @@ export function QuoteEditor({
               <div className="quote-items-desktop">
                 <div className="quote-lh" aria-hidden="true">
                   <span className="quote-lh-no">#</span>
-                  <span>Item</span>
+                  <span>Product — search by name or SKU</span>
                   <span className="num">Qty</span>
                   <span>Unit</span>
                   <span className="num">Unit price</span>
@@ -1142,63 +1234,47 @@ export function QuoteEditor({
                       ? `⚠ Price is below cost · ${formatPeso(a.margin)} · ${marginPct}%`
                       : `${formatPeso(a.margin)} · ${marginPct}%`;
                   const whLabel = pct ? `WHT ${pct}%` : "WHT —";
+                  const expanded = expandedLines[i.key] ?? (showOverride || !!whPctErrors[i.key]);
                   return (
                     <div className="quote-ln" key={i.key}>
                       <div className="quote-lr">
                         <div className="quote-ln-no">{idx + 1}</div>
                         <div className="quote-ln-dsc">
                           <div className="quote-ln-descwrap">
-                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
                             {pickerBox(i)}
                           </div>
-                          {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
-                          {productRow(i)}
+                          {productMeta(i)}
                           <div className="quote-ln-tags">
-                            <select
-                              className="quote-tg"
-                              aria-label={`Line ${idx + 1} kind`}
-                              value={i.kind}
-                              onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}
-                            >
-                              <option value="GOODS">Goods</option>
-                              <option value="SERVICES">Services</option>
-                            </select>
                             {usePickChips ? (
-                              pickChips.map((chip) => (
-                                <span
-                                  key={`${i.key}-${chip.code}`}
-                                  className="quote-tg quote-tg-wh is-chip"
-                                  title={chip.atc ?? undefined}
-                                  aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
-                                >
-                                  {chip.chipLabel}
-                                </span>
-                              ))
+                              <>
+                                <span className="quote-tg">{i.kind === "GOODS" ? "Goods" : "Services"}</span>
+                                {pickChips.map((chip) => (
+                                  <span
+                                    key={`${i.key}-${chip.code}`}
+                                    className="quote-tg quote-tg-wh is-chip"
+                                    title={chip.atc ?? undefined}
+                                    aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
+                                  >
+                                    {chip.chipLabel}
+                                  </span>
+                                ))}
+                              </>
                             ) : (
-                              <span className="quote-tg quote-tg-wh" title={displayAtc ?? undefined}>
-                                <span className="quote-tg-wh-label">{whLabel}</span>
-                                <input
-                                  aria-label={`Line ${idx + 1} withholding percent`}
-                                  inputMode="decimal"
-                                  className="w-wh"
-                                  value={pct}
-                                  placeholder="—"
-                                  onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
-                                />
-                                <span className="quote-wh-pct-suffix" aria-hidden>
-                                  %
-                                </span>
-                                {/* ATC only when not a stacked combined rate. */}
-                                <input
-                                  aria-label={`Line ${idx + 1} ATC`}
-                                  className="w-atc"
-                                  value={displayAtc ?? ""}
-                                  placeholder="ATC"
-                                  title={displayAtc ?? undefined}
-                                  onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                                />
+                              <span className="quote-tg quote-tg-wh">
+                                {i.kind === "GOODS" ? "Goods" : "Services"} · {whLabel}
+                                {displayAtc ? ` · ${displayAtc}` : ""}
                               </span>
                             )}
+                            {withCosts ? (
+                              costMissing ? (
+                                <span className="quote-tg quote-tg-cost">Cost not set</span>
+                              ) : below ? (
+                                <span className="quote-tg quote-tg-cost neg">Below cost</span>
+                              ) : (
+                                <span className="quote-tg quote-tg-cost ok">Margin {marginPct}%</span>
+                              )
+                            ) : null}
                             {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                           </div>
                         </div>
@@ -1214,6 +1290,7 @@ export function QuoteEditor({
                             inputMode="decimal"
                             value={i.unitPrice}
                             onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
+                            onKeyDown={(ev) => onPriceKeyDown(idx, ev)}
                           />
                         </div>
                         <div className="quote-ln-total num strong">{formatPeso(a.total)}</div>
@@ -1226,6 +1303,15 @@ export function QuoteEditor({
                           </button>
                           <button
                             type="button"
+                            className="btn-link"
+                            aria-label={`Line ${idx + 1} details`}
+                            aria-expanded={expanded}
+                            onClick={() => setExpandedLines((m) => ({ ...m, [i.key]: !expanded }))}
+                          >
+                            {expanded ? "⌃" : "⌄"}
+                          </button>
+                          <button
+                            type="button"
                             className="btn-link danger"
                             aria-label={`Remove line ${idx + 1}`}
                             onClick={() => removeItem(i)}
@@ -1234,40 +1320,92 @@ export function QuoteEditor({
                           </button>
                         </div>
                       </div>
-                      {withCosts ? (
-                        <div className={`quote-cost${below ? " quote-cost-warn" : ""}`}>
-                          <span className="quote-cost-k">Cost (internal)</span>
-                          <span className="quote-cost-field">
-                            Supplier{" "}
-                            <select
-                              aria-label={`Line ${idx + 1} supplier`}
-                              title={supplierName || undefined}
-                              value={i.supplierId ?? ""}
-                              onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
-                            >
-                              <option value="">—</option>
-                              {suppliers!.map((s) => (
-                                <option key={s.id} value={s.id} title={s.name}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                          <span className="quote-cost-field">
-                            Unit cost{" "}
-                            <input
-                              aria-label={`Line ${idx + 1} supplier unit cost`}
-                              inputMode="decimal"
-                              value={i.supplierUnitCost}
-                              onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
-                            />
-                          </span>
-                          <span className={`quote-cost-field${below ? " neg" : ""}`}>
-                            Margin{" "}
-                            <b>
-                              {marginText}
-                            </b>
-                          </span>
+                      {expanded ? (
+                        <div className="quote-ln-more">
+                          <div className="quote-ln-more-row">
+                            <div className="field">
+                              <label className="label" htmlFor={`kind-${i.key}`}>
+                                Kind
+                              </label>
+                              <select id={`kind-${i.key}`} aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
+                                <option value="GOODS">Goods</option>
+                                <option value="SERVICES">Services</option>
+                              </select>
+                            </div>
+                            {usePickChips ? (
+                              <p className="small muted quote-ln-more-note">Withholding comes from the customer&apos;s picks — see the Withholding tab.</p>
+                            ) : (
+                              <div className="field">
+                                <label className="label" htmlFor={`whpct-${i.key}`}>
+                                  Withholding
+                                </label>
+                                <span className="quote-tg quote-tg-wh" title={displayAtc ?? undefined}>
+                                  <span className="quote-tg-wh-label">{whLabel}</span>
+                                  <input
+                                    id={`whpct-${i.key}`}
+                                    aria-label={`Line ${idx + 1} withholding percent`}
+                                    inputMode="decimal"
+                                    className="w-wh"
+                                    value={pct}
+                                    placeholder="—"
+                                    onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
+                                  />
+                                  <span className="quote-wh-pct-suffix" aria-hidden>
+                                    %
+                                  </span>
+                                  <input
+                                    aria-label={`Line ${idx + 1} ATC`}
+                                    className="w-atc"
+                                    value={displayAtc ?? ""}
+                                    placeholder="ATC"
+                                    title={displayAtc ?? undefined}
+                                    onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                                  />
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                          {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
+                          {withCosts ? (
+                            <div className="quote-ln-more-row">
+                              <div className="field grow">
+                                <label className="label" htmlFor={`sup-${i.key}`}>
+                                  Supplier (internal)
+                                </label>
+                                <select
+                                  id={`sup-${i.key}`}
+                                  aria-label={`Line ${idx + 1} supplier`}
+                                  title={supplierName || undefined}
+                                  value={i.supplierId ?? ""}
+                                  onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                                >
+                                  <option value="">—</option>
+                                  {suppliers!.map((s) => (
+                                    <option key={s.id} value={s.id} title={s.name}>
+                                      {s.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field">
+                                <label className="label" htmlFor={`cost-${i.key}`}>
+                                  Unit cost
+                                </label>
+                                <input
+                                  id={`cost-${i.key}`}
+                                  aria-label={`Line ${idx + 1} supplier unit cost`}
+                                  inputMode="decimal"
+                                  value={i.supplierUnitCost}
+                                  onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
+                                />
+                              </div>
+                              <div className="field">
+                                <span className="label">Margin</span>
+                                <span className={`quote-ln-margin${below ? " neg" : ""}`}>{marginText}</span>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1290,6 +1428,16 @@ export function QuoteEditor({
                   const usePickChips = !showOverride && pickChips.length > 0;
                   const displayAtc = showOverride ? i.withholdingAtc : pickUsual.atc;
                   const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
+                  const costMissing = supplierCostMissing(i.supplierUnitCost);
+                  const below = !costMissing && toScaled(a.margin, 2) < 0n;
+                  const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
+                  const marginText = costMissing
+                    ? COST_NOT_SET_LABEL
+                    : below
+                      ? `⚠ Price is below cost · ${formatPeso(a.margin)} · ${marginPct}%`
+                      : `${formatPeso(a.margin)} · ${marginPct}%`;
+                  const whLabel = pct ? `WHT ${pct}%` : "WHT —";
+                  const expanded = expandedLines[i.key] ?? (showOverride || !!whPctErrors[i.key]);
                   return (
                     <article key={`m-${i.key}`} className="quote-line-card">
                       <div className="quote-line-card-actions line-actions">
@@ -1298,6 +1446,15 @@ export function QuoteEditor({
                         </button>
                         <button type="button" className="btn-link" aria-label={`Move line ${idx + 1} down`} disabled={idx === items.length - 1} onClick={() => move(idx, 1)}>
                           ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          aria-label={`Line ${idx + 1} details`}
+                          aria-expanded={expanded}
+                          onClick={() => setExpandedLines((m) => ({ ...m, [i.key]: !expanded }))}
+                        >
+                          {expanded ? "⌃" : "⌄"}
                         </button>
                         <button
                           type="button"
@@ -1310,22 +1467,12 @@ export function QuoteEditor({
                       </div>
                       <div className="quote-line-card-desc">
                         <div className="quote-ln-descwrap">
-                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} />
+                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
                           {pickerBox(i)}
                         </div>
-                        {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
-                        {productRow(i)}
+                        {productMeta(i)}
                       </div>
                       <div className="quote-line-card-row3">
-                        <div className="field">
-                          <label className="sr-only" htmlFor={`m-kind-${i.key}`}>
-                            Kind
-                          </label>
-                          <select id={`m-kind-${i.key}`} aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
-                            <option value="GOODS">Goods</option>
-                            <option value="SERVICES">Services</option>
-                          </select>
-                        </div>
                         <div className="field">
                           <label className="sr-only" htmlFor={`m-qty-${i.key}`}>
                             Qty
@@ -1350,42 +1497,6 @@ export function QuoteEditor({
                           />
                         </div>
                       </div>
-                      {withCosts && (
-                        <div className="quote-line-card-row2">
-                          <div className="field">
-                            <label className="sr-only" htmlFor={`m-sup-${i.key}`}>
-                              Supplier
-                            </label>
-                            <select
-                              id={`m-sup-${i.key}`}
-                              aria-label={`Line ${idx + 1} supplier`}
-                              title={supplierName || undefined}
-                              value={i.supplierId ?? ""}
-                              onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
-                            >
-                              <option value="">Supplier —</option>
-                              {suppliers!.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="field">
-                            <label className="sr-only" htmlFor={`m-cost-${i.key}`}>
-                              Unit cost
-                            </label>
-                            <input
-                              id={`m-cost-${i.key}`}
-                              aria-label={`Line ${idx + 1} supplier unit cost`}
-                              inputMode="decimal"
-                              value={i.supplierUnitCost}
-                              placeholder="Unit cost"
-                              onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
-                            />
-                          </div>
-                        </div>
-                      )}
                       <div className="quote-line-card-price">
                         <div className="field">
                           <label className="sr-only" htmlFor={`m-price-${i.key}`}>
@@ -1398,48 +1509,129 @@ export function QuoteEditor({
                             value={i.unitPrice}
                             placeholder="Price"
                             onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
+                            onKeyDown={(ev) => onPriceKeyDown(idx, ev)}
                           />
                         </div>
                         <div className="quote-line-card-total num strong">{formatPeso(a.total)}</div>
                       </div>
                       <div className="quote-line-card-meta">
-                        {withCosts ? <span>{supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : `Margin ${formatPeso(a.margin)}`}</span> : null}
                         {usePickChips ? (
-                          <span className="quote-line-card-wh-chips">
-                            {pickChips.map((chip) => (
-                              <span
-                                key={`m-${i.key}-${chip.code}`}
-                                className="quote-tg quote-tg-wh is-chip"
-                                title={chip.atc ?? undefined}
-                                aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
-                              >
-                                {chip.chipLabel}
-                              </span>
-                            ))}
-                          </span>
+                          <>
+                            <span className="quote-tg">{i.kind === "GOODS" ? "Goods" : "Services"}</span>
+                            <span className="quote-line-card-wh-chips">
+                              {pickChips.map((chip) => (
+                                <span
+                                  key={`m-${i.key}-${chip.code}`}
+                                  className="quote-tg quote-tg-wh is-chip"
+                                  title={chip.atc ?? undefined}
+                                  aria-label={`Line ${idx + 1} ${chip.chipLabel}`}
+                                >
+                                  {chip.chipLabel}
+                                </span>
+                              ))}
+                            </span>
+                          </>
                         ) : (
-                          <span className="quote-line-card-wh">
-                            WH%{" "}
-                            <input
-                              aria-label={`Line ${idx + 1} withholding percent`}
-                              inputMode="decimal"
-                              className="w-wh"
-                              value={pct}
-                              placeholder="—"
-                              onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
-                            />
-                            <input
-                              aria-label={`Line ${idx + 1} ATC`}
-                              className="w-atc"
-                              value={displayAtc ?? ""}
-                              placeholder="ATC"
-                              title={displayAtc ?? undefined}
-                              onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
-                            />
+                          <span className="quote-tg quote-tg-wh">
+                            {i.kind === "GOODS" ? "Goods" : "Services"} · {whLabel}
+                            {displayAtc ? ` · ${displayAtc}` : ""}
                           </span>
                         )}
+                        {withCosts ? (
+                          costMissing ? (
+                            <span className="quote-tg quote-tg-cost">Cost not set</span>
+                          ) : below ? (
+                            <span className="quote-tg quote-tg-cost neg">Below cost</span>
+                          ) : (
+                            <span className="quote-tg quote-tg-cost ok">Margin {marginPct}%</span>
+                          )
+                        ) : null}
                         {whPctErrors[i.key] ? <span className="error small">{whPctErrors[i.key]}</span> : null}
                       </div>
+                      {expanded ? (
+                        <div className="quote-ln-more">
+                          <div className="field">
+                            <label className="label" htmlFor={`m-kind-${i.key}`}>
+                              Kind
+                            </label>
+                            <select id={`m-kind-${i.key}`} aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>
+                              <option value="GOODS">Goods</option>
+                              <option value="SERVICES">Services</option>
+                            </select>
+                          </div>
+                          {usePickChips ? (
+                            <p className="small muted">Withholding comes from the customer&apos;s picks — see the Withholding tab.</p>
+                          ) : (
+                            <div className="field">
+                              <label className="label" htmlFor={`m-whpct-${i.key}`}>
+                                Withholding
+                              </label>
+                              <span className="quote-line-card-wh">
+                                WH%{" "}
+                                <input
+                                  id={`m-whpct-${i.key}`}
+                                  aria-label={`Line ${idx + 1} withholding percent`}
+                                  inputMode="decimal"
+                                  className="w-wh"
+                                  value={pct}
+                                  placeholder="—"
+                                  onChange={(ev) => onWhPctChange(i.key, ev.target.value)}
+                                />
+                                <input
+                                  aria-label={`Line ${idx + 1} ATC`}
+                                  className="w-atc"
+                                  value={displayAtc ?? ""}
+                                  placeholder="ATC"
+                                  title={displayAtc ?? undefined}
+                                  onChange={(ev) => changeLineWithholding(i.key, { withholdingAtc: ev.target.value || null })}
+                                />
+                              </span>
+                            </div>
+                          )}
+                          {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                          {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
+                          {withCosts ? (
+                            <>
+                              <div className="field">
+                                <label className="label" htmlFor={`m-sup-${i.key}`}>
+                                  Supplier (internal)
+                                </label>
+                                <select
+                                  id={`m-sup-${i.key}`}
+                                  aria-label={`Line ${idx + 1} supplier`}
+                                  title={supplierName || undefined}
+                                  value={i.supplierId ?? ""}
+                                  onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}
+                                >
+                                  <option value="">Supplier —</option>
+                                  {suppliers!.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field">
+                                <label className="label" htmlFor={`m-cost-${i.key}`}>
+                                  Unit cost
+                                </label>
+                                <input
+                                  id={`m-cost-${i.key}`}
+                                  aria-label={`Line ${idx + 1} supplier unit cost`}
+                                  inputMode="decimal"
+                                  value={i.supplierUnitCost}
+                                  placeholder="Unit cost"
+                                  onChange={(ev) => setItem(i.key, { supplierUnitCost: formatMoneyInput(ev.target.value) })}
+                                />
+                              </div>
+                              <div className="field">
+                                <span className="label">Margin</span>
+                                <span className={`quote-ln-margin${below ? " neg" : ""}`}>{marginText}</span>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -1730,7 +1922,7 @@ export function QuoteEditor({
           const nc = line.newCatalog ?? { brand: "", model: "", category: "", sku: "", details: "" };
           const setNc = (patch: Partial<typeof nc>) => setItem(line.key, { newCatalog: { ...nc, ...patch } });
           return (
-            <Modal title="Product details" labelId="product-details-title" variant="drawer-right" onClose={() => setDrawerFor(null)}>
+            <Modal title={line.itemId ? "Product details" : "Add to Products"} labelId="product-details-title" variant="drawer-right" onClose={() => setDrawerFor(null)}>
               {line.itemId ? (
                 <>
                   {drawerBusy ? (

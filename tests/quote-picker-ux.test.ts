@@ -3,15 +3,17 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 // UI tidy-up item 5 (Jerwin, 2026-11-07): the catalog picker becomes a real
-// dropdown anchored under the description input, gains an inline
-// "+ Add … as a new item" row that opens the product drawer in create mode,
-// and Product details opens as a right slide-over instead of a centered
-// modal. Source-level guards (the editor is a client component).
+// dropdown anchored under the description input, gains an inline add row
+// that opens the product drawer in create mode, and Product details opens
+// as a right slide-over instead of a centered modal. Compact lines Phase 1
+// (2026-11-08) renamed the add row to "+ Add to Products", made the drawer
+// title depend on the mode, and changed the empty-state wording.
+// Source-level guards (the editor is a client component).
 const editor = readFileSync(path.join(process.cwd(), "src/components/docs/QuoteEditor.tsx"), "utf8");
 const dialogs = readFileSync(path.join(process.cwd(), "src/components/docs/Dialogs.tsx"), "utf8");
 const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
 
-const pickerBox = editor.slice(editor.indexOf("function pickerBox"), editor.indexOf("function productRow"));
+const pickerBox = editor.slice(editor.indexOf("function pickerBox"), editor.indexOf("function productMeta"));
 const cssRule = (selector: string) => {
   const start = css.indexOf(`${selector} {`);
   expect(start).toBeGreaterThanOrEqual(0);
@@ -36,23 +38,24 @@ describe("catalog picker dropdown is anchored to the description input", () => {
 });
 
 describe("picker has an inline add-new-item row", () => {
-  it("renders the add row from the typed text and opens the drawer", () => {
+  it("renders the Add to Products row and opens the drawer", () => {
     expect(pickerBox).toContain("quote-picker-add");
-    expect(pickerBox).toContain("as a new item");
+    expect(pickerBox).toContain("+ Add to Products");
     expect(pickerBox).toContain("openDrawer(line)");
     expect(pickerBox).toContain("pickerQuery.trim()");
   });
 
   it("still offers the matches list and the free-text empty state", () => {
     expect(pickerBox).toContain("applyCatalogPick(line, r)");
-    expect(pickerBox).toContain("No catalog matches — this saves as a free-text line.");
+    expect(pickerBox).toContain("No product found for");
+    expect(pickerBox).toContain("this saves as a free-text line.");
   });
 });
 
 describe("product details opens as a right slide-over", () => {
   it("only the product details modal uses the drawer variant", () => {
     expect(editor.match(/variant="drawer-right"/g)?.length).toBe(1);
-    expect(editor).toContain('<Modal title="Product details" labelId="product-details-title" variant="drawer-right"');
+    expect(editor).toContain('<Modal title={line.itemId ? "Product details" : "Add to Products"} labelId="product-details-title" variant="drawer-right"');
   });
 
   it("the shared Modal renders the drawer classes only for that variant", () => {

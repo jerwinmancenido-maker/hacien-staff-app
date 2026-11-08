@@ -7363,13 +7363,46 @@ button.contact-card-add {
 .quote-ln-dsc {
   min-width: 0;
 }
-/* Catalog Step 3: picker + product buttons under a line's description. */
-.quote-ln-product {
+/* Compact lines (Phase 1): quiet caption under the search box — a linked
+   product or a pending new product. Plain free-text lines show nothing. */
+.quote-ln-meta-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 4px 10px;
   align-items: center;
   margin-top: 4px;
+  font-size: 12.5px;
+}
+.quote-picker-opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.quote-picker-opt:hover,
+.quote-picker-opt.is-active {
+  background: #eff6ff;
+}
+.quote-picker-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.quote-picker-meta {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.quote-picker-meta b {
+  color: var(--text);
 }
 /* The description cell anchors the catalog picker dropdown (item 5). */
 .quote-ln-descwrap {
@@ -7542,54 +7575,63 @@ button.contact-card-add {
   gap: 0;
   padding-top: 4px;
 }
-.quote-cost {
-  margin: 8px 0 0 28px;
+/* Compact lines (Phase 1): the per-line "More" section — kind, withholding
+   override and the internal cost fields live here, collapsed by default. */
+.quote-ln-more {
+  margin: 8px 0 2px 28px;
   background: #f8fafc;
-  border: 1px dashed var(--border);
+  border: 1px solid #eef1f4;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 10px 12px;
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  gap: 8px;
+}
+.quote-line-card .quote-ln-more {
+  margin-left: 0;
+}
+.quote-ln-more-row {
+  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  font-size: 11.5px;
-  color: var(--text-2);
+  gap: 10px 14px;
+  align-items: end;
 }
-.quote-cost-warn {
-  border-color: #fecaca;
-  background: #fef2f2;
+.quote-ln-more .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.quote-cost-k {
-  font-weight: 800;
-  color: var(--text-3);
-  letter-spacing: 0.02em;
+.quote-ln-more .field.grow {
+  flex: 1 1 180px;
 }
-.quote-cost-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+.quote-ln-more .field.grow select {
+  width: 100%;
 }
-.quote-cost-field select,
-.quote-cost-field input {
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0 6px;
-  background: #fff;
-  font: inherit;
-  font-size: 12px;
-  max-width: 160px;
-  box-sizing: border-box;
+.quote-ln-more-note {
+  margin: 0;
+  align-self: center;
 }
-.quote-cost-field input {
-  width: 6.5rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.quote-ln-margin {
+  font-weight: 600;
+  line-height: 32px;
 }
-.quote-cost-field.neg,
-.quote-cost-field.neg b {
+.quote-ln-margin.neg {
   color: var(--red);
+}
+.quote-tg-cost {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+.quote-tg-cost.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.quote-tg-cost.neg {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
 }
 .quote-items-mobile {
   display: none;
