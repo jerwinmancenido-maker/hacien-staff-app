@@ -58,6 +58,18 @@ type ItemRow = {
   /** Catalog Step 3 (quotes only; SO rows have neither). */
   itemId?: string | null;
   item?: { name: string } | null;
+  /** Lot (bundle) lines (quotes only; SO rows have neither). */
+  isLot?: boolean;
+  components?: {
+    id: string;
+    itemId: string | null;
+    description: string;
+    qty: Dec;
+    unit: string;
+    supplierId: string | null;
+    supplier?: { name: string } | null;
+    unitCost: Dec;
+  }[];
 };
 
 export type ItemView = {
@@ -82,6 +94,20 @@ export type ItemView = {
   /** Catalog Step 3: the linked catalog item (quotes only). */
   itemId?: string | null;
   itemName?: string | null;
+  /** Lot (bundle) line + its internal components (cost users only). */
+  isLot: boolean;
+  components?: ItemComponentView[];
+};
+
+export type ItemComponentView = {
+  id: string;
+  itemId: string | null;
+  description: string;
+  qty: string;
+  unit: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  unitCost: string;
 };
 
 export type TotalsView = {
@@ -111,6 +137,7 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     withholdingOverride: i.withholdingOverride ?? false,
     itemId: i.itemId ?? null,
     itemName: i.item?.name ?? null,
+    isLot: i.isLot ?? false,
   };
   if (!withCosts) return base;
   return {
@@ -120,6 +147,16 @@ function itemView(i: ItemRow, withCosts: boolean): ItemView {
     supplierUnitCost: money(i.supplierUnitCost),
     supplierTotal: money(i.supplierTotal),
     margin: money(i.margin),
+    components: (i.components ?? []).map((c) => ({
+      id: c.id,
+      itemId: c.itemId,
+      description: c.description,
+      qty: money(c.qty),
+      unit: c.unit,
+      supplierId: c.supplierId,
+      supplierName: c.supplier?.name ?? null,
+      unitCost: money(c.unitCost),
+    })),
   };
 }
 
@@ -198,7 +235,15 @@ const itemsInclude = {
 const quoteItemsInclude = {
   where: { removedAt: null },
   orderBy: { sortOrder: "asc" },
-  include: { supplier: { select: { name: true } }, item: { select: { name: true } } },
+  include: {
+    supplier: { select: { name: true } },
+    item: { select: { name: true } },
+    components: {
+      where: { removedAt: null },
+      orderBy: { sortOrder: "asc" },
+      include: { supplier: { select: { name: true } } },
+    },
+  },
 } satisfies Prisma.QuoteItemFindManyArgs;
 
 const contactSelect = { id: true, name: true, email: true, phone: true } as const;
@@ -653,6 +698,9 @@ export type EditableItem = {
   /** Catalog Step 3: the linked catalog item (quotes only; null for SO). */
   itemId?: string | null;
   itemName?: string | null;
+  /** Lot (bundle) line + components (quotes only, cost users only). */
+  isLot?: boolean;
+  components?: ItemComponentView[];
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
@@ -670,7 +718,15 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
       itemId: i.itemId ?? null,
       itemName: i.itemName ?? null,
     };
-    return withCosts ? { ...base, supplierId: i.supplierId ?? null, supplierUnitCost: i.supplierUnitCost ?? "0.00" } : base;
+    return withCosts
+      ? {
+          ...base,
+          supplierId: i.supplierId ?? null,
+          supplierUnitCost: i.supplierUnitCost ?? "0.00",
+          isLot: i.isLot ?? false,
+          components: i.components ?? [],
+        }
+      : base;
   });
 }
 

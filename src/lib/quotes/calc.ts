@@ -146,6 +146,16 @@ function mulToCents(a: bigint, aScale: number, b: bigint, bScale: number): bigin
   return divRound(a * b, 10n ** BigInt(aScale + bScale - CENTS));
 }
 
+/** Lot lines: total internal cost = Σ (component qty × component unit cost),
+ * each component rounded to cents exactly like a normal line's supplierTotal. */
+export function componentsTotal(components: readonly { qty: string; unitCost: string }[]): string {
+  let sum = 0n;
+  for (const c of components) {
+    sum += mulToCents(toScaled(c.qty, QTY), QTY, toScaled(c.unitCost || "0", CENTS), CENTS);
+  }
+  return fromScaled(sum, CENTS);
+}
+
 export function lineAmounts(line: LineInput): LineAmounts {
   const qty = toScaled(line.qty, QTY);
   const total = mulToCents(qty, QTY, toScaled(line.unitPrice, CENTS), CENTS);

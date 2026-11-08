@@ -249,6 +249,7 @@ model Supplier {
 
   contacts        Contact[]
   quoteItems      QuoteItem[]
+  quoteItemComponents QuoteItemComponent[]
   salesOrderItems SalesOrderItem[]
   addresses       Address[]
   documents       BusinessDocument[]
@@ -779,6 +780,7 @@ model Item {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   quoteItems       QuoteItem[]
+  quoteItemComponents QuoteItemComponent[]
 
   @@index([active])
   @@index([name])
@@ -808,6 +810,11 @@ model QuoteItem {
   supplierTotal    Decimal   @default(0) @db.Decimal(15, 2)
   // total − supplierTotal
   margin           Decimal   @default(0) @db.Decimal(15, 2)
+  // Lot (bundle) line: the customer sees only this line's face (description,
+  // qty, unit, price); the internal make-up lives in QuoteItemComponent rows
+  // and supplierTotal/margin come from them. supplierUnitCost stays 0.
+  isLot            Boolean   @default(false)
+  components       QuoteItemComponent[]
   // Snapshotted at line creation from the quote's withholding pick + kind.
   // Later customer-pick edits never change these; staff must re-apply.
   withholdingRate     Decimal? @db.Decimal(5, 4)
@@ -819,6 +826,30 @@ model QuoteItem {
   updatedAt        DateTime  @updatedAt
 
   @@index([quoteId])
+}
+
+// One internal component of a lot (bundle) quote line: a product (catalog or
+// free text) bought from one supplier at one cost. Never printed — the quote
+// shows only the lot line's face. Replaced wholesale on each quote save
+// (soft-removed, never deleted, like the lines themselves).
+model QuoteItemComponent {
+  id          String    @id @default(cuid())
+  quoteItemId String
+  quoteItem   QuoteItem @relation(fields: [quoteItemId], references: [id])
+  sortOrder   Int
+  itemId      String?
+  item        Item?     @relation(fields: [itemId], references: [id])
+  description String    @db.Text
+  qty         Decimal   @db.Decimal(12, 2)
+  unit          String    @db.VarChar(30)
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  unitCost    Decimal   @default(0) @db.Decimal(15, 2)
+  removedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([quoteItemId])
 }
 
 // Created only by converting a quote. Copies the quote's header, items (with

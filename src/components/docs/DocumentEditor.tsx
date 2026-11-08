@@ -85,6 +85,18 @@ export type EditorNewCatalog = {
   details: string;
 };
 
+/** One internal component of a lot (bundle) line (quote editor only). */
+export type EditorComponent = {
+  key: string;
+  id: string | null;
+  itemId: string | null;
+  description: string;
+  qty: string;
+  unit: string;
+  supplierId: string | null;
+  unitCost: string;
+};
+
 export type EditorItem = {
   key: string;
   id: string | null;
@@ -103,6 +115,9 @@ export type EditorItem = {
   itemName: string | null;
   /** Catalog Step 3 (quote editor only): fields for a not-yet-catalogued line. */
   newCatalog?: EditorNewCatalog | null;
+  /** Lot (bundle) line (quote editor only): cost comes from components. */
+  isLot?: boolean;
+  components?: EditorComponent[];
 };
 
 export type EditorInitial = {
@@ -126,7 +141,9 @@ export type EditorInitial = {
   internalNotes?: string;
   /** Quote subject / project line. */
   subject?: string;
-  items: Omit<EditorItem, "key">[];
+  /** Loaded rows carry no editor keys; components likewise (the quote
+   * editor assigns both when mapping its initial state). */
+  items: (Omit<EditorItem, "key" | "components"> & { components?: Omit<EditorComponent, "key">[] })[];
 };
 
 type Props = {
@@ -225,7 +242,7 @@ function sameRate(a: string | null | undefined, b: string | null | undefined): b
 }
 
 /** True when qty, unit price, line add/remove, or the selling / withholding / net totals differ. */
-function salesOrderPriceFieldsChanged(start: Omit<EditorItem, "key">[], current: EditorItem[]): boolean {
+function salesOrderPriceFieldsChanged(start: EditorInitial["items"], current: EditorItem[]): boolean {
   if (current.length !== start.length || current.some((row) => !row.id)) return true;
   const byId = new Map(start.filter((row) => row.id).map((row) => [row.id as string, row]));
   if (byId.size !== current.length) return true;
@@ -321,6 +338,10 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           itemId: i.itemId ?? null,
           itemName: i.itemName ?? null,
           newCatalog: null,
+          // The SO editor does not edit lot components (they live on the
+          // quote; conversion carries them in the service, not the payload).
+          isLot: false,
+          components: [],
         }))
       : [blankItem(initialPickSnaps)],
   );
