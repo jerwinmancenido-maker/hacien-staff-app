@@ -86,7 +86,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             canVoid={canVoid(user)}
             canApproveWorkflow={q.canApproveWorkflow}
             openSalesOrderId={openSo?.id ?? null}
-            customerAddress={suggestedAddress}
+            customerAddress={q.deliveryAddressText ?? suggestedAddress}
             addressOptions={addressOptions}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
@@ -182,6 +182,12 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
                 <>
                   <dt>Customer PO / RFQ no.</dt>
                   <dd>{q.buyerPoNo}</dd>
+                </>
+              )}
+              {q.deliveryAddressText && (
+                <>
+                  <dt>Delivery address</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{q.deliveryAddressText}</dd>
                 </>
               )}
               <dt>Withholding</dt>

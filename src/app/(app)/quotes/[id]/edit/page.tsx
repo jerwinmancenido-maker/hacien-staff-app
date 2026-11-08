@@ -7,7 +7,7 @@ import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../../editor-data";
-import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
+import { confirmNoneAndMarkQuoteSentAction, createQuoteAddressAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -48,6 +48,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         }}
         staffUsers={staffUsers}
         preparedById={quote.preparedById}
+        deliveryAddressId={quote.deliveryAddressId}
+        addAddressAction={createQuoteAddressAction}
         approvedByName={quote.approvedBy}
         approvedAt={quote.approvedAt ? formatDateTime(quote.approvedAt) : null}
         action={saveQuoteAction.bind(null, id)}

@@ -48,6 +48,7 @@ import type { FormState } from "@/lib/validation/forms";
 import { QuoteStatusChip } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import {
+  type EditorAddressOption,
   type EditorCustomer,
   type EditorInitial,
   type EditorItem,
@@ -88,6 +89,13 @@ export type QuoteEditorProps = {
   /** Preparer picker (2026-11-07): staff users to choose from + the current preparer. */
   staffUsers: { id: string; name: string; position: string | null; hasSignature: boolean }[];
   preparedById: string;
+  /** Delivery address pick (2026-11-08): the quote's stored pick, if any. */
+  deliveryAddressId: string | null;
+  /** Saves a new DELIVERY address to the customer; returns it for the picker. */
+  addAddressAction: (
+    customerId: string,
+    input: { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string },
+  ) => Promise<FormState & { address?: EditorAddressOption }>;
   /** S-70: approver + approval time. */
   approvedByName?: string | null;
   approvedAt?: string | null;
@@ -220,6 +228,9 @@ function toEditorCustomer(c: EditorCustomer | (Omit<EditorCustomer, "defaultWith
     defaultWithholding: c.defaultWithholding ?? null,
     creditLimit: c.creditLimit ?? null,
     contacts: c.contacts,
+    addresses: c.addresses,
+    defaultDeliveryId: c.defaultDeliveryId ?? null,
+    billingText: c.billingText ?? null,
   };
 }
 
@@ -238,6 +249,8 @@ export function QuoteEditor({
   printDefaults,
   staffUsers,
   preparedById,
+  deliveryAddressId,
+  addAddressAction,
   approvedByName = null,
   approvedAt = null,
   action,
@@ -268,6 +281,10 @@ export function QuoteEditor({
   /** Preparer picker: the chosen staff user; the preview below follows it. */
   const [preparedByIdState, setPreparedByIdState] = useState(preparedById);
   const preparer = staffUsers.find((u) => u.id === preparedByIdState) ?? null;
+  /** Delivery address pick: a saved-address id of the current customer, or
+   * "" for no pick (print/conversion use the customer's default). */
+  const [deliveryPick, setDeliveryPick] = useState(deliveryAddressId ?? "");
+  const [addAddressOpen, setAddAddressOpen] = useState(false);
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
@@ -397,6 +414,7 @@ export function QuoteEditor({
   const deliveryWarrantyText = `${h.deliveryNotes || printDefaults.deliveryNotes || ""} ${h.warrantyNotes || printDefaults.warrantyNotes || ""}`.trim();
   const showDeliveryWarranty = termsNotesOpen || deliveryWarrantyText !== "" || !!e.deliveryNotes || !!e.warrantyNotes;
   const customer = customerList.find((c) => c.id === h.customerId);
+  const pickedAddress = (customer?.addresses ?? []).find((a) => a.id === deliveryPick) ?? null;
   const contacts = customer?.contacts ?? [];
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
 
@@ -733,6 +751,9 @@ export function QuoteEditor({
 
   function pickCustomer(id: string) {
     const c = customerList.find((x) => x.id === id);
+    // The delivery pick belongs to the customer: reset to the new
+    // customer's default delivery address (or no pick).
+    setDeliveryPick(c?.defaultDeliveryId ?? "");
     applyPickDefaults(c?.defaultWithholding ?? null, items, {
       customerId: id,
       contactId: c?.contacts.find((k) => k.isMain)?.id ?? "",
@@ -751,11 +772,34 @@ export function QuoteEditor({
   function onCustomerCreated(c: EditorCustomer | (Omit<EditorCustomer, "defaultWithholding"> & { defaultWithholding?: string[] | null })) {
     const ec = toEditorCustomer(c);
     setCustomerList((xs) => (xs.some((x) => x.id === ec.id) ? xs : [...xs, ec]));
+    setDeliveryPick(ec.defaultDeliveryId ?? "");
     applyPickDefaults(ec.defaultWithholding ?? null, items, {
       customerId: ec.id,
       contactId: ec.contacts.find((k) => k.isMain)?.id ?? "",
       terms: ec.defaultTerms ?? h.terms,
     });
+  }
+
+  function onDeliverySelect(value: string) {
+    if (value === "__add__") {
+      setAddAddressOpen(true);
+      return;
+    }
+    setDeliveryPick(value);
+  }
+
+  /** A just-saved address joins the current customer's options (delivery
+   * first, like the server sort) and becomes the pick. */
+  function onAddressAdded(a: EditorAddressOption) {
+    setCustomerList((xs) =>
+      xs.map((c) =>
+        c.id === h.customerId
+          ? { ...c, addresses: [...(c.addresses ?? []), a].sort((x, y) => Number(y.kind === "DELIVERY") - Number(x.kind === "DELIVERY")) }
+          : c,
+      ),
+    );
+    setDeliveryPick(a.id);
+    setAddAddressOpen(false);
   }
 
   function changeQuotePick(next: string[] | null) {
@@ -852,6 +896,8 @@ export function QuoteEditor({
     buyerPoNo: h.buyerPoNo,
     // Preparer picker: who prepared this quote (prints under "Prepared by").
     preparedById: preparedByIdState,
+    // Delivery address pick: a saved-address id, or null for no pick.
+    deliveryAddressId: deliveryPick || null,
     // null = not set; [] = explicit none.
     withholdingCodes: pick,
     withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
@@ -1144,6 +1190,27 @@ export function QuoteEditor({
               <label htmlFor="subject">Subject / project</label>
               <input id="subject" type="text" value={h.subject} onChange={(ev) => setH({ ...h, subject: ev.target.value })} />
               {e.subject && <div className="error">{e.subject}</div>}
+            </div>
+            <div className={`quote-f field full${e.deliveryAddressId ? " has-error" : ""}`}>
+              <label htmlFor="deliveryAddressId">Delivery address</label>
+              <select id="deliveryAddressId" value={deliveryPick} onChange={(ev) => onDeliverySelect(ev.target.value)} disabled={!customer}>
+                <option value="">Customer default — decide at conversion</option>
+                {(customer?.addresses ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+                {customer && <option value="__add__">+ Add new address…</option>}
+              </select>
+              {pickedAddress ? (
+                <div className="hint" style={{ whiteSpace: "pre-line" }}>
+                  {pickedAddress.text}
+                </div>
+              ) : (
+                customer && <div className="hint">Prints the customer&apos;s default delivery address.</div>
+              )}
+              {customer?.billingText && <div className="hint">Billing: {customer.billingText.split("\n").join(", ")}</div>}
+              {e.deliveryAddressId && <div className="error">{e.deliveryAddressId}</div>}
             </div>
             {/* No withholding row here: withholding lives only in its tab
                 (owner call 2026-11-08). Pick errors still surface as the
@@ -1883,6 +1950,14 @@ export function QuoteEditor({
       </form>
 
       <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} terms={termsOptions} />
+      {addAddressOpen && customer && (
+        <AddAddressDialog
+          customerName={customer.name}
+          onClose={() => setAddAddressOpen(false)}
+          onSaved={onAddressAdded}
+          action={(input) => addAddressAction(customer.id, input)}
+        />
+      )}
 
       <ConfirmDialog
         open={costConfirmOpen}
@@ -2025,4 +2100,81 @@ export function QuoteEditor({
 
 function hasNonEmptyPicks(picks: WithholdingSnapshot[] | null): boolean {
   return Array.isArray(picks) && picks.length > 0;
+}
+
+type NewAddressFields = { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string };
+
+/**
+ * "+ Add new address" in the delivery picker: saves a DELIVERY address to
+ * the customer (same fields + validation as the customer profile) and hands
+ * it back so the editor can pick it at once.
+ */
+function AddAddressDialog({
+  customerName,
+  onClose,
+  onSaved,
+  action,
+}: {
+  customerName: string;
+  onClose: () => void;
+  onSaved: (a: EditorAddressOption) => void;
+  action: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
+}) {
+  const [fields, setFields] = useState<NewAddressFields>({ label: "", street: "", barangay: "", cityMunicipality: "", province: "", zip: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof NewAddressFields) => (ev: { target: { value: string } }) => setFields((f) => ({ ...f, [k]: ev.target.value }));
+
+  async function submit() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await action(fields);
+      if (res.address) {
+        onSaved(res.address);
+        return;
+      }
+      setErrors(res.fieldErrors ?? {});
+      setMessage(res.message ?? "Could not add the address.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field = (k: keyof NewAddressFields, label: string, required: boolean, maxLength?: number) => (
+    <div className={`field${errors[k] ? " has-error" : ""}`}>
+      <label htmlFor={`qa-${k}`}>
+        {label}
+        {required && <span className="req"> *</span>}
+      </label>
+      <input id={`qa-${k}`} type="text" value={fields[k]} maxLength={maxLength} onChange={set(k)} />
+      {errors[k] && <div className="error">{errors[k]}</div>}
+    </div>
+  );
+
+  return (
+    <Modal title={`Add delivery address — ${customerName}`} onClose={onClose} labelId="qa-title">
+      <p className="small muted">Saved to the customer as a Delivery address and picked on this quote.</p>
+      {message && (
+        <div className="alert error" role="alert">
+          {message}
+        </div>
+      )}
+      {field("label", "Label (e.g. Warehouse)", false, 100)}
+      {field("street", "Unit / building / street", true, 500)}
+      {field("barangay", "Barangay", true, 120)}
+      {field("cityMunicipality", "City / municipality", true, 120)}
+      {field("province", "Province", true, 120)}
+      {field("zip", "ZIP code", true, 4)}
+      <div className="buttons">
+        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className="btn" onClick={submit} disabled={busy}>
+          {busy ? "Adding…" : "Add address"}
+        </button>
+      </div>
+    </Modal>
+  );
 }

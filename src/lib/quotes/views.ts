@@ -268,6 +268,8 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     internalNotes: q.internalNotes,
     subject: q.subject,
     buyerPoNo: q.buyerPoNo,
+    deliveryAddressId: q.deliveryAddressId,
+    deliveryAddressText: q.deliveryAddressText,
     voidReason: q.voidReason,
     customer: q.customer,
     contact: q.contact,

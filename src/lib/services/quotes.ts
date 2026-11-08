@@ -207,6 +207,22 @@ async function checkPreparedBy(id: string) {
   if (found !== 1) throw new DocRuleError("Pick a staff member to prepare this quote.", "preparedById");
 }
 
+/**
+ * Delivery address pick (2026-11-08): the address must be one of the
+ * customer's saved, unarchived addresses — the same rule conversion uses.
+ * Returns the id plus the text snapshot stored on the quote, so later edits
+ * to the address record never change the saved quote.
+ */
+async function resolveDeliveryPick(customerId: string, addressId: string) {
+  const address = await db.address.findFirst({
+    where: { id: addressId, customerId, archivedAt: null },
+  });
+  if (!address) {
+    throw new DocRuleError("That delivery address doesn't belong to this customer.", "deliveryAddressId");
+  }
+  return { deliveryAddressId: address.id, deliveryAddressText: formatAddress(address, { multiline: true }) };
+}
+
 // ---------------------------------------------------------------------------
 // Create / edit
 // ---------------------------------------------------------------------------
@@ -221,6 +237,10 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   // Preparer picker: the chosen preparer, else the creator.
   const preparedById = input.preparedById ?? actor.id;
   await checkPreparedBy(preparedById);
+  // Delivery pick: validate ownership and snapshot the text (null = no pick).
+  const delivery = input.deliveryAddressId
+    ? await resolveDeliveryPick(customer.id, input.deliveryAddressId)
+    : { deliveryAddressId: null, deliveryAddressText: null };
 
   // Copy the customer's saved pick unless the payload overrides it.
   const customerPick = parseWithholdingPick(customer.defaultWithholding);
@@ -272,6 +292,8 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           leadTimeDays: input.leadTimeDays ?? null,
           subject: input.subject ?? null,
           buyerPoNo: input.buyerPoNo ?? null,
+          deliveryAddressId: delivery.deliveryAddressId,
+          deliveryAddressText: delivery.deliveryAddressText,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
@@ -325,6 +347,9 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           internalNotes: original.internalNotes,
           leadTimeDays: original.leadTimeDays,
           subject: original.subject,
+          // The copy keeps the delivery pick + its snapshot (same customer).
+          deliveryAddressId: original.deliveryAddressId,
+          deliveryAddressText: original.deliveryAddressText,
           buyerPoNo: null,
           settingsVersionId: snap.versionId,
           withholding: original.withholding as unknown as Prisma.InputJsonValue,
@@ -383,6 +408,19 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
     else if (input.preparedById !== current.preparedById) {
       await checkPreparedBy(input.preparedById);
       preparedByData.preparedById = input.preparedById;
+    }
+  }
+  // Delivery pick: omitted → keep the stored pick; null → clear it; a NEW
+  // id is validated against the (possibly changed) customer and
+  // re-snapshotted. The same id keeps the stored snapshot text, so editing
+  // the address record later never rewrites this quote.
+  const deliveryData: { deliveryAddressId?: string | null; deliveryAddressText?: string | null } = {};
+  if (input.deliveryAddressId !== undefined) {
+    if (input.deliveryAddressId === null) {
+      deliveryData.deliveryAddressId = null;
+      deliveryData.deliveryAddressText = null;
+    } else if (input.deliveryAddressId !== current.deliveryAddressId || input.customerId !== current.customerId) {
+      Object.assign(deliveryData, await resolveDeliveryPick(input.customerId, input.deliveryAddressId));
     }
   }
 
@@ -505,6 +543,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           ...moneyTotals,
           ...(resetApproval ? quoteApprovalClearData() : {}),
           ...preparedByData,
+          ...deliveryData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

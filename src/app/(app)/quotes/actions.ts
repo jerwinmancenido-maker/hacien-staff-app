@@ -27,6 +27,10 @@ import {
 import { acceptanceInputSchema, convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
 import { getQuoteView } from "@/lib/quotes/views";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { saveAddress } from "@/lib/services/addresses";
+import { addressSchema } from "@/lib/validation/addresses";
+import { toEditorAddressOption } from "./editor-data";
+import type { EditorAddressOption } from "@/components/docs/DocumentEditor";
 
 function readJson(form: FormData, key: string): unknown {
   try {
@@ -161,6 +165,28 @@ export async function convertQuoteAction(id: string, input: { buyerPoNo: string;
   });
   if (goTo) redirect(goTo);
   return result;
+}
+
+/**
+ * Quote editor "+ Add new address": saves a DELIVERY address to the
+ * customer (same service + validation as the customer profile) and returns
+ * it shaped for the editor's delivery picker, which picks it at once.
+ */
+export async function createQuoteAddressAction(
+  customerId: string,
+  input: { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string },
+): Promise<FormState & { address?: EditorAddressOption }> {
+  let address: EditorAddressOption | undefined;
+  const result = await runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const parsed = addressSchema.safeParse({ kind: "DELIVERY", isDefault: false, ...input });
+    if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+    const saved = await saveAddress(null, { kind: "customer", id: customerId }, parsed.data, user.id);
+    address = toEditorAddressOption(saved);
+    revalidatePath(`/customers/${customerId}`);
+    return { ok: true, message: "Address added." };
+  });
+  return address ? { ...result, address } : result;
 }
 
 /** Builds the email draft and logs it. Never sends anything. */

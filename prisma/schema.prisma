@@ -331,6 +331,7 @@ model Address {
   updatedAt        DateTime    @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  quotes         Quote[]
 
   @@index([customerId])
   @@index([supplierId])
@@ -693,6 +694,14 @@ model Quote {
   subject           String?     @db.VarChar(500)
   // Customer PO / RFQ number; prints when set.
   buyerPoNo         String?     @db.VarChar(64)
+  // Delivery address pick (2026-11-08): one of the customer's saved
+  // addresses, chosen on the quote itself. The text is a snapshot taken at
+  // save time — later edits to the address record don't change the quote
+  // (same pattern as PurchaseOrder.deliveryAddressText). Null = no pick;
+  // print and conversion fall back to the customer's suggested address.
+  deliveryAddressId   String?
+  deliveryAddress     Address? @relation(fields: [deliveryAddressId], references: [id])
+  deliveryAddressText String?  @db.Text
   settingsVersionId String
   withholding       Json
   // Quote-level pick (copied from Customer.defaultWithholding on create).
