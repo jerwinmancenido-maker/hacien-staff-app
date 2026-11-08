@@ -43,6 +43,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        contactRoles={settings.lists.contactRoles}
         defaultValidityDays={settings.quotes.defaultValidityDays}
         printDefaults={{
           quoteTerms: settings.print.quoteTerms ?? "",

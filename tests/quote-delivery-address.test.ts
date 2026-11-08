@@ -69,7 +69,11 @@ describe("quote delivery address: print, record, editor", () => {
   it("the editor renders the picker, sends the pick, and can add an address", () => {
     expect(editor).toContain('htmlFor="deliveryAddressId"');
     expect(editor).toContain("Customer default — decide at conversion");
-    expect(editor).toContain("+ Add new address…");
+    // Add-entry-points PR-1 (2026-11-08): the in-select add option became a
+    // visible "Add address" button beside the picker.
+    expect(editor).toContain("Add address");
+    expect(editor).toContain("setAddAddressOpen(true)");
+    expect(editor).not.toContain('value="__add__"');
     expect(editor).toContain("deliveryAddressId: deliveryPick || null");
     expect(editor).toContain("setDeliveryPick(c?.defaultDeliveryId ?? \"\")");
     expect(actions).toContain("createQuoteAddressAction");

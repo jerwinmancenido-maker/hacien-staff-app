@@ -5,6 +5,7 @@
 // from a sales order keep their link when edited.
 
 import { useState } from "react";
+import { AddContactDialog } from "@/components/docs/AddContactDialog";
 import { useFormAction } from "@/components/useFormAction";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
@@ -44,6 +45,7 @@ export function PoEditor({
   initial,
   suppliers,
   termsOptions,
+  contactRoles,
   status,
   action,
   cancelHref,
@@ -52,6 +54,8 @@ export function PoEditor({
   initial: PoEditorInitial;
   suppliers: PoEditorSupplier[];
   termsOptions: string[];
+  /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
+  contactRoles: string[];
   status?: string;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
@@ -59,8 +63,10 @@ export function PoEditor({
   const { state, pending, onSubmit } = useFormAction(action);
   const [h, setH] = useState(() => ({ ...initial }));
   const [items, setItems] = useState<Row[]>(() => (initial.items.length ? initial.items.map((i) => ({ ...i, key: newKey() })) : [blank()]));
+  const [supplierList, setSupplierList] = useState(suppliers);
+  const [addContactOpen, setAddContactOpen] = useState(false);
   const e = state.fieldErrors ?? {};
-  const supplier = suppliers.find((s) => s.id === h.supplierId);
+  const supplier = supplierList.find((s) => s.id === h.supplierId);
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
   const subtotal = fromScaled(
     items.reduce((acc, i) => acc + toScaled(safeTotal(i), 2), 0n),
@@ -69,7 +75,7 @@ export function PoEditor({
   const setItem = (key: string, patch: Partial<Row>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
   function pickSupplier(id: string) {
-    const s = suppliers.find((x) => x.id === id);
+    const s = supplierList.find((x) => x.id === id);
     setH((v) => ({
       ...v,
       supplierId: id,
@@ -77,6 +83,19 @@ export function PoEditor({
       terms: s?.defaultTerms ?? v.terms,
       supplierAddressText: s?.address ?? "",
     }));
+  }
+
+  /** A just-saved contact joins the picked supplier's list and is selected.
+   * If it became the main contact, the local main flags follow the server. */
+  function onContactAdded(c: { id: string; name: string; isMain: boolean }) {
+    setSupplierList((xs) =>
+      xs.map((x) =>
+        x.id === h.supplierId
+          ? { ...x, contacts: [...x.contacts.map((k) => (c.isMain ? { ...k, isMain: false } : k)), c] }
+          : x,
+      ),
+    );
+    setH((v) => ({ ...v, supplierContactId: c.id }));
   }
 
   const payload = {
@@ -93,6 +112,7 @@ export function PoEditor({
   const itemErrors = Object.entries(e).filter(([k]) => k.startsWith("items"));
 
   return (
+    <>
     <form onSubmit={onSubmit} noValidate>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {state.message && (
@@ -123,7 +143,7 @@ export function PoEditor({
               </label>
               <select id="supplierId" value={h.supplierId} onChange={(ev) => pickSupplier(ev.target.value)}>
                 <option value="">Pick a supplier…</option>
-                {suppliers.map((s) => (
+                {supplierList.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -141,15 +161,20 @@ export function PoEditor({
           )}
           <div className={`field${e.supplierContactId ? " has-error" : ""}`}>
             <label htmlFor="supplierContactId">Supplier contact</label>
-            <select id="supplierContactId" value={h.supplierContactId} onChange={(ev) => setH({ ...h, supplierContactId: ev.target.value })} disabled={!supplier}>
-              <option value="">None</option>
-              {(supplier?.contacts ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.isMain ? " (main)" : ""}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <select id="supplierContactId" value={h.supplierContactId} onChange={(ev) => setH({ ...h, supplierContactId: ev.target.value })} disabled={!supplier} style={{ flex: 1, minWidth: 160 }}>
+                <option value="">None</option>
+                {(supplier?.contacts ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.isMain ? " (main)" : ""}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!supplier} onClick={() => setAddContactOpen(true)}>
+                Add contact
+              </button>
+            </div>
             {e.supplierContactId && <div className="error">{e.supplierContactId}</div>}
           </div>
           <div className={`field${e.date ? " has-error" : ""}`}>
@@ -266,5 +291,16 @@ export function PoEditor({
       </div>
 
     </form>
+    {addContactOpen && supplier && (
+      <AddContactDialog
+        open={addContactOpen}
+        onClose={() => setAddContactOpen(false)}
+        owner={{ kind: "supplier", id: supplier.id }}
+        ownerName={supplier.name}
+        roles={contactRoles}
+        onSaved={onContactAdded}
+      />
+    )}
+    </>
   );
 }

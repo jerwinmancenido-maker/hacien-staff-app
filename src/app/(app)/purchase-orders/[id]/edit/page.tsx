@@ -23,6 +23,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
         status={po.status}
         suppliers={suppliers}
         termsOptions={snap.settings.lists.paymentTerms}
+        contactRoles={snap.settings.lists.contactRoles}
         initial={po}
         action={savePurchaseOrderAction.bind(null, id)}
         cancelHref={`/purchase-orders/${id}`}

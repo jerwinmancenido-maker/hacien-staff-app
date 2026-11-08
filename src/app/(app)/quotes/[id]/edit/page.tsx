@@ -40,6 +40,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        contactRoles={settings.lists.contactRoles}
         defaultValidityDays={settings.quotes.defaultValidityDays}
         printDefaults={{
           quoteTerms: settings.print.quoteTerms ?? "",

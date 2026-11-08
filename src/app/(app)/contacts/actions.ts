@@ -51,6 +51,29 @@ export async function addContactAction(owner: ContactOwner, _prev: FormState, fo
   return result;
 }
 
+export type CreatedInlineContact = { id: string; name: string; isMain: boolean };
+export type CreateInlineContactState = FormState & { contact?: CreatedInlineContact };
+
+/** Inline "Add contact" from the quote / sales-order / PO editors: the same
+ * validation and service as addContactAction, but it returns the created
+ * contact instead of redirecting to the owner page, so the editor keeps its
+ * unsaved state and can select the new contact right away. */
+export async function createInlineContactAction(
+  owner: ContactOwner,
+  _prev: CreateInlineContactState,
+  form: FormData,
+): Promise<CreateInlineContactState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("edit_data");
+    const parsed = await parse(form);
+    if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
+    const created = await addContact(owner, parsed.data, user.id, await requestMeta());
+    revalidateOwner(owner);
+    return { ok: true, contact: { id: created.id, name: created.name, isMain: created.isMain } };
+  }, values);
+}
+
 export async function updateContactAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);
   return runAction(async () => {

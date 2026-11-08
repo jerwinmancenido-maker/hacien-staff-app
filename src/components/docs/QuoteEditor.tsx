@@ -47,6 +47,7 @@ import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { QuoteStatusChip } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { AddContactDialog } from "./AddContactDialog";
 import {
   type EditorAddressOption,
   type EditorCustomer,
@@ -84,6 +85,8 @@ export type QuoteEditorProps = {
   rates: WithholdingSnapshot[];
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
+  contactRoles: string[];
   defaultValidityDays: number;
   printDefaults: { quoteTerms: string; deliveryNotes: string; warrantyNotes: string };
   /** Preparer picker (2026-11-07): staff users to choose from + the current preparer. */
@@ -245,6 +248,7 @@ export function QuoteEditor({
   rates: allRates,
   suppliers,
   termsOptions,
+  contactRoles,
   defaultValidityDays,
   printDefaults,
   staffUsers,
@@ -274,6 +278,7 @@ export function QuoteEditor({
   const withCosts = suppliers !== null;
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [addContactOpen, setAddContactOpen] = useState(false);
   const [noneConfirmOpen, setNoneConfirmOpen] = useState(false);
   /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
   const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
@@ -762,10 +767,6 @@ export function QuoteEditor({
   }
 
   function onCustomerSelect(id: string) {
-    if (id === "__add__") {
-      setAddCustomerOpen(true);
-      return;
-    }
     pickCustomer(id);
   }
 
@@ -781,11 +782,20 @@ export function QuoteEditor({
   }
 
   function onDeliverySelect(value: string) {
-    if (value === "__add__") {
-      setAddAddressOpen(true);
-      return;
-    }
     setDeliveryPick(value);
+  }
+
+  /** A just-saved contact joins the picked customer's list and is selected.
+   * If it became the main contact, the local main flags follow the server. */
+  function onContactAdded(c: { id: string; name: string; isMain: boolean }) {
+    setCustomerList((xs) =>
+      xs.map((x) =>
+        x.id === h.customerId
+          ? { ...x, contacts: [...x.contacts.map((k) => (c.isMain ? { ...k, isMain: false } : k)), c] }
+          : x,
+      ),
+    );
+    setH((v) => ({ ...v, contactId: c.id }));
   }
 
   /** A just-saved address joins the current customer's options (delivery
@@ -1114,15 +1124,19 @@ export function QuoteEditor({
               <label htmlFor="customerId">
                 Customer<span className="req"> *</span>
               </label>
-              <select id="customerId" value={h.customerId} onChange={(ev) => onCustomerSelect(ev.target.value)}>
-                <option value="">Pick a customer…</option>
-                <option value="__add__">+ Add new customer</option>
-                {customerList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <select id="customerId" value={h.customerId} onChange={(ev) => onCustomerSelect(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
+                  <option value="">Pick a customer…</option>
+                  {customerList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddCustomerOpen(true)}>
+                  Add customer
+                </button>
+              </div>
               {customer && (
                 <div className="hint">
                   {[customerTypeLabel(customer.withholdingType), quotePickHint].filter(Boolean).join(" · ")}
@@ -1132,15 +1146,20 @@ export function QuoteEditor({
             </div>
             <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
-              <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer}>
-                <option value="">None</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.isMain ? " (main)" : ""}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
+                  <option value="">None</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.isMain ? " (main)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddContactOpen(true)}>
+                  Add contact
+                </button>
+              </div>
               {e.contactId && <div className="error">{e.contactId}</div>}
             </div>
             <div className={`quote-f field${e.date ? " has-error" : ""}`}>
@@ -1193,15 +1212,19 @@ export function QuoteEditor({
             </div>
             <div className={`quote-f field full${e.deliveryAddressId ? " has-error" : ""}`}>
               <label htmlFor="deliveryAddressId">Delivery address</label>
-              <select id="deliveryAddressId" value={deliveryPick} onChange={(ev) => onDeliverySelect(ev.target.value)} disabled={!customer}>
-                <option value="">Customer default — decide at conversion</option>
-                {(customer?.addresses ?? []).map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
-                {customer && <option value="__add__">+ Add new address…</option>}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <select id="deliveryAddressId" value={deliveryPick} onChange={(ev) => onDeliverySelect(ev.target.value)} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
+                  <option value="">Customer default — decide at conversion</option>
+                  {(customer?.addresses ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddAddressOpen(true)}>
+                  Add address
+                </button>
+              </div>
               {pickedAddress ? (
                 <div className="hint" style={{ whiteSpace: "pre-line" }}>
                   {pickedAddress.text}
@@ -1950,6 +1973,16 @@ export function QuoteEditor({
       </form>
 
       <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerCreated} rates={rates} terms={termsOptions} />
+      {addContactOpen && customer && (
+        <AddContactDialog
+          open={addContactOpen}
+          onClose={() => setAddContactOpen(false)}
+          owner={{ kind: "customer", id: customer.id }}
+          ownerName={customer.name}
+          roles={contactRoles}
+          onSaved={onContactAdded}
+        />
+      )}
       {addAddressOpen && customer && (
         <AddAddressDialog
           customerName={customer.name}

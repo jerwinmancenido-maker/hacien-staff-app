@@ -44,6 +44,7 @@ import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { AddContactDialog } from "./AddContactDialog";
 
 /** One saved address of a customer, shaped for the quote editor's
  * delivery-address picker (label matches the Convert dialog's options). */
@@ -138,6 +139,8 @@ type Props = {
   /** Suppliers for the item lines; only passed to users who can see costs. */
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
+  contactRoles: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
   /** Sales order only. locked = Staff/Approver. override = Admin must give a reason to change prices. */
@@ -278,7 +281,7 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref, priceLock }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -287,6 +290,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const rates = visibleRates(allRates);
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [addContactOpen, setAddContactOpen] = useState(false);
 
   const [h, setH] = useState(() => {
     const pick = resolveInitialPick(initial);
@@ -438,6 +442,19 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
     applyPickDefaults(customerPick, items, {}, { skipOverrides: true });
   }
 
+  /** A just-saved contact joins the picked customer's list and is selected.
+   * If it became the main contact, the local main flags follow the server. */
+  function onContactAdded(c: { id: string; name: string; isMain: boolean }) {
+    setCustomerList((xs) =>
+      xs.map((x) =>
+        x.id === h.customerId
+          ? { ...x, contacts: [...x.contacts.map((k) => (c.isMain ? { ...k, isMain: false } : k)), c] }
+          : x,
+      ),
+    );
+    setH((v) => ({ ...v, contactId: c.id }));
+  }
+
   function onCustomerSaved(c: EditorCustomer) {
     setCustomerList((xs) => {
       if (xs.some((x) => x.id === c.id)) return xs.map((x) => (x.id === c.id ? c : x));
@@ -576,15 +593,20 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           )}
           <div className={`field${e.contactId ? " has-error" : ""}`}>
             <label htmlFor="contactId">Contact</label>
-            <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer}>
-              <option value="">None</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.isMain ? " (main)" : ""}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
+                <option value="">None</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.isMain ? " (main)" : ""}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddContactOpen(true)}>
+                Add contact
+              </button>
+            </div>
             {e.contactId && <div className="error">{e.contactId}</div>}
           </div>
           {mode === "quote" ? (
@@ -873,6 +895,16 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
 
       {mode === "quote" && (
         <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} terms={termsOptions} />
+      )}
+      {addContactOpen && customer && (
+        <AddContactDialog
+          open={addContactOpen}
+          onClose={() => setAddContactOpen(false)}
+          owner={{ kind: "customer", id: customer.id }}
+          ownerName={customer.name}
+          roles={contactRoles}
+          onSaved={onContactAdded}
+        />
       )}
     </form>
     <ConfirmDialog
