@@ -1115,8 +1115,8 @@ export function QuoteEditor({
                 Customer<span className="req"> *</span>
               </label>
               <select id="customerId" value={h.customerId} onChange={(ev) => onCustomerSelect(ev.target.value)}>
-                <option value="__add__">+ Add new customer</option>
                 <option value="">Pick a customer…</option>
+                <option value="__add__">+ Add new customer</option>
                 {customerList.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}

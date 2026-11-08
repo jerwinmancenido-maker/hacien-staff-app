@@ -186,6 +186,9 @@ async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Pro
         unit: input.unit.trim(),
         kind: input.kind,
         details: nc.details ?? null,
+        // The price just quoted becomes the product's default, so the next
+        // quote pre-fills it instead of starting blank (2026-11-08).
+        defaultUnitPrice: input.unitPrice,
       },
     });
     out.push(created.id);
