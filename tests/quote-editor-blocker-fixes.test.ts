@@ -14,15 +14,18 @@ const quotesService = read("src/lib/services/quotes.ts");
 const calc = read("src/lib/quotes/calc.ts");
 
 describe("customer select placeholder comes first", () => {
-  it("Pick a customer… precedes + Add new customer in the customer select", () => {
+  it("the select holds only the placeholder + customers; adding is a visible button", () => {
+    // Updated 2026-11-08 (add-entry-points PR-1): the in-dropdown add option
+    // was buried at the top of the native popup once a customer was picked,
+    // so the create action moved to an "Add customer" button beside the
+    // select. The placeholder still comes first; no __add__ option remains.
     const start = editor.indexOf('id="customerId"');
     expect(start).toBeGreaterThan(-1);
-    const block = editor.slice(start, start + 500);
-    const placeholder = block.indexOf('<option value="">Pick a customer…</option>');
-    const add = block.indexOf('<option value="__add__">+ Add new customer</option>');
-    expect(placeholder).toBeGreaterThan(-1);
-    expect(add).toBeGreaterThan(-1);
-    expect(placeholder).toBeLessThan(add);
+    const block = editor.slice(start, start + 700);
+    expect(block).toContain('<option value="">Pick a customer…</option>');
+    expect(block).not.toContain('value="__add__"');
+    expect(block).toContain("Add customer");
+    expect(block).toContain("setAddCustomerOpen(true)");
   });
 });
 
