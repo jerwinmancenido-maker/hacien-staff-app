@@ -16,7 +16,6 @@ import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
-import { qtyMismatch } from "./plan";
 import { remainingQty } from "./receipt";
 import {
   approverError,
@@ -27,7 +26,8 @@ import {
   type PoStatus,
   type ProgressState,
 } from "./status";
-import { planPurchaseOrders } from "./plan";
+import { loadOrderedQty } from "./ordered";
+import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import {
   billExceedsPo,
   buildCostMarginSummary,
@@ -318,44 +318,52 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     },
   });
   if (!so) return null;
-  const live = await db.purchaseOrderItem.findMany({
-    where: { activeSalesOrderItemId: { in: so.items.map((i) => i.id) } },
-    select: { activeSalesOrderItemId: true, purchaseOrder: { select: { id: true, number: true } } },
-  });
-  const onPo = new Map(live.map((l) => [l.activeSalesOrderItemId!, l.purchaseOrder]));
+  const lineIds = so.items.filter((i) => !i.isLot).map((i) => i.id);
   const componentIds = so.items.flatMap((i) => i.components.map((c) => c.id));
-  const liveComponents = componentIds.length
-    ? await db.purchaseOrderItem.findMany({
-        where: { activeSalesOrderItemComponentId: { in: componentIds } },
-        select: { activeSalesOrderItemComponentId: true, purchaseOrder: { select: { id: true, number: true } } },
-      })
-    : [];
-  const componentOnPo = new Map(liveComponents.map((l) => [l.activeSalesOrderItemComponentId!, l.purchaseOrder]));
-  const lines = so.items.map((i) => ({
-    id: i.id,
-    sortOrder: i.sortOrder,
-    description: i.description,
-    kind: i.kind,
-    qty: money(i.qty),
-    unit: i.unit,
-    supplierId: i.supplierId,
-    supplierName: i.supplier?.name ?? null,
-    supplierUnitCost: money(i.supplierUnitCost),
-    purchaseOrder: onPo.get(i.id) ?? null,
-    isLot: i.isLot,
-    components: i.components.map((c) => ({
-      id: c.id,
-      sortOrder: c.sortOrder,
-      description: c.description,
-      qty: money(c.qty),
-      unit: c.unit,
-      supplierId: c.supplierId,
-      supplierName: c.supplier?.name ?? null,
-      unitCost: money(c.unitCost),
-      purchaseOrder: componentOnPo.get(c.id) ?? null,
-    })),
-  }));
-  const plan = planPurchaseOrders(lines, new Set(onPo.keys()), {}, undefined, new Set(componentOnPo.keys()));
+  const ordered = await loadOrderedQty(lineIds, componentIds, db);
+  const lines = so.items.map((i) => {
+    const bucket = ordered.lines.get(i.id);
+    const orderedQty = i.isLot ? "0.00" : (bucket?.qty ?? "0.00");
+    const soQty = money(i.qty);
+    return {
+      id: i.id,
+      sortOrder: i.sortOrder,
+      description: i.description,
+      kind: i.kind,
+      qty: soQty,
+      unit: i.unit,
+      supplierId: i.supplierId,
+      supplierName: i.supplier?.name ?? null,
+      supplierUnitCost: money(i.supplierUnitCost),
+      orderedQty,
+      remainingQty: i.isLot ? "0.00" : qtyLeft(soQty, orderedQty),
+      purchaseOrders: bucket?.purchaseOrders ?? [],
+      purchaseOrder: bucket?.purchaseOrders[0] ? { id: bucket.purchaseOrders[0].id, number: bucket.purchaseOrders[0].number } : null,
+      isLot: i.isLot,
+      components: i.components.map((c) => {
+        const comp = ordered.components.get(c.id);
+        const compOrdered = comp?.qty ?? "0.00";
+        const compQty = money(c.qty);
+        return {
+          id: c.id,
+          sortOrder: c.sortOrder,
+          description: c.description,
+          qty: compQty,
+          unit: c.unit,
+          supplierId: c.supplierId,
+          supplierName: c.supplier?.name ?? null,
+          unitCost: money(c.unitCost),
+          orderedQty: compOrdered,
+          remainingQty: qtyLeft(compQty, compOrdered),
+          purchaseOrders: comp?.purchaseOrders ?? [],
+          purchaseOrder: comp?.purchaseOrders[0] ? { id: comp.purchaseOrders[0].id, number: comp.purchaseOrders[0].number } : null,
+        };
+      }),
+    };
+  });
+  const orderedQty = Object.fromEntries(lines.filter((l) => !l.isLot).map((l) => [l.id, l.orderedQty]));
+  const orderedComponentQty = Object.fromEntries(lines.flatMap((l) => l.components.map((c) => [c.id, c.orderedQty])));
+  const plan = planPurchaseOrders(lines, new Set(), {}, undefined, new Set(), new Set(), { orderedQty, orderedComponentQty });
   const suppliers = await db.supplier.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   return {
     id: so.id,

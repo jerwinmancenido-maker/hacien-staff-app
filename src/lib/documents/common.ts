@@ -5,12 +5,15 @@ import type { WithholdingSnapshot } from "../quotes/calc";
 
 /** A business rule stopped the action (shown to the user as a form message). */
 export class DocRuleError extends Error {
+  readonly fields?: Record<string, string>;
   constructor(
     message: string,
     public field?: string,
+    fields?: Record<string, string>,
   ) {
     super(message);
     this.name = "DocRuleError";
+    this.fields = fields;
   }
 }
 

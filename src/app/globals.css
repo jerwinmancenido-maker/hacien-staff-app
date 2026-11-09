@@ -8147,3 +8147,228 @@ button.contact-card-add {
 }
 .wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: 12px; margin-top: 12px; background: var(--bg-muted, #f7f7f5); }
 .wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+
+/* Create POs — selection list + review (REQ-PO-FLOW-002). */
+.alert.info {
+  background: var(--blue-tint);
+  color: var(--blue-dark);
+}
+.create-pos .table-wrap {
+  max-height: none;
+}
+.create-pos .table-wrap table.list {
+  min-width: 0;
+}
+.create-pos tr.lot-header td {
+  background: var(--grey-50);
+  font-weight: 600;
+  font-size: 13px;
+  height: 40px;
+}
+.create-pos tr.inactive td {
+  color: var(--text-3);
+  background: var(--grey-50);
+}
+.create-pos tr.component td.desc {
+  padding-left: 28px;
+}
+.create-pos tr.component td.desc .title::before {
+  content: "↳ ";
+  color: var(--text-3);
+  font-weight: 400;
+}
+.create-pos .changed-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--amber);
+  margin-top: 3px;
+  font-weight: 500;
+}
+.create-pos .cost-hint,
+.create-pos td .hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.create-pos .row-error {
+  color: var(--red);
+  font-size: 12px;
+  margin-top: 5px;
+}
+.create-pos .zero-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+.create-pos .confirm-zero {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.create-pos .confirm-zero input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue);
+}
+.create-pos .already-on {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.create-pos .already-on a {
+  color: var(--blue);
+  text-decoration: underline;
+}
+.create-pos .select-all-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.create-pos input.row-qty,
+.create-pos select.row-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  outline: none;
+}
+.create-pos input.row-qty {
+  max-width: 110px;
+}
+.create-pos select.row-select {
+  min-width: 0;
+}
+.create-pos .supplier-cell {
+  width: 24%;
+}
+.create-pos input.row-qty.has-error,
+.create-pos select.row-select.has-error {
+  border-color: var(--red);
+}
+.create-pos .review-note {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.create-pos .po-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.create-pos .po-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--divider);
+  font-size: 13px;
+}
+.create-pos .po-lines li:first-child {
+  border-top: none;
+}
+.create-pos .line-meta {
+  color: var(--text-2);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.create-pos .po-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  align-items: baseline;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  font-size: 14px;
+}
+@media (max-width: 720px) {
+  .create-pos .table-wrap {
+    border: none;
+    padding: 0;
+    overflow: visible;
+  }
+  .create-pos .table-wrap table.list,
+  .create-pos .table-wrap table.list thead,
+  .create-pos .table-wrap table.list tbody,
+  .create-pos .table-wrap table.list tr,
+  .create-pos .table-wrap table.list th,
+  .create-pos .table-wrap table.list td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .create-pos .table-wrap table.list thead {
+    display: none;
+  }
+  .create-pos .table-wrap table.list {
+    min-width: 0;
+  }
+  .create-pos .table-wrap table.list tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--white);
+  }
+  .create-pos .table-wrap table.list tr.lot-header {
+    background: var(--grey-100);
+    padding: 10px 12px;
+  }
+  .create-pos .table-wrap table.list td {
+    height: auto;
+    padding: 6px 0;
+    border-top: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .create-pos .table-wrap table.list td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    flex: 0 0 90px;
+  }
+  .create-pos .table-wrap table.list td.col-check {
+    justify-content: flex-start;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .create-pos .table-wrap table.list td.col-check::before,
+  .create-pos .table-wrap table.list tr.lot-header td::before {
+    content: none;
+  }
+  .create-pos tr.component td.desc {
+    padding-left: 0;
+  }
+  .create-pos .table-wrap table.list td.supplier-cell,
+  .create-pos .table-wrap table.list td.qty-cell,
+  .create-pos .table-wrap table.list td.cost-cell {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .create-pos .zero-block,
+  .create-pos .num {
+    text-align: left;
+    align-items: flex-start;
+  }
+  .create-pos input.row-qty,
+  .create-pos select.row-select {
+    max-width: none;
+    min-width: 0;
+  }
+  .create-pos .form-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -71,6 +71,15 @@ describe("create POs from a sales order", () => {
     expect(plan.pos).toEqual([{ supplierId: "A", lines: [expect.objectContaining({ salesOrderItemId: "l2" })] }]);
   });
 
+  it("orders only the remaining qty and locks a line once that covers the SO qty", () => {
+    const partial = planPurchaseOrders([line("l1", "A", { qty: "10.00" })], new Set(), {}, undefined, new Set(), new Set(), { orderedQty: { l1: "8.00" } });
+    expect(partial.alreadyOrdered).toEqual([]);
+    expect(partial.pos[0]!.lines[0]!.qty).toBe("2.00");
+    const full = planPurchaseOrders([line("l1", "A", { qty: "10.00" })], new Set(), {}, undefined, new Set(), new Set(), { orderedQty: { l1: "10.00" } });
+    expect(full.pos).toEqual([]);
+    expect(full.alreadyOrdered.map((l) => l.id)).toEqual(["l1"]);
+  });
+
   it("warns when PO qty for a SO line differs from the SO qty", () => {
     expect(qtyMismatch("10.00", ["10.00"])).toBeNull();
     expect(qtyMismatch("10.00", ["4", "6"])).toBeNull();

@@ -13,7 +13,8 @@ export async function runAction(fn: () => Promise<FormState>, values?: Record<st
     return await fn();
   } catch (e) {
     if (e instanceof CompanyRuleError || e instanceof DocRuleError || e instanceof WithholdingRuleError) {
-      return e.field ? { values, fieldErrors: { [e.field]: e.message } } : { values, message: e.message };
+      const fieldErrors = e instanceof DocRuleError && e.fields ? e.fields : e.field ? { [e.field]: e.message } : undefined;
+      return fieldErrors ? { values, fieldErrors, message: e.message } : { values, message: e.message };
     }
     if (e instanceof ForbiddenError || e instanceof UserRuleError || e instanceof SettingsConflictError) {
       return { values, message: e.message };

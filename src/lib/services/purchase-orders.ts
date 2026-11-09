@@ -24,7 +24,16 @@ import {
   voidError,
   type PoStatus,
 } from "../purchasing/status";
-import { planPurchaseOrders, type PlannedPoLine } from "../purchasing/plan";
+import { loadOrderedQty } from "../purchasing/ordered";
+import {
+  planPoSelection,
+  planPurchaseOrders,
+  qtyLeft,
+  selectionIssueSummary,
+  type PlannedPoLine,
+  type PoSelectionInput,
+  type PoSelectionIssue,
+} from "../purchasing/plan";
 import type { CreateFromSoInput, PoInput, PoLineInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { defaultAddress } from "./addresses";
@@ -99,21 +108,43 @@ async function checkSupplier(supplierId: string, contactId: string | null, opts:
 const itemCreate = (
   l: PlannedPoLine | (PoLineInput & { salesOrderItemId?: string | null; salesOrderItemComponentId?: string | null }),
   sortOrder: number,
-) => ({
-  sortOrder,
-  description: l.description,
-  kind: l.kind,
-  qty: l.qty,
-  unit: l.unit,
-  unitCost: l.unitCost,
-  total: lineTotal(l.qty, l.unitCost),
-  salesOrderItemId: l.salesOrderItemId ?? null,
-  // A component line links its live claim to the component, not the lot
-  // line (many components share one lot line; the line link is unique).
-  activeSalesOrderItemId: "salesOrderItemComponentId" in l && l.salesOrderItemComponentId ? null : (l.salesOrderItemId ?? null),
-  salesOrderItemComponentId: "salesOrderItemComponentId" in l ? (l.salesOrderItemComponentId ?? null) : null,
-  activeSalesOrderItemComponentId: "salesOrderItemComponentId" in l ? (l.salesOrderItemComponentId ?? null) : null,
-});
+  /**
+   * Take the unique live-claim slot (`activeSalesOrderItem*`). Remainder lines
+   * pass false: they still set the non-unique salesOrderItem* link, so a
+   * second PO can buy what's left without a schema change.
+   */
+  claim = true,
+) => {
+  const componentId = "salesOrderItemComponentId" in l && l.salesOrderItemComponentId ? l.salesOrderItemComponentId : null;
+  const lineId = l.salesOrderItemId ?? null;
+  return {
+    sortOrder,
+    description: l.description,
+    kind: l.kind,
+    qty: l.qty,
+    unit: l.unit,
+    unitCost: l.unitCost,
+    total: lineTotal(l.qty, l.unitCost),
+    salesOrderItemId: lineId,
+    activeSalesOrderItemId: !componentId && claim ? lineId : null,
+    salesOrderItemComponentId: componentId,
+    activeSalesOrderItemComponentId: componentId && claim ? componentId : null,
+  };
+};
+
+function claimFlags(lines: readonly PlannedPoLine[], claimedLines: Set<string>, claimedComps: Set<string>): boolean[] {
+  return lines.map((l) => {
+    if (l.salesOrderItemComponentId) {
+      if (claimedComps.has(l.salesOrderItemComponentId)) return false;
+      claimedComps.add(l.salesOrderItemComponentId);
+      return true;
+    }
+    if (!l.salesOrderItemId) return false;
+    if (claimedLines.has(l.salesOrderItemId)) return false;
+    claimedLines.add(l.salesOrderItemId);
+    return true;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Create from a sales order
@@ -136,10 +167,84 @@ export async function orderedSoComponentIds(componentIds: readonly string[], cli
   return new Set(rows.map((r) => r.activeSalesOrderItemComponentId!));
 }
 
+type SoPoItem = {
+  id: string;
+  isLot: boolean;
+  sortOrder: number;
+  description: string;
+  kind: PlannedPoLine["kind"];
+  qty: { toFixed(n: number): string };
+  unit: string;
+  supplierId: string | null;
+  supplierUnitCost: { toFixed(n: number): string };
+  components: {
+    id: string;
+    sortOrder: number;
+    description: string;
+    qty: { toFixed(n: number): string };
+    unit: string;
+    supplierId: string | null;
+    unitCost: { toFixed(n: number): string };
+  }[];
+};
+
+type SupplierChoice = {
+  key: string;
+  salesOrderItemId: string;
+  salesOrderItemComponentId: string | null;
+  description: string;
+  quoteSupplierId: string | null;
+  supplierId: string;
+  overridden: boolean;
+  wasNoSupplier: boolean;
+  qty: string;
+  unitCost: string;
+  zeroCostConfirmed: boolean;
+};
+
+function throwIssues(message: string, issues: readonly PoSelectionIssue[]): never {
+  const fields: Record<string, string> = {};
+  for (const issue of issues) {
+    const key = `${issue.field}:${issue.key}`;
+    if (!fields[key]) fields[key] = issue.message;
+  }
+  throw new DocRuleError(message, undefined, fields);
+}
+
+function choiceFromLine(line: PlannedPoLine & { confirmZero?: boolean }, supplierId: string, quoteSupplierId: string | null): SupplierChoice {
+  return {
+    key: line.salesOrderItemComponentId ?? line.salesOrderItemId,
+    salesOrderItemId: line.salesOrderItemId,
+    salesOrderItemComponentId: line.salesOrderItemComponentId ?? null,
+    description: line.description,
+    quoteSupplierId,
+    supplierId,
+    overridden: (quoteSupplierId ?? null) !== supplierId,
+    wasNoSupplier: !quoteSupplierId,
+    qty: line.qty,
+    unitCost: line.unitCost,
+    zeroCostConfirmed: !!line.confirmZero,
+  };
+}
+
+function quoteSupplierFor(items: readonly SoPoItem[], line: PlannedPoLine): string | null {
+  if (line.salesOrderItemComponentId) {
+    for (const item of items) {
+      const component = item.components.find((c) => c.id === line.salesOrderItemComponentId);
+      if (component) return component.supplierId;
+    }
+    return null;
+  }
+  return items.find((item) => item.id === line.salesOrderItemId)?.supplierId ?? null;
+}
+
 /**
- * One Draft PO per supplier from an open sales order, in one transaction.
- * Lines without a supplier are skipped unless one is picked in the preview;
- * lines already on a live PO are skipped.
+ * One Draft PO per final supplier from an open sales order, in one transaction.
+ * With `rows`, only the ticked lines are ordered (supplier required, qty capped
+ * at the live remainder, ₱0 cost confirmed per line). Without `rows`, the
+ * legacy call orders every open line at its remaining qty and skips lines
+ * that still have no supplier. Nothing is written back to the SO or the quote.
+ * The same idempotency key returns the POs already created.
  */
 export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, input: CreateFromSoInput, actor: PoActor) {
   assertCanMaintainPurchaseOrder(actor);
@@ -147,8 +252,9 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.supplierPo;
   const year = input.date.getUTCFullYear();
+  const idempotencyKey = input.idempotencyKey && /^[A-Za-z0-9_-]{8,64}$/.test(input.idempotencyKey) ? input.idempotencyKey : undefined;
   const picked = [...new Set(Object.values(input.supplierPicks).filter((v): v is string => !!v))];
-  if (picked.length) {
+  if (!input.rows && picked.length) {
     const n = await db.supplier.count({ where: { id: { in: picked }, active: true } });
     if (n !== picked.length) throw new DocRuleError("One of the picked suppliers is inactive or no longer exists.", "supplierPicks");
   }
@@ -157,8 +263,30 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
   try {
     return await withTxRetry(() =>
       db.$transaction(async (tx) => {
-        // Lock the SO so two people creating POs from it queue up.
+        // Lock the SO so two creates (and a double submit of the same key) queue up.
         await tx.$queryRaw`SELECT \`id\` FROM \`SalesOrder\` WHERE \`id\` = ${salesOrderId} FOR UPDATE`;
+        if (idempotencyKey) {
+          const prior = await tx.auditLog.findMany({
+            where: { entityType: "SalesOrder", entityId: salesOrderId, action: "update" },
+            orderBy: { at: "desc" },
+            take: 40,
+          });
+          for (const audit of prior) {
+            const after = audit.after;
+            if (!after || typeof after !== "object" || Array.isArray(after)) continue;
+            const rec = after as { idempotencyKey?: unknown; purchaseOrderIds?: unknown };
+            if (rec.idempotencyKey !== idempotencyKey) continue;
+            if (!Array.isArray(rec.purchaseOrderIds) || !rec.purchaseOrderIds.every((id) => typeof id === "string")) break;
+            const ids = rec.purchaseOrderIds;
+            const existing = await tx.purchaseOrder.findMany({
+              where: { id: { in: ids }, salesOrderId, status: { not: "VOID" } },
+              include: { items: true },
+            });
+            if (existing.length !== ids.length) break;
+            const byId = new Map(existing.map((po) => [po.id, po]));
+            return ids.map((id) => byId.get(id)!);
+          }
+        }
         const so = await tx.salesOrder.findUnique({
           where: { id: salesOrderId },
           include: {
@@ -172,46 +300,154 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
         if (!so) throw new DocRuleError("Sales order not found.");
         if (so.status !== "OPEN") throw new DocRuleError("POs can only be created from an open sales order.");
         if (so.quote.status !== "WON") throw new DocRuleError("The sales order's quote isn't Won.");
-        const ordered = await orderedSoLineIds(
-          so.items.map((i) => i.id),
-          tx,
-        );
-        const orderedComponents = await orderedSoComponentIds(
-          so.items.flatMap((i) => i.components.map((c) => c.id)),
-          tx,
-        );
-        const plan = planPurchaseOrders(
-          so.items.map((i) => ({
-            ...i,
-            qty: money(i.qty),
-            supplierUnitCost: money(i.supplierUnitCost),
-            components: i.components.map((c) => ({
-              id: c.id,
-              sortOrder: c.sortOrder,
-              description: c.description,
-              qty: money(c.qty),
-              unit: c.unit,
-              supplierId: c.supplierId,
-              unitCost: money(c.unitCost),
+
+        const items = so.items as SoPoItem[];
+        const lineIds = items.filter((item) => !item.isLot).map((item) => item.id);
+        const componentIds = items.flatMap((item) => item.components.map((c) => c.id));
+        const ordered = await loadOrderedQty(lineIds, componentIds, tx);
+        const orderedQty = Object.fromEntries(lineIds.map((id) => [id, ordered.lines.get(id)?.qty ?? "0.00"]));
+        const orderedComponentQty = Object.fromEntries(componentIds.map((id) => [id, ordered.components.get(id)?.qty ?? "0.00"]));
+
+        let groups: { supplierId: string; lines: (PlannedPoLine & { confirmZero?: boolean })[] }[];
+        if (input.rows) {
+          const seen = new Set<string>();
+          const selection: PoSelectionInput[] = [];
+          const issues: PoSelectionIssue[] = [];
+          for (const row of input.rows) {
+            if (seen.has(row.key)) {
+              issues.push({ key: row.key, field: "qty", code: "unknown", message: "This line is listed twice." });
+              continue;
+            }
+            seen.add(row.key);
+            const plain = items.find((item) => !item.isLot && item.id === row.key);
+            const lot = items.find((item) => item.isLot && item.id === row.key);
+            const componentParent = items.find((item) => item.components.some((c) => c.id === row.key));
+            const component = componentParent?.components.find((c) => c.id === row.key);
+            if (lot) {
+              issues.push({ key: row.key, field: "qty", code: "unknown", message: "Order the components of a lot, not the lot itself." });
+              continue;
+            }
+            if (!plain && !component) {
+              issues.push({ key: row.key, field: "qty", code: "unknown", message: "This line is not on this sales order." });
+              continue;
+            }
+            if (plain) {
+              selection.push({
+                key: plain.id,
+                salesOrderItemId: plain.id,
+                salesOrderItemComponentId: null,
+                description: plain.description,
+                kind: plain.kind,
+                qty: row.qty,
+                unit: plain.unit,
+                unitCost: money(plain.supplierUnitCost),
+                supplierId: row.supplierId || null,
+                quoteSupplierId: plain.supplierId,
+                sortOrder: plain.sortOrder * 1000,
+                confirmZero: !!row.confirmZero,
+                remainingQty: qtyLeft(money(plain.qty), orderedQty[plain.id] ?? "0.00"),
+              });
+            } else if (component && componentParent) {
+              selection.push({
+                key: component.id,
+                salesOrderItemId: componentParent.id,
+                salesOrderItemComponentId: component.id,
+                description: component.description,
+                kind: componentParent.kind,
+                qty: row.qty,
+                unit: component.unit,
+                unitCost: money(component.unitCost),
+                supplierId: row.supplierId || null,
+                quoteSupplierId: component.supplierId,
+                sortOrder: componentParent.sortOrder * 1000 + component.sortOrder,
+                lotDescription: componentParent.description,
+                confirmZero: !!row.confirmZero,
+                remainingQty: qtyLeft(money(component.qty), orderedComponentQty[component.id] ?? "0.00"),
+              });
+            }
+          }
+          const plan = planPoSelection(selection);
+          issues.push(...plan.issues);
+          const supplierIds = [...new Set(selection.map((row) => row.supplierId).filter((id): id is string => !!id))];
+          const known = supplierIds.length
+            ? await tx.supplier.findMany({ where: { id: { in: supplierIds } }, select: { id: true, name: true, active: true } })
+            : [];
+          const names = new Map(known.map((s) => [s.id, s.name]));
+          for (const row of selection) {
+            if (!row.supplierId) continue;
+            const supplier = known.find((s) => s.id === row.supplierId);
+            if (!supplier || !supplier.active) {
+              issues.push({
+                key: row.key,
+                field: "supplier",
+                code: "inactive",
+                message: `Pick an active supplier — ${supplier?.name ?? "that supplier"} is no longer active`,
+              });
+            }
+          }
+          if (!input.rows.length) throw new DocRuleError("Tick at least one line to order.");
+          if (issues.length) {
+            const onlyInactive = issues.every((issue) => issue.code === "inactive");
+            const first = issues.find((issue) => issue.code === "inactive");
+            const line = selection.find((row) => row.key === first?.key);
+            const supplierName = (line?.supplierId && names.get(line.supplierId)) || "that supplier";
+            const message = onlyInactive
+              ? `Couldn't create the draft POs. Supplier ${supplierName} was deactivated while you were reviewing (line: ${line?.description ?? "a selected line"}). Nothing was saved — your selection below is unchanged.`
+              : issues.length === 1
+                ? issues[0]!.message
+                : selectionIssueSummary(issues, "create");
+            throwIssues(message, issues);
+          }
+          groups = plan.pos.map((po) => ({ supplierId: po.supplierId, lines: po.lines }));
+        } else {
+          const plan = planPurchaseOrders(
+            items.map((item) => ({
+              ...item,
+              qty: money(item.qty),
+              supplierUnitCost: money(item.supplierUnitCost),
+              components: item.components.map((c) => ({
+                id: c.id,
+                sortOrder: c.sortOrder,
+                description: c.description,
+                qty: money(c.qty),
+                unit: c.unit,
+                supplierId: c.supplierId,
+                unitCost: money(c.unitCost),
+              })),
             })),
-          })),
-          ordered,
-          input.supplierPicks,
-          input.lineIds ? new Set(input.lineIds) : undefined,
-          orderedComponents,
-          input.excludeComponentIds ? new Set(input.excludeComponentIds) : undefined,
-        );
-        if (!plan.pos.length) {
-          throw new DocRuleError(
-            plan.needsSupplier.length ? "Pick a supplier for at least one line." : "Every line of this sales order is already on a PO.",
+            new Set(),
+            input.supplierPicks,
+            input.lineIds ? new Set(input.lineIds) : undefined,
+            new Set(),
+            input.excludeComponentIds ? new Set(input.excludeComponentIds) : undefined,
+            { orderedQty, orderedComponentQty },
           );
+          if (!plan.pos.length) {
+            throw new DocRuleError(
+              plan.needsSupplier.length ? "Pick a supplier for at least one line." : "Every line of this sales order is already on a PO.",
+            );
+          }
+          groups = plan.pos;
         }
-        const supplierIds = plan.pos.map((p) => p.supplierId);
+
+        if (!groups.length) throw new DocRuleError("Tick at least one line to order.");
+        const supplierIds = groups.map((p) => p.supplierId);
         const suppliers = await tx.supplier.findMany({ where: { id: { in: supplierIds } }, include: { contacts: { where: { active: true } } } });
+        for (const id of supplierIds) {
+          const supplier = suppliers.find((s) => s.id === id);
+          if (!supplier || !supplier.active) {
+            throw new DocRuleError(`Pick an active supplier — ${supplier?.name ?? "that supplier"} is no longer active.`, "supplierPicks");
+          }
+        }
+        const claimedLines = await orderedSoLineIds(items.map((item) => item.id), tx);
+        const claimedComps = await orderedSoComponentIds(componentIds, tx);
+        const choices: SupplierChoice[] = [];
         const created: PoWithItems[] = [];
-        for (const p of plan.pos) {
-          const supplier = suppliers.find((s) => s.id === p.supplierId);
-          if (!supplier) throw new DocRuleError("One of the suppliers no longer exists.");
+        for (const p of groups) {
+          const supplier = suppliers.find((s) => s.id === p.supplierId)!;
+          const poChoices = p.lines.map((line) => choiceFromLine(line, p.supplierId, quoteSupplierFor(items, line)));
+          choices.push(...poChoices);
+          const claims = claimFlags(p.lines, claimedLines, claimedComps);
           const number = await allocateDocNumber(tx, "PURCHASE_ORDER", year, format);
           const po = await tx.purchaseOrder.create({
             data: {
@@ -228,7 +464,7 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
               subtotal: subtotalOf(p.lines),
               createdById: actor.id,
               updatedById: actor.id,
-              items: { create: p.lines.map((l, i) => itemCreate(l, i)) },
+              items: { create: p.lines.map((l, i) => itemCreate(l, i, claims[i])) },
             },
             include: { items: true },
           });
@@ -237,7 +473,13 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
             entityType: "PurchaseOrder",
             entityId: po.id,
             action: "create",
-            after: { ...poAudit(po), fromSalesOrder: so.number },
+            after: {
+              ...poAudit(po),
+              fromSalesOrder: so.number,
+              draftsOnly: true,
+              idempotencyKey: idempotencyKey ?? null,
+              supplierChoices: poChoices,
+            },
           });
           created.push(po);
         }
@@ -247,7 +489,13 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
           entityId: so.id,
           action: "update",
           before: { purchaseOrders: null },
-          after: { purchaseOrders: created.map((c) => c.number).join(", ") },
+          after: {
+            purchaseOrders: created.map((c) => c.number).join(", "),
+            purchaseOrderIds: created.map((c) => c.id),
+            idempotencyKey: idempotencyKey ?? null,
+            draftsOnly: true,
+            supplierChoices: choices,
+          },
           diff: false,
         });
         return created;
