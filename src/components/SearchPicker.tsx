@@ -10,7 +10,7 @@
 // area. Replaces native selects for Customer / Contact / Address / Supplier
 // in the quote and PO editors.
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 export type SearchPickerOption = { id: string; label: string; meta?: string };
 
@@ -62,9 +62,19 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
 
   const selected = options.find((o) => o.id === value) ?? null;
   const rows = pickerRows(options, emptyOptionLabel, query);
+
+  // Keep the highlighted row visible: arrow keys can move the highlight
+  // past the scrolled list's edge, and Enter must never confirm a row the
+  // user cannot see (Bugbot, PR #175).
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector(`[data-picker-ix="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open, rows.length]);
 
   function openPanel() {
     if (disabled) return;
@@ -145,11 +155,12 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
           {rows.length === 0 ? (
             <div className="small muted">No match for “{query.trim()}”.</div>
           ) : (
-            <ul className="plain-list search-picker-list">
+            <ul ref={listRef} className="plain-list search-picker-list">
               {rows.map((row, ix) => (
                 <li key={row.isEmpty ? "__empty__" : row.id}>
                   <button
                     type="button"
+                    data-picker-ix={ix}
                     className={`quote-picker-opt${ix === active ? " is-active" : ""}`}
                     role="option"
                     aria-selected={ix === active}
