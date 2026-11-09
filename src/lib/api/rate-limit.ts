@@ -39,10 +39,17 @@ export async function reserveRateLimit(input: {
         data: { lastUsedAt: now, lastUsedIp: input.ip.slice(0, 64) },
       });
     }
-    const where = { apiKeyId: input.apiKeyId, kind: input.kind, at: { gte: windowStart } };
-    const count = await tx.apiCallLog.count({ where });
+    // 429 rows are logged but do not occupy a slot. Retry-After follows the
+    // oldest counted request, so a client that waits is not blocked by its own rejections.
+    const counted = {
+      apiKeyId: input.apiKeyId,
+      kind: input.kind,
+      at: { gte: windowStart },
+      NOT: { status: 429 },
+    };
+    const count = await tx.apiCallLog.count({ where: counted });
     if (count >= limit) {
-      const oldest = await tx.apiCallLog.findFirst({ where, orderBy: { at: "asc" }, select: { at: true } });
+      const oldest = await tx.apiCallLog.findFirst({ where: counted, orderBy: { at: "asc" }, select: { at: true } });
       const retryAfter = Math.max(1, Math.ceil(((oldest?.at.getTime() ?? now.getTime()) + API_RATE_WINDOW_MS - now.getTime()) / 1000));
       const row = await tx.apiCallLog.create({
         data: {

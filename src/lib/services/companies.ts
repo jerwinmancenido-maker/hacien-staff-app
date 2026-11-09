@@ -1,6 +1,7 @@
 // Customers and suppliers: create, update, mark inactive / active. Never deleted.
 
 import { Prisma, type WithholdingType, type SupplierTaxType } from "@prisma/client";
+import { settleApiWrite } from "../api/context";
 import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
 import { extractLast4, isMaskedBankAccountNumber, maskBankAccountNumber, resolveBankAccountNumber } from "../bank-mask";
@@ -149,6 +150,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
       if (!id) {
         const created = await tx.customer.create({ data });
         await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: created.id, action: "create", after: created });
+        await settleApiWrite(tx, created);
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
@@ -160,6 +162,7 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
       }
       const after = await tx.customer.update({ where: { id }, data });
       await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: id, action: "update", before, after });
+      await settleApiWrite(tx, after);
       return after;
     });
   } catch (e) {

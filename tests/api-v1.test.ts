@@ -7,7 +7,7 @@ import { writeAudit } from "@/lib/audit";
 import { runWithApiContext } from "@/lib/api/context";
 import { ApiError } from "@/lib/api/errors";
 import { API_LIMIT_MAX, parsePageLimit } from "@/lib/api/http";
-import { hashRequestBody, judgeIdempotency, parseIdempotencyKey } from "@/lib/api/idempotency";
+import { hashRequestBody, IDEMPOTENCY_PENDING_MS, IDEMPOTENCY_TTL_MS, judgeIdempotency, parseIdempotencyKey } from "@/lib/api/idempotency";
 import { API_KEY_PREFIX_LEN, generateApiKey, hashApiKey, maskApiKeyForLog } from "@/lib/api/keys";
 import { hasScope } from "@/lib/api/scopes";
 import type { Tx } from "@/lib/db";
@@ -92,22 +92,27 @@ describe("Idempotency-Key", () => {
   });
 
   it("replays the same request and conflicts when the body differs", () => {
+    const now = Date.now();
     const stored = {
       requestHash: "abc",
       method: "POST",
       path: "/api/v1/customers",
       status: 201,
       responseJson: { ok: true, data: { customer: { id: "c1" } } },
+      at: new Date(now),
     };
-    expect(judgeIdempotency(stored, { requestHash: "abc", method: "POST", path: "/api/v1/customers" })).toEqual({
+    const same = { requestHash: "abc", method: "POST", path: "/api/v1/customers" };
+    expect(judgeIdempotency(stored, same, now)).toEqual({
       type: "replay",
       status: 201,
       body: stored.responseJson,
     });
-    expect(judgeIdempotency(stored, { requestHash: "other", method: "POST", path: "/api/v1/customers" }).type).toBe("conflict");
-    expect(judgeIdempotency({ ...stored, status: 0, responseJson: null }, { requestHash: "abc", method: "POST", path: "/api/v1/customers" }).type).toBe(
-      "in_progress",
+    expect(judgeIdempotency(stored, { ...same, requestHash: "other" }, now).type).toBe("conflict");
+    expect(judgeIdempotency({ ...stored, status: 0, responseJson: null }, same, now).type).toBe("in_progress");
+    expect(judgeIdempotency({ ...stored, status: 0, responseJson: null, at: new Date(now - IDEMPOTENCY_PENDING_MS - 1000) }, same, now).type).toBe(
+      "stale",
     );
+    expect(judgeIdempotency({ ...stored, at: new Date(now - IDEMPOTENCY_TTL_MS - 1000) }, same, now).type).toBe("expired");
   });
 });
 

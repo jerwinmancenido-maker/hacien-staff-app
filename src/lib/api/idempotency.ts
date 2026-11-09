@@ -1,15 +1,31 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { db, isUniqueViolation } from "../db";
+import { db, isUniqueViolation, type Tx } from "../db";
 import { ApiError } from "./errors";
 
 const IDEM_RE = /^[A-Za-z0-9._:-]{8,191}$/;
+
+/** Completed results can be reused as a new request after this. */
+export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+/** A pending claim older than this did not finish. The retry may take it over. */
+export const IDEMPOTENCY_PENDING_MS = 60 * 1000;
 
 export type IdempotencyDecision =
   | { type: "fresh" }
   | { type: "conflict" }
   | { type: "in_progress" }
+  | { type: "stale" }
+  | { type: "expired" }
   | { type: "replay"; status: number; body: unknown };
+
+type IdempotencyRow = {
+  requestHash: string | null;
+  method: string;
+  path: string;
+  status: number;
+  responseJson: unknown;
+  at: Date;
+};
 
 /** Same body with different key order hashes the same. */
 export function hashRequestBody(body: unknown): string {
@@ -37,14 +53,38 @@ export function parseIdempotencyKey(header: string | null): string {
 }
 
 export function judgeIdempotency(
-  existing: { requestHash: string | null; method: string; path: string; status: number; responseJson: unknown },
+  existing: IdempotencyRow,
   request: { requestHash: string; method: string; path: string },
+  now = Date.now(),
 ): IdempotencyDecision {
-  if (existing.requestHash !== request.requestHash || existing.method !== request.method || existing.path !== request.path) {
-    return { type: "conflict" };
-  }
-  if (existing.status === 0 || existing.responseJson == null) return { type: "in_progress" };
+  const age = now - existing.at.getTime();
+  if (age >= IDEMPOTENCY_TTL_MS) return { type: "expired" };
+  const pending = existing.status === 0 || existing.responseJson == null;
+  // The write that owned this claim did not commit. A retry may proceed.
+  if (pending && age >= IDEMPOTENCY_PENDING_MS) return { type: "stale" };
+  const same =
+    existing.requestHash === request.requestHash && existing.method === request.method && existing.path === request.path;
+  if (!same) return { type: "conflict" };
+  if (pending) return { type: "in_progress" };
   return { type: "replay", status: existing.status, body: existing.responseJson };
+}
+
+/**
+ * Mark the claimed row complete. Call this inside the same transaction as the
+ * customer write. If this row no longer owns the key, the caller must roll back.
+ */
+export async function settleIdempotentWrite(
+  tx: Tx,
+  input: { logId: string; idempotencyKey: string; status: number; body: unknown },
+): Promise<void> {
+  const stored = JSON.parse(JSON.stringify(input.body)) as Prisma.InputJsonValue;
+  const updated = await tx.apiCallLog.updateMany({
+    where: { id: input.logId, idempotencyKey: input.idempotencyKey, status: 0 },
+    data: { status: input.status, responseJson: stored },
+  });
+  if (updated.count !== 1) {
+    throw new ApiError(409, "idempotency_in_progress", "A request with this Idempotency-Key is already running.");
+  }
 }
 
 /**
@@ -59,24 +99,33 @@ export async function claimIdempotency(input: {
   method: string;
   path: string;
 }): Promise<IdempotencyDecision> {
-  const existing = await db.apiCallLog.findFirst({
-    where: { apiKeyId: input.apiKeyId, idempotencyKey: input.idempotencyKey },
-  });
-  if (existing) {
-    return judgeIdempotency(existing, input);
-  }
   try {
-    await db.apiCallLog.update({
-      where: { id: input.logId },
-      data: {
-        idempotencyKey: input.idempotencyKey,
-        requestHash: input.requestHash,
-        method: input.method.slice(0, 10),
-        path: input.path.slice(0, 255),
-      },
+    return await db.$transaction(async (tx) => {
+      const existing = await tx.apiCallLog.findFirst({
+        where: { apiKeyId: input.apiKeyId, idempotencyKey: input.idempotencyKey },
+      });
+      if (existing) {
+        const decision = judgeIdempotency(existing, input);
+        if (decision.type !== "stale" && decision.type !== "expired") return decision;
+        // Release the key without deleting the old call row.
+        await tx.apiCallLog.update({ where: { id: existing.id }, data: { idempotencyKey: null } });
+      }
+      await tx.apiCallLog.update({
+        where: { id: input.logId },
+        data: {
+          idempotencyKey: input.idempotencyKey,
+          requestHash: input.requestHash,
+          method: input.method.slice(0, 10),
+          path: input.path.slice(0, 255),
+          status: 0,
+          responseJson: Prisma.DbNull,
+          at: new Date(),
+        },
+      });
+      return { type: "fresh" };
     });
-    return { type: "fresh" };
   } catch (e) {
+    // A duplicate key aborts the transaction. Read the winner after it commits.
     if (!isUniqueViolation(e)) throw e;
     const winner = await db.apiCallLog.findFirst({
       where: { apiKeyId: input.apiKeyId, idempotencyKey: input.idempotencyKey },

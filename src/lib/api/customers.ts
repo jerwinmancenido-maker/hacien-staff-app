@@ -54,6 +54,9 @@ export async function listCustomersForApi(search: URLSearchParams, user: Permiss
   if (q.length > 100) throw new ApiError(400, "validation", "Search must be 100 characters or less.");
   const rows = await listCustomers({
     q: q || undefined,
+    // Staff list passes matchTin from canSeeTin. Viewers search names only,
+    // so a hidden TIN cannot be used to find whose it is.
+    matchTin: canSeeTin(user),
     skip: (page.page - 1) * page.limit,
     take: page.limit + 1,
   });

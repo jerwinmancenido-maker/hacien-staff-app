@@ -19,6 +19,8 @@ import { GET as getCustomer, PATCH as patchCustomer } from "@/app/api/v1/custome
 import { GET as listCustomersRoute, POST as postCustomer } from "@/app/api/v1/customers/route";
 import { GET as getItemRoute } from "@/app/api/v1/items/[id]/route";
 import { GET as listItemsRoute } from "@/app/api/v1/items/route";
+import { ApiError } from "@/lib/api/errors";
+import { hashRequestBody, IDEMPOTENCY_PENDING_MS, IDEMPOTENCY_TTL_MS, settleIdempotentWrite } from "@/lib/api/idempotency";
 import { generateApiKey } from "@/lib/api/keys";
 import { db } from "@/lib/db";
 import { getSettingsSnapshot } from "@/lib/settings";
@@ -371,5 +373,163 @@ describe("api v1", () => {
     expect(Number(writeLimited.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
     const healthStill = await getHealth(request("/api/v1/health", writeKey.token));
     expect(healthStill.status).toBe(200);
+  });
+
+  it("does not let 429 rows keep a client blocked after the counted requests age out", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const key = await issueKey(admin.id, ["customers:read"]);
+    const countedAt = new Date(Date.now() - 50_000);
+    await db.apiCallLog.createMany({
+      data: Array.from({ length: 120 }, () => ({
+        apiKeyId: key.id,
+        method: "GET",
+        path: "/api/v1/health",
+        status: 200,
+        kind: "read",
+        at: countedAt,
+      })),
+    });
+    const limited = await getHealth(request("/api/v1/health", key.token));
+    expect(limited.status).toBe(429);
+    const retry = Number(limited.headers.get("retry-after"));
+    expect(retry).toBeGreaterThanOrEqual(1);
+    expect(retry).toBeLessThanOrEqual(15);
+
+    await db.apiCallLog.createMany({
+      data: Array.from({ length: 120 }, () => ({
+        apiKeyId: key.id,
+        method: "GET",
+        path: "/api/v1/health",
+        status: 429,
+        kind: "read",
+        at: new Date(),
+      })),
+    });
+    await db.apiCallLog.updateMany({
+      where: { apiKeyId: key.id, status: 200 },
+      data: { at: new Date(Date.now() - 61_000) },
+    });
+    const afterWait = await getHealth(request("/api/v1/health", key.token));
+    expect(afterWait.status).toBe(200);
+  });
+
+  it("a viewer key cannot match or see a hidden TIN", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const viewer = await makeUser("viewer");
+    const adminKey = await issueKey(admin.id, ["customers:read", "customers:write"]);
+    const viewerKey = await issueKey(viewer.id, ["customers:read"]);
+    const term = await terms();
+    const digits = (randomBytes(4).readUInt32BE(0) % 1_000_000_000).toString().padStart(9, "0");
+    const tin = `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 9)}-000`;
+    const name = `HiddenTinCustomer${randomBytes(4).toString("hex").replace(/[0-9]/g, "x")}`;
+    const created = await postCustomer(
+      request("/api/v1/customers", adminKey.token, { method: "POST", idem: idemKey(), body: customerBody(name, term, { tin, notes: "hidden" }) }),
+    );
+    expect(created.status).toBe(201);
+    const id = (await created.json()).data.customer.id as string;
+
+    const byTin = await listCustomersRoute(request(`/api/v1/customers?q=${encodeURIComponent(tin)}`, viewerKey.token));
+    expect(byTin.status).toBe(200);
+    const byTinBody = await byTin.json();
+    expect(byTinBody.data.customers.map((c: { id: string }) => c.id)).not.toContain(id);
+    expect(JSON.stringify(byTinBody)).not.toContain(tin);
+
+    const byName = await listCustomersRoute(request(`/api/v1/customers?q=${encodeURIComponent(name)}`, viewerKey.token));
+    const byNameBody = await byName.json();
+    const named = byNameBody.data.customers.find((c: { id: string }) => c.id === id) as { tin?: string } | undefined;
+    if (!named) throw new Error("viewer name search missed the customer");
+    expect(named.tin).toBeUndefined();
+    expect(JSON.stringify(byNameBody)).not.toContain(tin);
+
+    const detail = await getCustomer(request(`/api/v1/customers/${id}`, viewerKey.token), { params: Promise.resolve({ id }) });
+    const detailBody = await detail.json();
+    expect(detailBody.data.customer.tin).toBeUndefined();
+    expect(JSON.stringify(detailBody)).not.toContain(tin);
+
+    const staff = await listCustomersRoute(request(`/api/v1/customers?q=${encodeURIComponent(tin)}`, adminKey.token));
+    const staffBody = await staff.json();
+    const found = staffBody.data.customers.find((c: { id: string; tin?: string }) => c.id === id) as { tin?: string } | undefined;
+    if (!found) throw new Error("staff TIN search missed the customer");
+    expect(found.tin).toBe(tin);
+  });
+
+  it("retries a stale idempotency claim, expires a finished one, and rolls the write back with the record", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const key = await issueKey(admin.id, ["customers:write"]);
+    const term = await terms();
+
+    const pendingName = `Pending ${tag()}`;
+    const pendingBody = customerBody(pendingName, term);
+    const pendingKey = idemKey();
+    await db.apiCallLog.create({
+      data: {
+        apiKeyId: key.id,
+        method: "POST",
+        path: "/api/v1/customers",
+        status: 0,
+        kind: "write",
+        idempotencyKey: pendingKey,
+        requestHash: hashRequestBody(pendingBody),
+        at: new Date(),
+      },
+    });
+    const blocked = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem: pendingKey, body: pendingBody }));
+    expect(blocked.status).toBe(409);
+    expect((await blocked.json()).error.code).toBe("idempotency_in_progress");
+    expect(await db.customer.count({ where: { name: pendingName } })).toBe(0);
+
+    await db.apiCallLog.updateMany({
+      where: { apiKeyId: key.id, idempotencyKey: pendingKey },
+      data: { at: new Date(Date.now() - IDEMPOTENCY_PENDING_MS - 1000) },
+    });
+    const recovered = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem: pendingKey, body: pendingBody }));
+    expect(recovered.status).toBe(201);
+    expect(recovered.headers.get("idempotency-replayed")).toBeNull();
+    expect(await db.customer.count({ where: { name: pendingName } })).toBe(1);
+    const settled = await db.apiCallLog.findFirst({ where: { apiKeyId: key.id, idempotencyKey: pendingKey } });
+    expect(settled?.status).toBe(201);
+    expect(settled?.responseJson).not.toBeNull();
+
+    const idem = idemKey();
+    const expiredName = `Expired ${tag()}`;
+    const expiredBody = customerBody(expiredName, term);
+    const first = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem, body: expiredBody }));
+    expect(first.status).toBe(201);
+    const firstId = (await first.json()).data.customer.id as string;
+    await db.apiCallLog.updateMany({
+      where: { apiKeyId: key.id, idempotencyKey: idem },
+      data: { at: new Date(Date.now() - IDEMPOTENCY_TTL_MS - 1000) },
+    });
+    const again = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem, body: expiredBody }));
+    expect(again.status).toBe(201);
+    expect(again.headers.get("idempotency-replayed")).toBeNull();
+    const againId = (await again.json()).data.customer.id as string;
+    expect(againId).not.toBe(firstId);
+    expect(await db.customer.count({ where: { name: expiredName } })).toBe(2);
+
+    const orphan = await db.apiCallLog.create({
+      data: { apiKeyId: key.id, method: "POST", path: "/api/v1/customers", status: 0, kind: "write" },
+    });
+    const rolledName = `Rolled ${tag()}`;
+    await expect(
+      db.$transaction(async (tx) => {
+        await tx.customer.create({
+          data: { name: rolledName, withholdingType: "NONE", defaultWithholding: [], defaultTerms: null },
+        });
+        await settleIdempotentWrite(tx, {
+          logId: orphan.id,
+          idempotencyKey: idemKey(),
+          status: 201,
+          body: { ok: true },
+        });
+      }),
+    ).rejects.toBeInstanceOf(ApiError);
+    expect(await db.customer.findFirst({ where: { name: rolledName } })).toBeNull();
+    const orphanAfter = await db.apiCallLog.findUnique({ where: { id: orphan.id } });
+    expect(orphanAfter?.status).toBe(0);
+    expect(orphanAfter?.responseJson).toBeNull();
   });
 });

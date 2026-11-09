@@ -551,6 +551,8 @@ model AuditLog {
   ip         String?     @db.VarChar(64)
   // Set when the change was made through /api/v1. Null on every existing
   // row and on staff UI changes (those are not via an API key).
+  // Column add only — it does not change AuditAction, so this migration can
+  // apply before or after one that appends an AuditAction enum value.
   apiKeyId   String?
   apiKey     ApiKey?     @relation(fields: [apiKeyId], references: [id])
 

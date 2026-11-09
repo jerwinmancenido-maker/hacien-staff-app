@@ -1,12 +1,14 @@
 import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { clientIp } from "../auth/client-ip";
+import { db } from "../db";
 import { CompanyRuleError } from "../services/companies";
 import { ForbiddenError, assertCan, type Permission } from "../permissions";
 import { runWithApiContext } from "./context";
 import { ApiError } from "./errors";
 import { apiError } from "./http";
-import { claimIdempotency, finishCall, hashRequestBody, parseIdempotencyKey } from "./idempotency";
+import { serializeCustomer, type CustomerShape } from "./customers";
+import { claimIdempotency, finishCall, hashRequestBody, parseIdempotencyKey, settleIdempotentWrite } from "./idempotency";
 import { authenticateBearer, type ApiActor } from "./keys";
 import { rateKind, reserveRateLimit, type RateKind } from "./rate-limit";
 import { hasScope } from "./scopes";
@@ -80,7 +82,7 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
   const kind: RateKind = rateKind(method);
   const ip = clientIp(req.headers);
   let logId: string | null = null;
-  let claimed = false;
+  let claimedKey: string | null = null;
   try {
     const auth = await authenticateBearer(req.headers.get("authorization"), { method, path, kind });
     const slot = await reserveRateLimit({ apiKeyId: auth.apiKeyId, kind, method, path, ip });
@@ -123,17 +125,41 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
       if (decision.type === "in_progress") {
         throw new ApiError(409, "idempotency_in_progress", "A request with this Idempotency-Key is already running.");
       }
-      claimed = true;
+      claimedKey = idempotencyKey;
     }
 
-    const res = await runWithApiContext({ apiKeyId: auth.apiKeyId, ip }, () => handler({ apiKeyId: auth.apiKeyId, user: auth.user, ip, body }));
-    if (claimed) await finishCall(logId, res.status, await storedPayload(res));
-    else await finishCall(logId, res.status);
+    const res = await runWithApiContext(
+      {
+        apiKeyId: auth.apiKeyId,
+        ip,
+        settleWrite: claimedKey
+          ? async (tx, record) => {
+              const customer = serializeCustomer(record as CustomerShape, auth.user);
+              await settleIdempotentWrite(tx, {
+                logId: logId as string,
+                idempotencyKey: claimedKey as string,
+                status: 201,
+                body: { ok: true, data: { customer } },
+              });
+            }
+          : undefined,
+      },
+      () => handler({ apiKeyId: auth.apiKeyId, user: auth.user, ip, body }),
+    );
+    if (claimedKey) {
+      const stored = await db.apiCallLog.findUnique({ where: { id: logId as string }, select: { status: true, responseJson: true } });
+      // The customer transaction already stored the result. A missing result means it did not commit.
+      if (!stored || stored.status === 0 || stored.responseJson == null) {
+        throw new ApiError(500, "internal", "Something went wrong.");
+      }
+    } else if (logId) {
+      await finishCall(logId, res.status);
+    }
     return res;
   } catch (e) {
     const error = asApiError(e);
     if (logId) {
-      if (claimed) {
+      if (claimedKey) {
         const res = apiError(error);
         await finishCall(logId, res.status, await storedPayload(res));
         return res;
