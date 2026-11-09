@@ -21,12 +21,18 @@ describe("S-64 attachment sheet", () => {
 
   it("is titled as an attachment, never a DR or SI, with both disclaimer lines", () => {
     const doc = src("src/components/docs/PackingListDocument.tsx");
-    expect(doc).toContain("PACKING LIST &amp; DELIVERY DETAILS");
-    expect(doc).toContain("(Attachment to DR No.");
+    // The title stacks in two lines since the 2026-11-09 redesign mock v2
+    // ("Packing List" + "& Delivery Details"); together they are the title.
+    expect(doc).toContain("Packing List");
+    expect(doc).toContain("&amp; Delivery Details");
+    expect(doc).toContain("Attachment to DR No.");
     expect(doc).toContain("ATTACHMENT ONLY — NOT AN OFFICIAL RECEIPT OR SALES INVOICE.");
     expect(doc).toContain("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
     expect(doc).toContain("Computer-generated. Always issued with the manual BIR DR/SI.");
-    expect(doc).toContain("policiesUrl");
+    // The policies URL prints once, inside the version line — the bare
+    // policiesUrl line duplicated it (owner-approved redesign 2026-11-09,
+    // the same dedup rule the professional documents follow since v8).
+    expect(doc).not.toContain("sheet.policiesUrl");
     expect(doc).toContain("versionLine");
   });
 
