@@ -106,8 +106,10 @@ export async function deleteBillingAction(id: string, reason: string): Promise<F
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
-    await deleteBilling(id, parsed.data, user);
-    refreshBilling(null, null, null);
+    const removed = await deleteBilling(id, parsed.data, user);
+    refreshBilling(removed.customerId, removed.salesOrderId, removed.id);
+    revalidatePath(`/print/billings/${removed.id}`);
+    revalidatePath("/books", "layout");
     revalidatePath("/");
     goTo = "/billing/billings";
     return { ok: true, message: "Billing deleted." };
@@ -166,8 +168,11 @@ export async function deleteCollectionAction(id: string, reason: string): Promis
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
-    await deleteCollection(id, parsed.data, user);
-    refreshBilling(null, null, null);
+    const removed = await deleteCollection(id, parsed.data, user);
+    refreshBilling(removed.customerId, null, null);
+    revalidatePath(`/billing/collections/${removed.id}`);
+    revalidatePath(`/print/collections/${removed.id}`);
+    revalidatePath("/books", "layout");
     revalidatePath("/");
     goTo = "/billing/collections";
     return { ok: true, message: "Collection deleted." };

@@ -137,7 +137,7 @@ export async function deleteQuote(id: string, reason: string, actor: DeleteActor
       consumeArmedFailure();
       await tx.quote.delete({ where: { id } });
     });
-    return { id, number: quote.number };
+    return { id, number: quote.number, customerId: quote.customerId };
   });
 }
 
@@ -215,7 +215,7 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Delete
       consumeArmedFailure();
       await tx.salesOrder.delete({ where: { id } });
     });
-    return { id, number: so.number };
+    return { id, number: so.number, customerId: so.customerId, quoteId: so.quoteId };
   });
 }
 
@@ -273,7 +273,7 @@ export async function deleteBilling(id: string, reason: string, actor: DeleteAct
       consumeArmedFailure();
       await tx.billing.delete({ where: { id } });
     });
-    return { id, number: billing.number, invoiceNo: billing.invoiceNo };
+    return { id, number: billing.number, invoiceNo: billing.invoiceNo, customerId: billing.customerId, salesOrderId: billing.salesOrderId };
   });
 }
 
@@ -358,7 +358,7 @@ export async function deleteCollection(id: string, reason: string, actor: Delete
       consumeArmedFailure();
       await tx.collection.delete({ where: { id } });
     });
-    return { id, number: collection.number };
+    return { id, number: collection.number, customerId: collection.customerId };
   });
 }
 

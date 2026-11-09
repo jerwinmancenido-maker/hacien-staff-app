@@ -159,8 +159,11 @@ export async function deleteQuoteAction(id: string, reason: string): Promise<For
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
-    await deleteQuote(id, parsed.data, user);
+    const removed = await deleteQuote(id, parsed.data, user);
     revalidatePath("/quotes");
+    revalidatePath(`/quotes/${removed.id}`);
+    revalidatePath(`/print/quotes/${removed.id}`);
+    revalidatePath(`/customers/${removed.customerId}`);
     revalidatePath("/");
     revalidatePath("/reminders");
     goTo = "/quotes";

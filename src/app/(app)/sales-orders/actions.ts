@@ -60,9 +60,13 @@ export async function deleteSalesOrderAction(id: string, reason: string): Promis
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
-    await deleteSalesOrder(id, parsed.data, user);
+    const removed = await deleteSalesOrder(id, parsed.data, user);
     revalidatePath("/sales-orders");
+    revalidatePath(`/sales-orders/${removed.id}`);
+    revalidatePath(`/print/sales-orders/${removed.id}`);
     revalidatePath("/quotes");
+    revalidatePath(`/quotes/${removed.quoteId}`);
+    revalidatePath(`/customers/${removed.customerId}`);
     revalidatePath("/");
     revalidatePath("/reminders");
     goTo = "/sales-orders";

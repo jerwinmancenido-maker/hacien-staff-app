@@ -16,6 +16,7 @@ const env = vi.hoisted(() => {
       isViewer: boolean;
       canSeeCosts: boolean;
     },
+    paths: [] as string[],
   };
 });
 
@@ -24,7 +25,11 @@ vi.mock("@/lib/auth/current-user", async (importOriginal) => {
   return { ...actual, getCurrentUser: async () => env.user };
 });
 
-vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+vi.mock("next/cache", () => ({
+  revalidatePath: (path: string, type?: string) => {
+    env.paths.push(type ? `${type}:${path}` : path);
+  },
+}));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
@@ -679,9 +684,61 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
 
   it("an admin delete action redirects and removes the quote", async () => {
     const year = await freshYear();
-    const { quote } = await draftQuote(year);
+    const { customer, quote } = await draftQuote(year);
     asActor(admin);
+    env.paths = [];
     await expect(deleteQuoteAction(quote.id, REASON)).rejects.toThrow(`NEXT_REDIRECT:/quotes`);
     expect(await db.quote.findUnique({ where: { id: quote.id } })).toBeNull();
+    expect(env.paths).toContain(`/customers/${customer.id}`);
+    expect(env.paths).toContain(`/quotes/${quote.id}`);
+    expect(env.paths).toContain(`/print/quotes/${quote.id}`);
+  });
+
+  it("delete actions revalidate the customer, sales order, and statement print", async () => {
+    const year = await freshYear();
+    asActor(admin);
+
+    const billed = await openThenBill(year, nextInvoice());
+    await voidBilling(billed.billing.id, REASON, admin);
+    env.paths = [];
+    await expect(deleteBillingAction(billed.billing.id, REASON)).rejects.toThrow("NEXT_REDIRECT:/billing/billings");
+    expect(env.paths).toContain(`/customers/${billed.customer.id}`);
+    expect(env.paths).toContain(`/print/statements/${billed.customer.id}`);
+    expect(env.paths).toContain(`/sales-orders/${billed.so.id}`);
+    expect(env.paths).toContain(`/billing/billings/${billed.billing.id}`);
+    expect(env.paths).toContain(`/print/billings/${billed.billing.id}`);
+
+    const collected = await recordCollection(
+      {
+        customerId: billed.customer.id,
+        date: new Date(Date.UTC(year, 2, 8)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: null,
+        amountReceived: "40.00",
+        isDeposit: true,
+        notes: null,
+        allocations: [],
+      },
+      admin,
+    );
+    await voidCollection(collected.id, REASON, admin);
+    env.paths = [];
+    await expect(deleteCollectionAction(collected.id, REASON)).rejects.toThrow("NEXT_REDIRECT:/billing/collections");
+    expect(env.paths).toContain(`/customers/${billed.customer.id}`);
+    expect(env.paths).toContain(`/print/statements/${billed.customer.id}`);
+    expect(env.paths).toContain(`/billing/collections/${collected.id}`);
+    expect(env.paths).toContain(`/print/collections/${collected.id}`);
+
+    const soYear = await freshYear();
+    const { customer, quote, so } = await voidedSo(soYear);
+    env.paths = [];
+    await expect(deleteSalesOrderAction(so.id, REASON)).rejects.toThrow("NEXT_REDIRECT:/sales-orders");
+    expect(env.paths).toContain(`/customers/${customer.id}`);
+    expect(env.paths).toContain(`/quotes/${quote.id}`);
+    expect(env.paths).toContain(`/sales-orders/${so.id}`);
+    expect(env.paths).toContain(`/print/sales-orders/${so.id}`);
   });
 });
