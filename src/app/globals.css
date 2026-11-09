@@ -7694,6 +7694,33 @@ button.contact-card-add {
   border-color: var(--blue);
   color: var(--blue);
 }
+/* SearchPicker (record fields): the wrap anchors the shared .quote-picker
+   panel; the option list scrolls inside it while the pinned "+ Add …" row
+   stays fixed below the scroll area. */
+.search-picker-wrap {
+  position: relative;
+}
+.search-picker-wrap .input {
+  width: 100%;
+  padding-right: 26px;
+}
+.search-picker-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-2);
+  pointer-events: none;
+  font-size: 11px;
+}
+.search-picker-list {
+  max-height: 248px;
+  overflow-y: auto;
+}
+.search-picker-empty {
+  font-weight: 400;
+  color: var(--text-2);
+}
 /* Right slide-over variant of the shared modal (product details only). */
 .modal-backdrop.drawer {
   place-items: stretch end;

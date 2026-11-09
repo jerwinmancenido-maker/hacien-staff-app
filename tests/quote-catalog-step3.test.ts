@@ -28,6 +28,15 @@ describe("catalog Step 3: picker, drawer and catalog link", () => {
     if (!parsed.success) expect(parsed.error.issues[0]!.message).toContain("191");
     const plain = { ...base, description: "x".repeat(500) };
     expect(itemSchema.safeParse(plain).success).toBe(true);
+    // 2026-11-09: an all-blank marker still creates the item on save, so the
+    // 191-char name guard applies to it too; a short description passes.
+    const blankMarker = { ...base, newCatalog: { brand: "", model: "", category: "", sku: "", details: "" } };
+    expect(itemSchema.safeParse(blankMarker).success).toBe(true);
+    const blankLong = { ...blankMarker, description: "x".repeat(192) };
+    expect(itemSchema.safeParse(blankLong).success).toBe(false);
+    // A linked line never creates, so its long description is fine.
+    const linkedLong = { ...blankMarker, itemId: "item-1", description: "x".repeat(500) };
+    expect(itemSchema.safeParse(linkedLong).success).toBe(true);
   });
 
   it("planItems carries the link through, treats blank as unlinked, and itemData stays SO-safe", () => {
@@ -51,7 +60,13 @@ describe("catalog Step 3: picker, drawer and catalog link", () => {
     expect(editor).toContain("/api/items/search?q=");
     expect(editor).toContain("Open in catalog");
     expect(editor).toContain("itemId: i.itemId");
-    expect(editor).toContain("newCatalog: hasCatalogFields");
+    // 2026-11-09: the payload sends the marker whenever the drawer marked
+    // the line — blank fields still create the item (the old
+    // "newCatalog: hasCatalogFields" gate is gone).
+    expect(editor).toContain("newCatalog: nc");
+    expect(editor).not.toContain("hasCatalogFields");
+    // Opening the drawer is what sets the marker.
+    expect(editor).toContain("line.newCatalog == null");
     expect(editor).toContain("No product found for");
     expect(editor).toContain("this saves as a free-text line.");
   });

@@ -2,15 +2,25 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Add-entry-points sweep (2026-11-08): a create action must never hide as an
-// option inside a data dropdown — once a record is picked, the native popup
-// opens at the selection and the top rows are out of sight, so staff could
-// not add a customer from the quote editor. Every editor now carries a
-// visible "Add …" button beside the field instead.
+// Add-entry-points (2026-11-08) + add-in-dropdown pickers (2026-11-09):
+// a create action must never hide as an OPTION inside a dropdown — in a
+// native <select> popup the top rows scroll out of sight once a record is
+// picked, so staff could not add a customer from the quote editor. The
+// 2026-11-08 sweep moved the adds to visible buttons beside the fields.
+// The owner reversed that placement on 2026-11-09 ("can these buttons only
+// appear inside the drop box, like Add customer in the product box"):
+// record fields in the quote and PO editors are now SearchPickers — a
+// custom panel under the field whose list scrolls INSIDE the panel while
+// the "+ Add …" row stays pinned below the scroll area, so it can never
+// scroll out of sight the way the native-popup option did. The SO editor
+// (DocumentEditor) keeps its beside-field button — it was outside the
+// owner's 2026-11-09 scope. The inline dialogs and actions are unchanged.
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
 const quoteEditor = read("src/components/docs/QuoteEditor.tsx");
 const docEditor = read("src/components/docs/DocumentEditor.tsx");
 const poEditor = read("src/components/purchasing/PoEditor.tsx");
+const searchPicker = read("src/components/SearchPicker.tsx");
+const globalsCss = read("src/app/globals.css");
 const contactDialog = read("src/components/docs/AddContactDialog.tsx");
 const contactActions = read("src/app/(app)/contacts/actions.ts");
 const supplierDialog = read("src/components/purchasing/AddSupplierDialog.tsx");
@@ -32,21 +42,47 @@ describe("no create action hides inside a select, anywhere in src", () => {
   });
 });
 
+describe("the SearchPicker pins its add row below the scrolling list", () => {
+  it("the option list scrolls inside the panel; the add row renders after it", () => {
+    expect(searchPicker).toContain("search-picker-list");
+    expect(searchPicker.indexOf("search-picker-list")).toBeLessThan(searchPicker.indexOf("quote-picker-add"));
+    expect(globalsCss).toContain(".search-picker-list");
+    expect(globalsCss).toContain("overflow-y: auto");
+  });
+});
+
 describe("quote editor entry points", () => {
-  it("customer: visible Add customer button opens the existing dialog", () => {
+  it("customer: SearchPicker with a pinned Add customer row + the existing dialog", () => {
+    expect(quoteEditor).toContain('addLabel="Add customer"');
     expect(quoteEditor).toContain("setAddCustomerOpen(true)");
-    expect(quoteEditor).toContain("Add customer");
+    expect(quoteEditor).toContain("<AddCustomerDialog");
+    expect(quoteEditor).not.toContain('<select id="customerId"');
   });
-  it("delivery address: visible Add address button, no in-select option", () => {
-    expect(quoteEditor).toContain("setAddAddressOpen(true)");
-    expect(quoteEditor).toContain("Add address");
-    expect(quoteEditor).not.toContain("Add new address…</option>");
-  });
-  it("contact: Add contact button + the inline contact dialog (customer owner)", () => {
+  it("contact: SearchPicker with a pinned Add contact row + the inline dialog (customer owner)", () => {
+    expect(quoteEditor).toContain('addLabel="Add contact"');
     expect(quoteEditor).toContain("setAddContactOpen(true)");
     expect(quoteEditor).toContain("<AddContactDialog");
     expect(quoteEditor).toContain('owner={{ kind: "customer", id: customer.id }}');
     expect(quoteEditor).toContain("function onContactAdded");
+  });
+  it("delivery address: SearchPicker with a pinned Add address row, no in-select option", () => {
+    expect(quoteEditor).toContain('addLabel="Add address"');
+    expect(quoteEditor).toContain("setAddAddressOpen(true)");
+    expect(quoteEditor).not.toContain("Add new address…</option>");
+    expect(quoteEditor).not.toContain('<select id="deliveryAddressId"');
+  });
+  it("supplier: SearchPicker on lines and lot components (desktop + mobile), dialog wired to the asking line", () => {
+    expect(quoteEditor.match(/addLabel="Add supplier"/g)).toHaveLength(4);
+    expect(quoteEditor).toContain("<AddSupplierDialog");
+    expect(quoteEditor).toContain("function onSupplierCreated");
+    expect(quoteEditor).toContain("useState(suppliers)");
+    expect(quoteEditor).not.toContain("<select id={`sup-");
+    expect(quoteEditor).not.toContain("<select id={`comp-sup-");
+  });
+  it("no beside-field add buttons remain in the quote editor", () => {
+    expect(quoteEditor).not.toContain("onClick={() => setAddCustomerOpen(true)}");
+    expect(quoteEditor).not.toContain("onClick={() => setAddContactOpen(true)}");
+    expect(quoteEditor).not.toContain("onClick={() => setAddAddressOpen(true)}");
   });
 });
 
@@ -60,20 +96,24 @@ describe("sales-order editor entry points", () => {
 });
 
 describe("PO editor entry points", () => {
-  it("supplier contact: Add contact button + the inline contact dialog (supplier owner)", () => {
+  it("supplier contact: SearchPicker with a pinned Add contact row + the inline dialog (supplier owner)", () => {
+    expect(poEditor).toContain('addLabel="Add contact"');
     expect(poEditor).toContain("setAddContactOpen(true)");
     expect(poEditor).toContain("<AddContactDialog");
     expect(poEditor).toContain('owner={{ kind: "supplier", id: supplier.id }}');
     expect(poEditor).toContain("function onContactAdded");
+    expect(poEditor).not.toContain("onClick={() => setAddContactOpen(true)}");
   });
   it("the supplier list is local state so added records can join it", () => {
     expect(poEditor).toContain("useState(suppliers)");
   });
-  it("supplier: Add supplier button + dialog on the new-PO form (PR-2)", () => {
+  it("supplier: SearchPicker with a pinned Add supplier row + dialog on the new-PO form", () => {
+    expect(poEditor).toContain('addLabel="Add supplier"');
     expect(poEditor).toContain("setAddSupplierOpen(true)");
-    expect(poEditor).toContain("Add supplier");
     expect(poEditor).toContain("<AddSupplierDialog");
     expect(poEditor).toContain("function onSupplierAdded");
+    expect(poEditor).not.toContain("onClick={() => setAddSupplierOpen(true)}");
+    expect(poEditor).not.toContain('<select id="supplierId"');
   });
 });
 
