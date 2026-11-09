@@ -46,34 +46,23 @@ function splitDescription(raw: string): { description: string; detail: string | 
 }
 
 /** S-70: quote signatures — Prepared by (name, position, uploaded
-    signature), Approved by (name + approval date/time, only when the
-    quote was actually approved), Conforme stays a blank line. */
+    signature); Conforme stays a blank line. The approval itself (who
+    approved, and when) is INTERNAL ONLY and never prints — owner
+    decision 2026-11-09 after Release 4 went live; the approval still
+    shows on the in-app record, and an approved quote still carries the
+    "System-generated and approved" note (no name, no date). */
 function quoteSignatories(
-  q: {
-    createdBy: { id: string; name: string; position: string | null; signatureStorageKey: string | null };
-    approvedBy: { name: string } | null;
-    approvedAt: Date | null;
-    approvalStatus: string;
-  },
   preparer: { id: string; name: string; position: string | null; signatureStorageKey: string | null },
 ): PrintSignatory[] {
-  const out: PrintSignatory[] = [
+  return [
     {
       role: "Prepared by",
       name: printablePersonName(preparer.name),
       position: printablePosition(preparer.position),
       signatureUrl: preparer.signatureStorageKey ? `/files/user-signature/${preparer.id}` : null,
     },
+    { role: "Conforme", name: null },
   ];
-  if (q.approvalStatus === "APPROVED" && q.approvedBy) {
-    out.push({
-      role: "Approved by",
-      name: printablePersonName(q.approvedBy.name),
-      date: q.approvedAt ? formatDateTime(q.approvedAt) : null,
-    });
-  }
-  out.push({ role: "Conforme", name: null });
-  return out;
 }
 
 function customerSignatories(preparedName: string | null): PrintSignatory[] {
@@ -204,7 +193,6 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       contact: { select: { name: true, email: true, phone: true } },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
       preparedBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
-      approvedBy: { select: { name: true } },
     },
   });
   if (!q) return null;
@@ -284,7 +272,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
     warrantyNotes: q.warrantyNotes?.trim() ? q.warrantyNotes : letter.print.warrantyNotes || null,
-    signatories: quoteSignatories(q, preparer),
+    signatories: quoteSignatories(preparer),
     // S-70: only an approved quote may claim approval on the print.
     generatedNote: q.approvalStatus === "APPROVED" ? "System-generated and approved. No signature required." : null,
     ...footer,
@@ -536,7 +524,6 @@ export async function getPurchaseOrderPrintModel(
       salesOrder: { select: { number: true } },
       items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
       createdBy: { select: { name: true } },
-      approvedBy: { select: { name: true } },
     },
   });
   if (!po) return null;
@@ -583,11 +570,8 @@ export async function getPurchaseOrderPrintModel(
     deliveryNotes: letter.print.deliveryNotes || null,
     signatories: [
       { role: "Prepared by", name: po.createdBy.name, date: formatDateTime(po.createdAt) },
-      {
-        role: "Approved by",
-        name: po.approvedBy?.name ?? null,
-        date: po.approvedAt ? formatDateTime(po.approvedAt) : null,
-      },
+      // No "Approved by" block: who approved a PO, and when, is internal
+      // only and never prints (owner decision 2026-11-09, same as quotes).
       { role: "Received by", name: null },
     ],
     ...footer,

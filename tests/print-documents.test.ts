@@ -334,16 +334,17 @@ describe("professional print documents", () => {
       ...poPrintFixture(),
       signatories: [
         { role: "Prepared by", name: "HACIEN Sales", date: "Nov 9, 2026, 10:00 AM" },
-        { role: "Approved by", name: "HACIEN Sales", date: "Nov 9, 2026, 11:00 AM" },
         { role: "Received by", name: null },
       ],
     });
-    expect(withDates.match(/pp-sign-date">Date</g)).toHaveLength(3);
+    // Prepared (has a date) + Received by (hand-sign prompt). No "Approved
+    // by" role: approval is internal only and no model emits it filled
+    // (owner decision 2026-11-09).
+    expect(withDates.match(/pp-sign-date">Date</g)).toHaveLength(2);
     const noDates = html({
       ...poPrintFixture(),
       signatories: [
         { role: "Prepared by", name: "HACIEN Sales" },
-        { role: "Approved by", name: null },
         { role: "Received by", name: null },
       ],
     });

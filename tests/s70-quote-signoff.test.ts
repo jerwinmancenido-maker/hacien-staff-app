@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 
 // S-70: quote sign-off — Prepared by is picked from staff (defaults to the
 // quote's creator; 2026-11-07 preparer picker), showing the chosen person's
-// name + position and their uploaded signature image, Approved by from the
-// S-18 approval (name + date and time), the "electronically generated,
-// approved in HACIEN system" line, Conforme staying a blank line, and an
-// uploaded signed conforme saved on the quote.
+// name + position and their uploaded signature image, the "electronically
+// generated, approved in HACIEN system" line, Conforme staying a blank
+// line, and an uploaded signed conforme saved on the quote. The S-18
+// approval (who + when) shows in the EDITOR only — it never prints
+// (owner decision 2026-11-09: approval is internal only).
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -38,9 +39,11 @@ describe("S-70 quote sign-off", () => {
     expect(service).toContain("sniffLogoMime");
   });
 
-  it("quote print carries prepared position/signature, approver + time, and the generated line", () => {
+  it("quote print carries prepared position/signature and the generated line — never the approver", () => {
     const views = read("src/lib/print/views.ts");
-    expect(views).toContain("quoteSignatories(q, preparer)");
+    expect(views).toContain("quoteSignatories(preparer)");
+    // Internal only (owner, 2026-11-09): no print model reads the approver.
+    expect(views).not.toContain("approvedBy");
     expect(views).toContain("System-generated and approved. No signature required.");
     const doc = read("src/components/docs/ProfessionalPrintDocument.tsx");
     expect(doc).toContain("s.signatureUrl");
