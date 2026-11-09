@@ -4680,6 +4680,22 @@ button.contact-card-add {
 .print-shell-letter .print-toolbar-alert {
   width: 8.5in;
 }
+/* The packing list root carries .pp-doc-root WITHOUT .pp-page (it keeps
+   the legacy .print-page sheet box), so the design variables are defined
+   on .pp-doc-root as well — without them every var()-based colour on
+   that sheet (table header band, lot titles, title pixel, box edges)
+   silently drops out. Professional documents carry both classes and see
+   the same values either way. */
+.pp-doc-root {
+  --pp-ink: var(--ink, #0a0a0a);
+  --pp-navy: #0d1526;
+  --pp-accent: var(--blue, #2563eb);
+  --pp-rule: #e5e5e5;
+  --pp-rule-soft: #e5e5e5;
+  --pp-muted: var(--grey-600, #525252);
+  --pp-label: var(--grey-700, #404040);
+  --pp-fill: var(--grey-100, #f5f5f5);
+}
 .pp-page {
   /* HACIEN brand kit print: ink + greys; Pixel Blue only as title marker.
      On-screen preview = full A4/Letter sheet, centered, equal side padding

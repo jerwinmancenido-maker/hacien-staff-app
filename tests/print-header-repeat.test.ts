@@ -73,3 +73,18 @@ describe("page headers: thead letterhead (books) vs margin-box strip (profession
     expect(margins.length).toBe(2); // @page (A4) and @page letter
   });
 });
+
+describe("print design variables reach every pp-doc root", () => {
+  const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
+
+  it("defines the --pp-* palette on .pp-doc-root, not only on .pp-page", () => {
+    // The packing list root is .print-page.pp-doc-root (no .pp-page): when
+    // the palette lived only on .pp-page, every var()-based colour on the
+    // packing sheet silently dropped out — the dark items-table header
+    // band most visibly (white header text on a transparent band). Found
+    // on the DR012 staging proof, 2026-11-09.
+    expect(css).toMatch(/\.pp-doc-root\s*\{[^}]*--pp-navy:\s*#0d1526;/s);
+    expect(css).toMatch(/\.pp-doc-root\s*\{[^}]*--pp-accent:/s);
+    expect(css).toMatch(/\.pp-page\s*\{[^}]*--pp-navy:\s*#0d1526;/s);
+  });
+});
