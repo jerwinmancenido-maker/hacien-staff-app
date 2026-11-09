@@ -282,7 +282,7 @@ describe("professional print documents", () => {
     const markup = html(withholdingQuotePrintFixture());
     const lower = markup.toLowerCase();
     const totalsBlob = (markup.match(/pp-totals[\s\S]*?<\/table>/i)?.[0] ?? "").toLowerCase();
-    expect(totalsBlob).toContain("subtotal");
+    expect(totalsBlob).not.toContain("subtotal"); // owner 2026-11-09: Subtotal row removed — it duplicated the Total
     expect(totalsBlob).toContain("total");
     expect(totalsBlob).not.toContain("less");
     expect(totalsBlob).not.toContain("net");
@@ -395,7 +395,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     }
   });
 
-  it("NON-VAT totals math (subtotal, withholding, total) remains Subtotal + Total only", () => {
+  it("NON-VAT totals math remains Total only (no Subtotal row, no withholding lines)", () => {
     const totals = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "5200.00",
@@ -410,10 +410,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
         },
       ],
     });
-    expect(totals).toEqual([
-      { label: "Subtotal", amount: "520000.00" },
-      { label: "Total", amount: "520000.00", emphasize: true },
-    ]);
+    expect(totals).toEqual([{ label: "Total", amount: "520000.00", emphasize: true }]);
   });
 
   it("validity default 15 + override: sentence formatting and date calculation", () => {

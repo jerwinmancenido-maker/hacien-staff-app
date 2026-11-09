@@ -84,7 +84,10 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
 }
 
 /**
- * Totals for customer quotes/SOs/billings: Subtotal + Total (contract price) only.
+ * Totals for customer quotes/SOs: the Total (contract price) only.
+ * A Subtotal row used to print above it with the same amount — removed
+ * 2026-11-09 at the owner's call: nothing ever prints between the two,
+ * so the Subtotal only duplicated the Total.
  * Withholding is office math — never printed (no Less/Net/WHT/ATC/%).
  * Amount in words must match this printed Total.
  * Collection acknowledgements separately list EWT actually applied to cash.
@@ -99,10 +102,7 @@ export function customerMoneyTotals(opts: {
   void opts.netReceived;
   void opts.withholding;
   const total = opts.contractPrice;
-  return [
-    { label: "Subtotal", amount: total },
-    { label: "Total", amount: total, emphasize: true },
-  ];
+  return [{ label: "Total", amount: total, emphasize: true }];
 }
 
 const day = (ymdStr: string | null | undefined) =>
@@ -172,7 +172,10 @@ const lotComponentNames = (isLot: boolean, components: readonly { description: s
   isLot && components.length > 0 ? components.map((c) => c.description) : undefined;
 
 /**
- * Subtotal + optional mid-lines + Total.
+ * Optional mid-lines + Total. With no mid-lines the Total stands alone —
+ * a Subtotal row above it would print the same amount twice (removed
+ * 2026-11-09 at the owner's call). With mid-lines, the Subtotal returns
+ * as their base.
  * The Total amount always equals `subtotal` — amounts in `extra` are listed but do not change Total.
  */
 export function moneyTotals(
@@ -180,6 +183,7 @@ export function moneyTotals(
   extra: PrintMoneyLine[] = [],
   totalLabel = "Total",
 ): PrintMoneyLine[] {
+  if (extra.length === 0) return [{ label: totalLabel, amount: subtotal, emphasize: true }];
   return [{ label: "Subtotal", amount: subtotal }, ...extra, { label: totalLabel, amount: subtotal, emphasize: true }];
 }
 
@@ -390,12 +394,10 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   if (!b) return null;
   const letter = await letterhead();
   const amount = money(b.amount);
-  // Customer copy: Subtotal + Total (gross) only — never show EWT / net expected.
+  // Customer copy: Total (gross) only — never show EWT / net expected.
+  // (No Subtotal row: it printed the same amount as the Total.)
   // withholdingExpected / netExpected stay on the billing record for office use.
-  const totals: PrintMoneyLine[] = [
-    { label: "Subtotal", amount },
-    { label: "Total", amount, emphasize: true },
-  ];
+  const totals: PrintMoneyLine[] = [{ label: "Total", amount, emphasize: true }];
   const footer = await baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);
   const deliveryAddress = await suggestedDeliveryAddress(b.customer);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { customerMoneyTotals } from "@/lib/print/views";
 
 describe("customerMoneyTotals", () => {
-  it("shows Subtotal + Total without WHT when withholding is zero", () => {
+  it("shows Total only without WHT when withholding is zero", () => {
     expect(
       customerMoneyTotals({
         contractPrice: "1000.00",
@@ -11,12 +11,11 @@ describe("customerMoneyTotals", () => {
         withholding: [],
       }),
     ).toEqual([
-      { label: "Subtotal", amount: "1000.00" },
       { label: "Total", amount: "1000.00", emphasize: true },
     ]);
   });
 
-  it("even with withholdingTotal > 0, only Subtotal + Total (no Less / Net)", () => {
+  it("even with withholdingTotal > 0, only Total (no Subtotal / Less / Net)", () => {
     const lines = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "20800.00",
@@ -27,7 +26,6 @@ describe("customerMoneyTotals", () => {
       ],
     });
     expect(lines).toEqual([
-      { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
     ]);
     expect(lines.map((l) => l.label).join(" ")).not.toMatch(/Less|Net|withholding|WHT|EWT/i);
