@@ -78,6 +78,16 @@ export function moveLineIntoLot<L extends LotLineShape>(items: readonly L[], lin
     .map((i) => (i.key === lotKey && i.isLot ? { ...i, components: [...(i.components ?? []), comp] } : i));
 }
 
+/**
+ * A lot whose last component left is no longer a lot: it keeps its own
+ * description and price as a plain line. Leaving it flagged `isLot` with
+ * zero components would fail the save rule "a lot needs at least one
+ * component" and trap the quote (Bugbot, PR #175).
+ */
+function unlotIfEmpty<L extends LotLineShape>(line: L): L {
+  return line.isLot && (line.components ?? []).length === 0 ? { ...line, isLot: false, components: [] } : line;
+}
+
 /** Move a component from one lot to another (appended last). */
 export function moveComponentToLot<L extends LotLineShape>(
   items: readonly L[],
@@ -90,7 +100,7 @@ export function moveComponentToLot<L extends LotLineShape>(
   const stripped = items.map((i) => {
     if (i.key !== fromLotKey) return i;
     moved = (i.components ?? []).find((c) => c.key === compKey);
-    return { ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) };
+    return unlotIfEmpty({ ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) });
   });
   if (!moved) return [...items];
   const comp = moved;
@@ -113,11 +123,51 @@ export function moveComponentOut<L extends LotLineShape>(
   const out: L[] = [];
   for (const i of items) {
     if (i.key === lotKey) {
-      out.push({ ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) });
+      out.push(unlotIfEmpty({ ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) }));
       out.push(makeLine(comp));
     } else {
       out.push(i);
     }
   }
   return out;
+}
+
+/** Remove one component from a lot; un-lots the line if it was the last. */
+export function removeLotComponent<L extends LotLineShape>(items: readonly L[], lotKey: string, compKey: string): L[] {
+  return items.map((i) =>
+    i.key === lotKey ? unlotIfEmpty({ ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) }) : i,
+  );
+}
+
+/** A line that remembers the qty/unit it had before it became a lot. */
+export interface LotToggleShape extends LotLineShape {
+  preLotQty?: string;
+  preLotUnit?: string;
+}
+
+/**
+ * The Lot checkbox transition. Ticking forces the line to one bundle
+ * (qty "1", unit "lot") and STASHES the qty/unit it had; unticking
+ * restores the stash, so a misclick no longer permanently shrinks the
+ * line (Bugbot, PR #175). Unticking a lot that was loaded as a lot (no
+ * stash) keeps its current qty/unit. A fresh lot starts with one blank
+ * component; an existing component list is kept.
+ */
+export function applyLotToggle<L extends LotToggleShape>(
+  line: L,
+  on: boolean,
+  makeComponent: () => LotComponentShape,
+): L {
+  if (on) {
+    const comps = line.components && line.components.length ? line.components : [makeComponent()];
+    return { ...line, isLot: true, qty: "1", unit: "lot", preLotQty: line.qty, preLotUnit: line.unit, components: comps };
+  }
+  return {
+    ...line,
+    isLot: false,
+    qty: line.preLotQty ?? line.qty,
+    unit: line.preLotUnit ?? line.unit,
+    preLotQty: undefined,
+    preLotUnit: undefined,
+  };
 }
