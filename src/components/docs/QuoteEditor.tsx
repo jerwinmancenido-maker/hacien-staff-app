@@ -44,7 +44,7 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { costIsEmpty, lastCostHint, pickSupplierCost, type SupplierCostRow } from "@/lib/quotes/last-cost";
-import { applyLotToggle, lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot } from "@/lib/quotes/lot-moves";
+import { applyLotToggle, lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot, removeLotComponent } from "@/lib/quotes/lot-moves";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
@@ -700,9 +700,7 @@ export function QuoteEditor({
   }
 
   function removeComponent(lineKey: string, compKey: string) {
-    setItems((xs) =>
-      xs.map((x) => (x.key === lineKey ? { ...x, components: (x.components ?? []).filter((c) => c.key !== compKey) } : x)),
-    );
+    setItems((xs) => removeLotComponent(xs, lineKey, compKey));
   }
 
   /** Phase A auto-fill, per component: same last-PO-cost lookup as lines. */

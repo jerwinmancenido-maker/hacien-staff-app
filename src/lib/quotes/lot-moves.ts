@@ -132,6 +132,13 @@ export function moveComponentOut<L extends LotLineShape>(
   return out;
 }
 
+/** Remove one component from a lot; un-lots the line if it was the last. */
+export function removeLotComponent<L extends LotLineShape>(items: readonly L[], lotKey: string, compKey: string): L[] {
+  return items.map((i) =>
+    i.key === lotKey ? unlotIfEmpty({ ...i, components: (i.components ?? []).filter((c) => c.key !== compKey) }) : i,
+  );
+}
+
 /** A line that remembers the qty/unit it had before it became a lot. */
 export interface LotToggleShape extends LotLineShape {
   preLotQty?: string;

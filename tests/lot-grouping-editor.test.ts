@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyLotToggle, moveComponentOut, moveComponentToLot, type LotComponentShape, type LotToggleShape } from "@/lib/quotes/lot-moves";
+import { applyLotToggle, moveComponentOut, moveComponentToLot, removeLotComponent, type LotComponentShape, type LotToggleShape } from "@/lib/quotes/lot-moves";
 
 const editor = readFileSync(join(process.cwd(), "src/components/docs/QuoteEditor.tsx"), "utf8");
 const lotMoves = readFileSync(join(process.cwd(), "src/lib/quotes/lot-moves.ts"), "utf8");
@@ -115,6 +115,21 @@ describe("lot toggle restore + empty-lot moves (Bugbot PR #175)", () => {
     const a = line({ key: "A", isLot: true, qty: "1", unit: "lot", components: [comp("c1"), comp("c2")] });
     const b = line({ key: "B", isLot: true, qty: "1", unit: "lot", components: [] });
     const out = moveComponentToLot([a, b], "A", "c1", "B");
+    expect(out[0]!.isLot).toBe(true);
+    expect(out[0]!.components?.map((c) => c.key)).toEqual(["c2"]);
+  });
+
+  it("DELETING a lot's last component un-lots the line too (Bugbot re-run, PR #176)", () => {
+    const a = line({ key: "A", isLot: true, qty: "1", unit: "lot", components: [comp("c1")] });
+    const out = removeLotComponent([a], "A", "c1");
+    expect(out[0]!.isLot).toBe(false);
+    expect(out[0]!.components).toHaveLength(0);
+    expect(editor).toContain("removeLotComponent(xs, lineKey, compKey)");
+  });
+
+  it("deleting one of two components keeps the lot", () => {
+    const a = line({ key: "A", isLot: true, qty: "1", unit: "lot", components: [comp("c1"), comp("c2")] });
+    const out = removeLotComponent([a], "A", "c1");
     expect(out[0]!.isLot).toBe(true);
     expect(out[0]!.components?.map((c) => c.key)).toEqual(["c2"]);
   });
