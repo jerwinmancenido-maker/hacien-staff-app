@@ -83,6 +83,22 @@ describe("planItems lot planning", () => {
     expect(line.components).toHaveLength(2);
   });
 
+  it("forces a lot's qty to 1 even when the payload says otherwise (audit D1)", () => {
+    // A lot's price is the price of ONE bundle and Create POs orders the
+    // components' quantities unscaled — qty 2 would sell two bundles and
+    // buy one bundle's parts.
+    const { items } = planItems([], [{ ...LOT_INPUT, qty: "2" }], true, { lots: true });
+    const line = items[0]!;
+    expect(line.qty).toBe("1");
+    expect(line.total).toBe("600000.00");
+    // A stored lot self-heals the same way on a no-costs save.
+    const stored: StoredItem[] = [
+      { id: "line-9", kind: "SERVICES", supplierId: null, supplierUnitCost: "0", isLot: true, components: LOT_INPUT.components },
+    ];
+    const healed = planItems(stored, [{ ...LOT_INPUT, id: "line-9", qty: "3", isLot: undefined, components: undefined }], false, { lots: true });
+    expect(healed.items[0]!.qty).toBe("1");
+  });
+
   it("without the lots opt-in (the sales-order path) the same input plans as a normal line", () => {
     const { items } = planItems([], [LOT_INPUT], true);
     const line = items[0]!;
