@@ -34,6 +34,13 @@ describe("lot grouping editor wiring", () => {
     expect(count("lotNumberOf(items, i.key)")).toBe(2);
   });
 
+  it("the badge renders ONLY on lot lines — no LOT 0 on normal lines (CTO fix 2026-11-09)", () => {
+    // Both badge sites (desktop + mobile) are gated on the line being a
+    // lot; the lot bar itself (with the Lot checkbox) stays on every
+    // costs line so staff can tick it.
+    expect(count('i.isLot ? <span className="quote-lot-badge"')).toBe(2);
+  });
+
   it("the member description is a textarea (title + specs), not an input, in both branches", () => {
     // Both comp-description fields are textareas (a third rows={3} in the
     // file is the unrelated terms-remarks box).

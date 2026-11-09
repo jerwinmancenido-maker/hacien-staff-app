@@ -978,6 +978,10 @@ export function QuoteEditor({
   }
 
   function pickCustomer(id: string) {
+    // Re-picking the customer already on the quote is a no-op: the reset
+    // below would wipe the contact, delivery pick and terms the staffer
+    // already set (CTO fix 2026-11-09).
+    if (id === h.customerId) return;
     const c = customerList.find((x) => x.id === id);
     // The delivery pick belongs to the customer: reset to the new
     // customer's default delivery address (or no pick).
@@ -1733,7 +1737,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
-                              <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span>
+                              {i.isLot ? <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span> : null}
                               <label className="small">
                                 <input
                                   type="checkbox"
@@ -2117,7 +2121,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
-                              <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span>
+                              {i.isLot ? <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span> : null}
                               <label className="small">
                                 <input
                                   type="checkbox"

@@ -2,7 +2,10 @@
 // member as a part (title + spec lines split from its description, plus
 // its OWN qty/unit — owner block design 2026-11-09) and nothing else
 // about them — no component costs or supplier ids anywhere in the model.
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { db } from "@/lib/db";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
@@ -93,5 +96,15 @@ describe("lot print models (db)", () => {
       expect(json).not.toContain(supA.id);
       expect(json).not.toContain(supB.id);
     }
+
+    // CTO fix (2026-11-09): the SO print NAMES the lot. Rendering the
+    // real SO model shows the lot line's own description leading its
+    // block (pp-lot-name); the quote render has no name row — there the
+    // name rides on the quote's Subject (owner design).
+    const soHtml = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: soPrint!.doc }));
+    expect(soHtml).toContain("pp-lot-name");
+    expect(soHtml).toContain("Google Cloud Platform Services");
+    const quoteHtml = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrint!.doc }));
+    expect(quoteHtml).not.toContain("pp-lot-name");
   });
 });
