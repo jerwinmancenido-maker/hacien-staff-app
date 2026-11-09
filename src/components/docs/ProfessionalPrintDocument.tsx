@@ -275,12 +275,35 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
               // and both price cells merge (rowSpan) across the block and
               // centre vertically. The lot's qty is always 1, so Unit Price
               // and Amount are the same figure — arithmetic, not duplication.
-              const span = comps.length;
+              // CTO fix (2026-11-09): SO print models never carry a subject
+              // (getSalesOrderPrintModel does not set one), so an SO lot
+              // printed with no name anywhere. On sales orders the block
+              // leads with the lot's own description row (plain, no band);
+              // quote prints keep the owner's design untouched.
+              const showLotName = doc.kind === "sales_order";
+              const span = comps.length + (showLotName ? 1 : 0);
               return (
                 <Fragment key={n}>
+                  {showLotName ? (
+                    <tr>
+                      <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
+                      <td className="pp-desc pp-lot-name">
+                        <div className="pp-pre">{i.description}</div>
+                        {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
+                      </td>
+                      <td className="num pp-qty">{qty(i.qty)}</td>
+                      <td className="pp-unit">{i.unit}</td>
+                      {!hideAmounts ? (
+                        <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>
+                      ) : null}
+                      {!hideAmounts ? (
+                        <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>
+                      ) : null}
+                    </tr>
+                  ) : null}
                   {comps.map((part, m) => (
                     <tr key={m}>
-                      {m === 0 ? (
+                      {m === 0 && !showLotName ? (
                         <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
                       ) : null}
                       <td className="pp-desc pp-part-cell">
@@ -291,10 +314,10 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
                       </td>
                       <td className="num pp-qty">{qty(part.qty)}</td>
                       <td className="pp-unit">{part.unit}</td>
-                      {m === 0 && !hideAmounts ? (
+                      {m === 0 && !showLotName && !hideAmounts ? (
                         <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>
                       ) : null}
-                      {m === 0 && !hideAmounts ? (
+                      {m === 0 && !showLotName && !hideAmounts ? (
                         <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>
                       ) : null}
                     </tr>

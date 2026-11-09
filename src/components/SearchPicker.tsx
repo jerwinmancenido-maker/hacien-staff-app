@@ -33,6 +33,30 @@ type Props = {
 
 type Row = { id: string; label: string; meta?: string; isEmpty?: boolean };
 
+/**
+ * Panel rows for a query: the empty ("None") row first when it matches,
+ * then the label-filtered options. Exported for tests — this is the exact
+ * list Enter picks from.
+ */
+export function pickerRows(options: SearchPickerOption[], emptyOptionLabel: string | undefined, queryText: string): Row[] {
+  const t = queryText.trim().toLowerCase();
+  const filtered = t ? options.filter((o) => o.label.toLowerCase().includes(t)) : options;
+  return [
+    ...(emptyOptionLabel && (!t || emptyOptionLabel.toLowerCase().includes(t)) ? [{ id: "", label: emptyOptionLabel, isEmpty: true }] : []),
+    ...filtered,
+  ];
+}
+
+/**
+ * Where the highlight starts: on the currently picked row, so pressing
+ * Enter without navigating KEEPS the current pick instead of landing on
+ * the empty row (CTO fix 2026-11-09). Falls back to the first row.
+ */
+export function pickerActiveIndex(rows: Row[], value: string): number {
+  const ix = rows.findIndex((r) => r.id === value);
+  return ix >= 0 ? ix : 0;
+}
+
 export function SearchPicker({ id, ariaLabel, value, options, placeholder, emptyOptionLabel, disabled, onPick, addLabel, onAdd }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -40,17 +64,12 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.id === value) ?? null;
-  const q = query.trim().toLowerCase();
-  const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
-  const rows: Row[] = [
-    ...(emptyOptionLabel && (!q || emptyOptionLabel.toLowerCase().includes(q)) ? [{ id: "", label: emptyOptionLabel, isEmpty: true }] : []),
-    ...filtered,
-  ];
+  const rows = pickerRows(options, emptyOptionLabel, query);
 
   function openPanel() {
     if (disabled) return;
     setQuery("");
-    setActive(0);
+    setActive(pickerActiveIndex(pickerRows(options, emptyOptionLabel, ""), value));
     setOpen(true);
   }
 
@@ -60,7 +79,10 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
   }
 
   function pick(row: Row) {
-    onPick(row.id);
+    // Re-picking the row already picked changes nothing — do not fire
+    // onPick (the quote editor's customer handler resets contact,
+    // delivery and terms on every pick; CTO fix 2026-11-09).
+    if (row.id !== value) onPick(row.id);
     closePanel();
     inputRef.current?.blur();
   }
@@ -108,8 +130,9 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
         value={open ? query : (selected?.label ?? "")}
         onFocus={openPanel}
         onChange={(ev) => {
-          setQuery(ev.target.value);
-          setActive(0);
+          const next = ev.target.value;
+          setQuery(next);
+          setActive(pickerActiveIndex(pickerRows(options, emptyOptionLabel, next), value));
           setOpen(true);
         }}
         onKeyDown={onKeyDown}

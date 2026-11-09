@@ -104,3 +104,29 @@ describe("lot lines on the print (block design)", () => {
     expect(table).not.toContain("rowSpan");
   });
 });
+
+describe("SO lot prints name the lot (CTO fix 2026-11-09)", () => {
+  it("an SO lot block leads with the lot's own description row", () => {
+    // SO print models never set a subject, so without this row the lot
+    // printed with no name at all — only anonymous member parts.
+    const soDoc = { ...lotDoc(), kind: "sales_order" as const };
+    const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: soDoc })));
+    expect(table).toContain("pp-lot-name");
+    // The lot's name prints exactly once, ahead of its member parts.
+    expect(occurrences(table, "PBRIS ICT Software Subscription")).toBe(1);
+    expect(table.indexOf("PBRIS ICT Software Subscription")).toBeLessThan(table.indexOf("Google Cloud Platform Services"));
+    // Name row + 2 parts = span 3 on exactly the 3 merged cells.
+    expect(occurrences(table, 'rowSpan="3"')).toBe(3);
+    // The lot's price pair still prints once each, on the merged cells.
+    expect(occurrences(table, "₱598,000.00")).toBe(2);
+    // Parts keep their own qty/unit under the named block.
+    expect(table).toContain("Licenses");
+    expect(occurrences(table, "pp-part-title")).toBe(2);
+  });
+
+  it("a quote lot block still prints NO lot name row (owner design)", () => {
+    const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
+    expect(table).not.toContain("pp-lot-name");
+    expect(table).not.toContain("PBRIS ICT Software Subscription");
+  });
+});
