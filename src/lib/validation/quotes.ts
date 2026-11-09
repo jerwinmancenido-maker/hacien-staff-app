@@ -82,9 +82,11 @@ export const itemSchema = z.object({
    * inferred output type, or every ItemInput literal in the suite needs it. */
   itemId: z.string().trim().max(64).nullable().optional(),
   /**
-   * Catalog Step 3: fields typed in the editor for a line that is not in the
-   * catalog yet. Any field filled in creates a catalog item on save (name =
-   * the line description) and links the line to it; all blank = no item.
+   * Catalog Step 3 + the 2026-11-09 rule (Jerwin): this object is the
+   * "Add to Products" intent marker — the editor sends it when staff used
+   * the drawer for the line. Its PRESENCE creates a catalog item on save
+   * (name = the line description) and links the line to it, even when every
+   * field is blank; ABSENT = a free-text line, no item is created.
    */
   newCatalog: z
     .object({
@@ -123,9 +125,11 @@ export const itemSchema = z.object({
   withholdingOverride: z.boolean().optional(),
 }).refine(
   (v) => {
-    const nc = v.newCatalog;
-    const hasFields = nc != null && [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((f) => f != null && f !== "");
-    return !hasFields || v.description.trim().length <= 191;
+    // An item is created exactly when the marker is present and the line is
+    // not already linked; the created item's name is the description, so it
+    // must fit the catalog name column whenever creation can happen.
+    const creates = v.newCatalog != null && !v.itemId;
+    return !creates || v.description.trim().length <= 191;
   },
   { message: "To save this as a catalog item, keep the description under 191 characters.", path: ["description"] },
 ).refine(
