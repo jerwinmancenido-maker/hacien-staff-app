@@ -47,7 +47,9 @@ export default async function SalesOrderPage({
   if (!so) notFound();
   // PO numbers for everyone; links (and Create POs) only for cost users.
   const purchasing = await getSoPurchasing(so.id, user);
-  const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.ordered < purchasing.total;
+  // Show Create POs while any line still has unordered qty. A partial PO
+  // (or a voided one) must not hide the menu.
+  const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.needsMorePo;
   const [billingSummary, billings, costMargin, deliveries, collections, returns] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),

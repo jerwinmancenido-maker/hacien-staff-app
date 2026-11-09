@@ -31,6 +31,7 @@ import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import {
   billExceedsPo,
   buildCostMarginSummary,
+  lineHasUnorderedQty,
   lineNeedsMorePo,
   sumMoney,
   valueReceived,
@@ -411,9 +412,25 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       select: {
         id: true,
         qty: true,
+        isLot: true,
+        components: {
+          where: { removedAt: null },
+          select: {
+            qty: true,
+            purchaseOrderItems: {
+              where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+              select: { qty: true },
+            },
+          },
+        },
         purchaseOrderItems: {
           where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
-          select: { qty: true, receivedQty: true, purchaseOrder: { select: { id: true, number: true, status: true } } },
+          select: {
+            qty: true,
+            receivedQty: true,
+            salesOrderItemComponentId: true,
+            purchaseOrder: { select: { id: true, number: true, status: true } },
+          },
         },
       },
     }),
@@ -429,6 +446,7 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       },
     }),
   ]);
+  let fullyOrdered = 0;
   const lines: SoPurchasingLine[] = items.map((i) => {
     const p = soLineProgress(
       money(i.qty),
@@ -439,6 +457,19 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       .map((x) => x.purchaseOrder)
       .filter((po) => (seen.has(po.id) ? false : (seen.add(po.id), true)))
       .map((po) => ({ id: po.id, number: po.number, status: po.status }));
+    // Coverage is remaining qty, not "a PO exists". Component buys of a lot
+    // are not counted against the lot's own qty.
+    const plain = i.purchaseOrderItems.filter((x) => !x.salesOrderItemComponentId);
+    const needsMore = lineHasUnorderedQty({
+      qty: money(i.qty),
+      orderedQty: sumMoney(plain.map((x) => money(x.qty))),
+      isLot: i.isLot,
+      components: i.components.map((c) => ({
+        qty: money(c.qty),
+        orderedQty: sumMoney(c.purchaseOrderItems.map((x) => money(x.qty))),
+      })),
+    });
+    if (!needsMore) fullyOrdered += 1;
     return { id: i.id, ...p, purchaseOrders };
   });
   // Audit F: the PO id is a link, not money — every viewer gets it. Only
@@ -455,7 +486,10 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
     purchaseOrders,
     total: lines.length,
     received: lines.filter((l) => l.state === "RECEIVED").length,
-    ordered: lines.filter((l) => l.state !== "NOT_ORDERED").length,
+    /** Lines whose required qty is fully on live, non-void POs. A partial line does not count. */
+    ordered: fullyOrdered,
+    /** True while any line (or lot component) still has quantity left to order. */
+    needsMorePo: fullyOrdered < lines.length,
     canSeeCosts: withCosts,
   };
 }

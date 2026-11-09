@@ -11,7 +11,8 @@ const env = vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
-import { createPurchaseOrdersFromSalesOrder } from "@/lib/services/purchase-orders";
+import { createPurchaseOrdersFromSalesOrder, voidPurchaseOrder } from "@/lib/services/purchase-orders";
+import { getCreatePosPreview, getSoPurchasing } from "@/lib/purchasing/views";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { freshYear, makeCustomer, makeSupplier, makeUser } from "./fixtures";
 
@@ -254,5 +255,63 @@ describe.skipIf(!env.hasDb)("selection-first create POs (MySQL)", () => {
     const other = await salesOrder(await freshYear());
     await expect(createPurchaseOrdersFromSalesOrder(so.id, input(year, [{ key: other.items[0]!.id, supplierId: a.id, qty: "1" }], `other-${year}`), admin)).rejects.toThrow(/not on this sales order/);
     expect(await db.purchaseOrder.count({ where: { salesOrderId: so.id } })).toBe(1);
+  });
+
+  /** Every open line and lot component, at its full qty. */
+  function coverRows(ctx: Awaited<ReturnType<typeof salesOrder>>) {
+    const rows: { key: string; supplierId: string; qty: string; confirmZero?: boolean }[] = [];
+    for (const item of ctx.items) {
+      if (item.isLot) {
+        for (const c of item.components) rows.push({ key: c.id, supplierId: c.supplierId ?? ctx.a.id, qty: c.qty.toFixed(2) });
+      } else {
+        rows.push({
+          key: item.id,
+          supplierId: item.supplierId ?? ctx.b.id,
+          qty: item.qty.toFixed(2),
+          confirmZero: item.supplierUnitCost.toFixed(2) === "0.00",
+        });
+      }
+    }
+    return rows;
+  }
+
+  it("keeps Create POs available for leftover qty and pre-fills that qty", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrder(year);
+    const laptop = ctx.items.find((i) => i.description === "Laptop i5")!;
+    await createPurchaseOrdersFromSalesOrder(ctx.so.id, input(year, [{ key: laptop.id, supplierId: ctx.a.id, qty: "4" }], `menu-partial-${year}`), admin);
+    const progress = await getSoPurchasing(ctx.so.id, admin);
+    expect(progress.needsMorePo).toBe(true);
+    expect(progress.ordered).toBeLessThan(progress.total);
+    const preview = await getCreatePosPreview(ctx.so.id, admin);
+    const row = preview?.lines.find((l) => l.id === laptop.id);
+    expect(row?.orderedQty).toBe("4.00");
+    expect(row?.remainingQty).toBe("6.00");
+  });
+
+  it("hides Create POs once every line's required qty is on a live PO", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrder(year);
+    await createPurchaseOrdersFromSalesOrder(ctx.so.id, input(year, coverRows(ctx), `menu-full-${year}`), admin);
+    const progress = await getSoPurchasing(ctx.so.id, admin);
+    expect(progress.needsMorePo).toBe(false);
+    expect(progress.ordered).toBe(progress.total);
+    const preview = await getCreatePosPreview(ctx.so.id, admin);
+    expect(preview?.lines.every((l) => (l.isLot ? l.components.every((c) => c.remainingQty === "0.00") : l.remainingQty === "0.00"))).toBe(true);
+  });
+
+  it("counts a voided PO as cancelled, so its qty can be ordered again", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrder(year);
+    const laptop = ctx.items.find((i) => i.description === "Laptop i5")!;
+    const [po] = await createPurchaseOrdersFromSalesOrder(ctx.so.id, input(year, [{ key: laptop.id, supplierId: ctx.a.id, qty: "10" }], `menu-void-${year}`), admin);
+    await voidPurchaseOrder(po!.id, "cancelled", admin);
+    const progress = await getSoPurchasing(ctx.so.id, admin);
+    expect(progress.needsMorePo).toBe(true);
+    expect(progress.ordered).toBeLessThan(progress.total);
+    const preview = await getCreatePosPreview(ctx.so.id, admin);
+    const row = preview?.lines.find((l) => l.id === laptop.id);
+    expect(row?.orderedQty).toBe("0.00");
+    expect(row?.remainingQty).toBe("10.00");
   });
 });
