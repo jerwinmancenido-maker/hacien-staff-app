@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can, canVoid } from "@/lib/permissions";
+import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
 import { quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
@@ -33,6 +33,7 @@ import {
   refreshQuoteCompanyDetailsAction,
   rejectQuoteAction,
   voidQuoteAction,
+  deleteQuoteAction,
 } from "../actions";
 import { WITHHOLDING_INTERNAL_PANEL_LABEL, WITHHOLDING_NOT_SET_NOTICE, isWithholdingNotSet } from "@/lib/quotes/withholding-defaults";
 
@@ -85,6 +86,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             approvalStatus={q.approvalStatus}
             canEdit={canEdit}
             canVoid={canVoid(user)}
+            canDelete={canDeleteDocument(user)}
             canApproveWorkflow={q.canApproveWorkflow}
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={q.deliveryAddressText ?? suggestedAddress}
@@ -97,6 +99,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
               markLost: markQuoteLostAction,
               void: voidQuoteAction,
+              delete: deleteQuoteAction,
               convert: convertQuoteAction,
               email: emailDraftAction,
               refreshCompanyDetails: refreshQuoteCompanyDetailsAction,

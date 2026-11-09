@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ESLint } from "eslint";
-import { assertNotDelete, assertNotRawDelete, HardDeleteError, noDeleteExtension, rawSqlText } from "@/lib/no-delete";
+import { assertNotDelete, assertNotRawDelete, bindDocumentDeleteAllowance, HardDeleteError, noDeleteExtension, rawSqlText } from "@/lib/no-delete";
+import { proveNestedDifferentModelDeleteBlocked } from "@/lib/services/document-delete";
 
 describe("no hard deletes", () => {
   it("assertNotDelete throws for delete and deleteMany only", () => {
@@ -60,8 +61,9 @@ describe("no hard deletes", () => {
     expect(lines).toEqual([3, 4, 7]);
   }, 30_000);
 
-  it("the app has no DELETE routes and no delete calls in source", () => {
+  it("the app has no DELETE routes and no delete calls outside the delete service", () => {
     const root = path.resolve(__dirname, "../src");
+    const service = "src/lib/services/document-delete.ts";
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
@@ -73,12 +75,50 @@ describe("no hard deletes", () => {
     walk(root);
     const offenders = files.filter((f) => {
       const src = readFileSync(f, "utf8");
-      return (
-        /export\s+(async\s+)?function\s+DELETE\b/.test(src) ||
-        /\b(db|tx|prisma|client)\.\w+\.(delete|deleteMany)\s*\(/.test(src) ||
-        /\bDELETE\s+FROM\b/i.test(src)
-      );
+      const rel = path.relative(path.resolve(__dirname, ".."), f).split(path.sep).join("/");
+      const route = /export\s+(async\s+)?function\s+DELETE\b/.test(src);
+      const raw = /\bDELETE\s+FROM\b/i.test(src);
+      const call = /\b(db|tx|prisma|client)\.\w+\.(delete|deleteMany)\s*\(/.test(src);
+      if (rel === service) {
+        // Prisma delete only, in this one file. No deleteMany and no raw DELETE.
+        return route || raw || /\.deleteMany\s*\(/.test(src) || !call;
+      }
+      return route || raw || call;
     });
     expect(offenders).toEqual([]);
+  });
+
+  it("only the delete service holds the private allowance", () => {
+    const root = path.resolve(__dirname, "../src");
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = path.join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && readFileSync(p, "utf8").includes("new AsyncLocalStorage")) {
+          hits.push(path.relative(path.resolve(__dirname, ".."), p).split(path.sep).join("/"));
+        }
+      }
+    };
+    walk(root);
+    expect(hits).toEqual(["src/lib/services/document-delete.ts"]);
+    const src = readFileSync(path.resolve(__dirname, "../src/lib/services/document-delete.ts"), "utf8");
+    expect(src).not.toMatch(/export function inDocumentDelete/);
+    expect(src).not.toMatch(/export (const|function) allowance/);
+  });
+
+  it("ordinary code cannot rebind the delete allowance", () => {
+    expect(() => bindDocumentDeleteAllowance(() => true)).toThrow(HardDeleteError);
+  });
+
+  it("a nested delete of a different model still throws inside the allowance", async () => {
+    const result = await proveNestedDifferentModelDeleteBlocked();
+    expect(result).toEqual({
+      quoteBlockedOutside: true,
+      quoteAllowedInside: true,
+      otherBlockedInside: true,
+      nestedOtherBlocked: true,
+      deleteManyBlockedInside: true,
+    });
   });
 });

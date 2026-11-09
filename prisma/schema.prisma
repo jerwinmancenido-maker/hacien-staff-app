@@ -402,6 +402,9 @@ enum AuditAction {
   settings_change
   email_draft
   download
+  // Admin delete of a draft or void document. Appended at the end so existing
+  // rows keep their values (MySQL ENUM order). No backfill.
+  delete
 }
 
 // ---------------------------------------------------------------------------

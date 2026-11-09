@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
+import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { db } from "@/lib/db";
 import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
@@ -24,6 +24,7 @@ import {
   voidQuote,
   type EmailDraft,
 } from "@/lib/services/quotes";
+import { deleteQuote } from "@/lib/services/document-delete";
 import { acceptanceInputSchema, convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
 import { getQuoteView } from "@/lib/quotes/views";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
@@ -148,6 +149,25 @@ export async function voidQuoteAction(id: string, reason: string): Promise<FormS
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Quote voided." };
   });
+}
+
+export async function deleteQuoteAction(id: string, reason: string): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanDeleteDocument(user);
+    const parsed = voidReasonSchema.safeParse(reason);
+    if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
+    await deleteQuote(id, parsed.data, user);
+    revalidatePath("/quotes");
+    revalidatePath("/");
+    revalidatePath("/reminders");
+    goTo = "/quotes";
+    return { ok: true, message: "Quote deleted." };
+  });
+  if (goTo) redirect(goTo);
+  return result;
 }
 
 export async function convertQuoteAction(id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }): Promise<FormState> {

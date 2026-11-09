@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Modal, VoidDialog } from "@/components/docs/Dialogs";
+import { DeleteDialog, Modal, VoidDialog } from "@/components/docs/Dialogs";
 import type { FormState } from "@/lib/validation/forms";
 
 export function VoidButton({ label, docLabel, body, onVoid }: { label: string; docLabel: string; body: string; onVoid: (reason: string) => Promise<FormState> }) {
@@ -23,6 +23,38 @@ export function VoidButton({ label, docLabel, body, onVoid }: { label: string; d
           onClose={() => setOpen(false)}
           onVoid={async (reason) => {
             const res = await onVoid(reason);
+            if (res.ok) router.refresh();
+            return res;
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+export function DeleteButton({
+  number,
+  body,
+  onDelete,
+}: {
+  number: string;
+  body: string;
+  onDelete: (reason: string) => Promise<FormState>;
+}) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  return (
+    <>
+      <button type="button" className="btn btn-secondary btn-sm danger" onClick={() => setOpen(true)}>
+        Delete
+      </button>
+      {open && (
+        <DeleteDialog
+          number={number}
+          body={body}
+          onClose={() => setOpen(false)}
+          onDelete={async (reason) => {
+            const res = await onDelete(reason);
             if (res.ok) router.refresh();
             return res;
           }}

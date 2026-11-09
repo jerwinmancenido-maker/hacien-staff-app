@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
+import { assertCanDeleteDocument, assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { markBillingChecked, recordBilling, updateBilling, updateBillingExpectedDate, voidBilling } from "@/lib/services/billings";
+import { deleteBilling, deleteCollection } from "@/lib/services/document-delete";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import type { BookletType } from "@/lib/billing/booklet";
 import { applyCreditSimple, applyCustomerCredit, mark2307Received, markCollectionChecked, recordCollection, voidCollection } from "@/lib/services/collections";
@@ -97,6 +98,24 @@ export async function voidBillingAction(id: string, reason: string): Promise<For
   });
 }
 
+export async function deleteBillingAction(id: string, reason: string): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanDeleteDocument(user);
+    const parsed = voidReasonSchema.safeParse(reason);
+    if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
+    await deleteBilling(id, parsed.data, user);
+    refreshBilling(null, null, null);
+    revalidatePath("/");
+    goTo = "/billing/billings";
+    return { ok: true, message: "Billing deleted." };
+  });
+  if (goTo) redirect(goTo);
+  return result;
+}
+
 export async function recordCollectionAction(_prev: FormState, form: FormData): Promise<FormState> {
   const parsed = parseCollectionForm(form);
   if (!parsed.ok) return { values: parsed.values, fieldErrors: parsed.fieldErrors, message: "Fix the fields marked below." };
@@ -137,6 +156,24 @@ export async function voidCollectionAction(id: string, reason: string): Promise<
     revalidatePath(`/billing/collections/${id}`);
     return { ok: true, message: "Collection voided." };
   });
+}
+
+export async function deleteCollectionAction(id: string, reason: string): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanDeleteDocument(user);
+    const parsed = voidReasonSchema.safeParse(reason);
+    if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
+    await deleteCollection(id, parsed.data, user);
+    refreshBilling(null, null, null);
+    revalidatePath("/");
+    goTo = "/billing/collections";
+    return { ok: true, message: "Collection deleted." };
+  });
+  if (goTo) redirect(goTo);
+  return result;
 }
 
 export async function applyCreditAction(_prev: FormState, form: FormData): Promise<FormState> {

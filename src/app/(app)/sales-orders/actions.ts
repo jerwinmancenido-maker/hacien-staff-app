@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
+import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
+import { deleteSalesOrder } from "@/lib/services/document-delete";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { postCustomerReturn, voidCustomerReturn } from "@/lib/services/customer-returns";
 import { customerReturnInputSchema } from "@/lib/validation/customer-returns";
@@ -49,6 +50,26 @@ export async function voidSalesOrderAction(id: string, reason: string): Promise<
     revalidatePath("/quotes");
     return { ok: true, message: "Sales order voided." };
   });
+}
+
+export async function deleteSalesOrderAction(id: string, reason: string): Promise<FormState> {
+  let goTo: string | null = null;
+  const result = await runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    assertCanDeleteDocument(user);
+    const parsed = voidReasonSchema.safeParse(reason);
+    if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
+    await deleteSalesOrder(id, parsed.data, user);
+    revalidatePath("/sales-orders");
+    revalidatePath("/quotes");
+    revalidatePath("/");
+    revalidatePath("/reminders");
+    goTo = "/sales-orders";
+    return { ok: true, message: "Sales order deleted." };
+  });
+  if (goTo) redirect(goTo);
+  return result;
 }
 
 export async function recordDeliveryAction(salesOrderId: string, _prev: FormState, form: FormData): Promise<FormState> {

@@ -14,6 +14,28 @@ import type { RegisterKey } from "../books/config";
 import { REGISTER_CONFIGS } from "../books/config";
 import { buildRegister, type BookRegister } from "../books/registers";
 
+function deletedVoidSiRow(id: string, after: unknown): BookSourceRow | null {
+  if (!after || typeof after !== "object" || Array.isArray(after)) return null;
+  const snap = after as Record<string, unknown>;
+  const invoiceNo = snap.invoiceNo;
+  const date = snap.invoiceDate;
+  if (invoiceNo == null || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const si = String(invoiceNo);
+  const party = typeof snap.customerName === "string" && snap.customerName.trim() ? snap.customerName.trim() : "—";
+  return {
+    id: `deleted-${id}`,
+    kind: "BILLING",
+    date,
+    documentNumber: `INV-${si}`,
+    party,
+    particulars: `Deleted (void), SI no. ${si}`,
+    amount: "0.00",
+    ewt: null,
+    href: null,
+    voided: false,
+  };
+}
+
 function dateYmd(d: Date): string {
   // DATE columns are UTC midnight of the Manila calendar day; manilaYmdFromInstant
   // also correctly maps real UTC timestamps (23:59 PHT in, 00:00 next day out).
@@ -31,7 +53,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
   // Do not link into gated sections when their feature flags are off.
   const [cashOn, payablesOn] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
 
-  const [billings, collections, bills, payments, expenses] = await Promise.all([
+  const [billings, collections, bills, payments, expenses, deletedBillingAudits] = await Promise.all([
     db.billing.findMany({
       include: { customer: { select: { name: true } } },
       orderBy: [{ invoiceDate: "asc" }, { invoiceNo: "asc" }],
@@ -61,6 +83,11 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       },
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),
+    db.auditLog.findMany({
+      where: { entityType: "Billing", action: "delete" },
+      select: { id: true, after: true },
+      orderBy: { at: "asc" },
+    }),
   ]);
 
   const rows: BookSourceRow[] = [];
@@ -79,6 +106,15 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       href: `/billing/billings/${b.id}`,
       voided: b.status === "VOID",
     });
+  }
+
+  // A void SI that an Admin deleted is gone from Billing, but the number stays
+  // on the register. Amount is 0 so it does not re-enter the invoiced total
+  // (the void already had no legal effect). The wording comes from the delete
+  // audit snapshot. No link — the document page is gone.
+  for (const audit of deletedBillingAudits) {
+    const line = deletedVoidSiRow(audit.id, audit.after);
+    if (line) rows.push(line);
   }
 
   for (const c of collections) {

@@ -1,9 +1,12 @@
-// No hard deletes anywhere. Master data is archived (`active`/`archivedAt`);
-// documents (later) are voided (`voidedAt` + reason). This Prisma client
-// extension makes any delete/deleteMany — and any raw SQL containing DELETE or
-// TRUNCATE ($queryRaw, $executeRaw and their Unsafe variants) — throw before
-// it reaches the database. ESLint (eslint.config.mjs) also flags raw SQL
-// DELETE in source, and tests/no-delete.test.ts checks both.
+// No hard deletes anywhere, except one case: an active Admin deleting a draft
+// or void quote, or a void sales order, billing, or collection. That path
+// lives only in src/lib/services/document-delete.ts, which holds a private
+// AsyncLocalStorage and registers a reader here. The extension allows Prisma
+// `delete` of the models in that store, and only while the store is active.
+// `deleteMany` and raw DELETE/TRUNCATE stay blocked. Ordinary call sites
+// cannot enter the store (the setter is not exported) and cannot replace the
+// reader (bind once). ESLint (eslint.config.mjs) still flags raw SQL DELETE.
+// tests/no-delete.test.ts allow-lists only the delete service file.
 
 import { Prisma } from "@prisma/client";
 
@@ -21,8 +24,26 @@ export const RAW_OPERATIONS = ["$queryRaw", "$executeRaw", "$queryRawUnsafe", "$
 /** Matches SQL statements that remove rows. Keep in sync with the ESLint rule. */
 export const RAW_DELETE_PATTERN = /\b(DELETE|TRUNCATE)\b/i;
 
+/**
+ * Reader installed once by the document-delete service. False until then,
+ * and false whenever that service is not inside its private allowance.
+ * A second bind is refused so another module cannot turn deletes on.
+ */
+let allowsModel: (model: string) => boolean = () => false;
+let allowanceBound = false;
+
+export function bindDocumentDeleteAllowance(reader: (model: string) => boolean): void {
+  if (allowanceBound) {
+    throw new HardDeleteError("allowance", "bindDocumentDeleteAllowance");
+  }
+  allowanceBound = true;
+  allowsModel = reader;
+}
+
 export function assertNotDelete(model: string | undefined, operation: string): void {
   if ((BLOCKED_OPERATIONS as readonly string[]).includes(operation)) {
+    // Prisma delete only, and only for a model the private allowance names.
+    if (operation === "delete" && model && allowsModel(model)) return;
     throw new HardDeleteError(model, operation);
   }
 }

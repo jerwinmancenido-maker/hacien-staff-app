@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canDeleteDocument } from "@/lib/permissions";
 import { isCashEnabled } from "@/lib/cash/features";
 import { formatDate, formatPeso } from "@/lib/format";
 import { getCollectionView } from "@/lib/billing/views";
 import { Activity } from "@/components/Activity";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionStatusChip, MethodLabel, PRINTABLE_DISCLAIMER } from "@/components/billing/BillingParts";
-import { VoidButton } from "@/components/purchasing/DocButtons";
+import { DeleteButton, VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, PageHeader } from "@/components/ui";
-import { markCollectionCheckedAction, voidCollectionAction } from "../../actions";
+import { deleteCollectionAction, markCollectionCheckedAction, voidCollectionAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -62,6 +62,13 @@ export default async function CollectionDetailPage({
                 docLabel={`collection ${c.number}`}
                 body="Voiding reverses allocations and billing statuses."
                 onVoid={voidCollectionAction.bind(null, id)}
+              />
+            )}
+            {canDeleteDocument(user) && c.status === "VOID" && (
+              <DeleteButton
+                number={c.number}
+                body={`${c.number} will be deleted. This cannot be undone, and its number will not be reused.`}
+                onDelete={deleteCollectionAction.bind(null, id)}
               />
             )}
           </>
