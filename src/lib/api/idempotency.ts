@@ -107,8 +107,33 @@ export async function claimIdempotency(input: {
       if (existing) {
         const decision = judgeIdempotency(existing, input);
         if (decision.type !== "stale" && decision.type !== "expired") return decision;
-        // Release the key without deleting the old call row.
-        await tx.apiCallLog.update({ where: { id: existing.id }, data: { idempotencyKey: null } });
+        // Release the key without deleting the old call row. The release is
+        // qualified, mirroring settleIdempotentWrite: a stale claim is
+        // released only while its row is still pending, and either way the
+        // row must still hold the key. The snapshot above can cross the
+        // original write's settle — an unqualified release would steal the
+        // key from a completed write and let this retry duplicate it.
+        const released = await tx.apiCallLog.updateMany({
+          where: {
+            id: existing.id,
+            idempotencyKey: input.idempotencyKey,
+            ...(decision.type === "stale" ? { status: 0 } : {}),
+          },
+          data: { idempotencyKey: null },
+        });
+        if (released.count !== 1) {
+          // The claim moved under us: judge whoever holds the key now.
+          const owner = await tx.apiCallLog.findFirst({
+            where: { apiKeyId: input.apiKeyId, idempotencyKey: input.idempotencyKey },
+          });
+          if (!owner) {
+            // A concurrent claim released it first; the key is free.
+          } else {
+            const again = judgeIdempotency(owner, input);
+            if (again.type !== "stale" && again.type !== "expired") return again;
+            throw new ApiError(409, "idempotency_in_progress", "A request with this Idempotency-Key is already running.");
+          }
+        }
       }
       await tx.apiCallLog.update({
         where: { id: input.logId },
