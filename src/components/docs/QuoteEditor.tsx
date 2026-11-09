@@ -44,7 +44,7 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { costIsEmpty, lastCostHint, pickSupplierCost, type SupplierCostRow } from "@/lib/quotes/last-cost";
-import { lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot } from "@/lib/quotes/lot-moves";
+import { applyLotToggle, lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot, removeLotComponent } from "@/lib/quotes/lot-moves";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
@@ -179,7 +179,11 @@ function blankItem(picks: readonly WithholdingSnapshot[], key: string): EditorIt
 function safeLine(i: EditorItem) {
   try {
     if (i.isLot) {
-      const total = lineAmounts({ kind: i.kind, qty: i.qty || "0", unitPrice: i.unitPrice || "0", supplierUnitCost: "0" }).total;
+      // A lot is always qty 1 — the same rule the save planner applies
+      // (lib/quotes/items.ts). Using the stored qty here would show one
+      // total on screen while save writes another for a legacy lot whose
+      // stored qty is not 1 (Bugbot, PR #175).
+      const total = lineAmounts({ kind: i.kind, qty: "1", unitPrice: i.unitPrice || "0", supplierUnitCost: "0" }).total;
       const supplierTotal = componentsTotal((i.components ?? []).map((c) => ({ qty: c.qty || "0", unitCost: c.unitCost || "0" })));
       return { total, supplierTotal, margin: fromScaled(toScaled(total, 2) - toScaled(supplierTotal, 2), 2) };
     }
@@ -645,14 +649,7 @@ export function QuoteEditor({
   }
 
   function toggleLot(line: EditorItem, on: boolean) {
-    setItems((xs) =>
-      xs.map((x) => {
-        if (x.key !== line.key) return x;
-        if (!on) return { ...x, isLot: false };
-        const comps = x.components && x.components.length ? x.components : [blankComponent()];
-        return { ...x, isLot: true, qty: "1", unit: "lot", components: comps };
-      }),
-    );
+    setItems((xs) => xs.map((x) => (x.key === line.key ? applyLotToggle(x, on, blankComponent) : x)));
   }
 
   // ---- Lot grouping: select items into lots (2026-11-09) -----------------
@@ -703,9 +700,7 @@ export function QuoteEditor({
   }
 
   function removeComponent(lineKey: string, compKey: string) {
-    setItems((xs) =>
-      xs.map((x) => (x.key === lineKey ? { ...x, components: (x.components ?? []).filter((c) => c.key !== compKey) } : x)),
-    );
+    setItems((xs) => removeLotComponent(xs, lineKey, compKey));
   }
 
   /** Phase A auto-fill, per component: same last-PO-cost lookup as lines. */

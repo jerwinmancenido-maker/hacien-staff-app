@@ -118,6 +118,10 @@ export type EditorItem = {
   /** Lot (bundle) line (quote editor only): cost comes from components. */
   isLot?: boolean;
   components?: EditorComponent[];
+  /** Quote editor only: qty/unit the line had before it became a lot, so
+   * unticking Lot restores them. Editor state only — never saved. */
+  preLotQty?: string;
+  preLotUnit?: string;
 };
 
 export type EditorInitial = {

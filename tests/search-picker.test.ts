@@ -76,3 +76,18 @@ describe("quote editor customer re-pick guard (source pin)", () => {
     expect(fn.indexOf("if (id === h.customerId) return;")).toBeLessThan(fn.indexOf("applyPickDefaults"));
   });
 });
+
+describe("the highlighted row stays visible (Bugbot PR #175)", () => {
+  const src = readFileSync(path.join(process.cwd(), "src/components/SearchPicker.tsx"), "utf8");
+
+  it("scrolls the active row into view whenever the highlight moves", () => {
+    expect(src).toContain("scrollIntoView({ block: \"nearest\" })");
+    expect(src).toContain("[data-picker-ix=\"${active}\"]");
+    expect(src).toContain("}, [active, open, rows.length]);");
+  });
+
+  it("marks each row with its index for the scroll lookup", () => {
+    expect(src).toContain("data-picker-ix={ix}");
+    expect(src).toContain("ref={listRef}");
+  });
+});
