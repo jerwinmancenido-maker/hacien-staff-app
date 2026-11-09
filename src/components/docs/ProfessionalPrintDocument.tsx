@@ -6,7 +6,7 @@ import { Fragment } from "react";
 import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
-import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
+import { printStripCss } from "@/lib/print/strip-style";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
 import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
@@ -120,7 +120,17 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
                 <div className="pp-sign-date">Date</div>
               </>
             )}
-            {s.role !== "Conforme" && s.role !== "Prepared by" && <div className="pp-sign-date">Date</div>}
+            {/* The "Date" label belongs with a value: hand-sign roles
+                (Received by) keep it as a write-in prompt; system roles
+                (Prepared by / Approved by) show it only when the model
+                carries the date — a bare label over a blank is a defect
+                (owner-flagged on PO prints, 2026-11-09). */}
+            {s.role !== "Conforme" && s.role !== "Prepared by" && s.role !== "Approved by" && (
+              <div className="pp-sign-date">Date</div>
+            )}
+            {(s.role === "Prepared by" || s.role === "Approved by") && s.date && (
+              <div className="pp-sign-date">Date</div>
+            )}
             {s.date ? <div className="pp-sign-date">{s.date}</div> : null}
           </div>
         );
@@ -161,41 +171,31 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
               ? "Supplier"
               : "No.";
 
+  // Print redesign v10 (owner-approved 2026-11-09): the identity strip
+  // lives in the @page top margin box (see the emitted <style> below and
+  // @page pp-doc in globals.css) and is suppressed on page 1, so nothing
+  // prints twice on the same page — the v8 in-flow thead strip repeated
+  // identically on every page, duplicating the title block on page 1.
+  // Statements have no document number: their strip is the title only.
+  const stripText = (doc.number === doc.party.name ? doc.title : `${doc.title} · ${doc.number}`).toUpperCase();
+
   return (
     <article
-      className={`pp-page pp-paper-${doc.paperSize.toLowerCase()}`}
+      className={`pp-page pp-doc-root pp-paper-${doc.paperSize.toLowerCase()}`}
       aria-label={`${doc.title} ${doc.number}`}
       data-print-kind={doc.kind}
     >
+      <style>{printStripCss(stripText)}</style>
       {doc.watermark && (
         <div className="pp-watermark" aria-hidden="true">
           {doc.watermark}
         </div>
       )}
 
-      <PrintHeaderRepeat
-        header={
-          <div className="pp-runhead">
-            <span className="pp-runhead-brand">
-              <span className="pp-title-pixel" aria-hidden="true" />
-              HACIEN
-            </span>
-            <span className="pp-runhead-doc">
-              {doc.title} · {doc.number}
-            </span>
-            {doc.number !== doc.party.name && (
-              <span className="pp-runhead-party">{doc.party.name}</span>
-            )}
-          </div>
-        }
-      >
-      {/* Print redesign v8 (owner-approved 2026-11-09): the repeating head
-          is a compact identity strip (brand · title · number · party), so
-          page 2+ carry a slim header with the document's identity instead
-          of the whole letterhead repeated. The full letterhead prints
-          once, in flow, at the top of page 1. The document number moves
-          out of the meta list into its own editorial block beside the
-          title; date/status/meta become a strip under the title. */}
+      {/* The full letterhead prints once, in flow, at the top of page 1
+          (print redesign v8, owner-approved 2026-11-09). The document
+          number sits in its own editorial block beside the title;
+          date/status/meta form a strip under the title. */}
       <header className="pp-head">
         <CompanyLetterhead company={doc.company} />
       </header>
@@ -456,7 +456,6 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           <div className="pp-qr-spacer" aria-hidden="true" />
         )}
       </footer>
-      </PrintHeaderRepeat>
     </article>
   );
 }

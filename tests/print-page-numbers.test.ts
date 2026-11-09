@@ -13,8 +13,19 @@ describe("Page X of Y CSS", () => {
     expect(css).toContain("@bottom-right");
     expect(css).toContain("@bottom-left");
     expect(css).not.toContain("@bottom-center");
-    expect(css).not.toContain("@top-left");
-    expect(css).not.toContain("@top-center");
+    // The generic @page stays free of @top boxes…
+    const genericPage = css.slice(css.indexOf("@page {"), css.indexOf("@page letter"));
+    expect(genericPage).not.toContain("@top-");
+    // …while the named pp-doc page (v10 print redesign) carries the
+    // identity strip in its top margin boxes, suppressed on page 1
+    // together with the footer contact line, so nothing prints twice.
+    expect(css).toContain(".pp-doc-root");
+    expect(css).toMatch(/\.pp-doc-root\s*\{\s*page:\s*pp-doc/);
+    expect(css).toMatch(/@page pp-doc\s*\{[\s\S]*?@top-left\s*\{\s*content: "■ HACIEN"/);
+    expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@top-left\s*\{\s*content: none/);
+    expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@bottom-left\s*\{\s*content: none/);
+    // The v8 in-flow thead strip is gone (it duplicated page 1's title block).
+    expect(css).not.toContain(".pp-runhead");
   });
 
   it("puts Page x of y in @page margin boxes; never paints in-flow Page 0 of 0", () => {

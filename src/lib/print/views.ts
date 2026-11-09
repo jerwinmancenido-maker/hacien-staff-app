@@ -209,7 +209,6 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const withholding = snapshotList(q.withholding);
   // Preparer picker: the chosen preparer, else the creator.
   const preparer = q.preparedBy ?? q.createdBy;
-  const prepared = printablePersonName(preparer.name);
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
   // The quote's own pick wins: its text was snapshotted at save time, so
@@ -238,7 +237,6 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
       ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
-      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ],
     // Full-width above items — not in the narrow right meta column.
     subject: q.subject?.trim() ? q.subject : null,
@@ -310,10 +308,8 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const letter = await letterhead(so.settingsVersionId);
   const total = money(so.contractPrice);
   const withholding = snapshotList(so.withholding);
-  const prepared = printablePersonName(so.createdBy.name);
   const footer = await baseFooter("sales_order", letter, { thankYou: true, includePayment: true, qr: true });
   const meta = [
-    ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ...(so.buyerPoNo ? [{ label: "Customer PO/ref", value: so.buyerPoNo }] : []),
     ...(so.buyerPoDate ? [{ label: "Customer PO date", value: day(ymd(so.buyerPoDate)) }] : []),
     ...(so.quote ? [{ label: "Quote no.", value: so.quote.number }] : []),
@@ -400,7 +396,6 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     { label: "Subtotal", amount },
     { label: "Total", amount, emphasize: true },
   ];
-  const prepared = printablePersonName(b.createdBy.name);
   const footer = await baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);
   const deliveryAddress = await suggestedDeliveryAddress(b.customer);
@@ -427,7 +422,6 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       { label: "Booklet invoice no.", value: String(b.invoiceNo) },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
-      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
       ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
       ...(b.salesOrder.terms ? [{ label: "Terms", value: b.salesOrder.terms }] : []),
     ],
@@ -586,8 +580,12 @@ export async function getPurchaseOrderPrintModel(
     notes: po.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     signatories: [
-      { role: "Prepared by", name: po.createdBy.name },
-      { role: "Approved by", name: po.approvedBy?.name ?? null },
+      { role: "Prepared by", name: po.createdBy.name, date: formatDateTime(po.createdAt) },
+      {
+        role: "Approved by",
+        name: po.approvedBy?.name ?? null,
+        date: po.approvedAt ? formatDateTime(po.approvedAt) : null,
+      },
       { role: "Received by", name: null },
     ],
     ...footer,

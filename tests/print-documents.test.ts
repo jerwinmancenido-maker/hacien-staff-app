@@ -308,6 +308,48 @@ describe("professional print documents", () => {
     });
     expect(markup.toLowerCase()).not.toContain("qa admin");
   });
+
+  it("v10: identity strip is an emitted @page style, never in-flow markup", () => {
+    const markup = html(quotePrintFixture());
+    expect(markup).toContain("pp-doc-root");
+    expect(markup).toContain(
+      '@page pp-doc { @top-right { content: "QUOTATION · QT-2026-0001";',
+    );
+    expect(markup).toContain("@page pp-doc:first { @top-right { content: none; } }");
+    // The v8 thead strip duplicated the title block on page 1 — it is gone.
+    expect(markup).not.toContain("pp-runhead");
+    expect(markup).not.toContain("pp-repeat");
+  });
+
+  it("v10: statement strip carries the title only, not the party name", () => {
+    const fixture = customerStatementFixture();
+    const markup = html(fixture);
+    const style = markup.slice(markup.indexOf("<style>"), markup.indexOf("</style>"));
+    expect(style).toContain("STATEMENT OF ACCOUNT");
+    expect(style).not.toContain(fixture.party.name.toUpperCase());
+  });
+
+  it("v10: signatory Date label prints only with a date (or on hand-sign roles)", () => {
+    const withDates = html({
+      ...poPrintFixture(),
+      signatories: [
+        { role: "Prepared by", name: "HACIEN Sales", date: "Nov 9, 2026, 10:00 AM" },
+        { role: "Approved by", name: "HACIEN Sales", date: "Nov 9, 2026, 11:00 AM" },
+        { role: "Received by", name: null },
+      ],
+    });
+    expect(withDates.match(/pp-sign-date">Date</g)).toHaveLength(3);
+    const noDates = html({
+      ...poPrintFixture(),
+      signatories: [
+        { role: "Prepared by", name: "HACIEN Sales" },
+        { role: "Approved by", name: null },
+        { role: "Received by", name: null },
+      ],
+    });
+    // Only Received by keeps the write-in Date prompt.
+    expect(noDates.match(/pp-sign-date">Date</g)).toHaveLength(1);
+  });
 });
 
 describe("print shell screen-only chrome", () => {
