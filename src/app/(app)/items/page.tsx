@@ -6,6 +6,7 @@ import { listItems } from "@/lib/services/items";
 import { ITEM_KIND_LABELS } from "@/lib/validation/items";
 import { formatPeso } from "@/lib/format";
 import { Chip, PageHeader } from "@/components/ui";
+import { DataTable } from "@/components/DataTable";
 import { PillTabs } from "@/components/PillTabs";
 import { SearchIcon } from "@/components/Icons";
 
@@ -83,44 +84,49 @@ export default async function ItemsPage({
               No items in the catalog{cq ? ` for “${cq}”.` : " yet — add the first one with + New item."}
             </p>
           ) : (
-            <div className="table-wrap">
-              <table className="list" aria-label="Item catalog">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Brand / Model</th>
-                    <th>Category</th>
-                    <th>SKU</th>
-                    <th>Unit</th>
-                    <th className="num">Default price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <Link href={`/items/${item.id}`}>{item.name}</Link>
-                        {!item.active && (
-                          <>
-                            {" "}
-                            <Chip tone="red">Inactive</Chip>
-                          </>
-                        )}
-                        {item.details ? <div className="small faint">{item.details}</div> : null}
-                      </td>
-                      <td>
-                        {[item.brand, item.model].filter(Boolean).join(" · ") || "—"}
-                        <div className="small faint">{ITEM_KIND_LABELS[item.kind]}</div>
-                      </td>
-                      <td>{item.category || "—"}</td>
-                      <td>{item.sku || "—"}</td>
-                      <td>{item.unit}</td>
-                      <td className="num">{item.defaultUnitPrice != null ? formatPeso(item.defaultUnitPrice) : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              label="Item catalog"
+              columns={[
+                { key: "item", label: "Item", sortable: false },
+                { key: "brand", label: "Brand / Model", sortable: false },
+                { key: "category", label: "Category", sortable: false },
+                { key: "sku", label: "SKU", sortable: false },
+                { key: "unit", label: "Unit", sortable: false },
+                { key: "price", label: "Default price", numeric: true, sortable: false },
+              ]}
+              rows={items.map((item) => ({
+                id: item.id,
+                // Whole row opens the item, like every other list in the app
+                // (owner ask 2026-11-09: the catalog rows felt unclickable —
+                // only the name was a link and nothing looked clickable).
+                href: `/items/${item.id}`,
+                inactive: !item.active,
+                cells: {
+                  item: (
+                    <>
+                      <Link href={`/items/${item.id}`}>{item.name}</Link>
+                      {!item.active && (
+                        <>
+                          {" "}
+                          <Chip tone="red">Inactive</Chip>
+                        </>
+                      )}
+                      {item.details ? <div className="small faint">{item.details}</div> : null}
+                    </>
+                  ),
+                  brand: (
+                    <>
+                      {[item.brand, item.model].filter(Boolean).join(" · ") || "—"}
+                      <div className="small faint">{ITEM_KIND_LABELS[item.kind]}</div>
+                    </>
+                  ),
+                  category: item.category || "—",
+                  sku: item.sku || "—",
+                  unit: item.unit,
+                  price: item.defaultUnitPrice != null ? formatPeso(item.defaultUnitPrice) : "—",
+                },
+              }))}
+            />
           )}
         </>
       ) : (
