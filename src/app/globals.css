@@ -8239,4 +8239,217 @@ button.contact-card-add {
     min-height: 32px !important;
     height: auto !important;
   }
+
+  /* Tighter phone chrome. One 10px side inset, not page padding plus card padding.
+     Sections are full-bleed bands with a 1px divider, not a box inside a box.
+     Desktop and tablet are outside this screen query. Tap targets and 16px
+     fields above are unchanged. */
+  .content,
+  .content:has(.home-dashboard),
+  .content:has(.home-getting-started) {
+    background: #fff;
+    padding: 8px 0 16px;
+  }
+  .topbar {
+    padding: 8px 10px;
+  }
+  .page-header,
+  .home-page-header {
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 0 10px;
+  }
+  .page-header .subtitle {
+    margin-top: 2px;
+  }
+  .toolbar,
+  .pill-tabs-wrap,
+  .form-grid,
+  .txn-filters {
+    margin-bottom: 8px;
+    gap: 6px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .card .toolbar,
+  .card .form-grid,
+  .card .pill-tabs-wrap,
+  .card .txn-filters {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .form-grid {
+    gap: 8px;
+  }
+  .field label,
+  .field .label {
+    margin-bottom: 2px;
+  }
+  .overview-dashboard,
+  .home-dashboard,
+  .home-mid,
+  .home-bot,
+  .txn-tab {
+    gap: 0;
+  }
+  .card + .card,
+  .home-dashboard .card,
+  .overview-dashboard .card {
+    margin-top: 0;
+  }
+
+  /* One surface. A top rule separates sections. No side border, radius, or shadow. */
+  .card,
+  .home-dashboard .card,
+  .record-card-row,
+  .table-wrap,
+  .upload-form,
+  .wh-internal-panel,
+  .totals-box,
+  .quote-line-card,
+  .contacts-strip-item {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .content > .card,
+  .overview-dashboard > .card,
+  .home-dashboard > .card,
+  .home-mid > .card,
+  .home-bot > .card,
+  .home-bot-left > .card,
+  .record-list-cards > .record-card-row,
+  .quote-line-card,
+  .contacts-strip-list > .contacts-strip-item + .contacts-strip-item {
+    border-top: 1px solid var(--border);
+  }
+  .card,
+  .overview-profile-card,
+  .record-list-cards > .record-card-row {
+    padding: 8px 10px;
+    gap: 2px;
+  }
+  .record-list-cards .card-row-primary,
+  .record-list-cards .card-row-chips,
+  .record-list-cards .card-row-amount {
+    flex: 0 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+  .record-list-cards {
+    gap: 0;
+  }
+  .record-list-cards > .record-card-row,
+  .record-list-cards > .record-card-row.clickable:hover {
+    box-shadow: none;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 0;
+  }
+  .card h2,
+  .card-head {
+    margin-bottom: 6px;
+  }
+
+  /* Tile groups: the lines between cells are the only chrome. */
+  .home-kps,
+  .home-pipeline-phone,
+  .stat-grid,
+  .overview-split-grid {
+    background: transparent;
+    gap: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .overview-split-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-split-grid > .card {
+    border-right: 0;
+  }
+  .home-kps > .card,
+  .home-kps > .home-kp,
+  .home-pipeline-phone > .card,
+  .home-pipeline-phone > a,
+  .stat-grid > .card,
+  .stat-grid > a.card,
+  .overview-split-grid > .card {
+    background: transparent;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+    padding: 8px 10px;
+  }
+  .home-kps > .card:nth-child(2n),
+  .home-pipeline-phone > a:nth-child(2n),
+  .stat-grid > .card:nth-child(2n),
+  .stat-grid > a.card:nth-child(2n) {
+    border-right: 0;
+  }
+  .home-pipeline-phone .home-pipeline-tile,
+  .home-pipeline-phone > .card {
+    min-height: 0;
+    height: auto;
+  }
+
+  /* A panel inside a card or table keeps the parent's surface. */
+  .card .card,
+  .card .table-wrap,
+  .card .quote-line-card,
+  .card .wh-internal-panel,
+  .card .totals-box,
+  .card .upload-form,
+  .card .record-card-row,
+  .card .contacts-strip-item,
+  .table-wrap .card {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .card .quote-line-card,
+  .contacts-strip-list > .contacts-strip-item + .contacts-strip-item {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 0;
+  }
+  .table-wrap {
+    padding: 0;
+    max-width: 100%;
+  }
+  table.list th,
+  table.list td {
+    height: auto;
+    padding: 8px 10px;
+  }
+  .card table.list th,
+  .card table.list td {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .home-ct,
+  .home-sales > .home-ct,
+  .home-na-card > .home-ct,
+  .home-na,
+  .home-sales-empty,
+  .home-sales-chw,
+  .home-sales-ml {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }

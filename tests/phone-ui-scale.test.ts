@@ -39,5 +39,8 @@ describe("phone UI scale", () => {
     expect(phone).toMatch(/min-height:\s*32px;/);
     expect(phone).toMatch(/\.form-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
     expect(phone).toMatch(/\.page-header \.actions[^}]*flex-wrap:\s*wrap;/);
+    expect(phone).toMatch(/\.content,\s*\n\s*\.content:has\(\.home-dashboard\)[\s\S]*padding:\s*8px 0 16px;/);
+    expect(phone).toMatch(/\.card \.table-wrap[\s\S]*background:\s*transparent;/);
+    expect(phone).toMatch(/\.home-kps,\s*\n\s*\.home-pipeline-phone[\s\S]*border-top:\s*1px solid var\(--border\);/);
   });
 });
