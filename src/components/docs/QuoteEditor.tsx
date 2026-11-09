@@ -44,11 +44,15 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { costIsEmpty, lastCostHint, pickSupplierCost, type SupplierCostRow } from "@/lib/quotes/last-cost";
+import { lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot } from "@/lib/quotes/lot-moves";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { QuoteStatusChip } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { SearchPicker } from "@/components/SearchPicker";
+import { AddSupplierDialog } from "@/components/purchasing/AddSupplierDialog";
+import type { CreatedInlineSupplier } from "@/app/(app)/suppliers/actions";
 import { AddContactDialog } from "./AddContactDialog";
 import {
   type EditorAddressOption,
@@ -310,6 +314,11 @@ export function QuoteEditor({
    * "" for no pick (print/conversion use the customer's default). */
   const [deliveryPick, setDeliveryPick] = useState(deliveryAddressId ?? "");
   const [addAddressOpen, setAddAddressOpen] = useState(false);
+  /** Supplier options are local state so an inline-added supplier can join
+   *  the list (and be picked on the line/component that asked for it). */
+  const [supplierList, setSupplierList] = useState(suppliers);
+  const [addSupplierOpen, setAddSupplierOpen] = useState(false);
+  const supplierTargetRef = useRef<{ lineKey: string; compKey: string | null } | null>(null);
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
@@ -641,9 +650,42 @@ export function QuoteEditor({
         if (x.key !== line.key) return x;
         if (!on) return { ...x, isLot: false };
         const comps = x.components && x.components.length ? x.components : [blankComponent()];
-        return { ...x, isLot: true, components: comps };
+        return { ...x, isLot: true, qty: "1", unit: "lot", components: comps };
       }),
     );
+  }
+
+  // ---- Lot grouping: select items into lots (2026-11-09) -----------------
+
+  function onMoveLineToLot(line: EditorItem, lotKey: string) {
+    if (!lotKey) return;
+    setItems((xs) => moveLineIntoLot(xs, line.key, lotKey));
+  }
+
+  function onMoveComponent(line: EditorItem, comp: EditorComponent, target: string) {
+    if (!target) return;
+    if (target === "__out__") {
+      setItems((xs) =>
+        moveComponentOut(xs, line.key, comp.key, (c) => {
+          const wh = lineWithholdingSnapshotFromPicks(linePicks, line.kind);
+          return {
+            ...blankItem(linePicks, allocLineKey()),
+            kind: line.kind,
+            withholdingRate: wh.withholdingRate,
+            withholdingAtc: wh.withholdingAtc,
+            itemId: c.itemId,
+            itemName: c.itemId ? c.description : null,
+            description: c.description,
+            qty: c.qty,
+            unit: c.unit,
+            supplierId: c.supplierId,
+            supplierUnitCost: c.unitCost,
+          };
+        }),
+      );
+    } else {
+      setItems((xs) => moveComponentToLot(xs, line.key, comp.key, target));
+    }
   }
 
   function setComponent(lineKey: string, compKey: string, patch: Partial<EditorComponent>) {
@@ -715,6 +757,13 @@ export function QuoteEditor({
     setDrawerFor(line.key);
     if (!line.itemId) {
       setDrawerItem(null);
+      // 2026-11-09 (Jerwin): opening "Add to Products" IS the intent — mark
+      // the line so saving the quote creates the catalog item even if every
+      // drawer field stays blank. Free-text lines never open the drawer and
+      // stay out of the catalog.
+      if (line.newCatalog == null) {
+        setItem(line.key, { newCatalog: { brand: "", model: "", category: "", sku: "", details: "" } });
+      }
       return;
     }
     setDrawerBusy(true);
@@ -929,6 +978,10 @@ export function QuoteEditor({
   }
 
   function pickCustomer(id: string) {
+    // Re-picking the customer already on the quote is a no-op: the reset
+    // below would wipe the contact, delivery pick and terms the staffer
+    // already set (CTO fix 2026-11-09).
+    if (id === h.customerId) return;
     const c = customerList.find((x) => x.id === id);
     // The delivery pick belongs to the customer: reset to the new
     // customer's default delivery address (or no pick).
@@ -984,6 +1037,31 @@ export function QuoteEditor({
     );
     setDeliveryPick(a.id);
     setAddAddressOpen(false);
+  }
+
+  /** The "+ Add supplier" row inside a line/component supplier picker:
+   *  remember which line (or component) asked, then open the drawer. */
+  function openAddSupplier(lineKey: string, compKey: string | null) {
+    supplierTargetRef.current = { lineKey, compKey };
+    setAddSupplierOpen(true);
+  }
+
+  /** A just-saved supplier joins the list and is picked on the line or
+   *  component that asked for it (cost auto-fill follows the pick). */
+  function onSupplierCreated(created: CreatedInlineSupplier) {
+    const entry = { id: created.id, name: created.name };
+    setSupplierList((xs) => (xs == null || xs.some((x) => x.id === entry.id) ? xs : [...xs, entry].sort((a, b) => a.name.localeCompare(b.name))));
+    const target = supplierTargetRef.current;
+    supplierTargetRef.current = null;
+    if (!target) return;
+    const line = items.find((x) => x.key === target.lineKey);
+    if (!line) return;
+    if (target.compKey == null) {
+      onSupplierPick(line, created.id);
+    } else {
+      const comp = (line.components ?? []).find((c) => c.key === target.compKey);
+      if (comp) onComponentSupplierPick(line, comp, created.id);
+    }
   }
 
   function changeQuotePick(next: string[] | null) {
@@ -1043,8 +1121,6 @@ export function QuoteEditor({
 
   function itemPayload(i: EditorItem) {
     const nc = i.newCatalog;
-    const hasCatalogFields =
-      nc != null && [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((v) => v.trim() !== "");
     const base = {
       id: i.id,
       description: i.description,
@@ -1056,8 +1132,9 @@ export function QuoteEditor({
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
       itemId: i.itemId,
-      // Only send typed catalog fields; blank ones mean "no catalog item".
-      newCatalog: hasCatalogFields
+      // The marker goes whenever the drawer marked the line (2026-11-09):
+      // blank fields still create the item on save.
+      newCatalog: nc
         ? { brand: nc.brand, model: nc.model, category: nc.category, sku: nc.sku, details: nc.details }
         : undefined,
     };
@@ -1316,19 +1393,16 @@ export function QuoteEditor({
               <label htmlFor="customerId">
                 Customer<span className="req"> *</span>
               </label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="customerId" value={h.customerId} onChange={(ev) => onCustomerSelect(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">Pick a customer…</option>
-                  {customerList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddCustomerOpen(true)}>
-                  Add customer
-                </button>
-              </div>
+              <SearchPicker
+                id="customerId"
+                ariaLabel="Customer"
+                value={h.customerId}
+                options={customerList.map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Pick a customer…"
+                onPick={onCustomerSelect}
+                addLabel="Add customer"
+                onAdd={() => setAddCustomerOpen(true)}
+              />
               {customer && (
                 <div className="hint">
                   {[customerTypeLabel(customer.withholdingType), quotePickHint].filter(Boolean).join(" · ")}
@@ -1338,20 +1412,18 @@ export function QuoteEditor({
             </div>
             <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">None</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.isMain ? " (main)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddContactOpen(true)}>
-                  Add contact
-                </button>
-              </div>
+              <SearchPicker
+                id="contactId"
+                ariaLabel="Contact"
+                value={h.contactId}
+                options={contacts.map((c) => ({ id: c.id, label: c.name, meta: c.isMain ? "Main contact" : undefined }))}
+                placeholder="Pick a contact…"
+                emptyOptionLabel="None"
+                disabled={!customer}
+                onPick={(id) => setH({ ...h, contactId: id })}
+                addLabel="Add contact"
+                onAdd={() => setAddContactOpen(true)}
+              />
               {e.contactId && <div className="error">{e.contactId}</div>}
             </div>
             <div className={`quote-f field${e.date ? " has-error" : ""}`}>
@@ -1401,22 +1473,22 @@ export function QuoteEditor({
               <label htmlFor="subject">Subject / project</label>
               <input id="subject" type="text" value={h.subject} onChange={(ev) => setH({ ...h, subject: ev.target.value })} />
               {e.subject && <div className="error">{e.subject}</div>}
+              {items.some((i) => i.isLot) ? <div className="hint">For a lot, the lot&apos;s name belongs in this Subject — it does not print in the items table.</div> : null}
             </div>
             <div className={`quote-f field full${e.deliveryAddressId ? " has-error" : ""}`}>
               <label htmlFor="deliveryAddressId">Delivery address</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="deliveryAddressId" value={deliveryPick} onChange={(ev) => onDeliverySelect(ev.target.value)} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">Customer default — decide at conversion</option>
-                  {(customer?.addresses ?? []).map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddAddressOpen(true)}>
-                  Add address
-                </button>
-              </div>
+              <SearchPicker
+                id="deliveryAddressId"
+                ariaLabel="Delivery address"
+                value={deliveryPick}
+                options={(customer?.addresses ?? []).map((a) => ({ id: a.id, label: a.label, meta: a.oneLine }))}
+                placeholder="Pick a delivery address…"
+                emptyOptionLabel="Customer default — decide at conversion"
+                disabled={!customer}
+                onPick={onDeliverySelect}
+                addLabel="Add address"
+                onAdd={() => setAddAddressOpen(true)}
+              />
               {pickedAddress ? (
                 <div className="hint" style={{ whiteSpace: "pre-line" }}>
                   {pickedAddress.text}
@@ -1506,7 +1578,6 @@ export function QuoteEditor({
                   const displayAtc = showOverride
                     ? i.withholdingAtc
                     : pickUsual.atc;
-                  const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -1561,7 +1632,7 @@ export function QuoteEditor({
                           </div>
                         </div>
                         <div className="quote-ln-qty">
-                          <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
+                          <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" value={i.qty} disabled={i.isLot === true} title={i.isLot ? "A lot is qty 1 — add another lot for a second bundle" : undefined} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                         </div>
                         <div className="quote-ln-unit">
                           <input aria-label={`Line ${idx + 1} unit`} value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
@@ -1592,6 +1663,21 @@ export function QuoteEditor({
                           >
                             {expanded ? "⌃" : "⌄"}
                           </button>
+                          {withCosts && !i.isLot && lotTargets(items).length > 0 ? (
+                            <select
+                              className="quote-ln-move"
+                              aria-label={`Move line ${idx + 1} into a lot`}
+                              value=""
+                              onChange={(ev) => onMoveLineToLot(i, ev.target.value)}
+                            >
+                              <option value="">Move to…</option>
+                              {lotTargets(items).map((t) => (
+                                <option key={t.key} value={t.key}>
+                                  Lot {t.n}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
                           <button
                             type="button"
                             className="btn-link danger"
@@ -1651,6 +1737,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
+                              {i.isLot ? <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span> : null}
                               <label className="small">
                                 <input
                                   type="checkbox"
@@ -1664,13 +1751,17 @@ export function QuoteEditor({
                           ) : null}
                           {withCosts && i.isLot ? (
                             <div className="quote-ln-components">
+                              <div className="small muted quote-ln-comp-hint">
+                                Members carry cost only — the lot price above is the only selling price. A member&apos;s first description line prints as the part title; the lines under it print as specs. Moving a line into a lot drops its selling price and withholding pick — the lot&apos;s price and withholding apply.
+                              </div>
                               {(i.components ?? []).map((c, cIdx) => (
                                 <div className="quote-ln-comp" key={c.key}>
                                   <div className="field grow">
                                     <label className="label" htmlFor={`comp-desc-${c.key}`}>
                                       Component {cIdx + 1}
                                     </label>
-                                    <input
+                                    <textarea
+                                      rows={3}
                                       id={`comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
                                       value={c.description}
@@ -1685,7 +1776,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
-                                    />
+                                    ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         <ul className="plain-list">
@@ -1733,19 +1824,17 @@ export function QuoteEditor({
                                     <label className="label" htmlFor={`comp-sup-${c.key}`}>
                                       Supplier
                                     </label>
-                                    <select
+                                    <SearchPicker
                                       id={`comp-sup-${c.key}`}
-                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      ariaLabel={`Line ${idx + 1} component ${cIdx + 1} supplier`}
                                       value={c.supplierId ?? ""}
-                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
-                                    >
-                                      <option value="">—</option>
-                                      {suppliers!.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                          {s.name}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                      placeholder="Pick a supplier…"
+                                      emptyOptionLabel="—"
+                                      onPick={(id) => onComponentSupplierPick(i, c, id || null)}
+                                      addLabel="Add supplier"
+                                      onAdd={() => openAddSupplier(i.key, c.key)}
+                                    />
                                   </div>
                                   <div className="field">
                                     <label className="label" htmlFor={`comp-cost-${c.key}`}>
@@ -1760,6 +1849,20 @@ export function QuoteEditor({
                                     />
                                     {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
                                   </div>
+                                  <select
+                                    className="quote-ln-move"
+                                    aria-label={`Move component ${cIdx + 1} of line ${idx + 1} to another lot or out of the lot`}
+                                    value=""
+                                    onChange={(ev) => onMoveComponent(i, c, ev.target.value)}
+                                  >
+                                    <option value="">Move to…</option>
+                                    {lotTargets(items, i.key).map((t) => (
+                                      <option key={t.key} value={t.key}>
+                                        Lot {t.n}
+                                      </option>
+                                    ))}
+                                    <option value="__out__">Out of lot</option>
+                                  </select>
                                   <button
                                     type="button"
                                     className="btn-link danger"
@@ -1786,20 +1889,17 @@ export function QuoteEditor({
                                 <label className="label" htmlFor={`sup-${i.key}`}>
                                   Supplier (internal)
                                 </label>
-                                <select
+                                <SearchPicker
                                   id={`sup-${i.key}`}
-                                  aria-label={`Line ${idx + 1} supplier`}
-                                  title={supplierName || undefined}
+                                  ariaLabel={`Line ${idx + 1} supplier`}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
-                                >
-                                  <option value="">—</option>
-                                  {suppliers!.map((s) => (
-                                    <option key={s.id} value={s.id} title={s.name}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                  placeholder="Pick a supplier…"
+                                  emptyOptionLabel="—"
+                                  onPick={(id) => onSupplierPick(i, id || null)}
+                                  addLabel="Add supplier"
+                                  onAdd={() => openAddSupplier(i.key, null)}
+                                />
                               </div>
                               <div className="field">
                                 <label className="label" htmlFor={`cost-${i.key}`}>
@@ -1841,7 +1941,6 @@ export function QuoteEditor({
                   const pickChips = lineWithholdingChipsFromPicks(linePicks, i.kind);
                   const usePickChips = !showOverride && pickChips.length > 0;
                   const displayAtc = showOverride ? i.withholdingAtc : pickUsual.atc;
-                  const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -1870,6 +1969,21 @@ export function QuoteEditor({
                         >
                           {expanded ? "⌃" : "⌄"}
                         </button>
+                        {withCosts && !i.isLot && lotTargets(items).length > 0 ? (
+                          <select
+                            className="quote-ln-move"
+                            aria-label={`Move line ${idx + 1} into a lot`}
+                            value=""
+                            onChange={(ev) => onMoveLineToLot(i, ev.target.value)}
+                          >
+                            <option value="">Move to…</option>
+                            {lotTargets(items).map((t) => (
+                              <option key={t.key} value={t.key}>
+                                Lot {t.n}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-link danger"
@@ -1895,6 +2009,7 @@ export function QuoteEditor({
                             id={`m-qty-${i.key}`}
                             aria-label={`Line ${idx + 1} qty`}
                             inputMode="decimal"
+                            disabled={i.isLot === true}
                             value={i.qty}
                             onChange={(ev) => setItem(i.key, { qty: ev.target.value })}
                           />
@@ -2006,6 +2121,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
+                              {i.isLot ? <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span> : null}
                               <label className="small">
                                 <input
                                   type="checkbox"
@@ -2019,13 +2135,17 @@ export function QuoteEditor({
                           ) : null}
                           {withCosts && i.isLot ? (
                             <div className="quote-ln-components">
+                              <div className="small muted quote-ln-comp-hint">
+                                Members carry cost only — the lot price above is the only selling price. A member&apos;s first description line prints as the part title; the lines under it print as specs. Moving a line into a lot drops its selling price and withholding pick — the lot&apos;s price and withholding apply.
+                              </div>
                               {(i.components ?? []).map((c, cIdx) => (
                                 <div className="quote-ln-comp" key={c.key}>
                                   <div className="field grow">
                                     <label className="label" htmlFor={`m-comp-desc-${c.key}`}>
                                       Component {cIdx + 1}
                                     </label>
-                                    <input
+                                    <textarea
+                                      rows={3}
                                       id={`m-comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
                                       value={c.description}
@@ -2040,7 +2160,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
-                                    />
+                                    ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         <ul className="plain-list">
@@ -2088,19 +2208,17 @@ export function QuoteEditor({
                                     <label className="label" htmlFor={`m-comp-sup-${c.key}`}>
                                       Supplier
                                     </label>
-                                    <select
+                                    <SearchPicker
                                       id={`m-comp-sup-${c.key}`}
-                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      ariaLabel={`Line ${idx + 1} component ${cIdx + 1} supplier`}
                                       value={c.supplierId ?? ""}
-                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
-                                    >
-                                      <option value="">—</option>
-                                      {suppliers!.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                          {s.name}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                      placeholder="Pick a supplier…"
+                                      emptyOptionLabel="—"
+                                      onPick={(id) => onComponentSupplierPick(i, c, id || null)}
+                                      addLabel="Add supplier"
+                                      onAdd={() => openAddSupplier(i.key, c.key)}
+                                    />
                                   </div>
                                   <div className="field">
                                     <label className="label" htmlFor={`m-comp-cost-${c.key}`}>
@@ -2115,6 +2233,20 @@ export function QuoteEditor({
                                     />
                                     {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
                                   </div>
+                                  <select
+                                    className="quote-ln-move"
+                                    aria-label={`Move component ${cIdx + 1} of line ${idx + 1} to another lot or out of the lot`}
+                                    value=""
+                                    onChange={(ev) => onMoveComponent(i, c, ev.target.value)}
+                                  >
+                                    <option value="">Move to…</option>
+                                    {lotTargets(items, i.key).map((t) => (
+                                      <option key={t.key} value={t.key}>
+                                        Lot {t.n}
+                                      </option>
+                                    ))}
+                                    <option value="__out__">Out of lot</option>
+                                  </select>
                                   <button
                                     type="button"
                                     className="btn-link danger"
@@ -2141,20 +2273,17 @@ export function QuoteEditor({
                                 <label className="label" htmlFor={`m-sup-${i.key}`}>
                                   Supplier (internal)
                                 </label>
-                                <select
+                                <SearchPicker
                                   id={`m-sup-${i.key}`}
-                                  aria-label={`Line ${idx + 1} supplier`}
-                                  title={supplierName || undefined}
+                                  ariaLabel={`Line ${idx + 1} supplier`}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
-                                >
-                                  <option value="">Supplier —</option>
-                                  {suppliers!.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                  placeholder="Pick a supplier…"
+                                  emptyOptionLabel="—"
+                                  onPick={(id) => onSupplierPick(i, id || null)}
+                                  addLabel="Add supplier"
+                                  onAdd={() => openAddSupplier(i.key, null)}
+                                />
                               </div>
                               <div className="field">
                                 <label className="label" htmlFor={`m-cost-${i.key}`}>
@@ -2439,6 +2568,9 @@ export function QuoteEditor({
           onSaved={onContactAdded}
         />
       )}
+      {addSupplierOpen && (
+        <AddSupplierDialog open={addSupplierOpen} onClose={() => setAddSupplierOpen(false)} termsOptions={termsOptions} onSaved={onSupplierCreated} />
+      )}
       {addAddressOpen && customer && (
         <AddAddressDialog
           customerName={customer.name}
@@ -2554,7 +2686,7 @@ export function QuoteEditor({
                 </>
               ) : (
                 <>
-                  <p className="small muted">“{line.description || "This line"}” isn&apos;t linked to the catalog yet. Fill in the fields below and saving this quote adds it as a new catalog item; leave them blank and it stays a free-text line.</p>
+                  <p className="small muted">“{line.description || "This line"}” isn&apos;t linked to the catalog yet. Saving this quote adds it as a new catalog item — the fields below are optional extras, blank is fine.</p>
                   <div className="field">
                     <label className="label" htmlFor="nc-brand">Brand</label>
                     <input id="nc-brand" type="text" value={nc.brand} onChange={(ev) => setNc({ brand: ev.target.value })} />

@@ -139,6 +139,11 @@ export function planItems(
     // only via conversion and are never edited as lots).
     const lotFromStored = old?.isLot === true && !lotFromInput && (!withCosts || opts.preserveLots === true);
     const isLot = lotFromInput || lotFromStored;
+    // A lot is always qty 1 (Jerwin's model, 2026-11-09): the lot's price is
+    // the price of ONE bundle, and Create POs orders the components'
+    // quantities unscaled — a lot qty of 2 would sell two bundles and buy
+    // one bundle's parts. Forcing it here self-heals any stored lot.
+    const qty = isLot ? "1" : input.qty;
     let components: PlannedComponent[] = [];
     if (lotFromInput) {
       components = (input.components ?? []).map((c) => ({
@@ -154,7 +159,7 @@ export function planItems(
     }
     let amounts: LineAmounts;
     if (isLot) {
-      const base = lineAmounts({ kind: input.kind, qty: input.qty, unitPrice: input.unitPrice, supplierUnitCost: "0" });
+      const base = lineAmounts({ kind: input.kind, qty, unitPrice: input.unitPrice, supplierUnitCost: "0" });
       const supplierTotal = componentsTotal(components);
       amounts = {
         total: base.total,
@@ -162,14 +167,14 @@ export function planItems(
         margin: fromScaled(toScaled(base.total, 2) - toScaled(supplierTotal, 2), 2),
       };
     } else {
-      amounts = lineAmounts({ kind: input.kind, qty: input.qty, unitPrice: input.unitPrice, supplierUnitCost });
+      amounts = lineAmounts({ kind: input.kind, qty, unitPrice: input.unitPrice, supplierUnitCost });
     }
     return {
       id: old?.id ?? null,
       sortOrder: i + 1,
       description: input.description,
       kind: input.kind,
-      qty: input.qty,
+      qty,
       unit: input.unit,
       // The editor always sends itemId (null = unlinked); null/"" clears a link.
       itemId: input.itemId || null,

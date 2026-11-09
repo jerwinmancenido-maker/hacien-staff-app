@@ -53,6 +53,11 @@ describe("S-55 surfaces", () => {
     expect(page).toContain("Last cost");
     expect(page).toContain("listItemHistory");
   });
+  it("catalog rows are clickable to the item detail (DataTable row href)", () => {
+    const page = src("src/app/(app)/items/page.tsx");
+    expect(page).toContain("DataTable");
+    expect(page).toContain("href: `/items/${item.id}`");
+  });
   it("history rows link to the history-only detail", () => {
     const page = src("src/app/(app)/items/page.tsx");
     expect(page).toContain("/items/history?item=");

@@ -72,6 +72,23 @@ describe.skipIf(!hasDb)("quote item catalog link (MySQL)", () => {
     expect(created?.defaultUnitPrice?.toFixed(2)).toBe("4321.50");
   });
 
+  it("creates a catalog item from an all-blank Add-to-Products marker (2026-11-09 rule)", async () => {
+    const name = `Blank Marker Item ${tag()}`;
+    const input = quoteInput(customerId, year);
+    input.items[0]!.description = name;
+    input.items[0]!.unitPrice = "777.25";
+    input.items[0]!.newCatalog = { brand: "", model: "", category: "", sku: "", details: "" };
+    const q = await createQuote(input, costUser);
+    const line = await db.quoteItem.findFirst({ where: { quoteId: q.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    expect(line?.itemId).not.toBeNull();
+    const created = await db.item.findUnique({ where: { id: line!.itemId! } });
+    expect(created?.name).toBe(name);
+    expect(created?.brand).toBeNull();
+    expect(created?.sku).toBeNull();
+    expect(created?.unit).toBe(input.items[0]!.unit);
+    expect(created?.defaultUnitPrice?.toFixed(2)).toBe("777.25");
+  });
+
   it("leaves a plain free-text line unlinked when no catalog fields are typed", async () => {
     const input = quoteInput(customerId, year);
     const q = await createQuote(input, costUser);

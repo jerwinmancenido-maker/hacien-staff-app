@@ -1,8 +1,11 @@
-// Lot prints — DB: the quote and sales-order print models carry the lot
-// components' DESCRIPTIONS (owner decision 2026-11-09) and nothing else
-// about them — no component costs, quantities or supplier ids anywhere
-// in the print model.
+// Lot prints — DB: the quote and sales-order print models carry each lot
+// member as a part (title + spec lines split from its description, plus
+// its OWN qty/unit — owner block design 2026-11-09) and nothing else
+// about them — no component costs or supplier ids anywhere in the model.
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ProfessionalPrintDocument } from "@/components/docs/ProfessionalPrintDocument";
 import { db } from "@/lib/db";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
@@ -38,7 +41,7 @@ describe("lot print models (db)", () => {
             unitPrice: "600000",
             isLot: true,
             components: [
-              { id: null, itemId: null, description: "GCP subscription", qty: "1", unit: "lot", supplierId: supA.id, unitCost: "300000" },
+              { id: null, itemId: null, description: "GCP subscription\nOne year term\nIncludes support", qty: "1", unit: "lot", supplierId: supA.id, unitCost: "300000" },
               { id: null, itemId: null, description: "Support hours", qty: "2", unit: "hour", supplierId: supB.id, unitCost: "47000" },
             ],
           },
@@ -60,7 +63,10 @@ describe("lot print models (db)", () => {
     const quotePrint = await getQuotePrintModel(q.id);
     expect(quotePrint).not.toBeNull();
     const lotLine = quotePrint!.doc.items!.find((i) => i.description.includes("Google Cloud"));
-    expect(lotLine?.components).toEqual(["GCP subscription", "Support hours"]);
+    expect(lotLine?.components).toEqual([
+      { title: "GCP subscription", specs: ["One year term", "Includes support"], qty: "1.00", unit: "lot" },
+      { title: "Support hours", specs: [], qty: "2.00", unit: "hour" },
+    ]);
     const plainLine = quotePrint!.doc.items!.find((i) => i.description === "Laptop unit");
     expect(plainLine?.components).toBeUndefined();
 
@@ -73,10 +79,14 @@ describe("lot print models (db)", () => {
     const soPrint = await getSalesOrderPrintModel(so.id);
     expect(soPrint).not.toBeNull();
     const soLotLine = soPrint!.doc.items!.find((i) => i.description.includes("Google Cloud"));
-    expect(soLotLine?.components).toEqual(["GCP subscription", "Support hours"]);
+    expect(soLotLine?.components).toEqual([
+      { title: "GCP subscription", specs: ["One year term", "Includes support"], qty: "1.00", unit: "lot" },
+      { title: "Support hours", specs: [], qty: "2.00", unit: "hour" },
+    ]);
 
     // Leak check: no component cost or supplier identity anywhere in
-    // either model's items (the lot's own price, 600000, is expected).
+    // either model's items (the lot's own price, 600000, is expected;
+    // member qtys print by design under the block layout).
     // Scoped to items: the full model legitimately carries long numeric
     // strings elsewhere (e.g. the QR svg path data in the footer).
     for (const model of [quotePrint!.doc, soPrint!.doc]) {
@@ -86,5 +96,15 @@ describe("lot print models (db)", () => {
       expect(json).not.toContain(supA.id);
       expect(json).not.toContain(supB.id);
     }
+
+    // CTO fix (2026-11-09): the SO print NAMES the lot. Rendering the
+    // real SO model shows the lot line's own description leading its
+    // block (pp-lot-name); the quote render has no name row — there the
+    // name rides on the quote's Subject (owner design).
+    const soHtml = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: soPrint!.doc }));
+    expect(soHtml).toContain("pp-lot-name");
+    expect(soHtml).toContain("Google Cloud Platform Services");
+    const quoteHtml = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: quotePrint!.doc }));
+    expect(quoteHtml).not.toContain("pp-lot-name");
   });
 });

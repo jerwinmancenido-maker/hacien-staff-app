@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { AddContactDialog } from "@/components/docs/AddContactDialog";
+import { SearchPicker } from "@/components/SearchPicker";
 import { AddSupplierDialog } from "./AddSupplierDialog";
 import { useFormAction } from "@/components/useFormAction";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
@@ -156,19 +157,16 @@ export function PoEditor({
               <label htmlFor="supplierId">
                 Supplier<span className="req"> *</span>
               </label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="supplierId" value={h.supplierId} onChange={(ev) => pickSupplier(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">Pick a supplier…</option>
-                  {supplierList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddSupplierOpen(true)}>
-                  Add supplier
-                </button>
-              </div>
+              <SearchPicker
+                id="supplierId"
+                ariaLabel="Supplier"
+                value={h.supplierId}
+                options={supplierList.map((s) => ({ id: s.id, label: s.name }))}
+                placeholder="Pick a supplier…"
+                onPick={pickSupplier}
+                addLabel="Add supplier"
+                onAdd={() => setAddSupplierOpen(true)}
+              />
               {e.supplierId && <div className="error">{e.supplierId}</div>}
             </div>
           ) : (
@@ -181,20 +179,18 @@ export function PoEditor({
           )}
           <div className={`field${e.supplierContactId ? " has-error" : ""}`}>
             <label htmlFor="supplierContactId">Supplier contact</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-              <select id="supplierContactId" value={h.supplierContactId} onChange={(ev) => setH({ ...h, supplierContactId: ev.target.value })} disabled={!supplier} style={{ flex: 1, minWidth: 160 }}>
-                <option value="">None</option>
-                {(supplier?.contacts ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.isMain ? " (main)" : ""}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn btn-secondary btn-sm" disabled={!supplier} onClick={() => setAddContactOpen(true)}>
-                Add contact
-              </button>
-            </div>
+            <SearchPicker
+              id="supplierContactId"
+              ariaLabel="Supplier contact"
+              value={h.supplierContactId}
+              options={(supplier?.contacts ?? []).map((c) => ({ id: c.id, label: c.name, meta: c.isMain ? "Main contact" : undefined }))}
+              placeholder="Pick a contact…"
+              emptyOptionLabel="None"
+              disabled={!supplier}
+              onPick={(id) => setH({ ...h, supplierContactId: id })}
+              addLabel="Add contact"
+              onAdd={() => setAddContactOpen(true)}
+            />
             {e.supplierContactId && <div className="error">{e.supplierContactId}</div>}
           </div>
           <div className={`field${e.date ? " has-error" : ""}`}>

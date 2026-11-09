@@ -5094,33 +5094,33 @@ button.contact-card-add {
   text-align: left;
   vertical-align: top;
 }
-/* Lot blocks (print redesign v8): the lot title carries the hierarchy —
-   bold navy — so the merged price clearly belongs to the bundle, and
-   component rows indent quietly with no per-row hairline (the old
-   desc-only hairlines stopped mid-table and read as a broken grid);
-   one rule closes the block under the last component. */
 .pp-lot-title {
   font-weight: 700;
   font-size: 10.5pt;
   color: var(--pp-navy);
 }
-.pp-items tr.pp-lot-start td {
-  padding-top: 13px;
+/* Lot blocks (owner design 2026-11-09, scoped per audit D3): quote and
+   sales-order items tables carry the bordered grid — each member part is
+   one bordered cell (bold title + spec bullets, its own qty/unit), the #
+   and price cells merge across the block. The class is applied ONLY to
+   quote/SO tables; PO/billing/receiving/expense, the ledger table and the
+   packing list keep the hairline style. */
+.pp-items-bordered th,
+.pp-items-bordered td {
+  border: 0.75pt solid #c3cad6;
 }
-.pp-items tr.pp-lot-start td.pp-desc {
-  /* No rule under the lot title — its own border would stop at the
-     description column edge (the merged cells draw theirs at the
-     block's end), echoing the old broken-grid look. */
-  border-bottom: none;
+.pp-items td.pp-part-cell {
+  padding: 7px 10px;
 }
-.pp-items td.pp-comp-cell {
-  padding: 5px 10px 5px 26px;
-  border-bottom: none;
+.pp-part-title {
+  font-weight: 700;
+  color: var(--pp-navy);
+}
+.pp-part-spec {
   color: #374151;
-}
-.pp-items tr.pp-comp-last td.pp-comp-cell {
-  border-bottom: 1px solid #dbe1ee;
-  padding-bottom: 10px;
+  font-size: 9pt;
+  padding-left: 10px;
+  line-height: 1.45;
 }
 /* Lot blocks: the rowSpan-merged #, qty, unit and price cells centre
    vertically against the lot's component rows. */
@@ -7694,6 +7694,33 @@ button.contact-card-add {
   border-color: var(--blue);
   color: var(--blue);
 }
+/* SearchPicker (record fields): the wrap anchors the shared .quote-picker
+   panel; the option list scrolls inside it while the pinned "+ Add …" row
+   stays fixed below the scroll area. */
+.search-picker-wrap {
+  position: relative;
+}
+.search-picker-wrap .input {
+  width: 100%;
+  padding-right: 26px;
+}
+.search-picker-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-2);
+  pointer-events: none;
+  font-size: 11px;
+}
+.search-picker-list {
+  max-height: 248px;
+  overflow-y: auto;
+}
+.search-picker-empty {
+  font-weight: 400;
+  color: var(--text-2);
+}
 /* Right slide-over variant of the shared modal (product details only). */
 .modal-backdrop.drawer {
   place-items: stretch end;
@@ -7866,6 +7893,34 @@ button.contact-card-add {
 .quote-ln-lotbar {
   display: flex;
   align-items: center;
+}
+/* Lot grouping (2026-11-09): the LOT n badge in the lot bar, the Move-to
+   selects on lines/components, and the members hint. */
+.quote-lot-badge {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+  margin-right: 8px;
+}
+.quote-ln-move {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  max-width: 132px;
+  background: #fff;
+}
+.quote-ln-comp-hint {
+  line-height: 1.5;
+}
+.quote-ln-comp textarea {
+  width: 100%;
+  font: inherit;
 }
 .quote-ln-components {
   display: flex;
