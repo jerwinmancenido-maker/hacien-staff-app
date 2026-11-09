@@ -8325,6 +8325,7 @@ button.contact-card-add {
     border-top: 1px solid var(--border);
   }
   .card,
+  .home-dashboard .card,
   .overview-profile-card,
   .record-list-cards > .record-card-row {
     padding: 8px 10px;
@@ -8374,9 +8375,6 @@ button.contact-card-add {
   .overview-split-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .overview-split-grid > .card {
-    border-right: 0;
-  }
   .home-kps > .card,
   .home-kps > .home-kp,
   .home-pipeline-phone > .card,
@@ -8392,6 +8390,11 @@ button.contact-card-add {
     box-shadow: none;
     margin: 0;
     padding: 8px 10px;
+  }
+  /* One-column split grid: no right border on its cards (the shared cell
+     rule above would otherwise restore it). */
+  .overview-split-grid > .card {
+    border-right: 0;
   }
   .home-kps > .card:nth-child(2n),
   .home-pipeline-phone > a:nth-child(2n),
@@ -8436,11 +8439,6 @@ button.contact-card-add {
   table.list td {
     height: auto;
     padding: 8px 10px;
-  }
-  .card table.list th,
-  .card table.list td {
-    padding-left: 0;
-    padding-right: 0;
   }
   .home-ct,
   .home-sales > .home-ct,
