@@ -6,6 +6,7 @@ import { Fragment } from "react";
 import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
+import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
 import { printStripCss } from "@/lib/print/strip-style";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
@@ -192,14 +193,24 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         </div>
       )}
 
-      {/* The full letterhead prints once, in flow, at the top of page 1
-          (print redesign v8, owner-approved 2026-11-09). The document
+      {/* The letterhead rides in the PrintHeaderRepeat thead, so it prints
+          at the top of EVERY page (owner 2026-11-10, restoring his
+          2026-11-07 rule "every page should have a header" for the
+          professional documents too — the v8/v10 strip-only exception left
+          page 2+ with no header and he called it unprofessional). The
+          thead renders in flow on page 1, so page 1 is unchanged: no
+          duplication (the in-flow copy below is gone — this IS the only
+          letterhead). The margin-box strip stays: it carries the document
+          title + number, which the letterhead does not. The document
           number sits in its own editorial block beside the title;
           date/status/meta form a strip under the title. */}
-      <header className="pp-head">
-        <CompanyLetterhead company={doc.company} />
-      </header>
-
+      <PrintHeaderRepeat
+        header={
+          <header className="pp-head">
+            <CompanyLetterhead company={doc.company} />
+          </header>
+        }
+      >
       <div className="pp-title-block">
         <h1>
           <span className="pp-title-pixel" aria-hidden="true" />
@@ -484,6 +495,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           <div className="pp-qr-spacer" aria-hidden="true" />
         )}
       </footer>
+      </PrintHeaderRepeat>
     </article>
   );
 }
