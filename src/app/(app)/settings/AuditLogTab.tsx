@@ -10,6 +10,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import {
   AUDIT_ENTITIES,
   AUDIT_ENTITY_LABELS,
+  auditActorLabel,
   auditRecordLink,
   auditSentence,
   resolveAuditLabels,
@@ -54,7 +55,13 @@ export async function AuditLogTab({ search }: { search: Search }) {
     (where.at as { lt: Date }).lt = d;
   }
   const [rows, total, users] = await Promise.all([
-    db.auditLog.findMany({ where, include: { user: { select: { name: true } } }, orderBy: { at: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    db.auditLog.findMany({
+      where,
+      include: { user: { select: { name: true } }, apiKey: { select: { name: true } } },
+      orderBy: { at: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
     db.auditLog.count({ where }),
     db.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
@@ -131,7 +138,7 @@ export async function AuditLogTab({ search }: { search: Search }) {
                       <div className="small muted">{formatDateTime(r.at).split(", ").pop()}</div>
                     </>
                   ),
-                  who: r.user?.name ?? <span className="faint">System</span>,
+                  who: auditActorLabel(r.user?.name, r.apiKey?.name) ?? <span className="faint">System</span>,
                   record: (
                     <>
                       <div>{AUDIT_ENTITY_LABELS[r.entityType] ?? r.entityType}</div>

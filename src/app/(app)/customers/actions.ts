@@ -4,11 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
-import { getSettingsSnapshot } from "@/lib/settings";
-import { duplicateCustomer, getCustomer, saveCustomer, setCustomerActive } from "@/lib/services/companies";
+import { duplicateCustomer, loadCustomerWriteOptions, saveCustomer, setCustomerActive } from "@/lib/services/companies";
 import { saveAddress } from "@/lib/services/addresses";
 import { attachStagedBusinessDocument } from "@/lib/services/business-documents";
-import { listWithholdingRates } from "@/lib/services/withholding";
 import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema } from "@/lib/validation/companies";
 import { addressSchema, type AddressInput } from "@/lib/validation/addresses";
@@ -31,22 +29,13 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
   let createdId: string | null = null;
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
-    const { settings } = await getSettingsSnapshot();
-    const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
     const type = str(form, "withholdingType") || undefined;
     // "No" always saves explicit none []; Yes shows the pick boxes.
     // Blank / not-set stays null and is rejected by the schema (never coerced to []).
     const pick = resolveCustomerSavedPick(type, parsePickFromForm(form));
     // A customer saved before terms were required can still be edited with blank terms.
     // A term already on the record stays valid even if it later leaves the Settings list.
-    let allowedTerms = settings.lists.paymentTerms;
-    let termsRequired = true;
-    if (id) {
-      const existing = await getCustomer(id);
-      const current = existing?.defaultTerms?.trim() ?? "";
-      if (current && !allowedTerms.includes(current)) allowedTerms = [...allowedTerms, current];
-      if (!current) termsRequired = false;
-    }
+    const { allowedTerms, activeCodes, termsRequired } = await loadCustomerWriteOptions(id);
     const parsed = customerSchema(allowedTerms, activeCodes, termsRequired).safeParse({
       name: str(form, "name"),
       tin: str(form, "tin"),

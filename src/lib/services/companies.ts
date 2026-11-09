@@ -5,7 +5,9 @@ import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
 import { extractLast4, isMaskedBankAccountNumber, maskBankAccountNumber, resolveBankAccountNumber } from "../bank-mask";
 import { ForbiddenError } from "../permissions";
+import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
+import { listWithholdingRates } from "./withholding";
 
 export class CompanyRuleError extends Error {
   constructor(
@@ -29,6 +31,9 @@ export type CustomerFilter = {
   withholdingPick?: "NOT_SET";
   showInactive?: boolean;
   onlyIds?: string[];
+  /** Page window for /api/v1. The staff UI omits these and loads the filtered list. */
+  skip?: number;
+  take?: number;
 };
 
 /** The default billing / office address, for list rows. */
@@ -56,6 +61,8 @@ export function listCustomers(f: CustomerFilter) {
     },
     include: mainAddress,
     orderBy: { name: "asc" },
+    ...(f.skip != null ? { skip: f.skip } : {}),
+    ...(f.take != null ? { take: f.take } : {}),
   });
 }
 
@@ -64,6 +71,29 @@ export function getCustomer(id: string) {
     where: { id },
     include: { contacts: { orderBy: [{ active: "desc" }, { isMain: "desc" }, { name: "asc" }] } },
   });
+}
+
+/**
+ * Terms list and withholding codes for a customer save. Shared by the staff
+ * form and /api/v1 so both follow the same rules: a blank existing term may
+ * stay blank, and a term already on the record stays valid if it leaves Settings.
+ */
+export async function loadCustomerWriteOptions(id: string | null): Promise<{
+  allowedTerms: string[];
+  activeCodes: string[];
+  termsRequired: boolean;
+}> {
+  const { settings } = await getSettingsSnapshot();
+  const activeCodes = (await listWithholdingRates(undefined, { activeOnly: true })).map((r) => r.code);
+  let allowedTerms = [...settings.lists.paymentTerms];
+  let termsRequired = true;
+  if (id) {
+    const existing = await getCustomer(id);
+    const current = existing?.defaultTerms?.trim() ?? "";
+    if (current && !allowedTerms.includes(current)) allowedTerms = [...allowedTerms, current];
+    if (!current) termsRequired = false;
+  }
+  return { allowedTerms, activeCodes, termsRequired };
 }
 
 type TinOwnerLookup = (args: { where: Prisma.CustomerWhereInput & Prisma.SupplierWhereInput }) => Promise<{ name: string } | null>;

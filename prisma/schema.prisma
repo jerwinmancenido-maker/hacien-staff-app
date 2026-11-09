@@ -92,6 +92,8 @@ model User {
   deliveriesCreated            Delivery[]                @relation("DeliveryCreatedBy")
   deliveryIdsChecked           Delivery[]                @relation("DeliveryIdCheckedBy")
   spoiledBookletNumbersCreated SpoiledBookletNumber[]    @relation("SpoiledBookletNumberCreatedBy")
+  apiKeysActing                ApiKey[]                  @relation("ApiKeyActingUser")
+  apiKeysCreated               ApiKey[]                  @relation("ApiKeyCreatedBy")
 }
 
 model Session {
@@ -547,10 +549,70 @@ model AuditLog {
   before     Json?
   after      Json?
   ip         String?     @db.VarChar(64)
+  // Set when the change was made through /api/v1. Null on every existing
+  // row and on staff UI changes (those are not via an API key).
+  apiKeyId   String?
+  apiKey     ApiKey?     @relation(fields: [apiKeyId], references: [id])
 
   @@index([entityType, entityId])
   @@index([at])
   @@index([userId])
+  @@index([apiKeyId])
+}
+
+// ---------------------------------------------------------------------------
+// Machine API keys (/api/v1). The raw key is shown once at creation and is
+// never stored — only an HMAC (API_KEY_PEPPER) and a short log-safe prefix.
+// Keys are revoked (revokedAt), never hard-deleted.
+// ---------------------------------------------------------------------------
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  name         String    @db.VarChar(120)
+  // First 8 characters of the key. Safe to log. Used to look the key up.
+  keyPrefix    String    @db.VarChar(16)
+  // HMAC-SHA256 hex of the full key. The raw key is never stored.
+  keyHash      String    @unique @db.VarChar(64)
+  // Scope strings, e.g. ["customers:read","items:read"]. "full" means every scope.
+  scopes       Json
+  actingUserId String
+  actingUser   User      @relation("ApiKeyActingUser", fields: [actingUserId], references: [id])
+  createdById  String?
+  createdBy    User?     @relation("ApiKeyCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  lastUsedAt   DateTime?
+  lastUsedIp   String?   @db.VarChar(64)
+
+  callLogs  ApiCallLog[]
+  auditLogs AuditLog[]
+
+  @@index([keyPrefix])
+  @@index([actingUserId])
+  @@index([createdById])
+}
+
+// One row per /api/v1 call (including rate-limit rejections). Reads stay here
+// so they do not flood AuditLog. A POST's Idempotency-Key is stored on the
+// first call's row; a retry with the same key replays responseJson.
+model ApiCallLog {
+  id             String   @id @default(cuid())
+  apiKeyId       String
+  apiKey         ApiKey   @relation(fields: [apiKeyId], references: [id])
+  method         String   @db.VarChar(10)
+  path           String   @db.VarChar(255)
+  status         Int
+  // "read" or "write" — the rate-limit bucket.
+  kind           String   @db.VarChar(8)
+  // Client Idempotency-Key, only on the request that owns the result.
+  idempotencyKey String?  @db.VarChar(191)
+  requestHash    String?  @db.VarChar(64)
+  responseJson   Json?
+  at             DateTime @default(now())
+
+  @@unique([apiKeyId, idempotencyKey])
+  @@index([apiKeyId, kind, at])
 }
 
 // ---------------------------------------------------------------------------
