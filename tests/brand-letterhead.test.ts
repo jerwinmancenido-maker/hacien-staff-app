@@ -92,8 +92,12 @@ describe("letterhead Template v3 layout", () => {
     const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
     expect(css).toContain(".pp-letterhead-text {\n  min-width: 0;\n  text-align: right;");
     expect(css).toContain("justify-content: flex-end;");
-    expect((css.match(/@bottom-left \{/g) || []).length).toBe(2);
-    expect((css.match(/@bottom-right \{/g) || []).length).toBe(2);
+    // @bottom-left: generic @page, @page letter, @page pp-doc, and the
+    // pp-doc:first suppression (v10 print redesign — page 1 of a
+    // professional document carries no footer contact line).
+    expect((css.match(/@bottom-left \{/g) || []).length).toBe(4);
+    // @bottom-right: generic @page, @page letter, @page pp-doc.
+    expect((css.match(/@bottom-right \{/g) || []).length).toBe(3);
     expect((css.match(/@bottom-center \{/g) || []).length).toBe(0);
     expect(css).toContain(
       '@bottom-left {\n    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";',

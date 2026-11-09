@@ -20,6 +20,7 @@ export default async function NewPurchaseOrderPage({ searchParams }: { searchPar
         isNew
         suppliers={suppliers}
         termsOptions={snap.settings.lists.paymentTerms}
+        contactRoles={snap.settings.lists.contactRoles}
         initial={{
           supplierId: s?.id ?? "",
           supplierContactId: s?.contacts.find((c) => c.isMain)?.id ?? "",

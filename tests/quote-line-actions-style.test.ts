@@ -2,35 +2,38 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// UI tidy-up item 1 (Jerwin, 2026-11-07): the actions under a quote line
-// ("Pick a product", the linked-product chip, unlink, "Product details") are
-// small quiet secondary buttons like "Add line" — same labels, same handlers,
-// no longer underlined text links.
+// Compact lines Phase 1 (Jerwin, 2026-11-08): the button row under a quote
+// line is gone — no "Pick a product", no "Product details" button. Typing
+// in the search box is the only picker entry; under the box sits a quiet
+// caption (productMeta) only when the line is linked or carries a pending
+// new product. This replaces the item-1 guard for the old button row.
 const editor = readFileSync(
   path.join(process.cwd(), "src/components/docs/QuoteEditor.tsx"),
   "utf8",
 );
-const productRow = editor.slice(
-  editor.indexOf("function productRow"),
-  editor.indexOf("const move =", editor.indexOf("function productRow")),
+const meta = editor.slice(
+  editor.indexOf("function productMeta"),
+  editor.indexOf("const move =", editor.indexOf("function productMeta")),
 );
 
-describe("quote line product actions are small secondary buttons", () => {
-  it("productRow renders no btn-link buttons", () => {
-    expect(productRow).not.toContain("btn-link");
+describe("quote line has no product button row, only a quiet caption", () => {
+  it("the old productRow and its buttons are removed", () => {
+    expect(editor).not.toContain("function productRow");
+    expect(editor).not.toContain("Pick a product");
+    expect(editor).not.toContain("quote-ln-product");
   });
 
-  it("all four actions use the Add line button classes", () => {
-    const matches = productRow.match(/btn btn-secondary btn-sm/g) ?? [];
-    expect(matches.length).toBe(4);
+  it("the linked caption opens the drawer and can unlink", () => {
+    expect(meta).toContain("🔗 Linked · {line.itemName ?? \"Linked product\"}");
+    expect(meta).toContain('aria-label="Unlink product"');
+    expect(meta).toContain("openDrawer(line)");
   });
 
-  it("labels and handlers are unchanged", () => {
-    expect(productRow).toContain("Pick a product");
-    expect(productRow).toContain("Product details");
-    expect(productRow).toContain('aria-label="Unlink product"');
-    expect(productRow).toContain("🔗 {line.itemName ?? \"Linked product\"}");
-    expect(productRow).toContain("setPickerFor(line.key)");
-    expect(productRow).toContain("openDrawer(line)");
+  it("a pending new product shows the will-be-added caption", () => {
+    expect(meta).toContain("will be added to Products when saved");
+  });
+
+  it("a plain free-text line renders no caption", () => {
+    expect(meta).toContain("return null;");
   });
 });

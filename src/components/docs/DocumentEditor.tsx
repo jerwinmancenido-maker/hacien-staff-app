@@ -44,6 +44,20 @@ import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { AddContactDialog } from "./AddContactDialog";
+
+/** One saved address of a customer, shaped for the quote editor's
+ * delivery-address picker (label matches the Convert dialog's options). */
+export type EditorAddressOption = {
+  id: string;
+  kind: string;
+  label: string;
+  isDefault: boolean;
+  /** Multi-line formatted text — what prints. */
+  text: string;
+  /** One-line formatted text. */
+  oneLine: string;
+};
 
 export type EditorCustomer = {
   id: string;
@@ -56,6 +70,11 @@ export type EditorCustomer = {
   /** S-54: null = no limit. Money string from Prisma Decimal. */
   creditLimit: string | null;
   contacts: { id: string; name: string; isMain: boolean }[];
+  /** Quote editor only: the customer's saved addresses (delivery first),
+   * its default DELIVERY address id, and the billing block text. */
+  addresses?: EditorAddressOption[];
+  defaultDeliveryId?: string | null;
+  billingText?: string | null;
 };
 
 export type EditorNewCatalog = {
@@ -64,6 +83,18 @@ export type EditorNewCatalog = {
   category: string;
   sku: string;
   details: string;
+};
+
+/** One internal component of a lot (bundle) line (quote editor only). */
+export type EditorComponent = {
+  key: string;
+  id: string | null;
+  itemId: string | null;
+  description: string;
+  qty: string;
+  unit: string;
+  supplierId: string | null;
+  unitCost: string;
 };
 
 export type EditorItem = {
@@ -84,6 +115,9 @@ export type EditorItem = {
   itemName: string | null;
   /** Catalog Step 3 (quote editor only): fields for a not-yet-catalogued line. */
   newCatalog?: EditorNewCatalog | null;
+  /** Lot (bundle) line (quote editor only): cost comes from components. */
+  isLot?: boolean;
+  components?: EditorComponent[];
 };
 
 export type EditorInitial = {
@@ -107,7 +141,9 @@ export type EditorInitial = {
   internalNotes?: string;
   /** Quote subject / project line. */
   subject?: string;
-  items: Omit<EditorItem, "key">[];
+  /** Loaded rows carry no editor keys; components likewise (the quote
+   * editor assigns both when mapping its initial state). */
+  items: (Omit<EditorItem, "key" | "components"> & { components?: Omit<EditorComponent, "key">[] })[];
 };
 
 type Props = {
@@ -120,6 +156,8 @@ type Props = {
   /** Suppliers for the item lines; only passed to users who can see costs. */
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
+  contactRoles: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
   /** Sales order only. locked = Staff/Approver. override = Admin must give a reason to change prices. */
@@ -204,7 +242,7 @@ function sameRate(a: string | null | undefined, b: string | null | undefined): b
 }
 
 /** True when qty, unit price, line add/remove, or the selling / withholding / net totals differ. */
-function salesOrderPriceFieldsChanged(start: Omit<EditorItem, "key">[], current: EditorItem[]): boolean {
+function salesOrderPriceFieldsChanged(start: EditorInitial["items"], current: EditorItem[]): boolean {
   if (current.length !== start.length || current.some((row) => !row.id)) return true;
   const byId = new Map(start.filter((row) => row.id).map((row) => [row.id as string, row]));
   if (byId.size !== current.length) return true;
@@ -260,7 +298,7 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, action, cancelHref, priceLock }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -269,6 +307,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const rates = visibleRates(allRates);
   const [customerList, setCustomerList] = useState(customersProp);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [addContactOpen, setAddContactOpen] = useState(false);
 
   const [h, setH] = useState(() => {
     const pick = resolveInitialPick(initial);
@@ -299,6 +338,12 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           itemId: i.itemId ?? null,
           itemName: i.itemName ?? null,
           newCatalog: null,
+          // Lot lines arrive only via conversion. The SO editor never edits
+          // components, but carries the flag + components through state so
+          // the lot-aware cost checks see the line's real cost make-up; the
+          // payload never sends them (the service preserves stored lots).
+          isLot: i.isLot ?? false,
+          components: (i.components ?? []).map((c, ci) => ({ ...c, key: c.id ?? `init-c-${ci}` })),
         }))
       : [blankItem(initialPickSnaps)],
   );
@@ -418,6 +463,19 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   function reapplyFromCustomer() {
     const customerPick = customer?.defaultWithholding ?? null;
     applyPickDefaults(customerPick, items, {}, { skipOverrides: true });
+  }
+
+  /** A just-saved contact joins the picked customer's list and is selected.
+   * If it became the main contact, the local main flags follow the server. */
+  function onContactAdded(c: { id: string; name: string; isMain: boolean }) {
+    setCustomerList((xs) =>
+      xs.map((x) =>
+        x.id === h.customerId
+          ? { ...x, contacts: [...x.contacts.map((k) => (c.isMain ? { ...k, isMain: false } : k)), c] }
+          : x,
+      ),
+    );
+    setH((v) => ({ ...v, contactId: c.id }));
   }
 
   function onCustomerSaved(c: EditorCustomer) {
@@ -558,15 +616,20 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           )}
           <div className={`field${e.contactId ? " has-error" : ""}`}>
             <label htmlFor="contactId">Contact</label>
-            <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer}>
-              <option value="">None</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.isMain ? " (main)" : ""}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
+                <option value="">None</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.isMain ? " (main)" : ""}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddContactOpen(true)}>
+                Add contact
+              </button>
+            </div>
             {e.contactId && <div className="error">{e.contactId}</div>}
           </div>
           {mode === "quote" ? (
@@ -855,6 +918,16 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
 
       {mode === "quote" && (
         <AddCustomerDialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} onSaved={onCustomerSaved} rates={rates} terms={termsOptions} />
+      )}
+      {addContactOpen && customer && (
+        <AddContactDialog
+          open={addContactOpen}
+          onClose={() => setAddContactOpen(false)}
+          owner={{ kind: "customer", id: customer.id }}
+          ownerName={customer.name}
+          roles={contactRoles}
+          onSaved={onContactAdded}
+        />
       )}
     </form>
     <ConfirmDialog

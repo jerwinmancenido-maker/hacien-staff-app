@@ -15,8 +15,11 @@ describe("moneyTotals", () => {
 
   it("uses an optional total label without changing the amount", () => {
     expect(moneyTotals("50.00", [], "Amount")).toEqual([
-      { label: "Subtotal", amount: "50.00" },
       { label: "Amount", amount: "50.00", emphasize: true },
     ]);
+  });
+
+  it("stands alone with no Subtotal row when there are no mid-lines (owner 2026-11-09)", () => {
+    expect(moneyTotals("100.00")).toEqual([{ label: "Total", amount: "100.00", emphasize: true }]);
   });
 });

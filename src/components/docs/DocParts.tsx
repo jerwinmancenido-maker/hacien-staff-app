@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import { formatPeso } from "@/lib/format";
 import { Chip, type ChipTone } from "@/components/ui";
-import { COST_NOT_SET_LABEL, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
+import { COST_NOT_SET_LABEL, lineCostMissing, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
 const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "blue", WON: "green", LOST: "red", VOID: "red" };
@@ -67,6 +67,8 @@ export type ItemsTableRow = {
   supplierUnitCost?: string;
   supplierTotal?: string;
   margin?: string;
+  isLot?: boolean;
+  components?: { unitCost: string }[];
 };
 
 const qtyText = (q: string) => q.replace(/\.00$/, "");
@@ -108,14 +110,14 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
               </td>
               <td className="num">{qtyText(i.qty)}</td>
               <td>{i.unit}</td>
-              {showCosts && <td>{i.supplierName ?? <span className="faint">—</span>}</td>}
-              {showCosts && <td className="num">{formatPeso(i.supplierUnitCost ?? 0)}</td>}
+              {showCosts && <td>{i.isLot ? <span className="faint">Lot</span> : (i.supplierName ?? <span className="faint">—</span>)}</td>}
+              {showCosts && <td className="num">{i.isLot ? <span className="faint">—</span> : formatPeso(i.supplierUnitCost ?? 0)}</td>}
               {showCosts && <td className="num">{formatPeso(i.supplierTotal ?? 0)}</td>}
               <td className="num">{formatPeso(i.unitPrice)}</td>
               <td className="num strong">{formatPeso(i.total)}</td>
               {showCosts && (
-                <td className={`num${supplierCostMissing(i.supplierUnitCost) ? "" : Number(i.margin) < 0 ? " neg" : ""}`}>
-                  {supplierCostMissing(i.supplierUnitCost) ? COST_NOT_SET_LABEL : formatPeso(i.margin ?? 0)}
+                <td className={`num${lineCostMissing(i) ? "" : Number(i.margin) < 0 ? " neg" : ""}`}>
+                  {lineCostMissing(i) ? COST_NOT_SET_LABEL : formatPeso(i.margin ?? 0)}
                 </td>
               )}
             </tr>

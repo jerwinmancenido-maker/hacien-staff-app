@@ -303,7 +303,18 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     include: {
       customer: { select: { name: true } },
       quote: { select: { number: true, status: true } },
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" }, include: { supplier: { select: { id: true, name: true } } } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          components: {
+            where: { removedAt: null },
+            orderBy: { sortOrder: "asc" },
+            include: { supplier: { select: { id: true, name: true } } },
+          },
+        },
+      },
     },
   });
   if (!so) return null;
@@ -312,6 +323,14 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     select: { activeSalesOrderItemId: true, purchaseOrder: { select: { id: true, number: true } } },
   });
   const onPo = new Map(live.map((l) => [l.activeSalesOrderItemId!, l.purchaseOrder]));
+  const componentIds = so.items.flatMap((i) => i.components.map((c) => c.id));
+  const liveComponents = componentIds.length
+    ? await db.purchaseOrderItem.findMany({
+        where: { activeSalesOrderItemComponentId: { in: componentIds } },
+        select: { activeSalesOrderItemComponentId: true, purchaseOrder: { select: { id: true, number: true } } },
+      })
+    : [];
+  const componentOnPo = new Map(liveComponents.map((l) => [l.activeSalesOrderItemComponentId!, l.purchaseOrder]));
   const lines = so.items.map((i) => ({
     id: i.id,
     sortOrder: i.sortOrder,
@@ -323,8 +342,20 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     supplierName: i.supplier?.name ?? null,
     supplierUnitCost: money(i.supplierUnitCost),
     purchaseOrder: onPo.get(i.id) ?? null,
+    isLot: i.isLot,
+    components: i.components.map((c) => ({
+      id: c.id,
+      sortOrder: c.sortOrder,
+      description: c.description,
+      qty: money(c.qty),
+      unit: c.unit,
+      supplierId: c.supplierId,
+      supplierName: c.supplier?.name ?? null,
+      unitCost: money(c.unitCost),
+      purchaseOrder: componentOnPo.get(c.id) ?? null,
+    })),
   }));
-  const plan = planPurchaseOrders(lines, new Set(onPo.keys()));
+  const plan = planPurchaseOrders(lines, new Set(onPo.keys()), {}, undefined, new Set(componentOnPo.keys()));
   const suppliers = await db.supplier.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   return {
     id: so.id,

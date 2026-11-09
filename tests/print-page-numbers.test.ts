@@ -13,8 +13,19 @@ describe("Page X of Y CSS", () => {
     expect(css).toContain("@bottom-right");
     expect(css).toContain("@bottom-left");
     expect(css).not.toContain("@bottom-center");
-    expect(css).not.toContain("@top-left");
-    expect(css).not.toContain("@top-center");
+    // The generic @page stays free of @top boxes…
+    const genericPage = css.slice(css.indexOf("@page {"), css.indexOf("@page letter"));
+    expect(genericPage).not.toContain("@top-");
+    // …while the named pp-doc page (v10 print redesign) carries the
+    // identity strip in its top margin boxes, suppressed on page 1
+    // together with the footer contact line, so nothing prints twice.
+    expect(css).toContain(".pp-doc-root");
+    expect(css).toMatch(/\.pp-doc-root\s*\{\s*page:\s*pp-doc/);
+    expect(css).toMatch(/@page pp-doc\s*\{[\s\S]*?@top-left\s*\{\s*content: "■ HACIEN"/);
+    expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@top-left\s*\{\s*content: none/);
+    expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@bottom-left\s*\{\s*content: none/);
+    // The v8 in-flow thead strip is gone (it duplicated page 1's title block).
+    expect(css).not.toContain(".pp-runhead");
   });
 
   it("puts Page x of y in @page margin boxes; never paints in-flow Page 0 of 0", () => {
@@ -36,7 +47,7 @@ describe("Page X of Y CSS", () => {
     expect(css).toMatch(/display:\s*none\s*!important/);
   });
 
-  it("uses HACIEN brand kit: Inter + Archivo Black, ink text, #E5E5E5 rules, #2563EB title pixel only", () => {
+  it("uses HACIEN brand kit: Inter + Archivo Black, ink text, navy structure (v8), #2563EB accents", () => {
     expect(css).toContain('font-family: "Inter"');
     expect(css).toContain('font-family: "Archivo Black"');
     expect(css).toContain("--font-display:");
@@ -49,13 +60,16 @@ describe("Page X of Y CSS", () => {
     expect(css).toContain("width: 45mm"); // logo-full letterhead (≥40mm)
     expect(css).toContain(".pp-logo-clearspace");
     expect(css).toContain("padding: 2.2mm"); // clear space ≈ 2× blue square at 45mm
-    expect(css).toContain("font-size: 18pt"); // document title (Archivo Black)
-    // Unboxed Bill/Deliver + totals: thin #E5E5E5 rules, no shaded totals fill
+    expect(css).toContain("font-size: 17pt"); // document title (Archivo Black)
+    // Unboxed Bill/Deliver; totals table itself stays transparent — the
+    // emphasized TOTAL row is the dark navy band (v8 redesign).
     expect(css).toMatch(/\.pp-party-box\s*\{[^}]*border:\s*none/s);
     expect(css).toMatch(/\.pp-totals\s*\{[^}]*background:\s*transparent/s);
     expect(css).toContain("border-top: 1px solid #e5e5e5");
-    // Receipt-style items header (no grey band); upright text; 60mm signature line
-    expect(css).toMatch(/\.pp-items thead th\s*\{[^}]*background:\s*transparent/s);
+    expect(css).toContain("--pp-navy: #0d1526");
+    expect(css).toMatch(/\.pp-total-emph th,\s*\.pp-total-emph td\s*\{[^}]*background:\s*var\(--pp-navy\)/s);
+    // Dark navy items header band (v8); upright text; 60mm signature line
+    expect(css).toMatch(/\.pp-items thead th\s*\{[^}]*background:\s*var\(--pp-navy\)/s);
     expect(css).not.toMatch(/\.pp-words\s*\{[^}]*font-style:\s*italic/s);
     expect(css).not.toMatch(/\.pp-thank-you\s*\{[^}]*font-style:\s*italic/s);
     expect(css).toMatch(/\.pp-sign-line\s*\{[^}]*width:\s*60mm/s);

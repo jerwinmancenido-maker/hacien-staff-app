@@ -2,7 +2,7 @@
 // draft. Every function checks permissions itself (server-side), runs in one
 // transaction with its audit row, and never deletes anything.
 
-import { Prisma, type Quote, type QuoteItem } from "@prisma/client";
+import { Prisma, type Quote, type QuoteItem, type QuoteItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { addDays, manilaToday } from "../format";
@@ -16,7 +16,7 @@ import {
   quoteNotApprovedError,
 } from "../quotes/approval";
 import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
-import { itemData, planItems, type PlannedItem } from "../quotes/items";
+import { componentData, itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
@@ -35,7 +35,7 @@ import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
 
 export type DocActor = PermissionUser & { id: string };
 
-type QuoteWithItems = Quote & { items: QuoteItem[] };
+type QuoteWithItems = Quote & { items: (QuoteItem & { components?: QuoteItemComponent[] })[] };
 
 export const EDITABLE_QUOTE_STATUSES = ["DRAFT", "SENT"] as const;
 
@@ -126,7 +126,10 @@ function resolveWithholdingPickInput(
 
 async function lockQuote(tx: Tx, id: string): Promise<QuoteWithItems> {
   await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${id} FOR UPDATE`;
-  const q = await tx.quote.findUnique({ where: { id }, include: { items: { where: { removedAt: null } } } });
+  const q = await tx.quote.findUnique({
+    where: { id },
+    include: { items: { where: { removedAt: null }, include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } } } },
+  });
   if (!q) throw new DocRuleError("Quote not found.");
   return q;
 }
@@ -186,6 +189,9 @@ async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Pro
         unit: input.unit.trim(),
         kind: input.kind,
         details: nc.details ?? null,
+        // The price just quoted becomes the product's default, so the next
+        // quote pre-fills it instead of starting blank (2026-11-08).
+        defaultUnitPrice: input.unitPrice,
       },
     });
     out.push(created.id);
@@ -207,6 +213,22 @@ async function checkPreparedBy(id: string) {
   if (found !== 1) throw new DocRuleError("Pick a staff member to prepare this quote.", "preparedById");
 }
 
+/**
+ * Delivery address pick (2026-11-08): the address must be one of the
+ * customer's saved, unarchived addresses — the same rule conversion uses.
+ * Returns the id plus the text snapshot stored on the quote, so later edits
+ * to the address record never change the saved quote.
+ */
+async function resolveDeliveryPick(customerId: string, addressId: string) {
+  const address = await db.address.findFirst({
+    where: { id: addressId, customerId, archivedAt: null },
+  });
+  if (!address) {
+    throw new DocRuleError("That delivery address doesn't belong to this customer.", "deliveryAddressId");
+  }
+  return { deliveryAddressId: address.id, deliveryAddressText: formatAddress(address, { multiline: true }) };
+}
+
 // ---------------------------------------------------------------------------
 // Create / edit
 // ---------------------------------------------------------------------------
@@ -221,6 +243,10 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   // Preparer picker: the chosen preparer, else the creator.
   const preparedById = input.preparedById ?? actor.id;
   await checkPreparedBy(preparedById);
+  // Delivery pick: validate ownership and snapshot the text (null = no pick).
+  const delivery = input.deliveryAddressId
+    ? await resolveDeliveryPick(customer.id, input.deliveryAddressId)
+    : { deliveryAddressId: null, deliveryAddressText: null };
 
   // Copy the customer's saved pick unless the payload overrides it.
   const customerPick = parseWithholdingPick(customer.defaultWithholding);
@@ -228,6 +254,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const pickSnapshots = await resolvePickSnapshots(pick);
   // Line rates drive totals; document withholding JSON is a read-only summary.
   const { items } = planItems([], input.items, withCosts, {
+    lots: true,
     withholdingPicks: pickSnapshots,
     // Always apply the pick on create so blank lines get the customer's rates.
     reapplyWithholding: input.reapplyWithholding === true || input.items.every((i) => i.withholdingRate === undefined),
@@ -272,6 +299,8 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           leadTimeDays: input.leadTimeDays ?? null,
           subject: input.subject ?? null,
           buyerPoNo: input.buyerPoNo ?? null,
+          deliveryAddressId: delivery.deliveryAddressId,
+          deliveryAddressText: delivery.deliveryAddressText,
           settingsVersionId: snap.versionId,
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
@@ -279,7 +308,16 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           createdById: actor.id,
           preparedById,
           updatedById: actor.id,
-          items: { create: items.map((p, idx) => ({ ...itemData(p), itemId: catalogIds[idx] ?? p.itemId })) },
+          items: {
+            create: items.map((p, idx) => ({
+              ...itemData(p),
+              isLot: p.isLot,
+              itemId: catalogIds[idx] ?? p.itemId,
+              components: p.isLot
+                ? { create: p.components.map((c, ci) => ({ ...componentData(c), sortOrder: ci + 1 })) }
+                : undefined,
+            })),
+          },
         },
         include: { items: true },
       });
@@ -300,7 +338,13 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
   assertCan(actor, "edit_data");
   const original = await db.quote.findUnique({
     where: { id },
-    include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+    include: {
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+      },
+    },
   });
   if (!original) throw new DocRuleError("Quote not found.");
   if (original.status === "VOID") throw new DocRuleError("A void quote cannot be copied.");
@@ -325,6 +369,9 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           internalNotes: original.internalNotes,
           leadTimeDays: original.leadTimeDays,
           subject: original.subject,
+          // The copy keeps the delivery pick + its snapshot (same customer).
+          deliveryAddressId: original.deliveryAddressId,
+          deliveryAddressText: original.deliveryAddressText,
           buyerPoNo: null,
           settingsVersionId: snap.versionId,
           withholding: original.withholding as unknown as Prisma.InputJsonValue,
@@ -347,6 +394,20 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
               unit: item.unit,
               supplierId: item.supplierId,
               itemId: item.itemId,
+              isLot: item.isLot,
+              components: item.isLot
+                ? {
+                    create: (item.components ?? []).map((c) => ({
+                      sortOrder: c.sortOrder,
+                      itemId: c.itemId,
+                      description: c.description,
+                      qty: c.qty,
+                      unit: c.unit,
+                      supplierId: c.supplierId,
+                      unitCost: c.unitCost,
+                    })),
+                  }
+                : undefined,
               supplierUnitCost: item.supplierUnitCost,
               unitPrice: item.unitPrice,
               total: item.total,
@@ -385,6 +446,19 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       preparedByData.preparedById = input.preparedById;
     }
   }
+  // Delivery pick: omitted → keep the stored pick; null → clear it; a NEW
+  // id is validated against the (possibly changed) customer and
+  // re-snapshotted. The same id keeps the stored snapshot text, so editing
+  // the address record later never rewrites this quote.
+  const deliveryData: { deliveryAddressId?: string | null; deliveryAddressText?: string | null } = {};
+  if (input.deliveryAddressId !== undefined) {
+    if (input.deliveryAddressId === null) {
+      deliveryData.deliveryAddressId = null;
+      deliveryData.deliveryAddressText = null;
+    } else if (input.deliveryAddressId !== current.deliveryAddressId || input.customerId !== current.customerId) {
+      Object.assign(deliveryData, await resolveDeliveryPick(input.customerId, input.deliveryAddressId));
+    }
+  }
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -397,6 +471,15 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         kind: i.kind,
         supplierId: i.supplierId,
         supplierUnitCost: money(i.supplierUnitCost),
+        isLot: i.isLot,
+        components: (i.components ?? []).map((c) => ({
+          itemId: c.itemId,
+          description: c.description,
+          qty: money(c.qty),
+          unit: c.unit,
+          supplierId: c.supplierId,
+          unitCost: money(c.unitCost),
+        })),
         withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
@@ -408,6 +491,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const pick = resolveWithholdingPickInput(input, existingPick);
       const pickSnapshots = await resolvePickSnapshots(pick);
       const { items: planned, removedIds } = planItems(stored, inputsWithCatalog, withCosts, {
+        lots: true,
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
       });
@@ -426,10 +510,23 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
 
       if (removedIds.length) {
         await tx.quoteItem.updateMany({ where: { id: { in: removedIds }, quoteId: id }, data: { removedAt: new Date() } });
+        await tx.quoteItemComponent.updateMany({ where: { quoteItemId: { in: removedIds }, removedAt: null }, data: { removedAt: new Date() } });
       }
       for (const item of items) {
-        if (item.id) await tx.quoteItem.update({ where: { id: item.id }, data: { ...itemData(item), itemId: item.itemId } });
-        else await tx.quoteItem.create({ data: { ...itemData(item), itemId: item.itemId, quoteId: id } });
+        let itemId = item.id;
+        if (itemId) await tx.quoteItem.update({ where: { id: itemId }, data: { ...itemData(item), isLot: item.isLot, itemId: item.itemId } });
+        else {
+          const created = await tx.quoteItem.create({ data: { ...itemData(item), isLot: item.isLot, itemId: item.itemId, quoteId: id } });
+          itemId = created.id;
+        }
+        // Components are replaced wholesale per save (soft-remove + create),
+        // matching how the editor always sends a lot's full make-up.
+        await tx.quoteItemComponent.updateMany({ where: { quoteItemId: itemId, removedAt: null }, data: { removedAt: new Date() } });
+        if (item.isLot && item.components.length) {
+          await tx.quoteItemComponent.createMany({
+            data: item.components.map((c, ci) => ({ ...componentData(c), sortOrder: ci + 1, quoteItemId: itemId! })),
+          });
+        }
       }
       const withholdingKeyOf = (rows: readonly WithholdingSnapshot[]) =>
         [...rows]
@@ -505,6 +602,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           ...moneyTotals,
           ...(resetApproval ? quoteApprovalClearData() : {}),
           ...preparedByData,
+          ...deliveryData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
@@ -865,6 +963,24 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
                 total: i.total,
                 supplierTotal: i.supplierTotal,
                 margin: i.margin,
+                // Lot lines carry their internal make-up to the SO; Create
+                // POs will buy the components, never the lot line itself.
+                isLot: i.isLot,
+                components: i.isLot
+                  ? {
+                      create: [...(i.components ?? [])]
+                        .sort((a, b) => a.sortOrder - b.sortOrder)
+                        .map((c, ci) => ({
+                          sortOrder: ci + 1,
+                          itemId: c.itemId,
+                          description: c.description,
+                          qty: c.qty,
+                          unit: c.unit,
+                          supplierId: c.supplierId,
+                          unitCost: c.unitCost,
+                        })),
+                    }
+                  : undefined,
                 // Copy line rates and ATCs exactly — never re-derive from the customer.
                 withholdingRate: i.withholdingRate,
                 withholdingAtc: i.withholdingAtc,

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canVoid } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { listAddresses, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -66,7 +67,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           <>
             {q.number}
             <Chip>Rev {q.revision}</Chip>
-            <QuoteStatusChip status={q.status} />
+            {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && <QuoteStatusChip status={q.status} />}
             {q.status !== "VOID" && (
               <QuoteWorkflowApprovalChip status={q.approvalStatus} label={q.approvalLabel} />
             )}
@@ -86,7 +87,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             canVoid={canVoid(user)}
             canApproveWorkflow={q.canApproveWorkflow}
             openSalesOrderId={openSo?.id ?? null}
-            customerAddress={suggestedAddress}
+            customerAddress={q.deliveryAddressText ?? suggestedAddress}
             addressOptions={addressOptions}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
@@ -182,6 +183,12 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
                 <>
                   <dt>Customer PO / RFQ no.</dt>
                   <dd>{q.buyerPoNo}</dd>
+                </>
+              )}
+              {q.deliveryAddressText && (
+                <>
+                  <dt>Delivery address</dt>
+                  <dd style={{ whiteSpace: "pre-wrap" }}>{q.deliveryAddressText}</dd>
                 </>
               )}
               <dt>Withholding</dt>

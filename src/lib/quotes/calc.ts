@@ -76,16 +76,46 @@ export type DocTotals = {
   supplierCostState: SupplierCostState;
 };
 
-/** Blank or ₱0.00 supplier unit cost. A typed zero uses the same path as a blank. */
+/** Blank or ₱0.00 supplier unit cost. A typed zero uses the same path as a blank.
+ * The money inputs group thousands with commas (formatMoneyInput), so strip
+ * them before the decimal test — the same leniency toScaled applies. Without
+ * this, any typed cost of ₱1,000+ read as "missing" in the editor (badge,
+ * margin label and the save warning) while totals computed it correctly. */
 export function supplierCostMissing(value: string | null | undefined): boolean {
-  const s = String(value ?? "").trim();
+  const s = String(value ?? "").trim().replace(/,/g, "");
   if (s === "") return true;
   if (!DECIMAL.test(s)) return true;
   return toScaled(s, CENTS) === 0n;
 }
 
-export function linesMissingSupplierCost(lines: readonly { supplierUnitCost?: string | null }[]): boolean {
-  return lines.some((l) => supplierCostMissing(l.supplierUnitCost));
+/** Minimal shape of a lot component for cost checks. */
+export type CostComponent = { unitCost?: string | null };
+
+/** Whether one line's cost is missing. A lot line's own unit cost is always
+ * 0 by design — its cost lives in its components — so a lot is missing cost
+ * when it has no components or any component has no cost. Any other line
+ * uses its supplier unit cost. */
+export function lineCostMissing(line: {
+  supplierUnitCost?: string | null;
+  isLot?: boolean;
+  components?: readonly CostComponent[] | null;
+}): boolean {
+  if (line.isLot) {
+    const comps = line.components ?? [];
+    if (comps.length === 0) return true;
+    return comps.some((c) => supplierCostMissing(c.unitCost));
+  }
+  return supplierCostMissing(line.supplierUnitCost);
+}
+
+export function linesMissingSupplierCost(
+  lines: readonly {
+    supplierUnitCost?: string | null;
+    isLot?: boolean;
+    components?: readonly CostComponent[] | null;
+  }[],
+): boolean {
+  return lines.some((l) => lineCostMissing(l));
 }
 
 export function supplierCostStateFromSupplierTotals(totals: readonly string[]): SupplierCostState {
@@ -140,6 +170,16 @@ const RATE = 4;
 /** a (scaled aScale) × b (scaled bScale), rounded to 2 decimals. */
 function mulToCents(a: bigint, aScale: number, b: bigint, bScale: number): bigint {
   return divRound(a * b, 10n ** BigInt(aScale + bScale - CENTS));
+}
+
+/** Lot lines: total internal cost = Σ (component qty × component unit cost),
+ * each component rounded to cents exactly like a normal line's supplierTotal. */
+export function componentsTotal(components: readonly { qty: string; unitCost: string }[]): string {
+  let sum = 0n;
+  for (const c of components) {
+    sum += mulToCents(toScaled(c.qty, QTY), QTY, toScaled(c.unitCost || "0", CENTS), CENTS);
+  }
+  return fromScaled(sum, CENTS);
 }
 
 export function lineAmounts(line: LineInput): LineAmounts {

@@ -1078,7 +1078,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     expect(money((await db.withholding2307.findUniqueOrThrow({ where: { id: legacy.id } })).amount)).toBe(beforeAmount);
   });
 
-  it("S-19 billing print shows Subtotal+Total only; words equal Total; no EWT line", async () => {
+  it("S-19 billing print shows Total only; words equal Total; no EWT line", async () => {
     const year = await freshYear();
     const { so } = await openSo(year, { unitPrice: "81500.75" });
     const billing = await recordBilling(
@@ -1100,7 +1100,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const print = await getBillingPrintModel(billing.id);
     expect(print).not.toBeNull();
     const totals = print!.doc.totals ?? [];
-    expect(totals.map((t) => t.label)).toEqual(["Subtotal", "Total"]);
+    expect(totals.map((t) => t.label)).toEqual(["Total"]);
     expect(totals.every((t) => t.amount === "81500.75")).toBe(true);
     expect(print!.doc.totalInWords).toBe(amountInWords("81500.75"));
     expect(JSON.stringify(totals)).not.toMatch(/EWT|withholding/i);

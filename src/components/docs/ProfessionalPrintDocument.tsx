@@ -2,10 +2,11 @@
 // Customer docs must never show supplier costs/margins; supplier docs must never
 // show customer selling prices. Tax wording comes only from lib/print/tax-wording.
 
+import { Fragment } from "react";
 import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
-import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
+import { printStripCss } from "@/lib/print/strip-style";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
 import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
@@ -64,7 +65,13 @@ function PartyBoxes({ party, kind, hideCounterpartyTin = false }: { party: Profe
       <div className="pp-party-box">
         <div className="pp-label">Deliver to</div>
         {party.deliveryAddress ? (
-          <div className="pp-pre">{party.deliveryAddress}</div>
+          <>
+            {/* Customer name heads the delivery block too (owner-approved
+                print redesign 2026-11-09) — a bare address read as
+                unfinished next to the full Bill to block. */}
+            <div className="pp-strong">{party.name}</div>
+            <div className="pp-pre">{party.deliveryAddress}</div>
+          </>
         ) : (
           <div className="pp-faint">—</div>
         )}
@@ -81,6 +88,9 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
         const position = printablePosition(s.position);
         return (
           <div key={s.role} className="pp-signatory">
+            {/* Role label on top, then the signature area, then the name
+                (print redesign v8, owner-approved 2026-11-09). */}
+            <div className="pp-sign-role">{s.role}</div>
             {s.signatureUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={s.signatureUrl} alt="" aria-hidden="true" style={{ maxHeight: 56, marginBottom: 2 }} />
@@ -102,7 +112,6 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
               }
               aria-hidden="true"
             />
-            <div className="pp-sign-role">{s.role}</div>
             <div className="pp-sign-name">{name ?? "\u00a0"}</div>
             {s.role === "Prepared by" && <div className="pp-sign-position">{position ?? "\u00a0"}</div>}
             {s.role === "Conforme" && (
@@ -111,7 +120,17 @@ function SignatoryBlock({ signatories }: { signatories: PrintSignatory[] }) {
                 <div className="pp-sign-date">Date</div>
               </>
             )}
-            {s.role !== "Conforme" && s.role !== "Prepared by" && <div className="pp-sign-date">Date</div>}
+            {/* The "Date" label belongs with a value: hand-sign roles
+                (Received by) keep it as a write-in prompt; system roles
+                (Prepared by / Approved by) show it only when the model
+                carries the date — a bare label over a blank is a defect
+                (owner-flagged on PO prints, 2026-11-09). */}
+            {s.role !== "Conforme" && s.role !== "Prepared by" && s.role !== "Approved by" && (
+              <div className="pp-sign-date">Date</div>
+            )}
+            {(s.role === "Prepared by" || s.role === "Approved by") && s.date && (
+              <div className="pp-sign-date">Date</div>
+            )}
             {s.date ? <div className="pp-sign-date">{s.date}</div> : null}
           </div>
         );
@@ -152,59 +171,63 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
               ? "Supplier"
               : "No.";
 
+  // Print redesign v10 (owner-approved 2026-11-09): the identity strip
+  // lives in the @page top margin box (see the emitted <style> below and
+  // @page pp-doc in globals.css) and is suppressed on page 1, so nothing
+  // prints twice on the same page — the v8 in-flow thead strip repeated
+  // identically on every page, duplicating the title block on page 1.
+  // Statements have no document number: their strip is the title only.
+  const stripText = (doc.number === doc.party.name ? doc.title : `${doc.title} · ${doc.number}`).toUpperCase();
+
   return (
     <article
-      className={`pp-page pp-paper-${doc.paperSize.toLowerCase()}`}
+      className={`pp-page pp-doc-root pp-paper-${doc.paperSize.toLowerCase()}`}
       aria-label={`${doc.title} ${doc.number}`}
       data-print-kind={doc.kind}
     >
+      <style>{printStripCss(stripText)}</style>
       {doc.watermark && (
         <div className="pp-watermark" aria-hidden="true">
           {doc.watermark}
         </div>
       )}
 
-      <PrintHeaderRepeat
-        header={
-          <header className="pp-head">
-            <CompanyLetterhead company={doc.company} />
-          </header>
-        }
-      >
-      {/* Letterhead Template v3: title + meta sit below the rule.
-          Big title on TOP, meta below it, both right-aligned
-          (owner 2026-11-07; the Template v3 doc shows the title on the
-          left with the meta beside it, and the earlier title-right
-          change had them side by side). */}
+      {/* The full letterhead prints once, in flow, at the top of page 1
+          (print redesign v8, owner-approved 2026-11-09). The document
+          number sits in its own editorial block beside the title;
+          date/status/meta form a strip under the title. */}
+      <header className="pp-head">
+        <CompanyLetterhead company={doc.company} />
+      </header>
+
       <div className="pp-title-block">
         <h1>
           <span className="pp-title-pixel" aria-hidden="true" />
           {doc.title}
         </h1>
-        <table className="pp-meta">
-          <tbody>
-            <tr>
-              <th>{numberLabel}</th>
-              <td>{doc.number}</td>
-            </tr>
-            <tr>
-              <th>Date</th>
-              <td>{doc.date}</td>
-            </tr>
-            {hideStatus ? null : (
-              <tr className="pp-status-row">
-                <th>Status</th>
-                <td>{doc.status}</td>
-              </tr>
-            )}
-            {doc.meta.map((m) => (
-              <tr key={`${m.label}-${m.value}`}>
-                <th>{m.label}</th>
-                <td>{m.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="pp-docnum">
+          <div className="pp-docnum-label">{numberLabel}</div>
+          <div className="pp-docnum-value">{doc.number}</div>
+        </div>
+      </div>
+
+      <div className="pp-meta-strip">
+        <div className="pp-meta-cell">
+          <div className="pp-meta-label">Date</div>
+          <div className="pp-meta-value">{doc.date}</div>
+        </div>
+        {hideStatus ? null : (
+          <div className="pp-meta-cell pp-status-row">
+            <div className="pp-meta-label">Status</div>
+            <div className="pp-meta-value">{doc.status}</div>
+          </div>
+        )}
+        {doc.meta.map((m) => (
+          <div className="pp-meta-cell" key={`${m.label}-${m.value}`}>
+            <div className="pp-meta-label">{m.label}</div>
+            <div className="pp-meta-value">{m.value}</div>
+          </div>
+        ))}
       </div>
 
       <PartyBoxes party={doc.party} kind={doc.kind} hideCounterpartyTin={hideCounterpartyTin} />
@@ -212,7 +235,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       {doc.subject?.trim() ? (
         <p className="pp-subject">
           <span className="pp-label-inline">Subject: </span>
-          {doc.subject.trim()}
+          <span className="pp-subject-value">{doc.subject.trim()}</span>
         </p>
       ) : null}
 
@@ -229,19 +252,51 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
             </tr>
           </thead>
           <tbody>
-            {doc.items.map((i, n) => (
-              <tr key={n}>
-                <td className="pp-n">{n + 1}</td>
-                <td className="pp-desc">
-                  <div className="pp-pre">{i.description}</div>
-                  {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
-                </td>
-                <td className="num pp-qty">{qty(i.qty)}</td>
-                <td className="pp-unit">{i.unit}</td>
-                {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
-                {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
-              </tr>
-            ))}
+            {doc.items.map((i, n) => {
+              const comps = i.components ?? [];
+              if (comps.length === 0) {
+                return (
+                  <tr key={n}>
+                    <td className="pp-n">{n + 1}</td>
+                    <td className="pp-desc">
+                      <div className="pp-pre">{i.description}</div>
+                      {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
+                    </td>
+                    <td className="num pp-qty">{qty(i.qty)}</td>
+                    <td className="pp-unit">{i.unit}</td>
+                    {!hideAmounts && <td className="num">{formatPeso(i.unitPrice)}</td>}
+                    {!hideAmounts && <td className="num">{formatPeso(i.amount)}</td>}
+                  </tr>
+                );
+              }
+              // Lot (bundle) line: component descriptions print one per row
+              // under the lot line; #, qty, unit and both price cells merge
+              // (rowSpan) across the whole block, so the lot shows ONE qty
+              // and ONE price (owner decision 2026-11-09).
+              const span = comps.length + 1;
+              return (
+                <Fragment key={n}>
+                  <tr className="pp-lot-start">
+                    <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
+                    <td className="pp-desc">
+                      <div className="pp-pre pp-lot-title">{i.description}</div>
+                      {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
+                    </td>
+                    <td className="num pp-qty pp-merged" rowSpan={span}>{qty(i.qty)}</td>
+                    <td className="pp-unit pp-merged" rowSpan={span}>{i.unit}</td>
+                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>}
+                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>}
+                  </tr>
+                  {comps.map((c, m) => (
+                    <tr key={m} className={m === comps.length - 1 ? "pp-comp-last" : undefined}>
+                      <td className="pp-desc pp-comp-cell">
+                        <div className="pp-pre">{c}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -319,25 +374,25 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         {(doc.terms || doc.notes || doc.deliveryNotes || doc.warrantyNotes) && (
           <section className="pp-notes">
             {doc.terms && (
-              <div>
-                <span className="pp-label-inline">Terms &amp; conditions: </span>
-                {doc.terms}
+              <div className="pp-note-row">
+                <span className="pp-label-inline">Remarks: </span>
+                <span>{doc.terms}</span>
               </div>
             )}
             {doc.deliveryNotes && (
-              <div>
+              <div className="pp-note-row">
                 <span className="pp-label-inline">Delivery lead time: </span>
                 <span className="pp-pre">{doc.deliveryNotes}</span>
               </div>
             )}
             {doc.warrantyNotes && (
-              <div>
+              <div className="pp-note-row">
                 <span className="pp-label-inline">Warranty: </span>
                 <span className="pp-pre">{doc.warrantyNotes}</span>
               </div>
             )}
             {doc.notes && (
-              <div>
+              <div className="pp-note-row">
                 <span className="pp-label-inline">Notes: </span>
                 <span className="pp-pre">{doc.notes}</span>
               </div>
@@ -374,14 +429,17 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         {doc.ewtNote && <p className="pp-ewt-note">{doc.ewtNote}</p>}
 
         {doc.signatories && doc.signatories.length > 0 && <SignatoryBlock signatories={doc.signatories} />}
-        {doc.generatedNote ? <p className="pp-faint" style={{ textAlign: "center", marginTop: 8 }}>{doc.generatedNote}</p> : null}
+        {doc.generatedNote ? <p className="pp-faint pp-gen-note" style={{ marginTop: 8 }}>{doc.generatedNote}</p> : null}
       </div>
 
       <footer className="pp-foot">
         <div className="pp-foot-left">
           {doc.thankYou && <span className="pp-thank-you">Thank you for your business</span>}
           {versionLine && <div className="pp-version-line pp-faint">{versionLine}</div>}
-          {doc.termsUrl && <span className="pp-faint">Terms: {doc.termsUrl}</span>}
+          {/* The version line already ends with the policies URL — printing
+              the Terms URL again under it duplicated the link on every
+              quote (owner-approved print redesign 2026-11-09). */}
+          {!versionLine && doc.termsUrl && <span className="pp-faint">Terms: {doc.termsUrl}</span>}
           {doc.taxLines.map((line) => (
             <div key={line} className="pp-tax-line">
               {line}
@@ -390,12 +448,14 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
         </div>
         <div className="pp-page-num" aria-hidden="true" />
         {doc.qrSvg ? (
-          <div className="pp-qr" role="img" aria-label="QR code" dangerouslySetInnerHTML={{ __html: doc.qrSvg }} />
+          <div className="pp-qr-wrap">
+            <div className="pp-qr" role="img" aria-label="QR code" dangerouslySetInnerHTML={{ __html: doc.qrSvg }} />
+            <div className="pp-qr-cap">Scan to verify</div>
+          </div>
         ) : (
           <div className="pp-qr-spacer" aria-hidden="true" />
         )}
       </footer>
-      </PrintHeaderRepeat>
     </article>
   );
 }

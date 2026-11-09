@@ -37,6 +37,13 @@ export type PrintLineItem = {
   unit: string;
   unitPrice: string;
   amount: string;
+  /**
+   * Lot (bundle) lines only: the component descriptions, printed one per row
+   * under the lot line with the qty/price cells merged across the block
+   * (owner decision 2026-11-09). Descriptions ONLY by design — this type has
+   * no component qty, price, cost or supplier fields, so none can leak.
+   */
+  components?: string[];
 };
 
 export type PrintMoneyLine = { label: string; amount: string; emphasize?: boolean };

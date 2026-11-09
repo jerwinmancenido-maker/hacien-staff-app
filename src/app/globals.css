@@ -4680,11 +4680,28 @@ button.contact-card-add {
 .print-shell-letter .print-toolbar-alert {
   width: 8.5in;
 }
+/* The packing list root carries .pp-doc-root WITHOUT .pp-page (it keeps
+   the legacy .print-page sheet box), so the design variables are defined
+   on .pp-doc-root as well — without them every var()-based colour on
+   that sheet (table header band, lot titles, title pixel, box edges)
+   silently drops out. Professional documents carry both classes and see
+   the same values either way. */
+.pp-doc-root {
+  --pp-ink: var(--ink, #0a0a0a);
+  --pp-navy: #0d1526;
+  --pp-accent: var(--blue, #2563eb);
+  --pp-rule: #e5e5e5;
+  --pp-rule-soft: #e5e5e5;
+  --pp-muted: var(--grey-600, #525252);
+  --pp-label: var(--grey-700, #404040);
+  --pp-fill: var(--grey-100, #f5f5f5);
+}
 .pp-page {
   /* HACIEN brand kit print: ink + greys; Pixel Blue only as title marker.
      On-screen preview = full A4/Letter sheet, centered, equal side padding
      matching @page margins. Print overrides at end of this section win. */
   --pp-ink: var(--ink, #0a0a0a);
+  --pp-navy: #0d1526;
   --pp-accent: var(--blue, #2563eb);
   --pp-rule: #e5e5e5;
   --pp-rule-soft: #e5e5e5;
@@ -4732,11 +4749,64 @@ button.contact-card-add {
 /* Letterhead Template v3: the header is logo left + company details right;
    the title block sits below the rule (see .pp-title-block). */
 .pp-head {
+  /* Print redesign v8 (owner-approved 2026-11-09): the letterhead now
+     prints once, in flow on page 1, over a strong navy rule with the
+     brand's blue segment — the repeating head is the compact strip. */
   position: relative;
   z-index: 1;
-  border-bottom: 0.5pt solid var(--pp-rule);
+  border-bottom: 2.5px solid var(--pp-navy);
   padding-bottom: 10px;
   min-width: 0;
+}
+.pp-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2.5px;
+  width: 120px;
+  height: 2.5px;
+  background: var(--pp-accent);
+}
+/* Print redesign v10 (owner-approved 2026-11-09): professional
+   documents and the packing list print on the named "pp-doc" page.
+   The identity strip (brand left; title · number right) lives in the
+   top margin box — the right box's content is per-document and is
+   emitted by the print component (lib/print/strip-style.ts). On page 1
+   the strip and the footer contact line are suppressed: the letterhead
+   and title block already carry them, and nothing may print twice on
+   the same page. The generic @page above still serves every other
+   print (book/tax pages keep their repeated letterhead). */
+.pp-doc-root {
+  page: pp-doc;
+}
+@page pp-doc {
+  size: A4;
+  margin: 15mm 0.39in 0.63in;
+  @top-left {
+    content: "■ HACIEN";
+    font-size: 7.5pt;
+    letter-spacing: 0.09em;
+    color: #737373;
+  }
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
+}
+@page pp-doc:first {
+  margin-top: 0.25in;
+  @top-left {
+    content: none;
+  }
+  @bottom-left {
+    content: none;
+  }
 }
 .pp-letterhead {
   min-width: 0;
@@ -4832,38 +4902,101 @@ button.contact-card-add {
   color: var(--danger, #b91c1c);
   font-style: italic;
 }
-/* Title block below the header rule: big title on top, meta below it,
-   both right-aligned (owner 2026-11-07). */
+/* Title block (print redesign v8, owner-approved 2026-11-09): title on
+   the left, the document number as an editorial block on the right,
+   and a meta strip (date / status / meta) under both. Supersedes the
+   Template v3 right-aligned title + meta table. */
 .pp-title-block {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
-  gap: 4px;
-  margin-top: 10px;
-  text-align: right;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
   min-width: 0;
 }
 .pp-title-block h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 18pt;
+  font-size: 17pt;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  font-weight: 400;
-  color: var(--pp-ink);
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: var(--pp-navy);
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  text-align: right;
-  gap: 8px;
+  gap: 9px;
   max-width: 100%;
   box-sizing: border-box;
 }
-.pp-title-block .pp-meta {
-  margin-left: 0;
-  width: max-content;
-  max-width: 100%;
+.pp-docnum {
+  text-align: right;
+  flex-shrink: 0;
+}
+.pp-docnum-label {
+  font-size: 7.5pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pp-muted);
+}
+.pp-docnum-value {
+  font-size: 13pt;
+  font-weight: 700;
+  color: var(--pp-navy);
+  line-height: 1.25;
+}
+/* Stacked second title line (packing list: "& Delivery Details" under
+   "Packing List") and the small line under a document number (the
+   packing list's SI reference) — packing-list redesign, owner-approved
+   mock v2, 2026-11-09. */
+.pp-title-sub {
+  font-size: 10.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--pp-navy);
+  margin-top: 3px;
+}
+.pp-docnum-sub {
+  font-size: 8.5pt;
+  color: var(--pp-muted);
+  margin-top: 1px;
+}
+/* Legal disclaimer box — same blue-edge treatment as .pp-pay, bold
+   lines (the packing list's ATTACHMENT ONLY / input-tax lines). */
+.pp-disclaimer {
+  border: 1px solid #e3e7ef;
+  border-left: 3px solid var(--pp-accent);
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 9.5pt;
+  margin-top: 16px;
+}
+.pp-disclaimer p {
+  margin: 0;
+}
+.pp-disclaimer p + p {
+  margin-top: 3px;
+}
+.pp-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 38px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pp-rule);
+}
+.pp-meta-label {
+  font-size: 7.5pt;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--pp-muted);
+}
+.pp-meta-value {
+  font-size: 10.5pt;
+  font-weight: 600;
+  margin-top: 1px;
 }
 /* Pixel Blue square — the only blue on the page besides the logo. */
 .pp-title-pixel {
@@ -4896,6 +5029,9 @@ button.contact-card-add {
   font-size: 9.5pt;
   line-height: 1.4;
   color: var(--pp-ink);
+}
+.pp-subject-value {
+  font-weight: 600;
 }
 .pp-party-grid {
   position: relative;
@@ -4953,26 +5089,67 @@ button.contact-card-add {
 }
 .pp-items th,
 .pp-items td {
-  padding: 8px 8px;
+  padding: 9px 10px;
   border-bottom: 0.5pt solid var(--pp-rule);
   text-align: left;
   vertical-align: top;
 }
+/* Lot blocks (print redesign v8): the lot title carries the hierarchy —
+   bold navy — so the merged price clearly belongs to the bundle, and
+   component rows indent quietly with no per-row hairline (the old
+   desc-only hairlines stopped mid-table and read as a broken grid);
+   one rule closes the block under the last component. */
+.pp-lot-title {
+  font-weight: 700;
+  font-size: 10.5pt;
+  color: var(--pp-navy);
+}
+.pp-items tr.pp-lot-start td {
+  padding-top: 13px;
+}
+.pp-items tr.pp-lot-start td.pp-desc {
+  /* No rule under the lot title — its own border would stop at the
+     description column edge (the merged cells draw theirs at the
+     block's end), echoing the old broken-grid look. */
+  border-bottom: none;
+}
+.pp-items td.pp-comp-cell {
+  padding: 5px 10px 5px 26px;
+  border-bottom: none;
+  color: #374151;
+}
+.pp-items tr.pp-comp-last td.pp-comp-cell {
+  border-bottom: 1px solid #dbe1ee;
+  padding-bottom: 10px;
+}
+/* Lot blocks: the rowSpan-merged #, qty, unit and price cells centre
+   vertically against the lot's component rows. */
+.pp-items td.pp-merged {
+  vertical-align: middle;
+}
 .pp-items thead th {
-  /* Receipt-style: plain black caps + thin rule, no grey fill band. */
-  border-bottom: 1px solid #e5e5e5;
+  /* Print redesign v8: dark navy header band, white caps. In pure
+     black-and-white printing it still reads as a strong header. */
+  border-bottom: none;
   font-size: 8pt;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: transparent;
+  letter-spacing: 0.09em;
+  background: var(--pp-navy);
   font-weight: 600;
-  color: var(--pp-ink);
+  color: #fff;
+  padding: 9px 10px;
 }
 .pp-items .num,
 .pp-totals .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+/* Air between the qty/unit columns and the money columns, so Unit
+   price and Amount never read as one duplicated number. */
+.pp-items td.num,
+.pp-items th.num {
+  padding-left: 18px;
 }
 .pp-items tfoot th {
   border-bottom: none;
@@ -5005,17 +5182,30 @@ button.contact-card-add {
 }
 .pp-total-emph th,
 .pp-total-emph td {
+  /* Print redesign v8: the TOTAL is a dark navy band — the one number
+     on the page nobody can miss. */
   font-weight: 700;
+  font-size: 11.5pt;
+  border-top: none;
+  background: var(--pp-navy);
+  color: #fff;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.pp-total-emph th {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   font-size: 10.5pt;
-  border-top: 1px solid #e5e5e5;
-  padding-top: 6px;
-  color: var(--pp-ink);
 }
 .pp-words {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 9.5pt;
   font-style: normal;
+  font-weight: 600;
   clear: both;
+}
+.pp-words .pp-label-inline {
+  font-weight: 400;
 }
 .pp-notes,
 .pp-terms-block,
@@ -5025,6 +5215,16 @@ button.contact-card-add {
   margin-top: 10px;
   font-size: 9.5pt;
 }
+.pp-note-row {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 4px 10px;
+  padding: 3px 0;
+}
+.pp-notes {
+  border-top: 1px solid var(--pp-rule);
+  padding-top: 6px;
+}
 .pp-terms-block {
   font-size: 7pt;
   line-height: 1.35;
@@ -5032,14 +5232,36 @@ button.contact-card-add {
 }
 .pp-terms-block .pp-label {
   font-weight: 600;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   color: var(--pp-label);
+}
+.pp-terms-block .pp-label::before {
+  /* The blue square from the logo's A — the brand motif. */
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: var(--pp-accent);
+  margin-right: 7px;
+}
+.pp-terms-list {
+  /* Two open columns instead of one dense wall (redesign v8). */
+  column-count: 2;
+  column-gap: 30px;
 }
 .pp-terms-item {
   margin-top: 1.5px;
+  break-inside: avoid;
 }
 .pp-version-line {
   font-size: 7.5pt;
+}
+.pp-pay {
+  /* Payment details sit in a bordered box with the brand's blue edge
+     (redesign v8) — a customer looking for where to pay finds it. */
+  border: 1px solid #e3e7ef;
+  border-left: 3px solid var(--pp-accent);
+  padding: 10px 12px;
 }
 .pp-pay ul {
   margin: 4px 0 0;
@@ -5082,10 +5304,11 @@ button.contact-card-add {
 .pp-sign-role {
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 8pt;
-  color: var(--pp-label);
+  letter-spacing: 0.08em;
+  font-size: 7.5pt;
+  color: var(--pp-muted);
   margin-top: 0;
+  margin-bottom: 4px;
 }
 .pp-sign-name,
 .pp-sign-position,
@@ -5094,6 +5317,17 @@ button.contact-card-add {
   color: #555;
   margin-top: 2px;
   min-height: 1.1em;
+}
+.pp-sign-name {
+  /* The printed name IS the signature for electronic signatories —
+     give it the weight of one (redesign v8). */
+  font-weight: 700;
+  font-size: 10pt;
+  color: var(--pp-ink);
+}
+.pp-gen-note {
+  font-style: italic;
+  font-size: 8.5pt;
 }
 .pp-sign-name-hint {
   font-size: 8pt;
@@ -5121,9 +5355,10 @@ button.contact-card-add {
 .pp-thank-you {
   display: block;
   font-style: normal;
-  font-size: 9.5pt;
+  font-weight: 700;
+  font-size: 10.5pt;
   margin-bottom: 2px;
-  color: #333;
+  color: var(--pp-navy);
 }
 .pp-tax-line {
   font-weight: 500;
@@ -5149,6 +5384,20 @@ button.contact-card-add {
 .pp-qr svg {
   width: 100%;
   height: 100%;
+}
+.pp-qr-wrap {
+  justify-self: end;
+  text-align: center;
+}
+.pp-qr-wrap .pp-qr {
+  justify-self: center;
+}
+.pp-qr-cap {
+  font-size: 6.5pt;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pp-muted);
+  margin-top: 3px;
 }
 .pp-page-num {
   text-align: center;
@@ -5239,6 +5488,12 @@ button.contact-card-add {
     align-items: flex-start;
     text-align: left;
     max-width: 100%;
+  }
+  .pp-docnum {
+    text-align: left;
+  }
+  .pp-terms-list {
+    column-count: 1;
   }
   .pp-title-block h1 {
     margin-left: 0;
@@ -7363,13 +7618,46 @@ button.contact-card-add {
 .quote-ln-dsc {
   min-width: 0;
 }
-/* Catalog Step 3: picker + product buttons under a line's description. */
-.quote-ln-product {
+/* Compact lines (Phase 1): quiet caption under the search box — a linked
+   product or a pending new product. Plain free-text lines show nothing. */
+.quote-ln-meta-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 4px 10px;
   align-items: center;
   margin-top: 4px;
+  font-size: 12.5px;
+}
+.quote-picker-opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.quote-picker-opt:hover,
+.quote-picker-opt.is-active {
+  background: #eff6ff;
+}
+.quote-picker-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.quote-picker-meta {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.quote-picker-meta b {
+  color: var(--text);
 }
 /* The description cell anchors the catalog picker dropdown (item 5). */
 .quote-ln-descwrap {
@@ -7542,54 +7830,94 @@ button.contact-card-add {
   gap: 0;
   padding-top: 4px;
 }
-.quote-cost {
-  margin: 8px 0 0 28px;
+/* Compact lines (Phase 1): the per-line "More" section — kind, withholding
+   override and the internal cost fields live here, collapsed by default. */
+.quote-ln-more {
+  margin: 8px 0 2px 28px;
   background: #f8fafc;
-  border: 1px dashed var(--border);
+  border: 1px solid #eef1f4;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 10px 12px;
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  gap: 8px;
+}
+.quote-line-card .quote-ln-more {
+  margin-left: 0;
+}
+.quote-ln-more-row {
+  display: flex;
   flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: end;
+}
+.quote-ln-more .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.quote-ln-more .field.grow {
+  flex: 1 1 180px;
+}
+.quote-ln-more .field.grow select {
+  width: 100%;
+}
+/* Lot (bundle) lines: toggle bar + the internal components editor. */
+.quote-ln-lotbar {
+  display: flex;
   align-items: center;
-  font-size: 11.5px;
-  color: var(--text-2);
 }
-.quote-cost-warn {
-  border-color: #fecaca;
-  background: #fef2f2;
+.quote-ln-components {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.quote-cost-k {
-  font-weight: 800;
-  color: var(--text-3);
-  letter-spacing: 0.02em;
+.quote-ln-comp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: end;
 }
-.quote-cost-field {
-  display: inline-flex;
+.quote-ln-comp .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.quote-ln-comp .field.grow {
+  flex: 1 1 200px;
+  position: relative;
+}
+.quote-ln-comp-foot {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.quote-cost-field select,
-.quote-cost-field input {
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0 6px;
-  background: #fff;
-  font: inherit;
-  font-size: 12px;
-  max-width: 160px;
-  box-sizing: border-box;
+.quote-ln-more-note {
+  margin: 0;
+  align-self: center;
 }
-.quote-cost-field input {
-  width: 6.5rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.quote-ln-margin {
+  font-weight: 600;
+  line-height: 32px;
 }
-.quote-cost-field.neg,
-.quote-cost-field.neg b {
+.quote-ln-margin.neg {
   color: var(--red);
+}
+.quote-tg-cost {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+.quote-tg-cost.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.quote-tg-cost.neg {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
 }
 .quote-items-mobile {
   display: none;

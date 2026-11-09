@@ -6,7 +6,7 @@ import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { customerArSnapshot } from "@/lib/billing/views";
 import { formatPeso } from "@/lib/format";
 import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../editor-data";
-import { confirmNoneAndMarkQuoteSentAction, markQuoteSentAction, saveQuoteAction } from "../actions";
+import { confirmNoneAndMarkQuoteSentAction, createQuoteAddressAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const user = await requirePagePermission("edit_data");
@@ -43,6 +43,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        contactRoles={settings.lists.contactRoles}
         defaultValidityDays={settings.quotes.defaultValidityDays}
         printDefaults={{
           quoteTerms: settings.print.quoteTerms ?? "",
@@ -51,6 +52,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         }}
         staffUsers={staffUsers}
         preparedById={user.id}
+        deliveryAddressId={preset?.defaultDeliveryId ?? null}
+        addAddressAction={createQuoteAddressAction}
         action={saveQuoteAction.bind(null, null)}
         cancelHref="/quotes"
         markSentAction={markQuoteSentAction}

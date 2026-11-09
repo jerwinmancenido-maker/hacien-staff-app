@@ -250,6 +250,13 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         <div className="card">
           <div className="card-head">
             <h2>Receiving reports</h2>
+            {canEdit && (po.status === "SENT" || po.status === "PARTIALLY_RECEIVED") && (
+              <div className="right">
+                <Link className="btn-link small" href={`/receiving/${id}/new`}>
+                  Receive items
+                </Link>
+              </div>
+            )}
           </div>
           {po.receivingReports.length === 0 ? (
             <EmptyState line={po.status === "DRAFT" || po.status === "APPROVED" ? "Items can be received once the PO is sent." : "Nothing received yet."} />

@@ -22,6 +22,8 @@ export type AttachmentSheetItem = {
   qty: string;
   serials: string[];
   note: string | null;
+  /** Lot (bundle) lines print with the bold navy lot-title styling. */
+  isLot: boolean;
 };
 
 export type AttachmentSheet = {
@@ -65,7 +67,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     include: {
       items: {
         orderBy: { id: "asc" },
-        include: { salesOrderItem: { select: { description: true, unit: true } } },
+        include: { salesOrderItem: { select: { description: true, unit: true, isLot: true } } },
       },
       salesOrder: {
         select: {
@@ -105,6 +107,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
       qty: `${money(i.qty)} ${i.salesOrderItem.unit}`,
       serials: splitSerials(i.serialNumbers),
       note: i.note,
+      isLot: i.salesOrderItem.isLot,
     })),
     warrantyNotes,
     banks: paymentInstructionsFromSettings(settings.print).filter((p) => p.kind === "bank"),

@@ -60,6 +60,18 @@ describe.skipIf(!hasDb)("quote item catalog link (MySQL)", () => {
     expect(created?.unit).toBe(input.items[0]!.unit);
   });
 
+  it("carries the line price into the created item's default unit price", async () => {
+    const name = `Priced Catalog Item ${tag()}`;
+    const input = quoteInput(customerId, year);
+    input.items[0]!.description = name;
+    input.items[0]!.unitPrice = "4321.50";
+    input.items[0]!.newCatalog = { brand: "Acme", model: "P1", category: "Widgets", sku: `ACME-P-${tag()}`, details: "priced" };
+    const q = await createQuote(input, costUser);
+    const line = await db.quoteItem.findFirst({ where: { quoteId: q.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+    const created = await db.item.findUnique({ where: { id: line!.itemId! } });
+    expect(created?.defaultUnitPrice?.toFixed(2)).toBe("4321.50");
+  });
+
   it("leaves a plain free-text line unlinked when no catalog fields are typed", async () => {
     const input = quoteInput(customerId, year);
     const q = await createQuote(input, costUser);

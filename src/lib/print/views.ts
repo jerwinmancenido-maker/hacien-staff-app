@@ -84,7 +84,10 @@ function customerSignatories(preparedName: string | null): PrintSignatory[] {
 }
 
 /**
- * Totals for customer quotes/SOs/billings: Subtotal + Total (contract price) only.
+ * Totals for customer quotes/SOs: the Total (contract price) only.
+ * A Subtotal row used to print above it with the same amount — removed
+ * 2026-11-09 at the owner's call: nothing ever prints between the two,
+ * so the Subtotal only duplicated the Total.
  * Withholding is office math — never printed (no Less/Net/WHT/ATC/%).
  * Amount in words must match this printed Total.
  * Collection acknowledgements separately list EWT actually applied to cash.
@@ -99,10 +102,7 @@ export function customerMoneyTotals(opts: {
   void opts.netReceived;
   void opts.withholding;
   const total = opts.contractPrice;
-  return [
-    { label: "Subtotal", amount: total },
-    { label: "Total", amount: total, emphasize: true },
-  ];
+  return [{ label: "Total", amount: total, emphasize: true }];
 }
 
 const day = (ymdStr: string | null | undefined) =>
@@ -157,11 +157,25 @@ async function baseFooter(
 }
 
 const itemRow = (
-  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string },
+  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string; components?: string[] },
 ): PrintLineItem => i;
 
+/** Print include for a line's lot components: descriptions only, in order. */
+const lotComponentsInclude = {
+  where: { removedAt: null },
+  orderBy: { sortOrder: "asc" },
+  select: { description: true },
+} as const;
+
+/** Component descriptions for a lot line; undefined for normal lines. */
+const lotComponentNames = (isLot: boolean, components: readonly { description: string }[]): string[] | undefined =>
+  isLot && components.length > 0 ? components.map((c) => c.description) : undefined;
+
 /**
- * Subtotal + optional mid-lines + Total.
+ * Optional mid-lines + Total. With no mid-lines the Total stands alone —
+ * a Subtotal row above it would print the same amount twice (removed
+ * 2026-11-09 at the owner's call). With mid-lines, the Subtotal returns
+ * as their base.
  * The Total amount always equals `subtotal` — amounts in `extra` are listed but do not change Total.
  */
 export function moneyTotals(
@@ -169,6 +183,7 @@ export function moneyTotals(
   extra: PrintMoneyLine[] = [],
   totalLabel = "Total",
 ): PrintMoneyLine[] {
+  if (extra.length === 0) return [{ label: totalLabel, amount: subtotal, emphasize: true }];
   return [{ label: "Subtotal", amount: subtotal }, ...extra, { label: totalLabel, amount: subtotal, emphasize: true }];
 }
 
@@ -180,7 +195,11 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const q = await db.quote.findUnique({
     where: { id },
     include: {
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: lotComponentsInclude },
+      },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       createdBy: { select: { id: true, name: true, position: true, signatureStorageKey: true } },
@@ -194,10 +213,11 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
   const withholding = snapshotList(q.withholding);
   // Preparer picker: the chosen preparer, else the creator.
   const preparer = q.preparedBy ?? q.createdBy;
-  const prepared = printablePersonName(preparer.name);
   const footer = await baseFooter("quote", letter, { thankYou: true, includePayment: true, qr: true });
   const billingAddress = await customerBlockAddress(q.customer);
-  const deliveryAddress = await suggestedDeliveryAddress(q.customer);
+  // The quote's own pick wins: its text was snapshotted at save time, so
+  // later edits to the customer's address record don't change reprints.
+  const deliveryAddress = q.deliveryAddressText?.trim() ? q.deliveryAddressText : await suggestedDeliveryAddress(q.customer);
   const validityDays = validityDaysFromDates(q.date, q.validUntil);
   const doc: ProfessionalPrintModel = {
     kind: "quote",
@@ -221,7 +241,6 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
       ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
-      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ],
     // Full-width above items — not in the narrow right meta column.
     subject: q.subject?.trim() ? q.subject : null,
@@ -234,6 +253,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
+        components: lotComponentNames(i.isLot, i.components),
       });
     }),
     unitPriceLabel: "Unit price",
@@ -277,7 +297,11 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const so = await db.salesOrder.findUnique({
     where: { id },
     include: {
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: { components: lotComponentsInclude },
+      },
       customer: true,
       contact: { select: { name: true, email: true, phone: true } },
       quote: { select: { number: true, terms: true, leadTimeDays: true, date: true, validUntil: true } },
@@ -288,10 +312,8 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
   const letter = await letterhead(so.settingsVersionId);
   const total = money(so.contractPrice);
   const withholding = snapshotList(so.withholding);
-  const prepared = printablePersonName(so.createdBy.name);
   const footer = await baseFooter("sales_order", letter, { thankYou: true, includePayment: true, qr: true });
   const meta = [
-    ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
     ...(so.buyerPoNo ? [{ label: "Customer PO/ref", value: so.buyerPoNo }] : []),
     ...(so.buyerPoDate ? [{ label: "Customer PO date", value: day(ymd(so.buyerPoDate)) }] : []),
     ...(so.quote ? [{ label: "Quote no.", value: so.quote.number }] : []),
@@ -325,6 +347,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
+        components: lotComponentNames(i.isLot, i.components),
       });
     }),
     totals: customerMoneyTotals({
@@ -371,13 +394,10 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   if (!b) return null;
   const letter = await letterhead();
   const amount = money(b.amount);
-  // Customer copy: Subtotal + Total (gross) only — never show EWT / net expected.
+  // Customer copy: Total (gross) only — never show EWT / net expected.
+  // (No Subtotal row: it printed the same amount as the Total.)
   // withholdingExpected / netExpected stay on the billing record for office use.
-  const totals: PrintMoneyLine[] = [
-    { label: "Subtotal", amount },
-    { label: "Total", amount, emphasize: true },
-  ];
-  const prepared = printablePersonName(b.createdBy.name);
+  const totals: PrintMoneyLine[] = [{ label: "Total", amount, emphasize: true }];
   const footer = await baseFooter("billing", letter, { thankYou: true, includePayment: true });
   const billingAddress = await customerBlockAddress(b.customer);
   const deliveryAddress = await suggestedDeliveryAddress(b.customer);
@@ -404,7 +424,6 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       { label: "Booklet invoice no.", value: String(b.invoiceNo) },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
-      ...(prepared ? [{ label: "Prepared by", value: prepared }] : []),
       ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
       ...(b.salesOrder.terms ? [{ label: "Terms", value: b.salesOrder.terms }] : []),
     ],
@@ -563,8 +582,12 @@ export async function getPurchaseOrderPrintModel(
     notes: po.notes,
     deliveryNotes: letter.print.deliveryNotes || null,
     signatories: [
-      { role: "Prepared by", name: po.createdBy.name },
-      { role: "Approved by", name: po.approvedBy?.name ?? null },
+      { role: "Prepared by", name: po.createdBy.name, date: formatDateTime(po.createdAt) },
+      {
+        role: "Approved by",
+        name: po.approvedBy?.name ?? null,
+        date: po.approvedAt ? formatDateTime(po.approvedAt) : null,
+      },
       { role: "Received by", name: null },
     ],
     ...footer,

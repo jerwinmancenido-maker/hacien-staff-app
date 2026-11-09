@@ -77,14 +77,15 @@ describe("professional print documents", () => {
     expect(html(draftPoFixture())).toContain("DRAFT");
   });
 
-  it("statements label the meta row with the party, not a document number", () => {
+  it("statements label the number block with the party, not a document number", () => {
     // Statements have no number — the "number" is the party name (owner 2026-11-07).
+    // The label lives in the doc-number block since the v8 print redesign.
     const customer = html(customerStatementFixture());
-    expect(customer).toContain("<th>Customer</th>");
-    expect(customer).not.toContain("<th>No.</th>");
+    expect(customer).toContain('<div class="pp-docnum-label">Customer</div>');
+    expect(customer).not.toContain('<div class="pp-docnum-label">No.</div>');
     const supplier = html(supplierStatementFixture());
-    expect(supplier).toContain("<th>Supplier</th>");
-    expect(supplier).not.toContain("<th>No.</th>");
+    expect(supplier).toContain('<div class="pp-docnum-label">Supplier</div>');
+    expect(supplier).not.toContain('<div class="pp-docnum-label">No.</div>');
   });
 
   it("customer prints never show supplier costs or margins", () => {
@@ -281,7 +282,7 @@ describe("professional print documents", () => {
     const markup = html(withholdingQuotePrintFixture());
     const lower = markup.toLowerCase();
     const totalsBlob = (markup.match(/pp-totals[\s\S]*?<\/table>/i)?.[0] ?? "").toLowerCase();
-    expect(totalsBlob).toContain("subtotal");
+    expect(totalsBlob).not.toContain("subtotal"); // owner 2026-11-09: Subtotal row removed — it duplicated the Total
     expect(totalsBlob).toContain("total");
     expect(totalsBlob).not.toContain("less");
     expect(totalsBlob).not.toContain("net");
@@ -306,6 +307,48 @@ describe("professional print documents", () => {
       ],
     });
     expect(markup.toLowerCase()).not.toContain("qa admin");
+  });
+
+  it("v10: identity strip is an emitted @page style, never in-flow markup", () => {
+    const markup = html(quotePrintFixture());
+    expect(markup).toContain("pp-doc-root");
+    expect(markup).toContain(
+      '@page pp-doc { @top-right { content: "QUOTATION · QT-2026-0001";',
+    );
+    expect(markup).toContain("@page pp-doc:first { @top-right { content: none; } }");
+    // The v8 thead strip duplicated the title block on page 1 — it is gone.
+    expect(markup).not.toContain("pp-runhead");
+    expect(markup).not.toContain("pp-repeat");
+  });
+
+  it("v10: statement strip carries the title only, not the party name", () => {
+    const fixture = customerStatementFixture();
+    const markup = html(fixture);
+    const style = markup.slice(markup.indexOf("<style>"), markup.indexOf("</style>"));
+    expect(style).toContain("STATEMENT OF ACCOUNT");
+    expect(style).not.toContain(fixture.party.name.toUpperCase());
+  });
+
+  it("v10: signatory Date label prints only with a date (or on hand-sign roles)", () => {
+    const withDates = html({
+      ...poPrintFixture(),
+      signatories: [
+        { role: "Prepared by", name: "HACIEN Sales", date: "Nov 9, 2026, 10:00 AM" },
+        { role: "Approved by", name: "HACIEN Sales", date: "Nov 9, 2026, 11:00 AM" },
+        { role: "Received by", name: null },
+      ],
+    });
+    expect(withDates.match(/pp-sign-date">Date</g)).toHaveLength(3);
+    const noDates = html({
+      ...poPrintFixture(),
+      signatories: [
+        { role: "Prepared by", name: "HACIEN Sales" },
+        { role: "Approved by", name: null },
+        { role: "Received by", name: null },
+      ],
+    });
+    // Only Received by keeps the write-in Date prompt.
+    expect(noDates.match(/pp-sign-date">Date</g)).toHaveLength(1);
   });
 });
 
@@ -352,7 +395,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     }
   });
 
-  it("NON-VAT totals math (subtotal, withholding, total) remains Subtotal + Total only", () => {
+  it("NON-VAT totals math remains Total only (no Subtotal row, no withholding lines)", () => {
     const totals = customerMoneyTotals({
       contractPrice: "520000.00",
       withholdingTotal: "5200.00",
@@ -367,10 +410,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
         },
       ],
     });
-    expect(totals).toEqual([
-      { label: "Subtotal", amount: "520000.00" },
-      { label: "Total", amount: "520000.00", emphasize: true },
-    ]);
+    expect(totals).toEqual([{ label: "Total", amount: "520000.00", emphasize: true }]);
   });
 
   it("validity default 15 + override: sentence formatting and date calculation", () => {

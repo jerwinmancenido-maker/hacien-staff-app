@@ -27,6 +27,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
         rates={so.withholding}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        contactRoles={settings.lists.contactRoles}
         action={saveSalesOrderAction.bind(null, id)}
         cancelHref={`/sales-orders/${id}`}
         priceLock={user.isAdmin ? "override" : "locked"}
