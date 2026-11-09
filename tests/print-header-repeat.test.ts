@@ -16,7 +16,16 @@ import { describe, expect, it } from "vitest";
 // flow on page 1, and page 2+ carry the identity strip from the @page
 // margin boxes instead — a thead repeats identically on page 1 too,
 // which duplicated the title block there.
-describe("page headers: thead letterhead (books) vs margin-box strip (professional docs)", () => {
+//
+// Owner reversal for the professional documents (2026-11-10, on
+// QT-2026-0005): page 2 without a header "is not professional looking" —
+// the letterhead now rides the thead for ProfessionalPrintDocument too
+// (the letterhead exists ONLY in the thead, so page 1 shows it once, in
+// flow — no duplication). The margin-box strip stays: it carries the
+// document title + number, which the letterhead does not. The packing
+// list keeps the v10 strip-only design (warehouse document, out of the
+// scope of the owner's complaint).
+describe("page headers: thead letterhead (books + professional docs) vs margin-box strip (packing list)", () => {
   const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
   const shell = readFileSync(
     path.resolve("src/components/docs/PrintHeaderRepeat.tsx"),
@@ -54,23 +63,50 @@ describe("page headers: thead letterhead (books) vs margin-box strip (profession
     }
   });
 
-  it("professional + packing-list shells use the margin-box strip (v10), not the thead", () => {
-    const shells = [
-      "src/components/docs/ProfessionalPrintDocument.tsx",
-      "src/components/docs/PackingListDocument.tsx",
-    ];
-    for (const file of shells) {
-      const src = readFileSync(path.resolve(file), "utf8");
-      expect(src, file).not.toContain("PrintHeaderRepeat");
-      expect(src, file).toContain("pp-doc-root");
-      expect(src, file).toContain("printStripCss");
-      expect(src, file).toContain("<CompanyLetterhead");
-    }
+  it("professional documents route their letterhead through PrintHeaderRepeat (owner 2026-11-10)", () => {
+    const src = readFileSync(
+      path.resolve("src/components/docs/ProfessionalPrintDocument.tsx"),
+      "utf8",
+    );
+    const open = src.indexOf("<PrintHeaderRepeat");
+    expect(open).toBeGreaterThan(-1);
+    const lh = src.indexOf("<CompanyLetterhead", open);
+    expect(lh).toBeGreaterThan(open);
+    expect(src.slice(open, lh)).toContain("header={");
+    expect(src).toContain("pp-doc-root");
+    // The strip stays — it carries title + number, not letterhead data.
+    expect(src).toContain("printStripCss");
+  });
+
+  it("packing-list shell keeps the margin-box strip (v10), not the thead", () => {
+    const src = readFileSync(
+      path.resolve("src/components/docs/PackingListDocument.tsx"),
+      "utf8",
+    );
+    expect(src).not.toContain("PrintHeaderRepeat");
+    expect(src).toContain("pp-doc-root");
+    expect(src).toContain("printStripCss");
+    expect(src).toContain("<CompanyLetterhead");
   });
 
   it("keeps the @page setup unchanged (the thead, not margins, carries the repeat)", () => {
     const margins = css.match(/margin: 0\.25in 0\.39in 0\.63in/g) ?? [];
     expect(margins.length).toBe(2); // @page (A4) and @page letter
+  });
+});
+
+describe("print pagination: closing sections flow, small units stay whole (owner 2026-11-10)", () => {
+  const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
+
+  it(".pp-closing is NOT one unbreakable block in print (the page-1 gap)", () => {
+    expect(css).not.toContain("  .pp-closing {\n    break-inside: avoid;\n  }");
+  });
+
+  it("the totals table and the amount-in-words line stay whole", () => {
+    expect(css).toContain(
+      "  .pp-totals {\n    break-inside: avoid;\n    break-before: avoid;\n  }",
+    );
+    expect(css).toContain("  .pp-words {\n    break-inside: avoid;\n  }");
   });
 });
 

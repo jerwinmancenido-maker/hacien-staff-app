@@ -4345,7 +4345,16 @@ td.has-error input {
     break-after: avoid;
     break-inside: avoid;
   }
-  .pp-closing {
+  /* Closing sections FLOW across pages (owner 2026-11-10): .pp-closing as
+     one unbreakable block pushed the totals + remarks + notes wholesale to
+     page 2 whenever the block outgrew page 1's remainder — a half-empty
+     first page (seen on QT-2026-0005). Only the small units stay whole:
+     the totals table and the amount-in-words line. */
+  .pp-totals {
+    break-inside: avoid;
+    break-before: avoid;
+  }
+  .pp-words {
     break-inside: avoid;
   }
   .pp-signatories {
