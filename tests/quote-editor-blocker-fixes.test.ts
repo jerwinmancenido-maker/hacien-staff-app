@@ -13,19 +13,22 @@ const editor = read("src/components/docs/QuoteEditor.tsx");
 const quotesService = read("src/lib/services/quotes.ts");
 const calc = read("src/lib/quotes/calc.ts");
 
-describe("customer select placeholder comes first", () => {
-  it("the select holds only the placeholder + customers; adding is a visible button", () => {
-    // Updated 2026-11-08 (add-entry-points PR-1): the in-dropdown add option
-    // was buried at the top of the native popup once a customer was picked,
-    // so the create action moved to an "Add customer" button beside the
-    // select. The placeholder still comes first; no __add__ option remains.
+describe("customer field: search picker, no native select", () => {
+  it("the customer field is a SearchPicker; adding is its pinned in-panel row", () => {
+    // Updated 2026-11-09 (add-in-dropdown pickers): the native select and
+    // the beside-field button are both gone. The field is the SearchPicker
+    // — type to filter, "+ Add customer" pinned inside the panel. The old
+    // blocker (resting display = the add option, dead first click) cannot
+    // recur: there is no add OPTION at all, only a button row in a panel,
+    // and the placeholder is the field's hint text.
     const start = editor.indexOf('id="customerId"');
     expect(start).toBeGreaterThan(-1);
     const block = editor.slice(start, start + 700);
-    expect(block).toContain('<option value="">Pick a customer…</option>');
+    expect(block).toContain('placeholder="Pick a customer…"');
     expect(block).not.toContain('value="__add__"');
-    expect(block).toContain("Add customer");
+    expect(block).toContain('addLabel="Add customer"');
     expect(block).toContain("setAddCustomerOpen(true)");
+    expect(editor).not.toContain('<select id="customerId"');
   });
 });
 

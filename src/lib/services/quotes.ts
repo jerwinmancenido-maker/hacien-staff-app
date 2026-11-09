@@ -156,16 +156,14 @@ export async function checkItems(items: readonly Pick<ItemInput, "itemId">[]) {
   if (found !== ids.length) throw new DocRuleError("One of the linked products no longer exists. Pick again.", "items");
 }
 
-function hasNewCatalogFields(nc: NonNullable<ItemInput["newCatalog"]> | undefined): boolean {
-  if (!nc) return false;
-  return [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((v) => v != null && v !== "");
-}
-
 /**
- * Catalog Step 3: lines typed with catalog fields (and no link yet) get a
- * catalog item created in the same transaction, and the line links to it.
- * Returns the item id per input index (null = no link). Runs inside the
- * quote transaction so a failed save never leaves an orphan catalog row.
+ * Catalog Step 3 + the 2026-11-09 rule (Jerwin): a line carrying the
+ * "Add to Products" marker (newCatalog present, no link yet) gets a catalog
+ * item created in the same transaction, and the line links to it — even
+ * when every drawer field is blank, because using the drawer IS the intent.
+ * Lines without the marker stay free-text. Returns the item id per input
+ * index (null = no link). Runs inside the quote transaction so a failed
+ * save never leaves an orphan catalog row.
  */
 async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Promise<(string | null)[]> {
   const out: (string | null)[] = [];
@@ -174,21 +172,23 @@ async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Pro
       out.push(input.itemId);
       continue;
     }
-    if (!hasNewCatalogFields(input.newCatalog)) {
+    if (!input.newCatalog) {
       out.push(null);
       continue;
     }
     const nc = input.newCatalog!;
+    // Blank drawer fields store as NULL (not set), never as empty strings.
+    const blankToNull = (v: string | null | undefined) => (v == null || v === "" ? null : v);
     const created = await tx.item.create({
       data: {
         name: input.description.trim(),
-        brand: nc.brand ?? null,
-        model: nc.model ?? null,
-        category: nc.category ?? null,
-        sku: nc.sku ?? null,
+        brand: blankToNull(nc.brand),
+        model: blankToNull(nc.model),
+        category: blankToNull(nc.category),
+        sku: blankToNull(nc.sku),
         unit: input.unit.trim(),
         kind: input.kind,
-        details: nc.details ?? null,
+        details: blankToNull(nc.details),
         // The price just quoted becomes the product's default, so the next
         // quote pre-fills it instead of starting blank (2026-11-08).
         defaultUnitPrice: input.unitPrice,

@@ -1,10 +1,11 @@
-// Lot (bundle) lines on customer prints (owner decision 2026-11-09,
-// supersedes the B1 "components never print" rule): a lot line prints its
-// component DESCRIPTIONS one per row under the lot line, while the #,
-// qty, unit and both price cells merge (rowSpan) across the block — the
-// lot shows ONE qty and ONE price, and unit price equals the amount.
-// Component quantities, costs and suppliers never reach the print model
-// (PrintLineItem.components is string[] by design).
+// Lot (bundle) lines on customer prints — BLOCK design (owner 2026-11-09,
+// supersedes the #160 itemized-rows layout and the B1 "components never
+// print" rule): a lot prints NO title row (its name rides on the Subject);
+// each member is one bordered part row — bold title, spec bullets, its OWN
+// qty/unit — while the #, Unit Price and Amount cells merge (rowSpan)
+// across the block. The lot's qty is always 1, so Unit Price and Amount
+// are the same figure (arithmetic, not duplication). Costs and suppliers
+// never reach the print model (PrintLotPart has no such fields by design).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -17,29 +18,40 @@ function lotDoc(): ProfessionalPrintModel {
     ...quotePrintFixture(),
     items: [
       {
-        description: "ICT Equipment Bundle",
+        description: "PBRIS ICT Software Subscription",
         qty: "1.00",
         unit: "lot",
-        unitPrice: "500000.00",
-        amount: "500000.00",
-        components: ["Server unit", "Laptops", "Network switch"],
+        unitPrice: "598000.00",
+        amount: "598000.00",
+        components: [
+          {
+            title: "Google Cloud Platform Services",
+            specs: ["One (1) year subscription under a fixed annual budget ceiling", "Firebase Blaze Plan"],
+            qty: "1.00",
+            unit: "lot",
+          },
+          {
+            title: "Anthropic Claude Max 5x Plan",
+            specs: ["One (1) year subscription"],
+            qty: "2.00",
+            unit: "Licenses",
+          },
+        ],
       },
       {
-        description: "Laptop unit",
-        qty: "1.00",
-        unit: "pc",
-        unitPrice: "52000.00",
-        amount: "52000.00",
+        description: "Support hours — remote, per hour",
+        qty: "10.00",
+        unit: "hour",
+        unitPrice: "1500.00",
+        amount: "15000.00",
       },
     ],
-    totals: [
-      { label: "Total", amount: "552000.00", emphasize: true },
-    ],
+    totals: [{ label: "Total", amount: "613000.00", emphasize: true }],
   };
 }
 
 function itemsTable(markup: string): string {
-  const start = markup.indexOf('<table class="pp-items">');
+  const start = markup.indexOf('<table class="pp-items');
   const end = markup.indexOf("</table>", start);
   expect(start).toBeGreaterThan(-1);
   return markup.slice(start, end);
@@ -47,26 +59,43 @@ function itemsTable(markup: string): string {
 
 const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
-describe("lot lines on the print", () => {
-  it("lists each component on its own row under the lot line", () => {
+describe("lot lines on the print (block design)", () => {
+  it("prints each member as a part block with title, specs and its own qty/unit — and NO lot title row", () => {
     const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
-    const lotAt = table.indexOf("ICT Equipment Bundle");
-    expect(lotAt).toBeGreaterThan(-1);
-    for (const name of ["Server unit", "Laptops", "Network switch"]) {
-      expect(table.indexOf(name)).toBeGreaterThan(lotAt);
-    }
-    // Component rows come before the next numbered line.
-    expect(table.indexOf("Server unit")).toBeLessThan(table.indexOf("Laptop unit"));
+    // The lot's own name never prints in the table (Subject carries it).
+    expect(table).not.toContain("PBRIS ICT Software Subscription");
+    // Parts print in order, before the next numbered line.
+    const gcp = table.indexOf("Google Cloud Platform Services");
+    const claude = table.indexOf("Anthropic Claude Max 5x Plan");
+    const normal = table.indexOf("Support hours");
+    expect(gcp).toBeGreaterThan(-1);
+    expect(claude).toBeGreaterThan(gcp);
+    expect(normal).toBeGreaterThan(claude);
+    // Specs print as bullets under their part's title.
+    expect(table).toContain("• One (1) year subscription under a fixed annual budget ceiling");
+    expect(table).toContain("• Firebase Blaze Plan");
+    // Each part shows its OWN qty and unit.
+    expect(table).toContain("Licenses");
+    expect(occurrences(table, "pp-part-title")).toBe(2);
   });
 
-  it("merges #, qty, unit and both price cells across the lot block", () => {
+  it("merges #, Unit Price and Amount across the block; qty/unit stay per-part", () => {
     const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
-    // 3 components + the lot row = span 4, on exactly the 5 merged cells.
-    expect(occurrences(table, 'rowSpan="4"')).toBe(5);
+    // 2 parts = span 2, on exactly the 3 merged cells (#, unit price, amount).
+    expect(occurrences(table, 'rowSpan="2"')).toBe(3);
     // The lot price appears once as unit price and once as amount.
-    expect(occurrences(table, "₱500,000.00")).toBe(2);
-    // The normal line keeps its own unmerged row.
-    expect(occurrences(table, "₱52,000.00")).toBe(2);
+    expect(occurrences(table, "₱598,000.00")).toBe(2);
+    // The normal line keeps its own unmerged price pair.
+    expect(occurrences(table, "₱15,000.00")).toBe(1);
+    expect(occurrences(table, "₱1,500.00")).toBe(1);
+  });
+
+  it("borders the items grid on quote/SO prints only (audit D3 scope)", () => {
+    const quote = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() }));
+    expect(quote).toContain("pp-items pp-items-bordered");
+    const poDoc = { ...lotDoc(), kind: "supplier_po" as const };
+    const po = renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: poDoc }));
+    expect(po).not.toContain("pp-items-bordered");
   });
 
   it("a line without components renders exactly one plain row", () => {

@@ -57,7 +57,10 @@ describe("wiring", () => {
     const editor = read("src/components/docs/QuoteEditor.tsx");
     expect(editor).toContain("maybeAutoFillCost");
     expect(editor).toContain("/api/items/supplier-costs?description=");
-    expect(editor.match(/onSupplierPick\(i, ev\.target\.value \|\| null\)/g)).toHaveLength(2);
+    // Supplier picks arrive from the SearchPicker as plain values (id), not
+    // change events — the picker conversion of 2026-11-09 replaced the
+    // native selects' ev.target.value wiring (desktop + mobile).
+    expect(editor.match(/onSupplierPick\(i, id \|\| null\)/g)).toHaveLength(2);
     expect(editor.match(/costHints\[i\.key\]/g)).toHaveLength(4); // ternary + render, desktop + mobile
     // The fill is guarded: it re-checks emptiness at apply time.
     expect(editor).toContain("costIsEmpty(x.supplierUnitCost)");
