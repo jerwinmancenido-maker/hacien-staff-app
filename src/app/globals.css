@@ -4930,6 +4930,39 @@ button.contact-card-add {
   color: var(--pp-navy);
   line-height: 1.25;
 }
+/* Stacked second title line (packing list: "& Delivery Details" under
+   "Packing List") and the small line under a document number (the
+   packing list's SI reference) — packing-list redesign, owner-approved
+   mock v2, 2026-11-09. */
+.pp-title-sub {
+  font-size: 10.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--pp-navy);
+  margin-top: 3px;
+}
+.pp-docnum-sub {
+  font-size: 8.5pt;
+  color: var(--pp-muted);
+  margin-top: 1px;
+}
+/* Legal disclaimer box — same blue-edge treatment as .pp-pay, bold
+   lines (the packing list's ATTACHMENT ONLY / input-tax lines). */
+.pp-disclaimer {
+  border: 1px solid #e3e7ef;
+  border-left: 3px solid var(--pp-accent);
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 9.5pt;
+  margin-top: 16px;
+}
+.pp-disclaimer p {
+  margin: 0;
+}
+.pp-disclaimer p + p {
+  margin-top: 3px;
+}
 .pp-meta-strip {
   display: flex;
   flex-wrap: wrap;
