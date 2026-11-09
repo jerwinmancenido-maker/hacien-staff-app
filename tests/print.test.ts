@@ -40,7 +40,7 @@ describe("print document", () => {
       expect(html).not.toContain("less 1% ewt");
       expect(html).not.toContain("wht");
       expect(html).not.toContain("atc");
-      expect(html).toContain("subtotal");
+      expect(html).not.toContain("subtotal"); // owner 2026-11-09: Subtotal row removed — it duplicated the Total
       expect(html).toContain("total");
     }
   });
