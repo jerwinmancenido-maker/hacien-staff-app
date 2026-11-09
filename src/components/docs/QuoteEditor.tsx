@@ -44,6 +44,7 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { customerWithholdingHint } from "@/lib/quotes/customer-withholding-hint";
 import { costIsEmpty, lastCostHint, pickSupplierCost, type SupplierCostRow } from "@/lib/quotes/last-cost";
+import { lotNumberOf, lotTargets, moveComponentOut, moveComponentToLot, moveLineIntoLot } from "@/lib/quotes/lot-moves";
 import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
@@ -649,9 +650,42 @@ export function QuoteEditor({
         if (x.key !== line.key) return x;
         if (!on) return { ...x, isLot: false };
         const comps = x.components && x.components.length ? x.components : [blankComponent()];
-        return { ...x, isLot: true, components: comps };
+        return { ...x, isLot: true, qty: "1", unit: "lot", components: comps };
       }),
     );
+  }
+
+  // ---- Lot grouping: select items into lots (2026-11-09) -----------------
+
+  function onMoveLineToLot(line: EditorItem, lotKey: string) {
+    if (!lotKey) return;
+    setItems((xs) => moveLineIntoLot(xs, line.key, lotKey));
+  }
+
+  function onMoveComponent(line: EditorItem, comp: EditorComponent, target: string) {
+    if (!target) return;
+    if (target === "__out__") {
+      setItems((xs) =>
+        moveComponentOut(xs, line.key, comp.key, (c) => {
+          const wh = lineWithholdingSnapshotFromPicks(linePicks, line.kind);
+          return {
+            ...blankItem(linePicks, allocLineKey()),
+            kind: line.kind,
+            withholdingRate: wh.withholdingRate,
+            withholdingAtc: wh.withholdingAtc,
+            itemId: c.itemId,
+            itemName: c.itemId ? c.description : null,
+            description: c.description,
+            qty: c.qty,
+            unit: c.unit,
+            supplierId: c.supplierId,
+            supplierUnitCost: c.unitCost,
+          };
+        }),
+      );
+    } else {
+      setItems((xs) => moveComponentToLot(xs, line.key, comp.key, target));
+    }
   }
 
   function setComponent(lineKey: string, compKey: string, patch: Partial<EditorComponent>) {
@@ -1435,6 +1469,7 @@ export function QuoteEditor({
               <label htmlFor="subject">Subject / project</label>
               <input id="subject" type="text" value={h.subject} onChange={(ev) => setH({ ...h, subject: ev.target.value })} />
               {e.subject && <div className="error">{e.subject}</div>}
+              {items.some((i) => i.isLot) ? <div className="hint">For a lot, the lot&apos;s name belongs in this Subject — it does not print in the items table.</div> : null}
             </div>
             <div className={`quote-f field full${e.deliveryAddressId ? " has-error" : ""}`}>
               <label htmlFor="deliveryAddressId">Delivery address</label>
@@ -1593,7 +1628,7 @@ export function QuoteEditor({
                           </div>
                         </div>
                         <div className="quote-ln-qty">
-                          <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
+                          <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" value={i.qty} disabled={i.isLot === true} title={i.isLot ? "A lot is qty 1 — add another lot for a second bundle" : undefined} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                         </div>
                         <div className="quote-ln-unit">
                           <input aria-label={`Line ${idx + 1} unit`} value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
@@ -1624,6 +1659,21 @@ export function QuoteEditor({
                           >
                             {expanded ? "⌃" : "⌄"}
                           </button>
+                          {withCosts && !i.isLot && lotTargets(items).length > 0 ? (
+                            <select
+                              className="quote-ln-move"
+                              aria-label={`Move line ${idx + 1} into a lot`}
+                              value=""
+                              onChange={(ev) => onMoveLineToLot(i, ev.target.value)}
+                            >
+                              <option value="">Move to…</option>
+                              {lotTargets(items).map((t) => (
+                                <option key={t.key} value={t.key}>
+                                  Lot {t.n}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
                           <button
                             type="button"
                             className="btn-link danger"
@@ -1683,6 +1733,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
+                              <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span>
                               <label className="small">
                                 <input
                                   type="checkbox"
@@ -1696,13 +1747,17 @@ export function QuoteEditor({
                           ) : null}
                           {withCosts && i.isLot ? (
                             <div className="quote-ln-components">
+                              <div className="small muted quote-ln-comp-hint">
+                                Members carry cost only — the lot price above is the only selling price. A member&apos;s first description line prints as the part title; the lines under it print as specs. Moving a line into a lot drops its selling price and withholding pick — the lot&apos;s price and withholding apply.
+                              </div>
                               {(i.components ?? []).map((c, cIdx) => (
                                 <div className="quote-ln-comp" key={c.key}>
                                   <div className="field grow">
                                     <label className="label" htmlFor={`comp-desc-${c.key}`}>
                                       Component {cIdx + 1}
                                     </label>
-                                    <input
+                                    <textarea
+                                      rows={3}
                                       id={`comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
                                       value={c.description}
@@ -1717,7 +1772,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
-                                    />
+                                    ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         <ul className="plain-list">
@@ -1790,6 +1845,20 @@ export function QuoteEditor({
                                     />
                                     {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
                                   </div>
+                                  <select
+                                    className="quote-ln-move"
+                                    aria-label={`Move component ${cIdx + 1} of line ${idx + 1} to another lot or out of the lot`}
+                                    value=""
+                                    onChange={(ev) => onMoveComponent(i, c, ev.target.value)}
+                                  >
+                                    <option value="">Move to…</option>
+                                    {lotTargets(items, i.key).map((t) => (
+                                      <option key={t.key} value={t.key}>
+                                        Lot {t.n}
+                                      </option>
+                                    ))}
+                                    <option value="__out__">Out of lot</option>
+                                  </select>
                                   <button
                                     type="button"
                                     className="btn-link danger"
@@ -1896,6 +1965,21 @@ export function QuoteEditor({
                         >
                           {expanded ? "⌃" : "⌄"}
                         </button>
+                        {withCosts && !i.isLot && lotTargets(items).length > 0 ? (
+                          <select
+                            className="quote-ln-move"
+                            aria-label={`Move line ${idx + 1} into a lot`}
+                            value=""
+                            onChange={(ev) => onMoveLineToLot(i, ev.target.value)}
+                          >
+                            <option value="">Move to…</option>
+                            {lotTargets(items).map((t) => (
+                              <option key={t.key} value={t.key}>
+                                Lot {t.n}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-link danger"
@@ -1921,6 +2005,7 @@ export function QuoteEditor({
                             id={`m-qty-${i.key}`}
                             aria-label={`Line ${idx + 1} qty`}
                             inputMode="decimal"
+                            disabled={i.isLot === true}
                             value={i.qty}
                             onChange={(ev) => setItem(i.key, { qty: ev.target.value })}
                           />
@@ -2032,6 +2117,7 @@ export function QuoteEditor({
                           {whPctErrors[i.key] ? <div className="error small">{whPctErrors[i.key]}</div> : null}
                           {withCosts ? (
                             <div className="quote-ln-lotbar">
+                              <span className="quote-lot-badge">LOT {lotNumberOf(items, i.key)}</span>
                               <label className="small">
                                 <input
                                   type="checkbox"
@@ -2045,13 +2131,17 @@ export function QuoteEditor({
                           ) : null}
                           {withCosts && i.isLot ? (
                             <div className="quote-ln-components">
+                              <div className="small muted quote-ln-comp-hint">
+                                Members carry cost only — the lot price above is the only selling price. A member&apos;s first description line prints as the part title; the lines under it print as specs. Moving a line into a lot drops its selling price and withholding pick — the lot&apos;s price and withholding apply.
+                              </div>
                               {(i.components ?? []).map((c, cIdx) => (
                                 <div className="quote-ln-comp" key={c.key}>
                                   <div className="field grow">
                                     <label className="label" htmlFor={`m-comp-desc-${c.key}`}>
                                       Component {cIdx + 1}
                                     </label>
-                                    <input
+                                    <textarea
+                                      rows={3}
                                       id={`m-comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
                                       value={c.description}
@@ -2066,7 +2156,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
-                                    />
+                                    ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         <ul className="plain-list">
@@ -2139,6 +2229,20 @@ export function QuoteEditor({
                                     />
                                     {costHints[`${i.key}:${c.key}`] ? <div className="hint">{costHints[`${i.key}:${c.key}`]}</div> : null}
                                   </div>
+                                  <select
+                                    className="quote-ln-move"
+                                    aria-label={`Move component ${cIdx + 1} of line ${idx + 1} to another lot or out of the lot`}
+                                    value=""
+                                    onChange={(ev) => onMoveComponent(i, c, ev.target.value)}
+                                  >
+                                    <option value="">Move to…</option>
+                                    {lotTargets(items, i.key).map((t) => (
+                                      <option key={t.key} value={t.key}>
+                                        Lot {t.n}
+                                      </option>
+                                    ))}
+                                    <option value="__out__">Out of lot</option>
+                                  </select>
                                   <button
                                     type="button"
                                     className="btn-link danger"
