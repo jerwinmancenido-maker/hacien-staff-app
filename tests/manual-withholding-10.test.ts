@@ -52,7 +52,6 @@ describe("manual withholding picks (build brief 10)", () => {
       withholding: [snap("GOV_GOODS_1"), snap("GOV_PT_3")],
     });
     expect(lines).toEqual([
-      { label: "Subtotal", amount: "540000.00" },
       { label: "Total", amount: "540000.00", emphasize: true },
     ]);
     const blob = JSON.stringify(lines).toLowerCase();

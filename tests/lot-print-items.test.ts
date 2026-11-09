@@ -33,7 +33,6 @@ function lotDoc(): ProfessionalPrintModel {
       },
     ],
     totals: [
-      { label: "Subtotal", amount: "552000.00" },
       { label: "Total", amount: "552000.00", emphasize: true },
     ],
   };

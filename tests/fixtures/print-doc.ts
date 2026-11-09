@@ -62,7 +62,6 @@ function base(partial: Partial<ProfessionalPrintModel> & Pick<ProfessionalPrintM
     meta: [],
     items,
     totals: [
-      { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
     ],
     totalInWords: "Five hundred twenty thousand pesos only",
@@ -102,7 +101,6 @@ export const withholdingQuotePrintFixture = (): ProfessionalPrintModel =>
     ...quotePrintFixture(),
     number: "QT-2026-0002",
     totals: [
-      { label: "Subtotal", amount: "520000.00" },
       { label: "Total", amount: "520000.00", emphasize: true },
     ],
   });
@@ -166,7 +164,6 @@ export const poPrintFixture = (): ProfessionalPrintModel =>
     unitPriceLabel: "Unit cost",
     items: [{ description: "Laptop i5 (sample)", qty: "10.00", unit: "pc", unitPrice: "40000.00", amount: "400000.00" }],
     totals: [
-      { label: "Subtotal", amount: "400000.00" },
       { label: "Total", amount: "400000.00", emphasize: true },
     ],
     totalInWords: "Four hundred thousand pesos only",
@@ -206,7 +203,6 @@ export const rrPrintWithCostsFixture = (): ProfessionalPrintModel =>
     unitPriceLabel: "Unit cost",
     items: [{ description: "Laptop i5 (sample)", qty: "10.00", unit: "pc", unitPrice: "40000.00", amount: "400000.00" }],
     totals: [
-      { label: "Subtotal", amount: "400000.00" },
       { label: "Total", amount: "400000.00", emphasize: true },
     ],
     totalInWords: "Four hundred thousand pesos only",
@@ -343,7 +339,6 @@ export const longQuotePrintFixture = (): ProfessionalPrintModel => {
     number: "QT-2026-0025",
     items: many,
     totals: [
-      { label: "Subtotal", amount: "25000.00" },
       { label: "Total", amount: "25000.00", emphasize: true },
     ],
     totalInWords: "Twenty-five thousand pesos only",
