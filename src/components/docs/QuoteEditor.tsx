@@ -49,6 +49,9 @@ import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { QuoteStatusChip } from "./DocParts";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { SearchPicker } from "@/components/SearchPicker";
+import { AddSupplierDialog } from "@/components/purchasing/AddSupplierDialog";
+import type { CreatedInlineSupplier } from "@/app/(app)/suppliers/actions";
 import { AddContactDialog } from "./AddContactDialog";
 import {
   type EditorAddressOption,
@@ -310,6 +313,11 @@ export function QuoteEditor({
    * "" for no pick (print/conversion use the customer's default). */
   const [deliveryPick, setDeliveryPick] = useState(deliveryAddressId ?? "");
   const [addAddressOpen, setAddAddressOpen] = useState(false);
+  /** Supplier options are local state so an inline-added supplier can join
+   *  the list (and be picked on the line/component that asked for it). */
+  const [supplierList, setSupplierList] = useState(suppliers);
+  const [addSupplierOpen, setAddSupplierOpen] = useState(false);
+  const supplierTargetRef = useRef<{ lineKey: string; compKey: string | null } | null>(null);
   // Client-only line keys for rows added after mount (initial keys are SSR-stable).
   const lineKeySeq = useRef(0);
   const allocLineKey = () => `n${++lineKeySeq.current}`;
@@ -715,6 +723,13 @@ export function QuoteEditor({
     setDrawerFor(line.key);
     if (!line.itemId) {
       setDrawerItem(null);
+      // 2026-11-09 (Jerwin): opening "Add to Products" IS the intent — mark
+      // the line so saving the quote creates the catalog item even if every
+      // drawer field stays blank. Free-text lines never open the drawer and
+      // stay out of the catalog.
+      if (line.newCatalog == null) {
+        setItem(line.key, { newCatalog: { brand: "", model: "", category: "", sku: "", details: "" } });
+      }
       return;
     }
     setDrawerBusy(true);
@@ -986,6 +1001,31 @@ export function QuoteEditor({
     setAddAddressOpen(false);
   }
 
+  /** The "+ Add supplier" row inside a line/component supplier picker:
+   *  remember which line (or component) asked, then open the drawer. */
+  function openAddSupplier(lineKey: string, compKey: string | null) {
+    supplierTargetRef.current = { lineKey, compKey };
+    setAddSupplierOpen(true);
+  }
+
+  /** A just-saved supplier joins the list and is picked on the line or
+   *  component that asked for it (cost auto-fill follows the pick). */
+  function onSupplierCreated(created: CreatedInlineSupplier) {
+    const entry = { id: created.id, name: created.name };
+    setSupplierList((xs) => (xs == null || xs.some((x) => x.id === entry.id) ? xs : [...xs, entry].sort((a, b) => a.name.localeCompare(b.name))));
+    const target = supplierTargetRef.current;
+    supplierTargetRef.current = null;
+    if (!target) return;
+    const line = items.find((x) => x.key === target.lineKey);
+    if (!line) return;
+    if (target.compKey == null) {
+      onSupplierPick(line, created.id);
+    } else {
+      const comp = (line.components ?? []).find((c) => c.key === target.compKey);
+      if (comp) onComponentSupplierPick(line, comp, created.id);
+    }
+  }
+
   function changeQuotePick(next: string[] | null) {
     applyPickDefaults(filterGovVatCodes(next), items, {}, { skipOverrides: true });
   }
@@ -1043,8 +1083,6 @@ export function QuoteEditor({
 
   function itemPayload(i: EditorItem) {
     const nc = i.newCatalog;
-    const hasCatalogFields =
-      nc != null && [nc.brand, nc.model, nc.category, nc.sku, nc.details].some((v) => v.trim() !== "");
     const base = {
       id: i.id,
       description: i.description,
@@ -1056,8 +1094,9 @@ export function QuoteEditor({
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
       itemId: i.itemId,
-      // Only send typed catalog fields; blank ones mean "no catalog item".
-      newCatalog: hasCatalogFields
+      // The marker goes whenever the drawer marked the line (2026-11-09):
+      // blank fields still create the item on save.
+      newCatalog: nc
         ? { brand: nc.brand, model: nc.model, category: nc.category, sku: nc.sku, details: nc.details }
         : undefined,
     };
@@ -1316,19 +1355,16 @@ export function QuoteEditor({
               <label htmlFor="customerId">
                 Customer<span className="req"> *</span>
               </label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="customerId" value={h.customerId} onChange={(ev) => onCustomerSelect(ev.target.value)} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">Pick a customer…</option>
-                  {customerList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddCustomerOpen(true)}>
-                  Add customer
-                </button>
-              </div>
+              <SearchPicker
+                id="customerId"
+                ariaLabel="Customer"
+                value={h.customerId}
+                options={customerList.map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Pick a customer…"
+                onPick={onCustomerSelect}
+                addLabel="Add customer"
+                onAdd={() => setAddCustomerOpen(true)}
+              />
               {customer && (
                 <div className="hint">
                   {[customerTypeLabel(customer.withholdingType), quotePickHint].filter(Boolean).join(" · ")}
@@ -1338,20 +1374,18 @@ export function QuoteEditor({
             </div>
             <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="contactId" value={h.contactId} onChange={(ev) => setH({ ...h, contactId: ev.target.value })} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">None</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.isMain ? " (main)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddContactOpen(true)}>
-                  Add contact
-                </button>
-              </div>
+              <SearchPicker
+                id="contactId"
+                ariaLabel="Contact"
+                value={h.contactId}
+                options={contacts.map((c) => ({ id: c.id, label: c.name, meta: c.isMain ? "Main contact" : undefined }))}
+                placeholder="Pick a contact…"
+                emptyOptionLabel="None"
+                disabled={!customer}
+                onPick={(id) => setH({ ...h, contactId: id })}
+                addLabel="Add contact"
+                onAdd={() => setAddContactOpen(true)}
+              />
               {e.contactId && <div className="error">{e.contactId}</div>}
             </div>
             <div className={`quote-f field${e.date ? " has-error" : ""}`}>
@@ -1404,19 +1438,18 @@ export function QuoteEditor({
             </div>
             <div className={`quote-f field full${e.deliveryAddressId ? " has-error" : ""}`}>
               <label htmlFor="deliveryAddressId">Delivery address</label>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <select id="deliveryAddressId" value={deliveryPick} onChange={(ev) => onDeliverySelect(ev.target.value)} disabled={!customer} style={{ flex: 1, minWidth: 160 }}>
-                  <option value="">Customer default — decide at conversion</option>
-                  {(customer?.addresses ?? []).map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={!customer} onClick={() => setAddAddressOpen(true)}>
-                  Add address
-                </button>
-              </div>
+              <SearchPicker
+                id="deliveryAddressId"
+                ariaLabel="Delivery address"
+                value={deliveryPick}
+                options={(customer?.addresses ?? []).map((a) => ({ id: a.id, label: a.label, meta: a.oneLine }))}
+                placeholder="Pick a delivery address…"
+                emptyOptionLabel="Customer default — decide at conversion"
+                disabled={!customer}
+                onPick={onDeliverySelect}
+                addLabel="Add address"
+                onAdd={() => setAddAddressOpen(true)}
+              />
               {pickedAddress ? (
                 <div className="hint" style={{ whiteSpace: "pre-line" }}>
                   {pickedAddress.text}
@@ -1506,7 +1539,6 @@ export function QuoteEditor({
                   const displayAtc = showOverride
                     ? i.withholdingAtc
                     : pickUsual.atc;
-                  const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -1733,19 +1765,17 @@ export function QuoteEditor({
                                     <label className="label" htmlFor={`comp-sup-${c.key}`}>
                                       Supplier
                                     </label>
-                                    <select
+                                    <SearchPicker
                                       id={`comp-sup-${c.key}`}
-                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      ariaLabel={`Line ${idx + 1} component ${cIdx + 1} supplier`}
                                       value={c.supplierId ?? ""}
-                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
-                                    >
-                                      <option value="">—</option>
-                                      {suppliers!.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                          {s.name}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                      placeholder="Pick a supplier…"
+                                      emptyOptionLabel="—"
+                                      onPick={(id) => onComponentSupplierPick(i, c, id || null)}
+                                      addLabel="Add supplier"
+                                      onAdd={() => openAddSupplier(i.key, c.key)}
+                                    />
                                   </div>
                                   <div className="field">
                                     <label className="label" htmlFor={`comp-cost-${c.key}`}>
@@ -1786,20 +1816,17 @@ export function QuoteEditor({
                                 <label className="label" htmlFor={`sup-${i.key}`}>
                                   Supplier (internal)
                                 </label>
-                                <select
+                                <SearchPicker
                                   id={`sup-${i.key}`}
-                                  aria-label={`Line ${idx + 1} supplier`}
-                                  title={supplierName || undefined}
+                                  ariaLabel={`Line ${idx + 1} supplier`}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
-                                >
-                                  <option value="">—</option>
-                                  {suppliers!.map((s) => (
-                                    <option key={s.id} value={s.id} title={s.name}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                  placeholder="Pick a supplier…"
+                                  emptyOptionLabel="—"
+                                  onPick={(id) => onSupplierPick(i, id || null)}
+                                  addLabel="Add supplier"
+                                  onAdd={() => openAddSupplier(i.key, null)}
+                                />
                               </div>
                               <div className="field">
                                 <label className="label" htmlFor={`cost-${i.key}`}>
@@ -1841,7 +1868,6 @@ export function QuoteEditor({
                   const pickChips = lineWithholdingChipsFromPicks(linePicks, i.kind);
                   const usePickChips = !showOverride && pickChips.length > 0;
                   const displayAtc = showOverride ? i.withholdingAtc : pickUsual.atc;
-                  const supplierName = suppliers?.find((s) => s.id === i.supplierId)?.name ?? "";
                   const costMissing = lineCostMissing(i);
                   const below = !costMissing && toScaled(a.margin, 2) < 0n;
                   const marginPct = Number(a.total) !== 0 ? ((Number(a.margin) / Number(a.total)) * 100).toFixed(1) : "0.0";
@@ -2088,19 +2114,17 @@ export function QuoteEditor({
                                     <label className="label" htmlFor={`m-comp-sup-${c.key}`}>
                                       Supplier
                                     </label>
-                                    <select
+                                    <SearchPicker
                                       id={`m-comp-sup-${c.key}`}
-                                      aria-label={`Line ${idx + 1} component ${cIdx + 1} supplier`}
+                                      ariaLabel={`Line ${idx + 1} component ${cIdx + 1} supplier`}
                                       value={c.supplierId ?? ""}
-                                      onChange={(ev) => onComponentSupplierPick(i, c, ev.target.value || null)}
-                                    >
-                                      <option value="">—</option>
-                                      {suppliers!.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                          {s.name}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                      placeholder="Pick a supplier…"
+                                      emptyOptionLabel="—"
+                                      onPick={(id) => onComponentSupplierPick(i, c, id || null)}
+                                      addLabel="Add supplier"
+                                      onAdd={() => openAddSupplier(i.key, c.key)}
+                                    />
                                   </div>
                                   <div className="field">
                                     <label className="label" htmlFor={`m-comp-cost-${c.key}`}>
@@ -2141,20 +2165,17 @@ export function QuoteEditor({
                                 <label className="label" htmlFor={`m-sup-${i.key}`}>
                                   Supplier (internal)
                                 </label>
-                                <select
+                                <SearchPicker
                                   id={`m-sup-${i.key}`}
-                                  aria-label={`Line ${idx + 1} supplier`}
-                                  title={supplierName || undefined}
+                                  ariaLabel={`Line ${idx + 1} supplier`}
                                   value={i.supplierId ?? ""}
-                                  onChange={(ev) => onSupplierPick(i, ev.target.value || null)}
-                                >
-                                  <option value="">Supplier —</option>
-                                  {suppliers!.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={(supplierList ?? []).map((s) => ({ id: s.id, label: s.name }))}
+                                  placeholder="Pick a supplier…"
+                                  emptyOptionLabel="—"
+                                  onPick={(id) => onSupplierPick(i, id || null)}
+                                  addLabel="Add supplier"
+                                  onAdd={() => openAddSupplier(i.key, null)}
+                                />
                               </div>
                               <div className="field">
                                 <label className="label" htmlFor={`m-cost-${i.key}`}>
@@ -2439,6 +2460,9 @@ export function QuoteEditor({
           onSaved={onContactAdded}
         />
       )}
+      {addSupplierOpen && (
+        <AddSupplierDialog open={addSupplierOpen} onClose={() => setAddSupplierOpen(false)} termsOptions={termsOptions} onSaved={onSupplierCreated} />
+      )}
       {addAddressOpen && customer && (
         <AddAddressDialog
           customerName={customer.name}
@@ -2554,7 +2578,7 @@ export function QuoteEditor({
                 </>
               ) : (
                 <>
-                  <p className="small muted">“{line.description || "This line"}” isn&apos;t linked to the catalog yet. Fill in the fields below and saving this quote adds it as a new catalog item; leave them blank and it stays a free-text line.</p>
+                  <p className="small muted">“{line.description || "This line"}” isn&apos;t linked to the catalog yet. Saving this quote adds it as a new catalog item — the fields below are optional extras, blank is fine.</p>
                   <div className="field">
                     <label className="label" htmlFor="nc-brand">Brand</label>
                     <input id="nc-brand" type="text" value={nc.brand} onChange={(ev) => setNc({ brand: ev.target.value })} />
