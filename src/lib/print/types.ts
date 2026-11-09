@@ -29,6 +29,19 @@ export type PrintPartyBlock = {
 
 export type PrintMetaRow = { label: string; value: string };
 
+/**
+ * One member (part) of a lot line on a print: its title (the first line of
+ * the member's description), its spec lines (the rest), and its OWN qty/unit
+ * inside one lot. By design this type has NO price, cost or supplier fields,
+ * so none of those can ever leak onto a customer print.
+ */
+export type PrintLotPart = {
+  title: string;
+  specs: string[];
+  qty: string;
+  unit: string;
+};
+
 export type PrintLineItem = {
   description: string;
   /** Optional secondary line under the description (never cost/margin). */
@@ -38,12 +51,14 @@ export type PrintLineItem = {
   unitPrice: string;
   amount: string;
   /**
-   * Lot (bundle) lines only: the component descriptions, printed one per row
-   * under the lot line with the qty/price cells merged across the block
-   * (owner decision 2026-11-09). Descriptions ONLY by design — this type has
-   * no component qty, price, cost or supplier fields, so none can leak.
+   * Lot (bundle) lines only: the member parts, printed one row each inside
+   * the lot's block — the lot's own title row does NOT print (the lot's name
+   * rides on the quote Subject) and the # / Unit Price / Amount cells merge
+   * across the parts (owner design 2026-11-09). The lot's qty is always 1,
+   * so Unit Price and Amount are the same figure — arithmetic, not
+   * duplication.
    */
-  components?: string[];
+  components?: PrintLotPart[];
 };
 
 export type PrintMoneyLine = { label: string; amount: string; emphasize?: boolean };

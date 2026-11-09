@@ -31,7 +31,7 @@ import { POLICY_VERSION_LINE } from "./policies";
 import { buildQuoteSoTermsPoints } from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
-import type { ProfessionalPrintModel, PrintLineItem, PrintMoneyLine, PrintSignatory } from "./types";
+import type { ProfessionalPrintModel, PrintLineItem, PrintLotPart, PrintMoneyLine, PrintSignatory } from "./types";
 
 function assertCosts(viewer: PermissionUser) {
   if (!canSeeCosts(viewer)) throw new ForbiddenError();
@@ -146,19 +146,37 @@ async function baseFooter(
 }
 
 const itemRow = (
-  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string; components?: string[] },
+  i: { description: string; detail?: string | null; qty: string; unit: string; unitPrice: string; amount: string; components?: PrintLotPart[] },
 ): PrintLineItem => i;
 
-/** Print include for a line's lot components: descriptions only, in order. */
+/** Print include for a line's lot components: description + own qty/unit,
+ * in order. Never cost or supplier — those must not reach a print model. */
 const lotComponentsInclude = {
   where: { removedAt: null },
   orderBy: { sortOrder: "asc" },
-  select: { description: true },
+  select: { description: true, qty: true, unit: true },
 } as const;
 
-/** Component descriptions for a lot line; undefined for normal lines. */
-const lotComponentNames = (isLot: boolean, components: readonly { description: string }[]): string[] | undefined =>
-  isLot && components.length > 0 ? components.map((c) => c.description) : undefined;
+/**
+ * Lot parts for a print; undefined for normal lines. Each component's
+ * description splits like a line's: first line = the part title, the rest
+ * = its spec lines.
+ */
+const lotComponentParts = (
+  isLot: boolean,
+  components: readonly { description: string; qty: { toFixed(n: number): string } | number | string; unit: string }[],
+): PrintLotPart[] | undefined =>
+  isLot && components.length > 0
+    ? components.map((c) => {
+        const { description, detail } = splitDescription(c.description);
+        return {
+          title: description,
+          specs: detail ? detail.split("\n").map((x) => x.trim()).filter(Boolean) : [],
+          qty: money(c.qty),
+          unit: c.unit,
+        };
+      })
+    : undefined;
 
 /**
  * Optional mid-lines + Total. With no mid-lines the Total stands alone —
@@ -241,7 +259,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
-        components: lotComponentNames(i.isLot, i.components),
+        components: lotComponentParts(i.isLot, i.components),
       });
     }),
     unitPriceLabel: "Unit price",
@@ -335,7 +353,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
         unit: i.unit,
         unitPrice: money(i.unitPrice),
         amount: money(i.total),
-        components: lotComponentNames(i.isLot, i.components),
+        components: lotComponentParts(i.isLot, i.components),
       });
     }),
     totals: customerMoneyTotals({

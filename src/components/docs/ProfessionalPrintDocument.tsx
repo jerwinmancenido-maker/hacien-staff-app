@@ -240,7 +240,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       ) : null}
 
       {doc.items && (
-        <table className="pp-items">
+        <table className={doc.kind === "quote" || doc.kind === "sales_order" ? "pp-items pp-items-bordered" : "pp-items"}>
           <thead>
             <tr>
               <th className="pp-n">#</th>
@@ -269,29 +269,34 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
                   </tr>
                 );
               }
-              // Lot (bundle) line: component descriptions print one per row
-              // under the lot line; #, qty, unit and both price cells merge
-              // (rowSpan) across the whole block, so the lot shows ONE qty
-              // and ONE price (owner decision 2026-11-09).
-              const span = comps.length + 1;
+              // Lot (bundle) line, block design (owner 2026-11-09): NO title
+              // row — the lot's name rides on the Subject. One row per member
+              // part (title + spec bullets, the part's OWN qty/unit); the #
+              // and both price cells merge (rowSpan) across the block and
+              // centre vertically. The lot's qty is always 1, so Unit Price
+              // and Amount are the same figure — arithmetic, not duplication.
+              const span = comps.length;
               return (
                 <Fragment key={n}>
-                  <tr className="pp-lot-start">
-                    <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
-                    <td className="pp-desc">
-                      <div className="pp-pre pp-lot-title">{i.description}</div>
-                      {i.detail ? <div className="pp-item-detail pp-pre">{i.detail}</div> : null}
-                    </td>
-                    <td className="num pp-qty pp-merged" rowSpan={span}>{qty(i.qty)}</td>
-                    <td className="pp-unit pp-merged" rowSpan={span}>{i.unit}</td>
-                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>}
-                    {!hideAmounts && <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>}
-                  </tr>
-                  {comps.map((c, m) => (
-                    <tr key={m} className={m === comps.length - 1 ? "pp-comp-last" : undefined}>
-                      <td className="pp-desc pp-comp-cell">
-                        <div className="pp-pre">{c}</div>
+                  {comps.map((part, m) => (
+                    <tr key={m}>
+                      {m === 0 ? (
+                        <td className="pp-n pp-merged" rowSpan={span}>{n + 1}</td>
+                      ) : null}
+                      <td className="pp-desc pp-part-cell">
+                        <div className="pp-part-title">{part.title}</div>
+                        {part.specs.map((spec, k) => (
+                          <div key={k} className="pp-part-spec">• {spec}</div>
+                        ))}
                       </td>
+                      <td className="num pp-qty">{qty(part.qty)}</td>
+                      <td className="pp-unit">{part.unit}</td>
+                      {m === 0 && !hideAmounts ? (
+                        <td className="num pp-merged" rowSpan={span}>{formatPeso(i.unitPrice)}</td>
+                      ) : null}
+                      {m === 0 && !hideAmounts ? (
+                        <td className="num pp-merged" rowSpan={span}>{formatPeso(i.amount)}</td>
+                      ) : null}
                     </tr>
                   ))}
                 </Fragment>
