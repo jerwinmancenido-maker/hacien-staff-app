@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { desktopCss } from "./desktop-css";
 
 // UI tidy-up item 5 (Jerwin, 2026-11-07): the catalog picker becomes a real
 // dropdown anchored under the description input, gains an inline add row
@@ -11,7 +12,7 @@ import { describe, expect, it } from "vitest";
 // Source-level guards (the editor is a client component).
 const editor = readFileSync(path.join(process.cwd(), "src/components/docs/QuoteEditor.tsx"), "utf8");
 const dialogs = readFileSync(path.join(process.cwd(), "src/components/docs/Dialogs.tsx"), "utf8");
-const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+const css = desktopCss(readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8"));
 
 const pickerBox = editor.slice(editor.indexOf("function pickerBox"), editor.indexOf("function productMeta"));
 const cssRule = (selector: string) => {
