@@ -96,7 +96,12 @@ export function buildRegister(
 ): BookRegister {
   const allowed = new Set(config.sources);
   const filtered = sources
-    .filter((r) => !r.voided && allowed.has(r.kind) && ymdInPeriod(r.date, fromYmd, toYmd))
+    .filter((r) => {
+      // A deleted void SI stays on the page (amount 0) so the number is visible.
+      // Every other void is left out of the register and its totals.
+      const keptVoid = r.voided === true && r.particulars.startsWith("Deleted (void)");
+      return (!r.voided || keptVoid) && allowed.has(r.kind) && ymdInPeriod(r.date, fromYmd, toYmd);
+    })
     .slice()
     .sort((a, b) => {
       const c = ymdCmp(a.date, b.date);

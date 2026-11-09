@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ESLint } from "eslint";
-import { assertNotDelete, assertNotRawDelete, bindDocumentDeleteAllowance, HardDeleteError, noDeleteExtension, rawSqlText } from "@/lib/no-delete";
+import { assertNotDelete, assertNotRawDelete, HardDeleteError, noDeleteExtension, rawSqlText } from "@/lib/no-delete";
 import { proveNestedDifferentModelDeleteBlocked } from "@/lib/services/document-delete";
 
 describe("no hard deletes", () => {
@@ -101,14 +101,10 @@ describe("no hard deletes", () => {
       }
     };
     walk(root);
-    expect(hits).toEqual(["src/lib/services/document-delete.ts"]);
+    expect(hits).toEqual(["src/lib/no-delete.ts"]);
     const src = readFileSync(path.resolve(__dirname, "../src/lib/services/document-delete.ts"), "utf8");
     expect(src).not.toMatch(/export function inDocumentDelete/);
     expect(src).not.toMatch(/export (const|function) allowance/);
-  });
-
-  it("ordinary code cannot rebind the delete allowance", () => {
-    expect(() => bindDocumentDeleteAllowance(() => true)).toThrow(HardDeleteError);
   });
 
   it("a nested delete of a different model still throws inside the allowance", async () => {

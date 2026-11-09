@@ -9,17 +9,18 @@ const admin: PermissionUser = { ...roleFlags(["ADMIN"]), active: true, canSeeCos
 
 describe("delete audit and activity wording", () => {
   it("says Deleted and does not link the removed document", () => {
-    const after = {
+    const before = {
       number: "BL-2026-0004",
       invoiceNo: 42,
-      customerName: "Sample Co",
+      customer: "Sample Co",
       reason: "Wrong draft",
+      total: "10000.00",
     };
-    expect(auditDeleteLabel(after)).toBe("BL-2026-0004");
+    expect(auditDeleteLabel(before)).toBe("BL-2026-0004");
     expect(auditRecordLink("Billing", "gone", "delete")).toBeUndefined();
     expect(auditRecordLink("Billing", "still-here")).toBe("/billing/billings/still-here");
     const sentence = auditSentence(
-      { entityType: "Billing", entityId: "gone", action: "delete", before: null, after },
+      { entityType: "Billing", entityId: "gone", action: "delete", before, after: null },
       "BL-2026-0004",
       admin,
     );

@@ -228,10 +228,10 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
       where: { entityType: "Quote", entityId: second.quote.id, action: "delete" },
     });
     expect(audit.userId).toBe(admin.id);
-    const snap = audit.after as { number: string; reason: string; customerName: string; status: string };
+    const snap = audit.before as { number: string; reason: string; customer: string; status: string };
     expect(snap.number).toBe(second.quote.number);
     expect(snap.reason).toBe(REASON);
-    expect(snap.customerName).toBe(second.customer.name);
+    expect(snap.customer).toBe(second.customer.name);
     expect(snap.status).toBe("DRAFT");
     expect(auditSentence({ ...audit, before: audit.before, after: audit.after }, snap.number, admin)).toMatch(/^Deleted/);
     expect(auditRecordLink("Quote", second.quote.id, "delete")).toBeUndefined();
@@ -408,12 +408,12 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
     const audit = await db.auditLog.findFirstOrThrow({
       where: { entityType: "Billing", entityId: billing.id, action: "delete" },
     });
-    const snap = audit.after as { invoiceNo: number; amount: string; reason: string; customerName: string };
+    const snap = audit.before as { invoiceNo: number; total: string; reason: string; customer: string };
     expect(snap.invoiceNo).toBe(billing.invoiceNo);
-    expect(snap.amount).toBe("10000.00");
+    expect(snap.total).toBe("10000.00");
     expect(snap.reason).toBe(REASON);
-    expect(snap.customerName).toBe(customer.name);
-    expect(auditSentence({ ...audit, before: null, after: audit.after }, billing.number, admin)).toContain(`SI no. ${billing.invoiceNo}`);
+    expect(snap.customer).toBe(customer.name);
+    expect(auditSentence({ ...audit, before: audit.before, after: audit.after }, billing.number, admin)).toContain(`SI no. ${billing.invoiceNo}`);
     await expect(
       recordBilling(
         {
@@ -428,10 +428,13 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
       ),
     ).rejects.toThrow(/already used|spoiled/i);
     const rows = await listBookSourceRows(admin);
-    const line = rows.find((r) => r.particulars === `Deleted (void), SI no. ${billing.invoiceNo}`);
+    const line = rows.find((r) => r.id === `deleted-${billing.id}`);
+    expect(line?.documentNumber).toBe(`INV-${billing.invoiceNo}`);
+    expect(line?.particulars).toBe(`Deleted (void), SI no. INV-${billing.invoiceNo}`);
+    expect(line?.voided).toBe(true);
     expect(line?.href).toBeNull();
     const booksAfter = await getBookRegister(admin, "sales", `${year}-01-01`, `${year}-12-31`);
-    expect(booksAfter.register.rows.some((r) => r.particulars === `Deleted (void), SI no. ${billing.invoiceNo}`)).toBe(true);
+    expect(booksAfter.register.rows.some((r) => r.particulars === `Deleted (void), SI no. INV-${billing.invoiceNo}`)).toBe(true);
     expect(booksAfter.register.salesPeriodTotals?.invoicedAmount).toBe(booksBefore.register.salesPeriodTotals?.invoicedAmount);
     const activity = await listRecentHomeActivity(30);
     const hit = activity.find((a) => a.entityId === billing.id);
@@ -560,8 +563,8 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
     const audit = await db.auditLog.findFirstOrThrow({
       where: { entityType: "Collection", entityId: clean.id, action: "delete" },
     });
-    expect((audit.after as { reason: string; amountReceived: string }).reason).toBe(REASON);
-    expect((audit.after as { amountReceived: string }).amountReceived).toBe("80.00");
+    expect((audit.before as { reason: string; total: string }).reason).toBe(REASON);
+    expect((audit.before as { total: string }).total).toBe("80.00");
     expect(auditRecordLink("Collection", clean.id, "delete")).toBeUndefined();
 
     const posted = await recordCollection(

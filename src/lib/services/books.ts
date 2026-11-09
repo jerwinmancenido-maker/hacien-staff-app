@@ -14,25 +14,25 @@ import type { RegisterKey } from "../books/config";
 import { REGISTER_CONFIGS } from "../books/config";
 import { buildRegister, type BookRegister } from "../books/registers";
 
-function deletedVoidSiRow(id: string, after: unknown): BookSourceRow | null {
-  if (!after || typeof after !== "object" || Array.isArray(after)) return null;
-  const snap = after as Record<string, unknown>;
+function deletedVoidSiRow(billingId: string, snapRaw: unknown): BookSourceRow | null {
+  if (!snapRaw || typeof snapRaw !== "object" || Array.isArray(snapRaw)) return null;
+  const snap = snapRaw as Record<string, unknown>;
   const invoiceNo = snap.invoiceNo;
   const date = snap.invoiceDate;
   if (invoiceNo == null || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
-  const si = String(invoiceNo);
-  const party = typeof snap.customerName === "string" && snap.customerName.trim() ? snap.customerName.trim() : "—";
+  const inv = `INV-${invoiceNo}`;
+  const party = typeof snap.customer === "string" && snap.customer.trim() ? snap.customer.trim() : "—";
   return {
-    id: `deleted-${id}`,
+    id: `deleted-${billingId}`,
     kind: "BILLING",
     date,
-    documentNumber: `INV-${si}`,
+    documentNumber: inv,
     party,
-    particulars: `Deleted (void), SI no. ${si}`,
+    particulars: `Deleted (void), SI no. ${inv}`,
     amount: "0.00",
     ewt: null,
     href: null,
-    voided: false,
+    voided: true,
   };
 }
 
@@ -85,7 +85,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
     }),
     db.auditLog.findMany({
       where: { entityType: "Billing", action: "delete" },
-      select: { id: true, after: true },
+      select: { id: true, entityId: true, before: true, after: true },
       orderBy: { at: "asc" },
     }),
   ]);
@@ -113,7 +113,8 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
   // (the void already had no legal effect). The wording comes from the delete
   // audit snapshot. No link — the document page is gone.
   for (const audit of deletedBillingAudits) {
-    const line = deletedVoidSiRow(audit.id, audit.after);
+    if (!audit.entityId) continue;
+    const line = deletedVoidSiRow(audit.entityId, audit.before ?? audit.after);
     if (line) rows.push(line);
   }
 

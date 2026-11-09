@@ -1,32 +1,23 @@
 // Admin delete of documents that never had legal effect: draft or void quotes,
 // and void sales orders, billings, and collections. The only hard-delete path
-// in the app. The allowance is a module-private AsyncLocalStorage — nothing
-// exported can enter it — and the Prisma extension honours it for `delete`
-// of the named models only, for the duration of that call.
+// in the app. Each delete runs inside withDeleteAllowance for its own models;
+// the Prisma extension allows Prisma delete of those models only until the
+// call returns. The audit snapshot is stored on the audit row's `before`.
 
-import { AsyncLocalStorage } from "node:async_hooks";
 import { PrismaClient } from "@prisma/client";
 import { writeAudit } from "../audit";
 import { db, isForeignKeyViolation, type Tx } from "../db";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { assertNotDelete, bindDocumentDeleteAllowance, HardDeleteError, noDeleteExtension } from "../no-delete";
+import { assertNotDelete, HardDeleteError, noDeleteExtension, withDeleteAllowance } from "../no-delete";
 import { assertCanDeleteDocument, type PermissionUser } from "../permissions";
 import { voidReasonSchema } from "../validation/quotes";
 
-type Actor = PermissionUser & { id: string };
+export type DeleteActor = PermissionUser & { id: string };
 
 const QUOTE_MODELS = ["Quote", "QuoteItem", "QuoteItemComponent"] as const;
 const SO_MODELS = ["SalesOrder", "SalesOrderItem", "SalesOrderItemComponent"] as const;
 const BILLING_MODELS = ["Billing"] as const;
 const COLLECTION_MODELS = ["Collection"] as const;
-
-const allowance = new AsyncLocalStorage<ReadonlySet<string>>();
-
-bindDocumentDeleteAllowance((model) => allowance.getStore()?.has(model) === true);
-
-function inDocumentDelete<T>(models: readonly string[], fn: () => Promise<T>): Promise<T> {
-  return allowance.run(new Set(models), fn);
-}
 
 let armedFailure = false;
 
@@ -98,7 +89,7 @@ async function markRemindersDone(tx: Tx, entityType: "QUOTE" | "SALES_ORDER", en
 const ATTACHMENT = "This document has an attachment, so it can't be deleted.";
 const TAX = "This document has a withholding (2307) record, so it can't be deleted.";
 
-export async function deleteQuote(id: string, reason: string, actor: Actor) {
+export async function deleteQuote(id: string, reason: string, actor: DeleteActor) {
   assertCanDeleteDocument(actor);
   const why = requireReason(reason);
   return runDelete(async (tx) => {
@@ -123,17 +114,14 @@ export async function deleteQuote(id: string, reason: string, actor: Actor) {
       entityType: "Quote",
       entityId: id,
       action: "delete",
-      before: null,
-      after: {
+      before: {
         number: quote.number,
-        customerId: quote.customerId,
-        customerName: quote.customer.name,
-        status: quote.status,
-        contractPrice: money(quote.contractPrice),
-        withholdingTotal: money(quote.withholdingTotal),
-        netReceived: money(quote.netReceived),
         reason: why,
+        customer: quote.customer.name,
+        total: money(quote.contractPrice),
+        status: quote.status,
       },
+      after: null,
       diff: false,
     });
 
@@ -143,7 +131,7 @@ export async function deleteQuote(id: string, reason: string, actor: Actor) {
       ? await tx.quoteItemComponent.findMany({ where: { quoteItemId: { in: itemIds } }, select: { id: true } })
       : [];
 
-    await inDocumentDelete(QUOTE_MODELS, async () => {
+    await withDeleteAllowance(QUOTE_MODELS, async () => {
       for (const c of components) await tx.quoteItemComponent.delete({ where: { id: c.id } });
       for (const item of items) await tx.quoteItem.delete({ where: { id: item.id } });
       consumeArmedFailure();
@@ -153,7 +141,7 @@ export async function deleteQuote(id: string, reason: string, actor: Actor) {
   });
 }
 
-export async function deleteSalesOrder(id: string, reason: string, actor: Actor) {
+export async function deleteSalesOrder(id: string, reason: string, actor: DeleteActor) {
   assertCanDeleteDocument(actor);
   const why = requireReason(reason);
   return runDelete(async (tx) => {
@@ -210,21 +198,18 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Actor)
       entityType: "SalesOrder",
       entityId: id,
       action: "delete",
-      before: null,
-      after: {
+      before: {
         number: so.number,
-        customerId: so.customerId,
-        customerName: so.customer.name,
-        status: so.status,
-        contractPrice: money(so.contractPrice),
-        withholdingTotal: money(so.withholdingTotal),
-        netReceived: money(so.netReceived),
         reason: why,
+        customer: so.customer.name,
+        total: money(so.contractPrice),
+        status: so.status,
       },
+      after: null,
       diff: false,
     });
 
-    await inDocumentDelete(SO_MODELS, async () => {
+    await withDeleteAllowance(SO_MODELS, async () => {
       for (const c of components) await tx.salesOrderItemComponent.delete({ where: { id: c.id } });
       for (const item of items) await tx.salesOrderItem.delete({ where: { id: item.id } });
       consumeArmedFailure();
@@ -234,7 +219,7 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Actor)
   });
 }
 
-export async function deleteBilling(id: string, reason: string, actor: Actor) {
+export async function deleteBilling(id: string, reason: string, actor: DeleteActor) {
   assertCanDeleteDocument(actor);
   const why = requireReason(reason);
   return runDelete(async (tx) => {
@@ -269,23 +254,22 @@ export async function deleteBilling(id: string, reason: string, actor: Actor) {
       entityType: "Billing",
       entityId: id,
       action: "delete",
-      before: null,
-      after: {
+      before: {
         number: billing.number,
+        reason: why,
+        customer: billing.customer.name,
+        total: money(billing.amount),
         invoiceNo: billing.invoiceNo,
         invoiceDate: ymd(billing.invoiceDate),
-        customerId: billing.customerId,
-        customerName: billing.customer.name,
         status: billing.status,
-        amount: money(billing.amount),
         withholdingExpected: money(billing.withholdingExpected),
         netExpected: money(billing.netExpected),
-        reason: why,
       },
+      after: null,
       diff: false,
     });
 
-    await inDocumentDelete(BILLING_MODELS, async () => {
+    await withDeleteAllowance(BILLING_MODELS, async () => {
       consumeArmedFailure();
       await tx.billing.delete({ where: { id } });
     });
@@ -328,7 +312,7 @@ async function lockCollectionParents(tx: Tx, collectionId: string) {
   await lockCollection(tx, collectionId);
 }
 
-export async function deleteCollection(id: string, reason: string, actor: Actor) {
+export async function deleteCollection(id: string, reason: string, actor: DeleteActor) {
   assertCanDeleteDocument(actor);
   const why = requireReason(reason);
   return runDelete(async (tx) => {
@@ -357,21 +341,20 @@ export async function deleteCollection(id: string, reason: string, actor: Actor)
       entityType: "Collection",
       entityId: id,
       action: "delete",
-      before: null,
-      after: {
+      before: {
         number: collection.number,
-        customerId: collection.customerId,
-        customerName: collection.customer.name,
+        reason: why,
+        customer: collection.customer.name,
+        total: money(collection.amountReceived),
         status: collection.status,
         date: ymd(collection.date),
-        amountReceived: money(collection.amountReceived),
         receiptNo: collection.receiptNo,
-        reason: why,
       },
+      after: null,
       diff: false,
     });
 
-    await inDocumentDelete(COLLECTION_MODELS, async () => {
+    await withDeleteAllowance(COLLECTION_MODELS, async () => {
       consumeArmedFailure();
       await tx.collection.delete({ where: { id } });
     });
@@ -401,7 +384,7 @@ export async function proveNestedDifferentModelDeleteBlocked(): Promise<{
     } catch (e) {
       outside = e;
     }
-    const inside = await inDocumentDelete(QUOTE_MODELS, async () => {
+    const inside = await withDeleteAllowance(QUOTE_MODELS, async () => {
       let quoteError: unknown = null;
       try {
         await client.quote.delete({ where: { id: "x" } });

@@ -81,9 +81,9 @@ const PAST: Record<AuditAction, string> = {
 };
 
 /** Number stored on a delete snapshot, so the log can name a row that is gone. */
-export function auditDeleteLabel(after: unknown): string | null {
-  if (!after || typeof after !== "object" || Array.isArray(after)) return null;
-  const n = (after as Record<string, unknown>).number;
+export function auditDeleteLabel(snap: unknown): string | null {
+  if (!snap || typeof snap !== "object" || Array.isArray(snap)) return null;
+  const n = (snap as Record<string, unknown>).number;
   return typeof n === "string" && n.trim() ? n.trim() : null;
 }
 
@@ -254,10 +254,12 @@ export function auditSentence(row: AuditRow, recordLabel: string | null, viewer:
   const record = recordLabel ?? "record";
   const after = asRecord(row.after);
   if (row.action === "delete") {
-    const number = recordLabel ?? auditDeleteLabel(row.after) ?? "record";
-    const customer = typeof after?.customerName === "string" && after.customerName.trim() ? after.customerName.trim() : "";
-    const reason = typeof after?.reason === "string" && after.reason.trim() ? after.reason.trim() : "";
-    const invoice = after?.invoiceNo;
+    const snap = asRecord(row.before) ?? after;
+    const number = recordLabel ?? auditDeleteLabel(snap) ?? "record";
+    const customerRaw = snap?.customer ?? snap?.customerName;
+    const customer = typeof customerRaw === "string" && customerRaw.trim() ? customerRaw.trim() : "";
+    const reason = typeof snap?.reason === "string" && snap.reason.trim() ? snap.reason.trim() : "";
+    const invoice = snap?.invoiceNo;
     const si = invoice != null && String(invoice).trim() ? ` (SI no. ${invoice})` : "";
     const who = customer ? ` for ${customer}` : "";
     const why = reason ? `: ${reason}` : "";

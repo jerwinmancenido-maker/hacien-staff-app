@@ -277,8 +277,10 @@ export async function listRecentHomeActivity(
   const items: HomeActivityItem[] = rows.map((r) => {
     const after = r.after;
     let extras: { purchaseOrderId?: string | null } | undefined;
-    let docNumber = jsonField(after, "number") ?? jsonField(after, "invoiceNo");
-    let party: string | null = jsonField(after, "customerName") ?? jsonField(after, "supplierName");
+    const before = r.before;
+    let docNumber = jsonField(after, "number") ?? jsonField(before, "number") ?? jsonField(after, "invoiceNo") ?? jsonField(before, "invoiceNo");
+    let party: string | null =
+      jsonField(after, "customerName") ?? jsonField(before, "customer") ?? jsonField(before, "customerName") ?? jsonField(after, "supplierName");
 
     if (r.entityType === "Quote" && r.entityId) {
       const q = quoteMap.get(r.entityId);

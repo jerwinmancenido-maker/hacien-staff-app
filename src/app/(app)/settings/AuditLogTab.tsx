@@ -121,7 +121,7 @@ export async function AuditLogTab({ search }: { search: Search }) {
             ]}
             rows={rows.map((r) => {
               const label =
-                (r.action === "delete" ? auditDeleteLabel(r.after) : null) ??
+                (r.action === "delete" ? auditDeleteLabel(r.before) ?? auditDeleteLabel(r.after) : null) ??
                 (r.entityId ? labels.get(`${r.entityType}:${r.entityId}`) ?? null : null);
               const link = auditRecordLink(r.entityType, r.entityId, r.action);
               return {

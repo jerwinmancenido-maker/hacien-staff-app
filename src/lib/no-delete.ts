@@ -1,13 +1,13 @@
 // No hard deletes anywhere, except one case: an active Admin deleting a draft
 // or void quote, or a void sales order, billing, or collection. That path
-// lives only in src/lib/services/document-delete.ts, which holds a private
-// AsyncLocalStorage and registers a reader here. The extension allows Prisma
-// `delete` of the models in that store, and only while the store is active.
-// `deleteMany` and raw DELETE/TRUNCATE stay blocked. Ordinary call sites
-// cannot enter the store (the setter is not exported) and cannot replace the
-// reader (bind once). ESLint (eslint.config.mjs) still flags raw SQL DELETE.
-// tests/no-delete.test.ts allow-lists only the delete service file.
+// (src/lib/services/document-delete.ts) calls withDeleteAllowance. The
+// extension then allows Prisma `delete` only for the models named in that
+// call, and only until the call returns. deleteMany and raw DELETE/TRUNCATE
+// stay blocked. ESLint (eslint.config.mjs) still flags raw SQL DELETE.
+// tests/no-delete.test.ts allow-lists only the delete service file for
+// Prisma delete calls.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { Prisma } from "@prisma/client";
 
 export class HardDeleteError extends Error {
@@ -24,26 +24,21 @@ export const RAW_OPERATIONS = ["$queryRaw", "$executeRaw", "$queryRawUnsafe", "$
 /** Matches SQL statements that remove rows. Keep in sync with the ESLint rule. */
 export const RAW_DELETE_PATTERN = /\b(DELETE|TRUNCATE)\b/i;
 
-/**
- * Reader installed once by the document-delete service. False until then,
- * and false whenever that service is not inside its private allowance.
- * A second bind is refused so another module cannot turn deletes on.
- */
-let allowsModel: (model: string) => boolean = () => false;
-let allowanceBound = false;
+const deleteAllowance = new AsyncLocalStorage<ReadonlySet<string>>();
 
-export function bindDocumentDeleteAllowance(reader: (model: string) => boolean): void {
-  if (allowanceBound) {
-    throw new HardDeleteError("allowance", "bindDocumentDeleteAllowance");
-  }
-  allowanceBound = true;
-  allowsModel = reader;
+/**
+ * Run `fn` allowed to Prisma-delete only `models`. Nested deletes of any
+ * other model still throw. deleteMany and raw SQL are never allowed.
+ * The document-delete service is the only production caller.
+ */
+export function withDeleteAllowance<T>(models: readonly string[], fn: () => T): T {
+  return deleteAllowance.run(new Set(models), fn);
 }
 
 export function assertNotDelete(model: string | undefined, operation: string): void {
   if ((BLOCKED_OPERATIONS as readonly string[]).includes(operation)) {
-    // Prisma delete only, and only for a model the private allowance names.
-    if (operation === "delete" && model && allowsModel(model)) return;
+    const allowed = operation === "delete" && !!model && deleteAllowance.getStore()?.has(model) === true;
+    if (allowed) return;
     throw new HardDeleteError(model, operation);
   }
 }
