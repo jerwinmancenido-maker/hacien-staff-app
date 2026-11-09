@@ -1,5 +1,5 @@
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
-import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
+import { printStripCss } from "@/lib/print/strip-style";
 import type { AttachmentSheet } from "@/lib/print/attachment";
 
 /**
@@ -9,8 +9,13 @@ import type { AttachmentSheet } from "@/lib/print/attachment";
  */
 export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
   return (
-    <article className="print-page" aria-label={`Packing list attachment for DR ${sheet.drNumber}`}>
-      <PrintHeaderRepeat header={<CompanyLetterhead company={sheet.company} />}>
+    <article className="print-page pp-doc-root" aria-label={`Packing list attachment for DR ${sheet.drNumber}`}>
+      {/* Print redesign v10 (owner-approved 2026-11-09): the letterhead
+          prints once in flow (it used to repeat in full on every page via
+          a thead); page 2+ carry the slim margin-box strip instead —
+          same @page pp-doc mechanism as the professional documents. */}
+      <style>{printStripCss(`Packing list · DR ${sheet.drNumber}`.toUpperCase())}</style>
+      <CompanyLetterhead company={sheet.company} />
       <div className="print-title" style={{ textAlign: "center", margin: "16px 0" }}>
         <h1>PACKING LIST &amp; DELIVERY DETAILS</h1>
         <div>
@@ -97,7 +102,6 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div>{sheet.policiesUrl}</div>
         <div>{sheet.versionLine}</div>
       </div>
-      </PrintHeaderRepeat>
     </article>
   );
 }

@@ -44,6 +44,9 @@ describe.skipIf(!hasDb)("quote prepared-by picker (MySQL)", () => {
     return createQuote(quoteInput(customer.id, year, { preparedById }), creator);
   }
 
+  // Print redesign v10 (2026-11-09): "Prepared by" no longer appears in
+  // the print meta strip — it duplicated the signatory block. The picker
+  // is proven through the signatory; the meta must stay free of it.
   function metaPrepared(doc: { meta: { label: string; value: string | null }[] }) {
     return doc.meta.find((m) => m.label === "Prepared by")?.value ?? null;
   }
@@ -52,7 +55,7 @@ describe.skipIf(!hasDb)("quote prepared-by picker (MySQL)", () => {
     const q = await makeQuote();
     expect(q.preparedById).toBe(creator.id);
     const { doc } = (await getQuotePrintModel(q.id))!;
-    expect(metaPrepared(doc)).toBe(creatorName);
+    expect(metaPrepared(doc)).toBeNull();
     expect(doc.signatories?.[0]?.role).toBe("Prepared by");
     expect(doc.signatories?.[0]?.name).toBe(creatorName);
   });
@@ -61,7 +64,7 @@ describe.skipIf(!hasDb)("quote prepared-by picker (MySQL)", () => {
     const q = await makeQuote(preparer.id);
     expect(q.preparedById).toBe(preparer.id);
     const { doc } = (await getQuotePrintModel(q.id))!;
-    expect(metaPrepared(doc)).toBe(preparerName);
+    expect(metaPrepared(doc)).toBeNull();
     expect(doc.signatories?.[0]?.name).toBe(preparerName);
     const view = await getQuoteView(q.id, creator);
     expect(view?.preparedById).toBe(preparer.id);
@@ -75,7 +78,7 @@ describe.skipIf(!hasDb)("quote prepared-by picker (MySQL)", () => {
     const cleared = await updateQuote(q.id, quoteInput(q.customerId, year, { preparedById: null }), creator);
     expect(cleared.preparedById).toBeNull();
     const { doc } = (await getQuotePrintModel(q.id))!;
-    expect(metaPrepared(doc)).toBe(creatorName);
+    expect(metaPrepared(doc)).toBeNull();
     expect(doc.signatories?.[0]?.name).toBe(creatorName);
   });
 

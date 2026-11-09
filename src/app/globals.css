@@ -4751,49 +4751,46 @@ button.contact-card-add {
   height: 2.5px;
   background: var(--pp-accent);
 }
-/* Compact running head, repeated on EVERY printed page by
-   PrintHeaderRepeat's thead: brand · document identity · party.
-   Slim on purpose — page 2+ get a header without repeating the
-   whole letterhead (owner 2026-11-09). */
-.pp-runhead {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 7px;
-  border-bottom: 2px solid var(--pp-navy);
-  font-size: 8pt;
-  color: var(--pp-muted);
-  white-space: nowrap;
+/* Print redesign v10 (owner-approved 2026-11-09): professional
+   documents and the packing list print on the named "pp-doc" page.
+   The identity strip (brand left; title · number right) lives in the
+   top margin box — the right box's content is per-document and is
+   emitted by the print component (lib/print/strip-style.ts). On page 1
+   the strip and the footer contact line are suppressed: the letterhead
+   and title block already carry them, and nothing may print twice on
+   the same page. The generic @page above still serves every other
+   print (book/tax pages keep their repeated letterhead). */
+.pp-doc-root {
+  page: pp-doc;
 }
-.pp-runhead::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 120px;
-  height: 2px;
-  background: var(--pp-accent);
+@page pp-doc {
+  size: A4;
+  margin: 15mm 0.39in 0.63in;
+  @top-left {
+    content: "■ HACIEN";
+    font-size: 7.5pt;
+    letter-spacing: 0.09em;
+    color: #737373;
+  }
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
 }
-.pp-runhead-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  color: var(--pp-navy);
-  font-size: 8.5pt;
-}
-.pp-runhead-doc {
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--pp-navy);
-  text-transform: uppercase;
-}
-.pp-runhead-party {
-  overflow: hidden;
-  text-overflow: ellipsis;
+@page pp-doc:first {
+  margin-top: 0.25in;
+  @top-left {
+    content: none;
+  }
+  @bottom-left {
+    content: none;
+  }
 }
 .pp-letterhead {
   min-width: 0;
@@ -5445,9 +5442,6 @@ button.contact-card-add {
   }
   .pp-docnum {
     text-align: left;
-  }
-  .pp-runhead-party {
-    display: none;
   }
   .pp-terms-list {
     column-count: 1;
