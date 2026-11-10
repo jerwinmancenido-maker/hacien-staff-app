@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { API_SCOPES } from "@/lib/api/scopes";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { createApiKeyAction, revokeApiKeyAction, type CreateApiKeyState } from "./actions";
@@ -23,6 +23,17 @@ export function ApiKeysTab({ keys, pepperSet }: { keys: ApiKeyRow[]; pepperSet: 
   const [state, formAction, pending] = useActionState(createApiKeyAction, initial);
   const [showOnce, setShowOnce] = useState(true);
   const [copied, setCopied] = useState(false);
+  // A fresh create must always surface its key, even if the previous one was
+  // dismissed: track the token we last showed and re-open the panel when a
+  // new one arrives.
+  const seenToken = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (state.token && state.token !== seenToken.current) {
+      seenToken.current = state.token;
+      setShowOnce(true);
+      setCopied(false);
+    }
+  }, [state.token]);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [revokeMsg, setRevokeMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -85,19 +96,19 @@ export function ApiKeysTab({ keys, pepperSet }: { keys: ApiKeyRow[]; pepperSet: 
       <form action={formAction} className="api-key-form">
         <div className="field">
           <label htmlFor="api-key-name">Key name</label>
-          <input id="api-key-name" name="name" required minLength={3} maxLength={120} placeholder="e.g. PepStack sync" disabled={!pepperSet} />
+          <input id="api-key-name" name="name" required minLength={3} maxLength={120} placeholder="e.g. PepStack sync" disabled={!pepperSet || !!token} />
         </div>
         <fieldset className="field">
           <legend>Scopes</legend>
           {API_SCOPES.map((s) => (
             <label key={s.value} className="check">
-              <input type="checkbox" name="scopes" value={s.value} disabled={!pepperSet} /> {s.label}
+              <input type="checkbox" name="scopes" value={s.value} disabled={!pepperSet || !!token} /> {s.label}
             </label>
           ))}
         </fieldset>
         <div className="field">
           <label htmlFor="api-key-expiry">Expires</label>
-          <select id="api-key-expiry" name="expiry" disabled={!pepperSet} defaultValue="none">
+          <select id="api-key-expiry" name="expiry" disabled={!pepperSet || !!token} defaultValue="none">
             <option value="none">Never</option>
             <option value="30">In 30 days</option>
             <option value="90">In 90 days</option>
@@ -109,7 +120,7 @@ export function ApiKeysTab({ keys, pepperSet }: { keys: ApiKeyRow[]; pepperSet: 
             {state.message}
           </div>
         )}
-        <button type="submit" className="btn primary" disabled={!pepperSet || pending}>
+        <button type="submit" className="btn primary" disabled={!pepperSet || pending || !!token}>
           Create key
         </button>
       </form>

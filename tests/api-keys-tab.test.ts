@@ -49,10 +49,41 @@ describe("API Keys tab wiring", () => {
   });
   it("the base seed creates the API / Bot user and the runtime ensure is idempotent", () => {
     const seed = read("src/lib/seed-base.ts");
-    expect(seed).toContain("api-bot@haciensolutions.com");
+    // CTO nit (bc-1b662691): the seed imports the bot constants, never copies them.
+    expect(seed).toContain('from "./api/bot-user.ts"');
+    expect(seed).toContain("API_BOT_FLAGS");
+    expect(seed).not.toContain("api-bot@haciensolutions.com");
     expect(seed).toContain("passwordHash: null");
     const bot = read("src/lib/api/bot-user.ts");
     expect(bot).toContain("API_BOT_EMAIL");
     expect(bot).toContain("canSeeCosts: false");
+  });
+});
+
+describe("CTO fix round bc-1b662691", () => {
+  it("a key on screen locks the create form, and a fresh create always surfaces its key", () => {
+    const tab = read("src/app/(app)/settings/ApiKeysTab.tsx");
+    expect(tab).toContain("seenToken");
+    expect(tab).toContain("disabled={!pepperSet || pending || !!token}");
+    expect(tab).toContain("disabled={!pepperSet || !!token}");
+  });
+
+  it("the bot is hidden from invite, reset and edit, with a plain label", () => {
+    const users = read("src/lib/services/users.ts");
+    expect(users).toContain("API_BOT_EMAIL");
+    expect(users).toContain("The API bot can't be edited");
+    expect(users).toContain("The API bot can't be invited");
+    const page = read("src/app/(app)/settings/page.tsx");
+    expect(page).toContain("API bot – can't sign in");
+    const detail = read("src/app/(app)/settings/users/[id]/page.tsx");
+    expect(detail).toContain("API bot – can&apos;t sign in");
+    expect(detail).toContain("isBot");
+  });
+
+  it("ensureApiBotUser re-locks drifted flags", () => {
+    const bot = read("src/lib/api/bot-user.ts");
+    expect(bot).toContain("API_BOT_FLAGS");
+    expect(bot).toContain("drifted");
+    expect(bot).toContain("db.user.update");
   });
 });

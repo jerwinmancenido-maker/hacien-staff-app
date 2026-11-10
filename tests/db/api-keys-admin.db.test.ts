@@ -21,6 +21,7 @@ import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { can, canSeeTin } from "@/lib/permissions";
 import { makeUser, tag } from "./fixtures";
+import { resendInvite, updateUser, UserRuleError } from "@/lib/services/users";
 
 const pepperAtStart = process.env.API_KEY_PEPPER;
 
@@ -31,6 +32,28 @@ afterEach(() => {
 const META = { method: "GET", path: "/api/v1/customers", kind: "read" as const };
 
 describe.skipIf(!env.hasDb)("API / Bot user", () => {
+  it("re-locks the flags when the bot row has been tampered with", async () => {
+    const { id } = await ensureApiBotUser();
+    await db.user.update({ where: { id }, data: { isAdmin: true, canSeeCosts: true, passwordHash: "tampered", name: "Renamed" } });
+    const again = await ensureApiBotUser();
+    expect(again.created).toBe(false);
+    const bot = await getApiBotUser();
+    expect(bot?.isAdmin).toBe(false);
+    expect(bot?.canSeeCosts).toBe(false);
+    expect(bot?.passwordHash).toBeNull();
+    expect(bot?.name).toBe("API / Bot");
+    expect(bot?.isStaff).toBe(true);
+  });
+
+  it("refuses to edit or invite the bot through the user services", async () => {
+    const { id } = await ensureApiBotUser();
+    const actor = await makeUser("costs");
+    await expect(
+      updateUser(id, { name: "Nope", email: API_BOT_EMAIL, position: null, roles: ["ADMIN"], canSeeCosts: true }, actor.id),
+    ).rejects.toBeInstanceOf(UserRuleError);
+    await expect(resendInvite(id)).rejects.toBeInstanceOf(UserRuleError);
+  });
+
   it("is created once with the plan-v2 flags and can never sign in", async () => {
     const first = await ensureApiBotUser();
     const second = await ensureApiBotUser();

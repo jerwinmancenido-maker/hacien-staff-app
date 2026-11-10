@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { API_BOT_EMAIL } from "@/lib/api/bot-user";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
@@ -177,6 +178,8 @@ export async function setUserActiveAction(id: string, active: boolean): Promise<
 export async function resetTwoFactorAction(id: string): Promise<FormState> {
   return runAction(async () => {
     await requireActionPermission("manage_users");
+    const target = await db.user.findUnique({ where: { id }, select: { email: true } });
+    if (target?.email === API_BOT_EMAIL) return { message: "The API bot can't be changed — it exists only so API keys have someone to act as." };
     await db.user.update({ where: { id }, data: { totpSecret: null } });
     revalidatePath("/settings");
     revalidatePath(`/settings/users/${id}`);

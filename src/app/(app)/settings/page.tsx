@@ -32,6 +32,7 @@ import { AuditLogTab } from "./AuditLogTab";
 import { ApiKeysTab, type ApiKeyRow } from "./ApiKeysTab";
 import { listApiKeys } from "@/lib/api/keys-admin";
 import { apiKeyPepper } from "@/lib/api/keys";
+import { API_BOT_EMAIL } from "@/lib/api/bot-user";
 
 // S-85: Settings is a left list of sections. Old ?tab= keys still resolve
 // to their section, so bookmarks and links keep working.
@@ -442,7 +443,9 @@ async function UsersTab() {
         label: u.canSeeCosts ? "Can see costs" : "Cost hidden",
         tone: u.canSeeCosts ? "dark" : "grey",
       },
-      ...(!u.active
+      ...(u.email === API_BOT_EMAIL
+        ? [{ label: "API bot – can't sign in", tone: "grey" as const }]
+        : !u.active
         ? [{ label: "Turned off", tone: "red" as const }]
         : u.passwordHash
         ? [{ label: "Active", tone: "green" as const }]
@@ -453,7 +456,7 @@ async function UsersTab() {
       { label: "Email", value: u.email },
       { label: "Costs", value: u.canSeeCosts ? "Yes" : "No" },
     ],
-    menuItems: [{ label: "Edit user", href: `/settings/users/${u.id}` }],
+    menuItems: u.email === API_BOT_EMAIL ? [] : [{ label: "Edit user", href: `/settings/users/${u.id}` }],
     sortValues: {
       name: u.name,
       roles: roleLabel(u),
