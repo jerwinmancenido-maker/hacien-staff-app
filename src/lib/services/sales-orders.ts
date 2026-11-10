@@ -322,10 +322,16 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           if (!line.id) continue;
           const prevLine = beforeLineById.get(line.id);
           if (!prevLine) continue;
-          if (
-            !rateEq(prevLine.withholdingRate, line.withholdingRate) ||
-            (prevLine.withholdingAtc ?? null) !== (line.withholdingAtc ?? null)
-          ) {
+          // beforePrices fills a stored NULL rate from the doc snapshot
+          // (that fill is not a change); normalize the planned line the
+          // same way — a line added with no rate keeps the snapshot rate,
+          // so a plain re-save must not trip this freeze. A submitted
+          // (non-null) rate or ATC still has to match exactly.
+          const plannedRate = line.withholdingRate ?? null;
+          const plannedFromDoc = plannedRate == null ? rateFromDocWithholding(before.withholding, line.kind) : null;
+          const effRate = plannedRate ?? plannedFromDoc?.withholdingRate ?? null;
+          const effAtc = (line.withholdingAtc ?? null) ?? (plannedRate == null ? (plannedFromDoc?.withholdingAtc ?? null) : null);
+          if (!rateEq(prevLine.withholdingRate, effRate) || (prevLine.withholdingAtc ?? null) !== effAtc) {
             throw new DocRuleError(whFrozen, "items");
           }
         }

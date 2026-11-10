@@ -260,7 +260,10 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         updateSalesOrder(so.id, await soInput(so.id, (items) => items.filter((i) => i.id !== laptop.id)), admin),
       ).rejects.toThrow(/Lines can't be removed after a billing is issued/);
 
-      // Notes-only edit is still allowed.
+      // Notes-only edit is still allowed — including with the null-rate
+      // line added above present (regression: the freeze loop once compared
+      // the doc-snapshot-filled stored rate against the raw planned null
+      // and refused plain re-saves).
       await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Called the buyer" }), admin);
 
       // After voiding the billing, the withholding change passes.
