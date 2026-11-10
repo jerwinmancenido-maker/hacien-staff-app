@@ -335,26 +335,18 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             throw new DocRuleError(whFrozen, "items");
           }
         }
-        const snapKey = (w: unknown) =>
-          JSON.stringify(
-            (Array.isArray(w) ? (w as { code?: unknown; lineKind?: unknown; rate?: unknown; atcCode?: unknown }[]) : [])
-              .map((x) => [
-                x.code ?? null,
-                x.lineKind ?? null,
-                x.rate == null ? null : Number(x.rate).toFixed(4),
-                x.atcCode ?? null,
-              ])
-              .sort(),
-          );
-        if (snapKey(before.withholding) !== snapKey(preserved.withholding)) {
-          throw new DocRuleError(whFrozen, "items");
-        }
       }
       if (liveBillings.length) {
         // A2 hard floor: the contract price can never drop below what is
         // already billed (holds even if A1 is ever relaxed).
         const billedTotal = liveBillings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
-        if (toScaled(afterPrices.contractPrice, 2) < billedTotal) {
+        // Only a save that LOWERS the total can breach the floor. An order
+        // already below billed (billed before this guard existed) must stay
+        // editable for notes, terms, address and cost-only saves (Bugbot).
+        if (
+          toScaled(afterPrices.contractPrice, 2) < toScaled(beforePrices.contractPrice, 2) &&
+          toScaled(afterPrices.contractPrice, 2) < billedTotal
+        ) {
           throw new DocRuleError(
             "The order total can't go below what is already billed.",
             "items",

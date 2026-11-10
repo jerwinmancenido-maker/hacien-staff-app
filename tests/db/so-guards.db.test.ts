@@ -24,7 +24,7 @@ const env = vi.hoisted(() => {
 });
 
 import { db } from "@/lib/db";
-import { recordBilling, voidBilling } from "@/lib/services/billings";
+import { recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
 import { withholdingCodePrefill } from "@/lib/services/collections";
 import { approveQuote, convertQuoteToSalesOrder, createQuote } from "@/lib/services/quotes";
 import { updateSalesOrder } from "@/lib/services/sales-orders";
@@ -296,6 +296,67 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       await expect(
         updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, unitPrice: "1000" } : i))), admin),
       ).rejects.toThrow(/below what is already billed/);
+    }
+
+    // --- Bugbot @f8c58dc: stacked pick (GOV_PT) on a goods-only SO -------
+    // The stored snapshot stacks GOV_PT_3 onto the whole base; the old
+    // header-snapshot compare could never match the line-derived grouping
+    // and refused every save after billing. Per-line freeze + the captured
+    // breakdown carry A1 now, so plain edits pass and a line-rate change
+    // is still refused.
+    {
+      const year = await freshYear();
+      const govItems: QuoteInput["items"] = [
+        { id: null, description: "Gov goods", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, govItems, ["GOODS_1", "GOV_PT_3"]);
+      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      // A plain notes save passes (the header compare is gone).
+      await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Gov order" }), admin);
+      // A line withholding change is still refused.
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const line = rows[0]!;
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === line.id ? { ...i, withholdingRate: "0.0500", withholdingAtc: "WI999", withholdingOverride: true } : i))), admin),
+      ).rejects.toThrow(/Withholding can't change after a billing is issued/);
+    }
+
+    // --- Bugbot @f8c58dc: a billing edit must not move the issued split --
+    {
+      const year = await freshYear();
+      const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
+      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const billing = await recordBilling(
+        { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const before = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      const partsBefore = before.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(partsBefore.length).toBeGreaterThan(1);
+      const sumBefore = partsBefore.reduce((a, x) => a + Number(x.amount), 0);
+      // An allowed SO edit (qty up) changes the live line mix.
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const laptop = rows[0]!;
+      await updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, qty: "12" } : i))), admin);
+      // Editing the billing (double the amount) rescales the STORED parts —
+      // same rates, same shares — instead of recapturing the new mix.
+      await updateBilling(
+        billing.id,
+        { amount: "20000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const after = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      const partsAfter = after.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(partsAfter.map((x) => x.rate)).toEqual(partsBefore.map((x) => x.rate));
+      const sumAfter = partsAfter.reduce((a, x) => a + Number(x.amount), 0);
+      expect(sumAfter).toBeCloseTo(sumBefore * 2, 2);
+      partsAfter.forEach((x, i) => {
+        expect(Number(x.amount)).toBeCloseTo(Number(partsBefore[i]!.amount) * 2, 2);
+      });
     }
   });
 });

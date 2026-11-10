@@ -59,6 +59,29 @@ async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithh
   return parts.length ? (parts as unknown as Prisma.InputJsonValue) : undefined;
 }
 
+type StoredBreakdownPart = { rate: string; atcCode: string | null; amount: string };
+
+/** Rescale a billing's STORED breakdown to a new amount (Bugbot, PR #188):
+ * the parts keep their issue-time shares of the withholding total — SO
+ * edits after issue must never change the mix. Cents go to the last part,
+ * the same convention as the collection split. Null when nothing stored. */
+export function rescaleBreakdown(stored: unknown, oldExpected: string, newExpected: string): Prisma.InputJsonValue | undefined {
+  if (!Array.isArray(stored) || stored.length === 0) return undefined;
+  const parts = (stored as StoredBreakdownPart[]).filter((x) => x && typeof x.rate === "string");
+  if (!parts.length) return undefined;
+  const oldT = toScaled(oldExpected, 2);
+  const newT = toScaled(newExpected, 2);
+  if (oldT <= 0n || newT === oldT) return parts as unknown as Prisma.InputJsonValue;
+  let acc = 0n;
+  const out = parts.map((part, i) => {
+    const isLast = i === parts.length - 1;
+    const amt = isLast ? newT - acc : (toScaled(part.amount, 2) * newT) / oldT;
+    acc += amt;
+    return { rate: part.rate, atcCode: part.atcCode ?? null, amount: fromScaled(amt, 2) };
+  });
+  return out as unknown as Prisma.InputJsonValue;
+}
+
 /** Non-void billings on an SO (amounts), for remaining-to-bill checks. */
 async function nonVoidBillings(tx: Tx, salesOrderId: string) {
   return tx.billing.findMany({
@@ -257,7 +280,12 @@ export async function updateBilling(
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
-            withholdingBreakdown: await captureWithholdingBreakdown(tx, so.id, so.withholding),
+            // A stored breakdown is NEVER recaptured from the live SO — an
+            // edit rescales the issue-time parts to the new expected total.
+            // Only a legacy billing with none stored captures one, once.
+            withholdingBreakdown:
+              rescaleBreakdown(before.withholdingBreakdown, money(before.withholdingExpected), withholdingExpected) ??
+              (await captureWithholdingBreakdown(tx, so.id, so.withholding)),
             netExpected: net,
             notes: input.notes,
             updatedById: actor.id,
