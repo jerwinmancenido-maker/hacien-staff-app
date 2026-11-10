@@ -44,7 +44,13 @@ describe("SoCostMarginTab purchase rows", () => {
   it("renders whole-row clickable PO rows via the stretched link", () => {
     const html = renderToStaticMarkup(createElement(SoCostMarginTab, { summary }));
     expect(html).toContain('class="clickable row-has-link"');
-    expect(html).toContain('class="row-stretched-link" href="/purchase-orders/po-1"');
+    // The stretched link is an EMPTY overlay (position:absolute in CSS) —
+    // the visible number is a separate plain link, like the Documents tab.
+    // Putting the class on the number itself displaces it (Bugbot @d2f3f03).
+    expect(html).toContain('class="row-stretched-link"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('href="/purchase-orders/po-1">PO-2026-0001</a>');
+    expect(html).not.toContain('row-stretched-link" href="/purchase-orders/po-1">PO-2026-0001');
     expect(html).toContain("UNO Management Group");
   });
 });
