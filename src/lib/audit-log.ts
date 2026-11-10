@@ -238,6 +238,19 @@ export function auditChangedFields(row: AuditRow, viewer: PermissionUser | null)
   return [...keys].filter((k) => JSON.stringify((before ?? {})[k]) !== JSON.stringify((after ?? {})[k])).map(humanField);
 }
 
+/** Who column: the acting user, plus the API key name when the change came through /api/v1. */
+export function auditActorLabel(userName: string | null | undefined, apiKeyName: string | null | undefined): string | null {
+  const clean = (value: string | null | undefined) => {
+    if (!value) return null;
+    const text = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+    return text || null;
+  };
+  const user = clean(userName);
+  const key = clean(apiKeyName);
+  if (user && key) return `${user} (via API key ${key})`;
+  return user;
+}
+
 /** One plain sentence for the row, e.g. "Voided quote QT-2026-0009: reason …". */
 export function auditSentence(row: AuditRow, recordLabel: string | null, viewer: PermissionUser | null): string {
   const typeLabel = AUDIT_ENTITY_LABELS[row.entityType] ?? row.entityType;

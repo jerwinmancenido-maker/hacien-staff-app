@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import {
   config,
+  isMachineApiPath,
   isPublicAssetPath,
   proxy,
   PROXY_MATCHER,
@@ -153,5 +154,22 @@ describe("proxy public-asset allowlist (security)", () => {
   it("logged out: /files/* still 401 (unchanged)", () => {
     const res = proxy(loggedOut("http://localhost/files/business-documents/abc"));
     expect(res.status).toBe(401);
+  });
+
+  it("logged out: /api/v1 skips the session cookie and other /api routes still answer 401", () => {
+    expect(isMachineApiPath("/api/v1")).toBe(true);
+    expect(isMachineApiPath("/api/v1/health")).toBe(true);
+    expect(isMachineApiPath("/api/v1/customers")).toBe(true);
+    expect(isMachineApiPath("/api/v10")).toBe(false);
+    expect(isMachineApiPath("/api/v1x")).toBe(false);
+    expect(isMachineApiPath("/api/items/search")).toBe(false);
+
+    for (const path of ["/api/v1", "/api/v1/health", "/api/v1/customers"]) {
+      const res = proxy(loggedOut(`http://localhost${path}`));
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("location"), path).toBeNull();
+    }
+    const sessionApi = proxy(loggedOut("http://localhost/api/items/search"));
+    expect(sessionApi.status).toBe(401);
   });
 });
