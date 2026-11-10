@@ -213,14 +213,20 @@ export default async function SalesOrderPage({
                 {deliveries.map((d) => (
                   <tr key={d.id} className="clickable row-has-link">
                     <td>
-                      <Link href={base} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      <Link href={`${base}?tab=deliveries`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       Delivery receipt
                     </td>
-                    <td className="strong">{d.drNumber}</td>
+                    <td className="strong">
+                      <Link href={`${base}?tab=deliveries`}>{d.drNumber}</Link>
+                    </td>
                     <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
                     <td className="num">—</td>
                     <td>{d.voidedAt ? "Void" : "Delivered"}</td>
-                    <td />
+                    <td>
+                      <Link href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noopener">
+                        Print
+                      </Link>
+                    </td>
                   </tr>
                 ))}
                 {purchasing.purchaseOrders.map((p) => (

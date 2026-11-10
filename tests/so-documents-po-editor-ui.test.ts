@@ -22,6 +22,14 @@ describe("SO Documents tab — whole-row clickable", () => {
     expect(page).toContain("/print/billings/");
     expect(page).toContain("Print");
   });
+  it("delivery rows reach the delivery, not the SO Overview (FIX-002)", () => {
+    // Bugbot Medium 5838939209: the DR row's only link pointed at the SO
+    // page base, so the receipt itself was unreachable from Documents.
+    expect(page).not.toContain("href={base} className=\"row-stretched-link\"");
+    expect(page).toContain("href={`${base}?tab=deliveries`} className=\"row-stretched-link\"");
+    expect(page).toContain("/print/deliveries/");
+    expect(page).toContain("/attachment");
+  });
 });
 
 describe("PO editor items table layout", () => {
