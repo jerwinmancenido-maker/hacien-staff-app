@@ -155,12 +155,15 @@ export default async function SalesOrderPage({
                   <th>Date</th>
                   <th className="num">Amount</th>
                   <th>Status</th>
-                  <th>Link</th>
+                  <th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Source quote</td>
+                <tr className="clickable row-has-link">
+                  <td>
+                    <Link href={`/quotes/${so.quote.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                    Source quote
+                  </td>
                   <td className="strong">
                     <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link>
                   </td>
@@ -169,13 +172,14 @@ export default async function SalesOrderPage({
                   <td>
                     <QuoteStatusChip status={so.quote.status} />
                   </td>
-                  <td>
-                    <Link href={`/quotes/${so.quote.id}`}>Open</Link>
-                  </td>
+                  <td />
                 </tr>
                 {billings.map((b) => (
-                  <tr key={b.id}>
-                    <td>Billing</td>
+                  <tr key={b.id} className="clickable row-has-link">
+                    <td>
+                      <Link href={`/billing/billings/${b.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      Billing
+                    </td>
                     <td className="strong">
                       <Link href={`/billing/billings/${b.id}`}>{b.number}</Link>
                     </td>
@@ -185,7 +189,6 @@ export default async function SalesOrderPage({
                       <BillingStatusChip status={b.status} />
                     </td>
                     <td>
-                      <Link href={`/billing/billings/${b.id}`}>Open</Link> ·{" "}
                       <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
                         Print
                       </Link>
@@ -193,41 +196,48 @@ export default async function SalesOrderPage({
                   </tr>
                 ))}
                 {collections.map((c) => (
-                  <tr key={c.id}>
-                    <td>Collection</td>
+                  <tr key={c.id} className="clickable row-has-link">
+                    <td>
+                      <Link href={`/billing/collections/${c.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      Collection
+                    </td>
                     <td className="strong">
                       <Link href={`/billing/collections/${c.id}`}>{c.number}</Link>
                     </td>
                     <td>{day(c.date)}</td>
                     <td className="num">{formatPeso(c.amountReceived)}</td>
                     <td>{c.status}</td>
-                    <td>
-                      <Link href={`/billing/collections/${c.id}`}>Open</Link>
-                    </td>
+                    <td />
                   </tr>
                 ))}
                 {deliveries.map((d) => (
-                  <tr key={d.id}>
-                    <td>Delivery receipt</td>
+                  <tr key={d.id} className="clickable row-has-link">
+                    <td>
+                      <Link href={base} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      Delivery receipt
+                    </td>
                     <td className="strong">{d.drNumber}</td>
                     <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
                     <td className="num">—</td>
                     <td>{d.voidedAt ? "Void" : "Delivered"}</td>
-                    <td>
-                      <Link href={base}>Open</Link>
-                    </td>
+                    <td />
                   </tr>
                 ))}
                 {purchasing.purchaseOrders.map((p) => (
-                  <tr key={p.number}>
-                    <td>Purchase order · {p.supplierName}</td>
+                  <tr key={p.number} className={p.id ? "clickable row-has-link" : undefined}>
+                    <td>
+                      {p.id ? (
+                        <Link href={`/purchase-orders/${p.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      ) : null}
+                      Purchase order · {p.supplierName}
+                    </td>
                     <td className="strong">
                       {p.id ? <Link href={`/purchase-orders/${p.id}`}>{p.number}</Link> : p.number}
                     </td>
                     <td>—</td>
                     <td className="num">{p.total ? formatPeso(p.total) : "—"}</td>
                     <td>{p.status}</td>
-                    <td>{p.id ? <Link href={`/purchase-orders/${p.id}`}>Open</Link> : "—"}</td>
+                    <td />
                   </tr>
                 ))}
               </tbody>

@@ -8823,6 +8823,45 @@ button.contact-card-add {
   margin-bottom: 12px;
 }
 
+/* PO editor items table (owner 2026-11-10): fixed layout + set column
+   widths, so the description column keeps the remaining space instead of
+   being squeezed by width:100% inputs in an auto-layout table, and the
+   description textarea grows to fit its text (no clipped spec lines). */
+.edit-table.items-edit.po-items-edit table.list {
+  table-layout: fixed;
+}
+.edit-table.items-edit.po-items-edit .col-kind {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+.edit-table.items-edit.po-items-edit .col-qty {
+  width: 5rem;
+  min-width: 5rem;
+}
+.edit-table.items-edit.po-items-edit .col-unit {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+.edit-table.items-edit.po-items-edit .col-money {
+  width: 7.75rem;
+  min-width: 7.75rem;
+}
+.edit-table.items-edit.po-items-edit .col-actions,
+.edit-table.items-edit.po-items-edit td.line-actions {
+  width: 2.75rem;
+  min-width: 2.75rem;
+}
+.edit-table.items-edit.po-items-edit textarea.po-desc {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  field-sizing: content;
+  min-height: 2.5em;
+}
+
 /* UNSLOP theme — approved by Jerwin 2026-11-11 ("I like the mock and the
    color" + his pick: light default, dark follows the computer setting).
    LIGHT is the default above (white surfaces, light end of the HACIEN blue
