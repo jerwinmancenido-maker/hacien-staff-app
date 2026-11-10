@@ -299,17 +299,50 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         select: { invoiceNo: true, amount: true },
         orderBy: { createdAt: "asc" },
       });
-      const pricesChangedEarly = salesOrderPricesChanged(beforePrices, afterPrices);
-      if (liveBillings.length && pricesChangedEarly) {
-        // A1: once an SI exists, money/qty/WH/add/remove are frozen at SO
-        // level — billings carry no lines, and the 2307 split reads the
-        // LIVE SO, so any of these edits would desync the issued SI.
-        // Cost/supplier-only edits do not trip salesOrderPricesChanged and
-        // stay allowed (A4).
-        throw new DocRuleError(
-          `This order already has SI no. ${liveBillings[0]!.invoiceNo}. Void that billing first to change prices.`,
-          "items",
-        );
+      if (liveBillings.length) {
+        // A1 (REVISED — looser rule; Jerwin direct 2026-11-10 17:17, final
+        // approval 17:22): once an SI exists, the BIR core is frozen for
+        // everyone — no line removals and no withholding rate/ATC/pick
+        // changes, because the 2307 split reads the live SO. Everything
+        // else stays editable: qty/price changes and line adds go through
+        // the price lock below (Admin + typed reason, audited) and the
+        // A2/A3 floors. Each billing also carries its own withholding
+        // breakdown from record time, so allowed edits cannot move an
+        // issued SI's split.
+        const siNo = liveBillings[0]!.invoiceNo;
+        const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
+        if (removedIds.length) {
+          throw new DocRuleError(
+            `This order already has SI no. ${siNo}. Lines can't be removed after a billing is issued — void that billing first.`,
+            "items",
+          );
+        }
+        const beforeLineById = new Map(beforePrices.lines.map((l) => [l.id, l]));
+        for (const line of afterPrices.lines) {
+          if (!line.id) continue;
+          const prevLine = beforeLineById.get(line.id);
+          if (!prevLine) continue;
+          if (
+            !rateEq(prevLine.withholdingRate, line.withholdingRate) ||
+            (prevLine.withholdingAtc ?? null) !== (line.withholdingAtc ?? null)
+          ) {
+            throw new DocRuleError(whFrozen, "items");
+          }
+        }
+        const snapKey = (w: unknown) =>
+          JSON.stringify(
+            (Array.isArray(w) ? (w as { code?: unknown; lineKind?: unknown; rate?: unknown; atcCode?: unknown }[]) : [])
+              .map((x) => [
+                x.code ?? null,
+                x.lineKind ?? null,
+                x.rate == null ? null : Number(x.rate).toFixed(4),
+                x.atcCode ?? null,
+              ])
+              .sort(),
+          );
+        if (snapKey(before.withholding) !== snapKey(preserved.withholding)) {
+          throw new DocRuleError(whFrozen, "items");
+        }
       }
       if (liveBillings.length) {
         // A2 hard floor: the contract price can never drop below what is

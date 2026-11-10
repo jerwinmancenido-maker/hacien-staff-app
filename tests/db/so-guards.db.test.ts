@@ -1,9 +1,15 @@
-// SO guards (REQ-PLAN-AUDIT-001 A1–A3; owner-approved 2026-11-10):
+// SO guards (REQ-PLAN-AUDIT-001 A1–A3; A1 REVISED — looser rule, Jerwin
+// direct 2026-11-10 17:17, final approval 17:22):
 // inside updateSalesOrder, under the SO row lock —
-//  A1: once any non-void billing exists, price/qty/kind/WH/add/remove are
-//      refused at SO level (billings have no lines; the 2307 split reads
-//      the live SO). Notes/terms and cost/supplier-only edits stay open.
-//  A2: contract price can never drop below the billed total (behind A1).
+//  A1: once any non-void billing exists, the BIR core is frozen for
+//      everyone: no line removals, no withholding rate/ATC/pick changes
+//      (the 2307 split reads the live SO). Qty/price edits and line adds
+//      stay open under the price lock (Admin + typed reason, audited).
+//      Each billing captures its own withholding breakdown at record time
+//      (Billing.withholdingBreakdown), and the 2307 prefill splits from
+//      it — proven below: an allowed edit cannot move an issued SI's
+//      prefill.
+//  A2: contract price can never drop below the billed total.
 //  A3: qty can never drop below the live ordered qty (PO not VOID, PO line
 //      not removed); a line — or a lot whose component — is on a PO cannot
 //      be removed.
@@ -19,6 +25,7 @@ const env = vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
+import { withholdingCodePrefill } from "@/lib/services/collections";
 import { approveQuote, convertQuoteToSalesOrder, createQuote } from "@/lib/services/quotes";
 import { updateSalesOrder } from "@/lib/services/sales-orders";
 import { getSettingsSnapshot } from "@/lib/settings";
@@ -27,7 +34,7 @@ import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeU
 
 const REASON = "Customer PO corrected it";
 
-describe.skipIf(!env.hasDb)("SO guards (A1 billing freeze, A3 ordered floor)", () => {
+describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 floors)", () => {
   it("enforces the floors and the freeze", async () => {
     const admin = await makeUser("costs");
     await ensureWideBooklet(admin.id);
@@ -62,6 +69,9 @@ describe.skipIf(!env.hasDb)("SO guards (A1 billing freeze, A3 ordered floor)", (
         supplierId: i.supplierId,
         supplierUnitCost: i.supplierUnitCost.toFixed(2),
         unitPrice: i.unitPrice.toFixed(2),
+        withholdingRate: i.withholdingRate != null ? i.withholdingRate.toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+        withholdingOverride: i.withholdingOverride,
       }));
       return {
         contactId: so.contactId,
@@ -85,6 +95,9 @@ describe.skipIf(!env.hasDb)("SO guards (A1 billing freeze, A3 ordered floor)", (
       supplierId: string | null;
       supplierUnitCost: string;
       unitPrice: string;
+      withholdingRate: string | null;
+      withholdingAtc: string | null;
+      withholdingOverride: boolean;
     };
 
     async function linkPo(soId: string, lineId: string, qty: string, opts: { componentId?: string; voided?: boolean } = {}) {
@@ -180,7 +193,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 billing freeze, A3 ordered floor)", (
       ).rejects.toThrow(/already on a purchase order/);
     }
 
-    // --- A1: billing freeze --------------------------------------------
+    // --- A1 (revised): billed SO — core frozen, the rest stays editable --
     {
       const year = await freshYear();
       const { so } = await openSo(year);
@@ -198,20 +211,88 @@ describe.skipIf(!env.hasDb)("SO guards (A1 billing freeze, A3 ordered floor)", (
       );
       const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
       const laptop = rows[0]!;
-      // Qty change refused, naming the SI.
+
+      // The billing captured its own withholding breakdown at record time.
+      const billedRow = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      expect(billedRow.withholdingBreakdown).not.toBeNull();
+      const prefillBefore = await withholdingCodePrefill(db as never, billing.id);
+
+      // Qty up on the unbilled portion: allowed for an admin with a reason,
+      // and the reason lands in the audit row.
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, qty: "12" } : i))),
+        admin,
+      );
+      const afterQty = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(afterQty.contractPrice.toFixed(2)).toBe("644000.00");
+      const auditRow = await db.auditLog.findFirst({
+        where: { entityType: "SalesOrder", entityId: so.id, action: "update" },
+        orderBy: { at: "desc" },
+      });
+      expect((auditRow?.after as { priceOverrideReason?: string } | null)?.priceOverrideReason).toBe(REASON);
+
+      // The allowed edit did NOT move the issued SI's 2307 prefill.
+      const prefillAfter = await withholdingCodePrefill(db as never, billing.id);
+      expect(prefillAfter).toEqual(prefillBefore);
+
+      // Adding a line: allowed.
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => [
+          ...items,
+          { id: null, description: "Extra cable", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false },
+        ]),
+        admin,
+      );
+
+      // Withholding change: refused for everyone while a billing is live.
       await expect(
-        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, qty: "9" } : i))), admin),
-      ).rejects.toThrow(/already has SI no\./);
-      // Price change refused (this is also the A2 floor in action: the
-      // frozen edit can never push the total below the billed amount).
+        updateSalesOrder(
+          so.id,
+          await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, withholdingRate: "0.0200", withholdingAtc: "WI999", withholdingOverride: true } : i))),
+          admin,
+        ),
+      ).rejects.toThrow(/Withholding can't change after a billing is issued/);
+
+      // Line removal: refused while a billing is live.
       await expect(
-        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, unitPrice: "1" } : i))), admin),
-      ).rejects.toThrow(/already has SI no\./);
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items.filter((i) => i.id !== laptop.id)), admin),
+      ).rejects.toThrow(/Lines can't be removed after a billing is issued/);
+
       // Notes-only edit is still allowed.
       await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Called the buyer" }), admin);
-      // After voiding the billing, the same qty edit passes (Admin + reason).
+
+      // After voiding the billing, the withholding change passes.
       await voidBilling(billing.id, "Wrong amount encoded", admin);
-      await updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, qty: "9" } : i))), admin);
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, withholdingRate: "0.0200", withholdingAtc: "WI999", withholdingOverride: true } : i))),
+        admin,
+      );
+    }
+
+    // --- A2: total can never drop below the billed total -----------------
+    {
+      const year = await freshYear();
+      const { so } = await openSo(year);
+      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      await recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "500000.00",
+          invoiceNo,
+          invoiceDate: new Date(Date.UTC(year, 2, 5)),
+          dueDate: new Date(Date.UTC(year, 3, 4)),
+          notes: null,
+        },
+        admin,
+      );
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const laptop = rows[0]!;
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, unitPrice: "1000" } : i))), admin),
+      ).rejects.toThrow(/below what is already billed/);
     }
   });
 });

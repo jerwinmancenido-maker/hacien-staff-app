@@ -185,15 +185,23 @@ export async function withholdingCodePrefill(
   });
   if (!so) return bare;
   const picks = (so.withholding ?? []) as WithholdingSnapshot[];
-  const parts = docTotals(
-    so.items.map((i) => ({
-      kind: i.kind,
-      total: money(i.total),
-      supplierTotal: money(i.supplierTotal),
-      margin: money(i.margin),
-    })),
-    picks.length ? picks : undefined,
-  ).withholding;
+  // A1 (revised): billings recorded since the breakdown capture carry their
+  // own per-code split from billing time — later SO edits can never move an
+  // issued SI's 2307 split. Older billings (null) fall back to the live SO.
+  const storedBreakdown = (billing.withholdingBreakdown ?? null) as
+    | { rate: string; atcCode: string | null; amount: string }[]
+    | null;
+  const parts = storedBreakdown?.length
+    ? storedBreakdown.map((x) => ({ rate: x.rate, atcCode: x.atcCode ?? null, amount: money(x.amount) }))
+    : docTotals(
+        so.items.map((i) => ({
+          kind: i.kind,
+          total: money(i.total),
+          supplierTotal: money(i.supplierTotal),
+          margin: money(i.margin),
+        })),
+        picks.length ? picks : undefined,
+      ).withholding;
   if (!parts.length) return bare;
   const already = billing.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
   const remaining = toScaled(money(billing.withholdingExpected), 2) - already;

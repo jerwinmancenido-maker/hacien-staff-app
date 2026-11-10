@@ -8,7 +8,7 @@ import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type Permissi
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { fromScaled, toScaled, withholdingBreakdownParts, type WithholdingSnapshot } from "../quotes/calc";
 import { bookletRangeError, formatBookletNumber } from "../billing/booklet";
 import { netExpected, proRataWithholding, remainingToBill } from "../billing/status";
 import type { BillingInput } from "../validation/billing";
@@ -25,14 +25,30 @@ function assertManageBilling(actor: BillingActor) {
 
 async function lockSalesOrder(tx: Tx, id: string) {
   const rows = await tx.$queryRaw<
-    { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null }[]
-  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
+    { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null; withholding: unknown }[]
+  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\`, \`withholding\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
   if (!rows[0]) throw new DocRuleError("Sales order not found.");
   return {
     ...rows[0],
     contractPrice: money(String(rows[0].contractPrice)),
     withholdingTotal: money(String(rows[0].withholdingTotal)),
   };
+}
+
+/** The billing's own withholding breakdown, captured from the SO at
+ * record/edit time (A1 revised): the 2307 prefill splits from this stored
+ * basis, so later SO edits can never move an issued SI's split. */
+async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithholding: unknown) {
+  const items = await tx.salesOrderItem.findMany({
+    where: { salesOrderId, removedAt: null },
+    select: { kind: true, total: true, supplierTotal: true, margin: true },
+  });
+  const picks = (soWithholding ?? []) as WithholdingSnapshot[];
+  const parts = withholdingBreakdownParts(
+    items.map((i) => ({ kind: i.kind, total: money(i.total), supplierTotal: money(i.supplierTotal), margin: money(i.margin) })),
+    picks.length ? picks : undefined,
+  );
+  return parts.length ? (parts as unknown as Prisma.InputJsonValue) : undefined;
 }
 
 /** Non-void billings on an SO (amounts), for remaining-to-bill checks. */
@@ -101,6 +117,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
+            withholdingBreakdown: await captureWithholdingBreakdown(tx, so.id, so.withholding),
             netExpected: net,
             status: "OPEN",
             notes: input.notes,
@@ -232,6 +249,7 @@ export async function updateBilling(
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
+            withholdingBreakdown: await captureWithholdingBreakdown(tx, so.id, so.withholding),
             netExpected: net,
             notes: input.notes,
             updatedById: actor.id,
