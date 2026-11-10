@@ -1,11 +1,12 @@
 // Order-status texts (Q16, S-95), built on the Q15 messaging base.
-// Sender is always HACIEN. Templates are status only — never promotional,
+// Sender ID is the UniSMS sender ID (UNISMS_SENDER_ID, default "Hacien ITS").
+// Templates are status only — never promotional,
 // never amounts, balances, 2307, URLs or links. Body carries first name and
 // SO number only, per the owner's approved wording.
 //
 // Gating, in order — a text is sent only if ALL pass:
 //   1. Settings messaging.orderTextsEnabled is on (Default chosen: OFF until
-//      UniSMS keys, the UniSMS DPA + DB location, and the HACIEN sender ID
+//      UniSMS keys, the UniSMS DPA + DB location, and the approved sender ID
 //      are confirmed — see the PR description).
 //   2. The template for this kind is on in the same settings.
 //   3. The customer's "Order text updates" switch is on (on by default).
