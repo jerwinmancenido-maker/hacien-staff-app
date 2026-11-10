@@ -16,7 +16,6 @@ import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
-import { qtyMismatch } from "./plan";
 import { remainingQty } from "./receipt";
 import {
   approverError,
@@ -27,10 +26,12 @@ import {
   type PoStatus,
   type ProgressState,
 } from "./status";
-import { planPurchaseOrders } from "./plan";
+import { loadOrderedQty } from "./ordered";
+import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import {
   billExceedsPo,
   buildCostMarginSummary,
+  lineHasUnorderedQty,
   lineNeedsMorePo,
   sumMoney,
   valueReceived,
@@ -318,44 +319,52 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     },
   });
   if (!so) return null;
-  const live = await db.purchaseOrderItem.findMany({
-    where: { activeSalesOrderItemId: { in: so.items.map((i) => i.id) } },
-    select: { activeSalesOrderItemId: true, purchaseOrder: { select: { id: true, number: true } } },
-  });
-  const onPo = new Map(live.map((l) => [l.activeSalesOrderItemId!, l.purchaseOrder]));
+  const lineIds = so.items.filter((i) => !i.isLot).map((i) => i.id);
   const componentIds = so.items.flatMap((i) => i.components.map((c) => c.id));
-  const liveComponents = componentIds.length
-    ? await db.purchaseOrderItem.findMany({
-        where: { activeSalesOrderItemComponentId: { in: componentIds } },
-        select: { activeSalesOrderItemComponentId: true, purchaseOrder: { select: { id: true, number: true } } },
-      })
-    : [];
-  const componentOnPo = new Map(liveComponents.map((l) => [l.activeSalesOrderItemComponentId!, l.purchaseOrder]));
-  const lines = so.items.map((i) => ({
-    id: i.id,
-    sortOrder: i.sortOrder,
-    description: i.description,
-    kind: i.kind,
-    qty: money(i.qty),
-    unit: i.unit,
-    supplierId: i.supplierId,
-    supplierName: i.supplier?.name ?? null,
-    supplierUnitCost: money(i.supplierUnitCost),
-    purchaseOrder: onPo.get(i.id) ?? null,
-    isLot: i.isLot,
-    components: i.components.map((c) => ({
-      id: c.id,
-      sortOrder: c.sortOrder,
-      description: c.description,
-      qty: money(c.qty),
-      unit: c.unit,
-      supplierId: c.supplierId,
-      supplierName: c.supplier?.name ?? null,
-      unitCost: money(c.unitCost),
-      purchaseOrder: componentOnPo.get(c.id) ?? null,
-    })),
-  }));
-  const plan = planPurchaseOrders(lines, new Set(onPo.keys()), {}, undefined, new Set(componentOnPo.keys()));
+  const ordered = await loadOrderedQty(lineIds, componentIds, db);
+  const lines = so.items.map((i) => {
+    const bucket = ordered.lines.get(i.id);
+    const orderedQty = i.isLot ? "0.00" : (bucket?.qty ?? "0.00");
+    const soQty = money(i.qty);
+    return {
+      id: i.id,
+      sortOrder: i.sortOrder,
+      description: i.description,
+      kind: i.kind,
+      qty: soQty,
+      unit: i.unit,
+      supplierId: i.supplierId,
+      supplierName: i.supplier?.name ?? null,
+      supplierUnitCost: money(i.supplierUnitCost),
+      orderedQty,
+      remainingQty: i.isLot ? "0.00" : qtyLeft(soQty, orderedQty),
+      purchaseOrders: bucket?.purchaseOrders ?? [],
+      purchaseOrder: bucket?.purchaseOrders[0] ? { id: bucket.purchaseOrders[0].id, number: bucket.purchaseOrders[0].number } : null,
+      isLot: i.isLot,
+      components: i.components.map((c) => {
+        const comp = ordered.components.get(c.id);
+        const compOrdered = comp?.qty ?? "0.00";
+        const compQty = money(c.qty);
+        return {
+          id: c.id,
+          sortOrder: c.sortOrder,
+          description: c.description,
+          qty: compQty,
+          unit: c.unit,
+          supplierId: c.supplierId,
+          supplierName: c.supplier?.name ?? null,
+          unitCost: money(c.unitCost),
+          orderedQty: compOrdered,
+          remainingQty: qtyLeft(compQty, compOrdered),
+          purchaseOrders: comp?.purchaseOrders ?? [],
+          purchaseOrder: comp?.purchaseOrders[0] ? { id: comp.purchaseOrders[0].id, number: comp.purchaseOrders[0].number } : null,
+        };
+      }),
+    };
+  });
+  const orderedQty = Object.fromEntries(lines.filter((l) => !l.isLot).map((l) => [l.id, l.orderedQty]));
+  const orderedComponentQty = Object.fromEntries(lines.flatMap((l) => l.components.map((c) => [c.id, c.orderedQty])));
+  const plan = planPurchaseOrders(lines, new Set(), {}, undefined, new Set(), new Set(), { orderedQty, orderedComponentQty });
   const suppliers = await db.supplier.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   return {
     id: so.id,
@@ -403,9 +412,25 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       select: {
         id: true,
         qty: true,
+        isLot: true,
+        components: {
+          where: { removedAt: null },
+          select: {
+            qty: true,
+            purchaseOrderItems: {
+              where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+              select: { qty: true },
+            },
+          },
+        },
         purchaseOrderItems: {
           where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
-          select: { qty: true, receivedQty: true, purchaseOrder: { select: { id: true, number: true, status: true } } },
+          select: {
+            qty: true,
+            receivedQty: true,
+            salesOrderItemComponentId: true,
+            purchaseOrder: { select: { id: true, number: true, status: true } },
+          },
         },
       },
     }),
@@ -421,6 +446,7 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       },
     }),
   ]);
+  let fullyOrdered = 0;
   const lines: SoPurchasingLine[] = items.map((i) => {
     const p = soLineProgress(
       money(i.qty),
@@ -431,6 +457,19 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
       .map((x) => x.purchaseOrder)
       .filter((po) => (seen.has(po.id) ? false : (seen.add(po.id), true)))
       .map((po) => ({ id: po.id, number: po.number, status: po.status }));
+    // Coverage is remaining qty, not "a PO exists". Component buys of a lot
+    // are not counted against the lot's own qty.
+    const plain = i.purchaseOrderItems.filter((x) => !x.salesOrderItemComponentId);
+    const needsMore = lineHasUnorderedQty({
+      qty: money(i.qty),
+      orderedQty: sumMoney(plain.map((x) => money(x.qty))),
+      isLot: i.isLot,
+      components: i.components.map((c) => ({
+        qty: money(c.qty),
+        orderedQty: sumMoney(c.purchaseOrderItems.map((x) => money(x.qty))),
+      })),
+    });
+    if (!needsMore) fullyOrdered += 1;
     return { id: i.id, ...p, purchaseOrders };
   });
   // Audit F: the PO id is a link, not money — every viewer gets it. Only
@@ -447,7 +486,10 @@ export async function getSoPurchasing(salesOrderId: string, viewer: PermissionUs
     purchaseOrders,
     total: lines.length,
     received: lines.filter((l) => l.state === "RECEIVED").length,
-    ordered: lines.filter((l) => l.state !== "NOT_ORDERED").length,
+    /** Lines whose required qty is fully on live, non-void POs. A partial line does not count. */
+    ordered: fullyOrdered,
+    /** True while any line (or lot component) still has quantity left to order. */
+    needsMorePo: fullyOrdered < lines.length,
     canSeeCosts: withCosts,
   };
 }

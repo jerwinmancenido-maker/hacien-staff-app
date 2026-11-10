@@ -117,6 +117,25 @@ export function lineNeedsMorePo(soQty: string, orderedQty: string): boolean {
   return toScaled(orderedQty, CENTS) < toScaled(soQty, CENTS);
 }
 
+/**
+ * One sales-order line for the Create POs menu. `qty` is the awarded /
+ * required quantity. `orderedQty` is what is already on live, non-void POs
+ * (cancelled / void POs are omitted by the caller). A lot is covered only
+ * when every component is.
+ */
+export type PoCoverageLine = {
+  qty: string;
+  orderedQty: string;
+  isLot?: boolean;
+  components?: readonly { qty: string; orderedQty: string }[];
+};
+
+/** True when this line still has quantity that can go on a new PO. */
+export function lineHasUnorderedQty(line: PoCoverageLine): boolean {
+  if (line.isLot) return (line.components ?? []).some((c) => lineNeedsMorePo(c.qty, c.orderedQty));
+  return lineNeedsMorePo(line.qty, line.orderedQty);
+}
+
 /** True when non-void billed amount exceeds the PO total. */
 export function billExceedsPo(poTotal: string, billedAmount: string): boolean {
   return toScaled(billedAmount, CENTS) > toScaled(poTotal, CENTS);

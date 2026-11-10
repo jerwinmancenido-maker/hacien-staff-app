@@ -7,6 +7,7 @@ import {
   billExceedsPo,
   buildCostMarginSummary,
   chooseCostBasis,
+  lineHasUnorderedQty,
   lineNeedsMorePo,
   sumMoney,
   valueReceived,
@@ -76,6 +77,36 @@ describe("warnings helpers", () => {
     expect(lineNeedsMorePo("10.00", "9.99")).toBe(true);
     expect(lineNeedsMorePo("10.00", "10.00")).toBe(false);
     expect(lineNeedsMorePo("10.00", "12.00")).toBe(false);
+  });
+
+  it("keeps a partial line open, a full line closed, and a cancelled PO (qty 0) open", () => {
+    expect(lineHasUnorderedQty({ qty: "10.00", orderedQty: "4.00" })).toBe(true);
+    expect(lineHasUnorderedQty({ qty: "10.00", orderedQty: "10.00" })).toBe(false);
+    expect(lineHasUnorderedQty({ qty: "10.00", orderedQty: "12.00" })).toBe(false);
+    // A voided PO is not live, so its qty is not in orderedQty.
+    expect(lineHasUnorderedQty({ qty: "10.00", orderedQty: "0.00" })).toBe(true);
+    expect(
+      lineHasUnorderedQty({
+        qty: "1.00",
+        orderedQty: "0.00",
+        isLot: true,
+        components: [
+          { qty: "5.00", orderedQty: "5.00" },
+          { qty: "2.00", orderedQty: "0.00" },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      lineHasUnorderedQty({
+        qty: "1.00",
+        orderedQty: "0.00",
+        isLot: true,
+        components: [
+          { qty: "5.00", orderedQty: "5.00" },
+          { qty: "2.00", orderedQty: "2.00" },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("flags when billed amount exceeds the PO total", () => {

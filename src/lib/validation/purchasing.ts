@@ -60,17 +60,33 @@ export const poInputSchema = z
   .refine((v) => !v.expectedDate || v.expectedDate >= v.date, { message: "Expected date can't be before the PO date.", path: ["expectedDate"] });
 export type PoInput = z.infer<typeof poInputSchema>;
 
+const selectionRowSchema = z.object({
+  /** SO line id, or lot-component id. */
+  key: z.string().trim().min(1).max(64),
+  /** Final supplier. Empty when the row still needs one. */
+  supplierId: z.string().trim().max(64),
+  qty: z.string().trim().max(32),
+  confirmZero: z.boolean().optional(),
+});
+
 export const createFromSoSchema = z
   .object({
     date: dateOnly("PO date"),
     expectedDate: optionalDate("Expected date"),
     deliveryAddressText: optionalText(1000),
-    /** SO line id → supplier picked in the preview (for lines without one). */
+    /** SO line id → supplier picked in the preview (for lines without one). Legacy callers. */
     supplierPicks: z.record(z.string().max(64), z.string().max(64).nullable()).default({}),
-    /** SO lines to include (unticked ones are skipped). Omitted = all. */
+    /** SO lines to include (unticked ones are skipped). Omitted = all. Legacy callers. */
     lineIds: z.array(z.string().max(64)).max(500).optional(),
-    /** Lot component ids to skip in this run (unticked in the preview). */
+    /** Lot component ids to skip in this run (unticked in the preview). Legacy callers. */
     excludeComponentIds: z.array(z.string().max(64)).max(500).optional(),
+    /**
+     * Selection-first payload. When present, only these rows are ordered
+     * (supplier + qty + zero-cost confirm). Omit for the legacy "all open lines" call.
+     */
+    rows: z.array(selectionRowSchema).max(500).optional(),
+    /** Same key on a repeat submit returns the POs already created. Blank or malformed keys are ignored by the service. */
+    idempotencyKey: z.string().trim().max(64).optional(),
   })
   .refine((v) => !v.expectedDate || v.expectedDate >= v.date, { message: "Expected date can't be before the PO date.", path: ["expectedDate"] });
 export type CreateFromSoInput = z.infer<typeof createFromSoSchema>;

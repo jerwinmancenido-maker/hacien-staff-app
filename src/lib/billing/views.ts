@@ -483,6 +483,22 @@ async function customerCreditsGrouped(): Promise<Map<string, { name: string; cre
     cur.credit += toScaled(unapplied, 2);
     scaled.set(c.customerId, cur);
   }
+  // Same second source as customerCreditBalance: unapplied credit memos.
+  const returnCredits = await db.customerCredit.findMany({
+    where: { customerReturn: { status: "POSTED" } },
+    select: {
+      customerId: true,
+      amount: true,
+      applications: { select: { cashApplied: true } },
+      customer: { select: { name: true } },
+    },
+  });
+  for (const c of returnCredits) {
+    const applied = c.applications.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
+    const cur = scaled.get(c.customerId) ?? { name: c.customer.name, credit: 0n };
+    cur.credit += toScaled(money(c.amount), 2) - applied;
+    scaled.set(c.customerId, cur);
+  }
   const out = new Map<string, { name: string; credit: string }>();
   for (const [id, v] of scaled) out.set(id, { name: v.name, credit: fromScaled(v.credit, 2) });
   return out;
