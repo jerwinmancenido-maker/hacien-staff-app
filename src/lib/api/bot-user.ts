@@ -37,24 +37,41 @@ export async function getApiBotUser() {
   return db.user.findUnique({ where: { email: API_BOT_EMAIL } });
 }
 
-/** Create the bot user if missing; otherwise re-lock its flags (role,
- * canSeeCosts, no password, active) so the row always matches API_BOT_FLAGS. */
+/** Create the bot user if missing; otherwise heal it: re-lock its flags
+ * (role, canSeeCosts, no password, active, no 2FA secret) so the row always
+ * matches API_BOT_FLAGS, AND revoke any sessions and burn any outstanding
+ * invite/reset tokens — a password set while the row was tampered with
+ * must not leave a working sign-in behind (PR #185 Bugbot round 2). */
 export async function ensureApiBotUser(): Promise<{ id: string; created: boolean }> {
   const existing = await getApiBotUser();
   if (existing) {
     const drifted =
       existing.name !== API_BOT_NAME ||
       existing.passwordHash !== null ||
+      existing.totpSecret !== null ||
       existing.isAdmin !== API_BOT_FLAGS.isAdmin ||
       existing.isApprover !== API_BOT_FLAGS.isApprover ||
       existing.isStaff !== API_BOT_FLAGS.isStaff ||
       existing.isViewer !== API_BOT_FLAGS.isViewer ||
       existing.canSeeCosts !== API_BOT_FLAGS.canSeeCosts ||
       existing.active !== API_BOT_FLAGS.active;
-    if (drifted) {
-      await db.user.update({
-        where: { id: existing.id },
-        data: { name: API_BOT_NAME, passwordHash: null, ...API_BOT_FLAGS },
+    const liveSessions = await db.session.count({ where: { userId: existing.id, revokedAt: null } });
+    const liveTokens = await db.passwordResetToken.count({ where: { userId: existing.id, usedAt: null } });
+    if (drifted || liveSessions > 0 || liveTokens > 0) {
+      const now = new Date();
+      await db.$transaction(async (tx) => {
+        if (drifted) {
+          await tx.user.update({
+            where: { id: existing.id },
+            data: { name: API_BOT_NAME, passwordHash: null, totpSecret: null, ...API_BOT_FLAGS },
+          });
+        }
+        if (liveSessions > 0) {
+          await tx.session.updateMany({ where: { userId: existing.id, revokedAt: null }, data: { revokedAt: now } });
+        }
+        if (liveTokens > 0) {
+          await tx.passwordResetToken.updateMany({ where: { userId: existing.id, usedAt: null }, data: { usedAt: now } });
+        }
       });
     }
     return { id: existing.id, created: false };

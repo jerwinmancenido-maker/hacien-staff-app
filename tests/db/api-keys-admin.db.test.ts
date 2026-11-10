@@ -21,7 +21,7 @@ import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { can, canSeeTin } from "@/lib/permissions";
 import { makeUser, tag } from "./fixtures";
-import { resendInvite, updateUser, UserRuleError } from "@/lib/services/users";
+import { issueToken, requestPasswordReset, resendInvite, setPasswordWithToken, setUserActive, updateUser, UserRuleError } from "@/lib/services/users";
 
 const pepperAtStart = process.env.API_KEY_PEPPER;
 
@@ -52,6 +52,33 @@ describe.skipIf(!env.hasDb)("API / Bot user", () => {
       updateUser(id, { name: "Nope", email: API_BOT_EMAIL, position: null, roles: ["ADMIN"], canSeeCosts: true }, actor.id),
     ).rejects.toBeInstanceOf(UserRuleError);
     await expect(resendInvite(id)).rejects.toBeInstanceOf(UserRuleError);
+    await expect(setUserActive(id, false, actor.id)).rejects.toBeInstanceOf(UserRuleError);
+  });
+
+  it("heal revokes the bot's sessions, clears its 2FA secret and burns its tokens", async () => {
+    const { id } = await ensureApiBotUser();
+    await db.user.update({ where: { id }, data: { passwordHash: "tampered", totpSecret: "tampered-secret" } });
+    const session = await db.session.create({ data: { tokenHash: `tok-${tag()}`, userId: id, expiresAt: new Date(Date.now() + 3_600_000) } });
+    const token = await db.$transaction((tx) => issueToken(tx, id, "INVITE"));
+    await ensureApiBotUser();
+    const bot = await getApiBotUser();
+    expect(bot?.passwordHash).toBeNull();
+    expect(bot?.totpSecret).toBeNull();
+    const healedSession = await db.session.findUniqueOrThrow({ where: { id: session.id } });
+    expect(healedSession.revokedAt).not.toBeNull();
+    // The burned invite token can no longer set a password.
+    expect(await setPasswordWithToken(token, "NewPass123!")).toBe(false);
+    expect((await getApiBotUser())?.passwordHash).toBeNull();
+  });
+
+  it("never issues a password reset for the bot, and an outstanding reset token is rejected", async () => {
+    const { id } = await ensureApiBotUser();
+    await requestPasswordReset(API_BOT_EMAIL);
+    const issued = await db.passwordResetToken.count({ where: { userId: id, usedAt: null } });
+    expect(issued).toBe(0);
+    const token = await db.$transaction((tx) => issueToken(tx, id, "RESET"));
+    expect(await setPasswordWithToken(token, "NewPass123!")).toBe(false);
+    expect((await getApiBotUser())?.passwordHash).toBeNull();
   });
 
   it("is created once with the plan-v2 flags and can never sign in", async () => {

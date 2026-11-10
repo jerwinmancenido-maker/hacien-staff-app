@@ -64,6 +64,12 @@ describe("CTO fix round bc-1b662691", () => {
   it("a key on screen locks the create form, and a fresh create always surfaces its key", () => {
     const tab = read("src/app/(app)/settings/ApiKeysTab.tsx");
     expect(tab).toContain("seenToken");
+    // The reset itself (Bugbot thread @7162cdf): a NEW token re-opens the
+    // panel and clears the copied flag, so a dismissed first key can never
+    // swallow the next one.
+    expect(tab).toContain("setShowOnce(true)");
+    expect(tab).toContain("setCopied(false)");
+    expect(tab).toContain("state.token !== seenToken.current");
     expect(tab).toContain("disabled={!pepperSet || pending || !!token}");
     expect(tab).toContain("disabled={!pepperSet || !!token}");
   });
@@ -84,6 +90,10 @@ describe("CTO fix round bc-1b662691", () => {
     const bot = read("src/lib/api/bot-user.ts");
     expect(bot).toContain("API_BOT_FLAGS");
     expect(bot).toContain("drifted");
-    expect(bot).toContain("db.user.update");
+    expect(bot).toContain("tx.user.update");
+    // Round 2: the heal also revokes sessions and burns outstanding tokens.
+    expect(bot).toContain("tx.session.updateMany");
+    expect(bot).toContain("tx.passwordResetToken.updateMany");
+    expect(bot).toContain("totpSecret: null");
   });
 });

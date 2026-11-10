@@ -1,7 +1,7 @@
 import type { TokenPurpose, User } from "@prisma/client";
 import { z } from "zod";
 import { db, isUniqueViolation, type Tx } from "../db";
-import { API_BOT_EMAIL } from "../api/bot-user";
+import { API_BOT_EMAIL, isApiBotEmail } from "../api/bot-user";
 import { writeAudit } from "../audit";
 import { appUrl, getMailer } from "../mailer";
 import { accountEmailHtml } from "../email-templates";
@@ -105,7 +105,7 @@ export async function updateUser(id: string, input: UserInput, actorId: string) 
     return await db.$transaction(async (tx) => {
       const all = await lockUsers(tx);
       const before = await tx.user.findUniqueOrThrow({ where: { id } });
-  if (before.email === API_BOT_EMAIL) throw new UserRuleError("The API bot can't be edited — it exists only so API keys have someone to act as.");
+      if (before.email === API_BOT_EMAIL) throw new UserRuleError("The API bot can't be edited — it exists only so API keys have someone to act as.");
       const flags = roleFlags(input.roles);
       const err = lastRoleGuard(all, id, { active: before.active, ...flags });
       if (err) throw new UserRuleError(err);
@@ -129,7 +129,7 @@ export async function setUserActive(id: string, active: boolean, actorId: string
   return db.$transaction(async (tx) => {
     const all = await lockUsers(tx);
     const before = await tx.user.findUniqueOrThrow({ where: { id } });
-  if (before.email === API_BOT_EMAIL) throw new UserRuleError("The API bot can't be edited — it exists only so API keys have someone to act as.");
+      if (before.email === API_BOT_EMAIL) throw new UserRuleError("The API bot can't be edited — it exists only so API keys have someone to act as.");
     if (before.active === active) return before;
     const err = lastRoleGuard(all, id, { ...before, active });
     if (err) throw new UserRuleError(err);
@@ -154,7 +154,11 @@ export async function setUserActive(id: string, active: boolean, actorId: string
 
 /** Sends a reset link if the email belongs to an active user. Caller shows the same message either way. */
 export async function requestPasswordReset(email: string) {
-  const user = await db.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  const normalized = email.trim().toLowerCase();
+  // The API bot can never hold a password — no reset link is ever issued
+  // for it (silent, like an unknown address; PR #185 Bugbot round 2).
+  if (isApiBotEmail(normalized)) return;
+  const user = await db.user.findUnique({ where: { email: normalized } });
   if (!user || !user.active) return;
   const token = await db.$transaction((tx) => issueToken(tx, user.id, "RESET"));
   const url = appUrl(`/reset-password?token=${token}`);
@@ -179,6 +183,9 @@ export async function findValidToken(token: string) {
   if (!token) return null;
   const row = await db.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
   if (!row || row.usedAt || row.expiresAt < new Date() || !row.user.active) return null;
+  // An invite/reset token for the API bot (e.g. issued before these guards)
+  // can never be redeemed — the bot must never gain a password.
+  if (isApiBotEmail(row.user.email)) return null;
   return row;
 }
 
