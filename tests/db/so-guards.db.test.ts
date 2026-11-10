@@ -298,6 +298,33 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       ).rejects.toThrow(/below what is already billed/);
     }
 
+    // --- A2 split (CTO ruling 2026-11-11): the floor binds money-moving
+    // saves ONLY. Legacy state: billed 500,000, then the line price was
+    // cut outside the service (pre-guard data) so the lines now sum to
+    // 310,000 — already below billed.
+    {
+      const year = await freshYear();
+      const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
+      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      await recordBilling(
+        { salesOrderId: so.id, amount: "500000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const laptop = rows[0]!;
+      await db.salesOrderItem.update({ where: { id: laptop.id }, data: { unitPrice: "29000", total: "290000" } });
+      await db.salesOrder.update({
+        where: { id: so.id },
+        data: { contractPrice: "310000.00", withholdingTotal: "3300.00", netReceived: "306700.00" },
+      });
+      // (1) A non-money save goes through despite being below billed.
+      await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Called the buyer" }), admin);
+      // (2) A money-moving save that stays below billed is refused.
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, qty: "11" } : i))), admin),
+      ).rejects.toThrow(/below what is already billed/);
+    }
+
     // --- Bugbot @f8c58dc: stacked pick (GOV_PT) on a goods-only SO -------
     // The stored snapshot stacks GOV_PT_3 onto the whole base; the old
     // header-snapshot compare could never match the line-derived grouping

@@ -340,11 +340,13 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         // A2 hard floor: the contract price can never drop below what is
         // already billed (holds even if A1 is ever relaxed).
         const billedTotal = liveBillings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
-        // Only a save that LOWERS the total can breach the floor. An order
-        // already below billed (billed before this guard existed) must stay
-        // editable for notes, terms, address and cost-only saves (Bugbot).
+        // The floor applies ONLY on money-moving saves (CTO ruling via
+        // Errands, 2026-11-11): a save that moves no price, qty, kind,
+        // withholding or line set never trips it — notes, terms, address,
+        // contact and cost-only saves on a billed order go through, even
+        // one already below billed from before this guard existed.
         if (
-          toScaled(afterPrices.contractPrice, 2) < toScaled(beforePrices.contractPrice, 2) &&
+          salesOrderPricesChanged(beforePrices, afterPrices) &&
           toScaled(afterPrices.contractPrice, 2) < billedTotal
         ) {
           throw new DocRuleError(
