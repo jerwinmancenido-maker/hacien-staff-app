@@ -223,9 +223,11 @@ export default async function SalesOrderPage({
                     <td className="num">—</td>
                     <td>{d.voidedAt ? "Void" : "Delivered"}</td>
                     <td>
-                      <Link href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noopener">
-                        Print
-                      </Link>
+                      {!d.voidedAt && (
+                        <Link href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noopener">
+                          Print
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}
