@@ -11,6 +11,8 @@ import { settingsValueFromForm } from "@/lib/settings/form";
 import { isSettingsKey } from "@/lib/settings/schema";
 import { saveWithholdingRates } from "@/lib/services/withholding";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
+import { createApiKey, revokeApiKey } from "@/lib/api/keys-admin";
+import { ApiError } from "@/lib/api/errors";
 import { bool, formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 import { saveUserSignature, SignatureError } from "@/lib/services/user-signature";
 
@@ -197,5 +199,52 @@ export async function resendInviteAction(id: string): Promise<FormState> {
     await requireActionPermission("manage_users");
     await resendInvite(id);
     return { ok: true, message: "Invite sent." };
+  });
+}
+
+export type CreateApiKeyState = FormState & { token?: string; keyPrefix?: string };
+
+const EXPIRY_DAYS: Record<string, number | null> = {
+  none: null,
+  "30": 30,
+  "90": 90,
+  "365": 365,
+};
+
+/** REQ-API-001 PR-B: create a /api/v1 key. The raw key is returned once, in this response only. */
+export async function createApiKeyAction(_prev: CreateApiKeyState, form: FormData): Promise<CreateApiKeyState> {
+  const values = formValues(form);
+  try {
+    return await runAction(async () => {
+      const user = await requireActionPermission("manage_settings");
+      const days = EXPIRY_DAYS[str(form, "expiry")] ?? null;
+      const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+      try {
+        const made = await createApiKey({
+          name: str(form, "name"),
+          scopes: form.getAll("scopes").filter((v): v is string => typeof v === "string"),
+          expiresAt,
+          actorId: user.id,
+        });
+        revalidatePath("/settings");
+        return { ok: true, message: "API key created. Copy it now — it will not be shown again.", token: made.token, keyPrefix: made.keyPrefix };
+      } catch (e) {
+        if (e instanceof ApiError) return { values, message: e.message };
+        throw e;
+      }
+    }, values);
+  } catch (e) {
+    if (e instanceof ApiError) return { values, message: e.message };
+    throw e;
+  }
+}
+
+/** REQ-API-001 PR-B: revoke a /api/v1 key (immediate; the row is kept, never deleted). */
+export async function revokeApiKeyAction(id: string): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    await revokeApiKey({ id, actorId: user.id });
+    revalidatePath("/settings");
+    return { ok: true, message: "API key revoked. It stops working immediately." };
   });
 }

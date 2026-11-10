@@ -92,6 +92,30 @@ export async function seedBase(db: BaseSeedDb): Promise<{ createdUsers: string[]
     created.push(adminEmail);
   }
 
+  // 2b. The dedicated "API / Bot" acting user for /api/v1 (REQ-API-001
+  // PR-B). Create-if-missing only — an existing row is never modified, so
+  // admin flag changes on staging/live are not overwritten by a re-seed.
+  // It can never sign in: passwordHash stays null and no invite is sent.
+  const API_BOT_EMAIL = "api-bot@haciensolutions.com";
+  const existingBot = await db.user.findUnique({ where: { email: API_BOT_EMAIL } });
+  if (!existingBot) {
+    await db.user.create({
+      data: {
+        email: API_BOT_EMAIL,
+        name: "API / Bot",
+        passwordHash: null,
+        isAdmin: false,
+        isApprover: false,
+        isStaff: true,
+        isViewer: false,
+        canSeeCosts: false,
+        active: true,
+      },
+    });
+    created.push(API_BOT_EMAIL);
+    console.log("API / Bot user created (acts for /api/v1 keys; cannot sign in).");
+  }
+
   // 3. Withholding rates: upsert Pass 3 catalog and deactivate deprecated rows.
   for (const r of WITHHOLDING_RATES) {
     const existing = await db.withholdingRate.findUnique({ where: { code: r.code } });
