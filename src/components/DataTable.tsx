@@ -7,7 +7,7 @@
 import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-export type Column = { key: string; label: string; numeric?: boolean; sortable?: boolean };
+export type Column = { key: string; label: string; numeric?: boolean; sortable?: boolean; className?: string };
 export type Row = {
   id: string;
   href?: string;
@@ -17,6 +17,11 @@ export type Row = {
 };
 
 const INTERACTIVE = "a, button, input, select, textarea, label, [data-no-row-click]";
+
+function cellClass(c: Column) {
+  const parts = [c.className, c.numeric ? "num" : ""].filter(Boolean);
+  return parts.length ? parts.join(" ") : undefined;
+}
 
 export function DataTable({ columns, rows, label }: { columns: Column[]; rows: Row[]; label: string }) {
   const router = useRouter();
@@ -59,7 +64,7 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
               return (
                 <th
                   key={c.key}
-                  className={c.numeric ? "num" : undefined}
+                  className={cellClass(c)}
                   aria-sort={active ? (dir === 1 ? "ascending" : "descending") : undefined}
                 >
                   {c.sortable === false ? (
@@ -89,7 +94,7 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
               }}
             >
               {columns.map((c, i) => (
-                <td key={c.key} className={c.numeric ? "num" : undefined}>
+                <td key={c.key} className={cellClass(c)}>
                   {i === 0 && row.href ? <a href={row.href} className="row-stretched-link" tabIndex={-1} aria-hidden /> : null}
                   {row.cells[c.key]}
                 </td>
