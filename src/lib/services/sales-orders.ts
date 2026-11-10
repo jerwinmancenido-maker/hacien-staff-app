@@ -291,6 +291,84 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           );
         }
       }
+      // SO guards (REQ-PLAN-AUDIT-001 A1–A3; owner-approved 2026-11-10).
+      // Everything below is computed inside the SO row lock taken above, so
+      // a concurrent PO create/picker save cannot slip past the floors.
+      const liveBillings = await tx.billing.findMany({
+        where: { salesOrderId: id, status: { not: "VOID" } },
+        select: { invoiceNo: true, amount: true },
+        orderBy: { createdAt: "asc" },
+      });
+      const pricesChangedEarly = salesOrderPricesChanged(beforePrices, afterPrices);
+      if (liveBillings.length && pricesChangedEarly) {
+        // A1: once an SI exists, money/qty/WH/add/remove are frozen at SO
+        // level — billings carry no lines, and the 2307 split reads the
+        // LIVE SO, so any of these edits would desync the issued SI.
+        // Cost/supplier-only edits do not trip salesOrderPricesChanged and
+        // stay allowed (A4).
+        throw new DocRuleError(
+          `This order already has SI no. ${liveBillings[0]!.invoiceNo}. Void that billing first to change prices.`,
+          "items",
+        );
+      }
+      if (liveBillings.length) {
+        // A2 hard floor: the contract price can never drop below what is
+        // already billed (holds even if A1 is ever relaxed).
+        const billedTotal = liveBillings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
+        if (toScaled(afterPrices.contractPrice, 2) < billedTotal) {
+          throw new DocRuleError(
+            "The order total can't go below what is already billed.",
+            "items",
+          );
+        }
+      }
+      // A3 ordered floor: live ordered qty per SO line / lot component =
+      // PO lines not removed, on POs not VOID (a CLOSED PO counts its full
+      // qty). Same live rule as the purchasing views.
+      const componentIds = before.items.flatMap((i) => (i.components ?? []).map((c) => c.id));
+      const livePoLines = await tx.purchaseOrderItem.findMany({
+        where: {
+          removedAt: null,
+          purchaseOrder: { salesOrderId: id, status: { not: "VOID" } },
+          OR: [
+            { salesOrderItemId: { in: [...beforeById.keys()] } },
+            ...(componentIds.length ? [{ salesOrderItemComponentId: { in: componentIds } }] : []),
+          ],
+        },
+        select: { salesOrderItemId: true, salesOrderItemComponentId: true, qty: true },
+      });
+      const orderedByLine = new Map<string, bigint>();
+      const orderedByComponent = new Map<string, bigint>();
+      for (const l of livePoLines) {
+        if (l.salesOrderItemId) orderedByLine.set(l.salesOrderItemId, (orderedByLine.get(l.salesOrderItemId) ?? 0n) + toScaled(money(l.qty), 2));
+        if (l.salesOrderItemComponentId) orderedByComponent.set(l.salesOrderItemComponentId, (orderedByComponent.get(l.salesOrderItemComponentId) ?? 0n) + toScaled(money(l.qty), 2));
+      }
+      const lineOrdered = (lineId: string): bigint => {
+        const prev = beforeById.get(lineId);
+        let total = orderedByLine.get(lineId) ?? 0n;
+        for (const c of prev?.components ?? []) total += orderedByComponent.get(c.id) ?? 0n;
+        return total;
+      };
+      for (const rid of removedIds) {
+        if (lineOrdered(rid) > 0n) {
+          throw new DocRuleError(
+            "This line is already on a purchase order. Void that PO before removing the line.",
+            `items.${rid}`,
+          );
+        }
+      }
+      for (const item of items) {
+        if (!item.id) continue;
+        const prev = beforeById.get(item.id);
+        if (!prev || prev.isLot) continue;
+        const ordered = orderedByLine.get(item.id) ?? 0n;
+        if (ordered > 0n && toScaled(money(item.qty), 2) < ordered) {
+          throw new DocRuleError(
+            `Ordered quantity cannot be below what is already on a purchase order (${fromScaled(ordered, 2)}).`,
+            `items.${item.id}.qty`,
+          );
+        }
+      }
       const lockMsg = salesOrderPriceLockError({
         isAdmin: actor.isAdmin === true,
         reason: priceOverrideReason,
