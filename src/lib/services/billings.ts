@@ -41,11 +41,19 @@ async function lockSalesOrder(tx: Tx, id: string) {
 async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithholding: unknown) {
   const items = await tx.salesOrderItem.findMany({
     where: { salesOrderId, removedAt: null },
-    select: { kind: true, total: true, supplierTotal: true, margin: true },
+    select: { kind: true, total: true, supplierTotal: true, margin: true, withholdingRate: true, withholdingAtc: true },
   });
   const picks = (soWithholding ?? []) as WithholdingSnapshot[];
   const parts = withholdingBreakdownParts(
-    items.map((i) => ({ kind: i.kind, total: money(i.total), supplierTotal: money(i.supplierTotal), margin: money(i.margin) })),
+    items.map((i) => ({
+      kind: i.kind,
+      total: money(i.total),
+      supplierTotal: money(i.supplierTotal),
+      margin: money(i.margin),
+      // Pick-less SOs split by their lines' stored rates (docTotals fallback).
+      withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+      withholdingAtc: i.withholdingAtc,
+    })),
     picks.length ? picks : undefined,
   );
   return parts.length ? (parts as unknown as Prisma.InputJsonValue) : undefined;

@@ -40,8 +40,8 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     await ensureWideBooklet(admin.id);
     const supplier = await makeSupplier();
 
-    async function openSo(year: number, items?: QuoteInput["items"]) {
-      const customer = await makeCustomer();
+    async function openSo(year: number, items?: QuoteInput["items"], pick?: string[]) {
+      const customer = await makeCustomer(pick ?? null);
       const quote = await createQuote(
         quoteInput(customer.id, year, items ? { items } : {}, supplier.id),
         admin,
@@ -196,7 +196,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     // --- A1 (revised): billed SO — core frozen, the rest stays editable --
     {
       const year = await freshYear();
-      const { so } = await openSo(year);
+      const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
       const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
       const billing = await recordBilling(
         {
@@ -275,7 +275,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     // --- A2: total can never drop below the billed total -----------------
     {
       const year = await freshYear();
-      const { so } = await openSo(year);
+      const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
       const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
       await recordBilling(
         {
