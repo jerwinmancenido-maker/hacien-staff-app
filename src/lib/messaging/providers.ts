@@ -3,9 +3,15 @@
 // Nothing is sent until the CTO sets the keys: without them, the provider
 // returns "not sent: not set up" and no request is made.
 //
-// Sender ID is always HACIEN, for HACIEN only.
+// UniSMS sender ID: env UNISMS_SENDER_ID, default "Hacien ITS" — the
+// approved sender ID (owner-confirmed 2026-11-10).
 
-export const MESSAGING_SENDER = "HACIEN";
+export const DEFAULT_SMS_SENDER_ID = "Hacien ITS";
+
+/** The sender ID every SMS goes out under. Read at send time. */
+export function smsSenderId(): string {
+  return process.env.UNISMS_SENDER_ID?.trim() || DEFAULT_SMS_SENDER_ID;
+}
 
 /** Exact reason logged when a channel is not configured. */
 export const NOT_SET_UP = "not sent: not set up";
@@ -29,11 +35,12 @@ export function notConfiguredProvider(name: string): MessageProvider {
 }
 
 /**
- * Generic fetch provider, used only when the CTO has set both an API URL and
- * an API key for the channel. Needs owner check: the request format below is
- * a generic JSON payload, not a format verified against UniSMS or Hostinger
- * Reach docs — confirm it before go-live. Go-live is in any case blocked
- * until the UniSMS DPA, DB location, and HACIEN sender ID are in place.
+ * UniSMS provider, used only when the CTO has set both UNISMS_API_URL and
+ * UNISMS_API_KEY. Request shape per the UniSMS docs (CTO-verified
+ * 2026-11-10): POST the API URL exactly as given (it is set to
+ * https://unismsapi.com/api/sms), Basic auth with the secret key as the
+ * username and an empty password, JSON body {recipient, content, sender_id}.
+ * Go-live stays gated on the UniSMS DPA + DB location checks.
  */
 export function fetchProvider(
   name: string,
@@ -48,9 +55,9 @@ export function fetchProvider(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
         },
-        body: JSON.stringify({ to: input.to, from: MESSAGING_SENDER, message: input.body }),
+        body: JSON.stringify({ recipient: input.to, content: input.body, sender_id: smsSenderId() }),
       });
       if (!res.ok) {
         let detail = "";
