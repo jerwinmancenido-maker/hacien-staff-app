@@ -187,7 +187,7 @@ describe("CreatePosForm selection screen", () => {
     expect(html).toContain('aria-label="Supplier Whiteboard"');
     expect(html).toContain("Select supplier…");
     expect(html).toContain("Confirm ₱0.00 cost");
-    expect(html).toContain("no cost — blocks create");
+    expect(html).toContain("No cost yet"); // CTO bc-a77311be item 4: amber chip, neutral wording (was "no cost — blocks create")
     expect(html).toContain("Fully ordered");
     expect(html).toContain("LOT");
     expect(html).toContain("Classroom kit");
