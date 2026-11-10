@@ -14,6 +14,19 @@ describe("rescaleBreakdown", () => {
     expect(out.map((p) => p.rate)).toEqual(["0.0100", "0.0200"]);
     expect(out.map((p) => p.amount)).toEqual(["120.00", "80.00"]);
   });
+  it("keeps shares and stays positive when the parts live on a bigger scale than the expected totals", () => {
+    // Real shape: parts sum to the SO's full withholding (5600) while the
+    // billing's pro-rata expected moves 103.70 -> 206.21.
+    const big = [
+      { rate: "0.0100", atcCode: "WC160", amount: "5200.00" },
+      { rate: "0.0200", atcCode: "WC140", amount: "400.00" },
+    ];
+    const out = rescaleBreakdown(big, "103.70", "206.21") as typeof big;
+    expect(out.every((p) => Number(p.amount) > 0)).toBe(true);
+    const sum = out.reduce((a, p) => a + Number(p.amount), 0);
+    expect(sum).toBeCloseTo(5600 * (206.21 / 103.7), 1);
+    expect(Number(out[0]!.amount) / sum).toBeCloseTo(5200 / 5600, 4);
+  });
   it("returns the stored parts unchanged when the total is unchanged", () => {
     expect(rescaleBreakdown(stored, "100.00", "100.00")).toEqual(stored);
   });

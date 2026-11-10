@@ -72,10 +72,19 @@ export function rescaleBreakdown(stored: unknown, oldExpected: string, newExpect
   const oldT = toScaled(oldExpected, 2);
   const newT = toScaled(newExpected, 2);
   if (oldT <= 0n || newT === oldT) return parts as unknown as Prisma.InputJsonValue;
+  // The stored parts live on their OWN scale (they sum to the SO's full
+  // withholding at capture time), while old/newExpected are the billing's
+  // pro-rata totals — different scales. Only the RATIO carries over: the
+  // parts scale by newT/oldT around their own sum, so shares are preserved
+  // exactly and no part can go negative. (Rescaling the parts TO newT
+  // directly made the last part the remainder of a mismatched scale —
+  // negative whenever the parts' sum exceeded the expected total.)
+  const sumStored = parts.reduce((a, x) => a + toScaled(x.amount, 2), 0n);
+  const target = (sumStored * newT) / oldT;
   let acc = 0n;
   const out = parts.map((part, i) => {
     const isLast = i === parts.length - 1;
-    const amt = isLast ? newT - acc : (toScaled(part.amount, 2) * newT) / oldT;
+    const amt = isLast ? target - acc : (toScaled(part.amount, 2) * newT) / oldT;
     acc += amt;
     return { rate: part.rate, atcCode: part.atcCode ?? null, amount: fromScaled(amt, 2) };
   });

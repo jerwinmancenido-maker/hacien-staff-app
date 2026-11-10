@@ -363,9 +363,13 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       partsAfter.forEach((x, i) => {
         expect(Number(x.amount) / sumAfter).toBeCloseTo(Number(partsBefore[i]!.amount) / sumBefore, 4);
       });
-      // And the rescaled parts sum to the billing's NEW expected total —
-      // the value withholdingCodePrefill will split for the 2307.
-      expect(sumAfter).toBeCloseTo(Number(after.withholdingExpected), 2);
+      // The parts stay on their own scale: the new sum is the old sum
+      // scaled by the expected totals' ratio, and every part is positive.
+      const ratio = Number(after.withholdingExpected) / Number(before.withholdingExpected);
+      expect(sumAfter).toBeCloseTo(sumBefore * ratio, 1);
+      partsAfter.forEach((x) => {
+        expect(Number(x.amount)).toBeGreaterThan(0);
+      });
     }
   });
 });
