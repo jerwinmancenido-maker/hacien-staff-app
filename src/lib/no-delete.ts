@@ -1,14 +1,17 @@
 // No hard deletes anywhere, except one case: an active Admin deleting a draft
 // or void quote, or a void sales order, billing, or collection. That path
-// (src/lib/services/document-delete.ts) calls withDeleteAllowance. The
-// extension then allows Prisma `delete` only for the models named in that
-// call, and only until the call returns. deleteMany and raw DELETE/TRUNCATE
-// stay blocked. ESLint (eslint.config.mjs) still flags raw SQL DELETE.
-// tests/no-delete.test.ts allow-lists only the delete service file for
-// Prisma delete calls.
+// (src/lib/services/document-delete.ts) runs its deletes through the
+// allowance gate below, whose run method is keyed by DELETE_ALLOWANCE_KEY —
+// a symbol only that service imports (tests/no-delete.test.ts source-scans
+// the importers). The extension then allows Prisma `delete` only for the
+// models named in that call, and only until the call returns. deleteMany
+// and raw DELETE/TRUNCATE stay blocked. ESLint (eslint.config.mjs) still
+// flags raw SQL DELETE. tests/no-delete.test.ts allow-lists only the delete
+// service file for Prisma delete calls.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Prisma } from "@prisma/client";
+import { DELETE_ALLOWANCE_KEY } from "./delete-allowance-key";
 
 export class HardDeleteError extends Error {
   constructor(model: string | undefined, operation: string) {
@@ -27,13 +30,20 @@ export const RAW_DELETE_PATTERN = /\b(DELETE|TRUNCATE)\b/i;
 const deleteAllowance = new AsyncLocalStorage<ReadonlySet<string>>();
 
 /**
- * Run `fn` allowed to Prisma-delete only `models`. Nested deletes of any
- * other model still throw. deleteMany and raw SQL are never allowed.
- * The document-delete service is the only production caller.
+ * The delete allowance gate. Its only member is keyed by
+ * DELETE_ALLOWANCE_KEY (src/lib/delete-allowance-key.ts), so holding this
+ * object grants nothing — the run method can be invoked only from a file
+ * that imports the key, and tests/no-delete.test.ts pins those importers
+ * to the delete service. Running `fn` through it allows Prisma `delete`
+ * only for `models`, and only until the call returns; nested deletes of
+ * any other model still throw, and deleteMany and raw SQL are never
+ * allowed.
  */
-export function withDeleteAllowance<T>(models: readonly string[], fn: () => T): T {
-  return deleteAllowance.run(new Set(models), fn);
-}
+export const deleteAllowanceGate = {
+  [DELETE_ALLOWANCE_KEY]<T>(models: readonly string[], fn: () => T): T {
+    return deleteAllowance.run(new Set(models), fn);
+  },
+};
 
 export function assertNotDelete(model: string | undefined, operation: string): void {
   if ((BLOCKED_OPERATIONS as readonly string[]).includes(operation)) {

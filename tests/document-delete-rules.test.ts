@@ -29,8 +29,8 @@ describe("delete audit and activity wording", () => {
     expect(sentence).toContain("SI no. 42");
     expect(sentence).toContain("Sample Co");
     expect(sentence).toContain("Wrong draft");
-    expect(activitySummary("delete", "Billing", "Ada")).toBe("Ada Deleted a billing");
-    expect(activitySummary("delete", "Quote", null)).toContain("Deleted");
+    expect(activitySummary("delete", "Billing", "Ada")).toBe("Ada deleted a billing");
+    expect(activitySummary("delete", "Quote", null)).toBe("Someone deleted a quote");
   });
 
   it("turns a foreign-key conflict into a plain refusal", () => {

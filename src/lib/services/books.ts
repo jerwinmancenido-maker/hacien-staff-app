@@ -12,7 +12,7 @@ import type { BookSourceRow } from "../books/registers";
 import { manilaYmdFromInstant } from "../books/period";
 import type { RegisterKey } from "../books/config";
 import { REGISTER_CONFIGS } from "../books/config";
-import { buildRegister, type BookRegister } from "../books/registers";
+import { buildRegister, DELETED_VOID_PARTICULARS_PREFIX, type BookRegister } from "../books/registers";
 
 function deletedVoidSiRow(billingId: string, snapRaw: unknown): BookSourceRow | null {
   if (!snapRaw || typeof snapRaw !== "object" || Array.isArray(snapRaw)) return null;
@@ -28,7 +28,7 @@ function deletedVoidSiRow(billingId: string, snapRaw: unknown): BookSourceRow | 
     date,
     documentNumber: inv,
     party,
-    particulars: `Deleted (void), SI no. ${inv}`,
+    particulars: `${DELETED_VOID_PARTICULARS_PREFIX}, SI no. ${inv}`,
     amount: "0.00",
     ewt: null,
     href: null,

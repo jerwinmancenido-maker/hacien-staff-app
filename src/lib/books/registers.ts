@@ -9,6 +9,14 @@ import { ymdInPeriod } from "./period";
 
 export { csvCell } from "./csv";
 
+/**
+ * Particulars prefix of a register row rebuilt from a deleted void
+ * billing's audit snapshot (see src/lib/services/books.ts). The register
+ * keeps those rows visible (amount 0) so the SI number is never lost;
+ * matching on this shared constant replaces a bare string comparison.
+ */
+export const DELETED_VOID_PARTICULARS_PREFIX = "Deleted (void)";
+
 export type BookSourceRow = {
   id: string;
   kind: RegisterSourceKind;
@@ -99,7 +107,7 @@ export function buildRegister(
     .filter((r) => {
       // A deleted void SI stays on the page (amount 0) so the number is visible.
       // Every other void is left out of the register and its totals.
-      const keptVoid = r.voided === true && r.particulars.startsWith("Deleted (void)");
+      const keptVoid = r.voided === true && r.particulars.startsWith(DELETED_VOID_PARTICULARS_PREFIX);
       return (!r.voided || keptVoid) && allowed.has(r.kind) && ymdInPeriod(r.date, fromYmd, toYmd);
     })
     .slice()

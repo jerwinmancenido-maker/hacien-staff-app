@@ -41,7 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
   settings_change: "changed",
   email_draft: "drafted email for",
   download: "downloaded",
-  delete: "Deleted",
+  delete: "deleted",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -119,7 +119,6 @@ export function documentHref(
 export function activitySummary(action: string, entityType: string, who: string | null): string {
   const what = ENTITY_LABELS[entityType] ?? entityType.toLowerCase();
   const actor = who?.trim() || "Someone";
-  if (action === "delete") return `${actor} Deleted a ${what}`;
   const verb = ACTION_LABELS[action] ?? action;
   return `${actor} ${verb} a ${what}`;
 }

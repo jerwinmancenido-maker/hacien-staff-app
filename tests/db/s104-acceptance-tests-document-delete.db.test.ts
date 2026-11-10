@@ -13,12 +13,19 @@ vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
-import { HardDeleteError, withDeleteAllowance } from "@/lib/no-delete";
+import { HardDeleteError } from "@/lib/no-delete";
 import { ForbiddenError } from "@/lib/permissions";
 import { listBookSourceRows } from "@/lib/services/books";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection, voidCollection } from "@/lib/services/collections";
-import { deleteBilling, deleteCollection, deleteQuote, deleteSalesOrder, type DeleteActor } from "@/lib/services/document-delete";
+import {
+  deleteBilling,
+  deleteCollection,
+  deleteQuote,
+  deleteSalesOrder,
+  proveNestedDifferentModelDeleteBlocked,
+  type DeleteActor,
+} from "@/lib/services/document-delete";
 import { createPurchaseOrdersFromSalesOrder } from "@/lib/services/purchase-orders";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, voidQuote, type DocActor } from "@/lib/services/quotes";
 import { voidSalesOrder } from "@/lib/services/sales-orders";
@@ -476,10 +483,12 @@ describe("S-104 no-delete exception boundaries", () => {
 
   it("the allowance does not leak to a different model (nested different-model delete throws)", async () => {
     await actors();
-    await expect(
-      withDeleteAllowance(["Quote"], async () => {
-        await db.customer.delete({ where: { id: "does-not-matter" } });
-      }),
-    ).rejects.toBeInstanceOf(HardDeleteError);
+    // Exercised through the delete service's own probe: the allowance can
+    // no longer be imported directly (it is keyed by a non-exported
+    // symbol), so the service proves the boundary itself.
+    const probe = await proveNestedDifferentModelDeleteBlocked();
+    expect(probe.quoteAllowedInside).toBe(true);
+    expect(probe.otherBlockedInside).toBe(true);
+    expect(probe.nestedOtherBlocked).toBe(true);
   });
 });

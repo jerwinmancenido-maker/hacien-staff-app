@@ -1,16 +1,21 @@
 // Admin delete of documents that never had legal effect: draft or void quotes,
 // and void sales orders, billings, and collections. The only hard-delete path
-// in the app. Each delete runs inside withDeleteAllowance for its own models;
-// the Prisma extension allows Prisma delete of those models only until the
-// call returns. The audit snapshot is stored on the audit row's `before`.
+// in the app. Each delete runs inside the delete allowance gate for its own
+// models; the Prisma extension allows Prisma delete of those models only
+// until the call returns. The audit snapshot is stored on the audit row's
+// `before`.
 
 import { PrismaClient } from "@prisma/client";
 import { writeAudit } from "../audit";
 import { db, isForeignKeyViolation, type Tx } from "../db";
+import { DELETE_ALLOWANCE_KEY } from "../delete-allowance-key";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { assertNotDelete, HardDeleteError, noDeleteExtension, withDeleteAllowance } from "../no-delete";
+import { assertNotDelete, deleteAllowanceGate, HardDeleteError, noDeleteExtension } from "../no-delete";
 import { assertCanDeleteDocument, type PermissionUser } from "../permissions";
 import { voidReasonSchema } from "../validation/quotes";
+
+/** The gate's run method, reachable only via DELETE_ALLOWANCE_KEY. */
+const withDeleteAllowance = deleteAllowanceGate[DELETE_ALLOWANCE_KEY];
 
 export type DeleteActor = PermissionUser & { id: string };
 
@@ -360,6 +365,42 @@ export async function deleteCollection(id: string, reason: string, actor: Delete
     });
     return { id, number: collection.number, customerId: collection.customerId };
   });
+}
+
+/**
+ * Page predicates: would deleteBilling refuse this (void) billing on its
+ * link guards alone? Mirrors the counts inside deleteBilling exactly —
+ * allocations from ANY collection (void ones included), 2307 rows,
+ * attachments INCLUDING archived, and return-credit applications — so the
+ * billing page can show "Kept for BIR records" instead of a Delete button
+ * that would only be refused. Status/role checks stay with the callers.
+ */
+export async function billingDeleteBlocked(id: string): Promise<boolean> {
+  const [allocations, taxes, attachments, credits] = await Promise.all([
+    db.collectionAllocation.count({ where: { billingId: id } }),
+    db.withholding2307.count({ where: { billingId: id } }),
+    db.documentAttachment.count({ where: { billingId: id } }),
+    db.customerCreditApplication.count({ where: { billingId: id } }),
+  ]);
+  return allocations > 0 || taxes > 0 || attachments > 0 || credits > 0;
+}
+
+/**
+ * Page predicate matching deleteCollection's guards: an official receipt
+ * number, allocations, 2307 rows, or attachments INCLUDING archived each
+ * keep the collection for BIR records.
+ */
+export async function collectionDeleteBlocked(c: {
+  id: string;
+  receiptNo: string | null;
+}): Promise<boolean> {
+  if (c.receiptNo && c.receiptNo.trim()) return true;
+  const [allocations, taxes, attachments] = await Promise.all([
+    db.collectionAllocation.count({ where: { collectionId: c.id } }),
+    db.withholding2307.count({ where: { collectionId: c.id } }),
+    db.documentAttachment.count({ where: { collectionId: c.id } }),
+  ]);
+  return allocations > 0 || taxes > 0 || attachments > 0;
 }
 
 type ProbeClient = { user: { delete: (args: { where: { id: string } }) => Promise<unknown> } };

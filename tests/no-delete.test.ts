@@ -107,6 +107,26 @@ describe("no hard deletes", () => {
     expect(src).not.toMatch(/export (const|function) allowance/);
   });
 
+  it("the allowance gate is key-locked: no exported runner, and the key has exactly two importers", () => {
+    const noDelete = readFileSync(path.resolve(__dirname, "../src/lib/no-delete.ts"), "utf8");
+    expect(noDelete).not.toMatch(/export\s+(async\s+)?function\s+withDeleteAllowance\b/);
+    expect(noDelete).not.toMatch(/export\s+const\s+withDeleteAllowance\b/);
+    expect(noDelete).toContain("deleteAllowanceGate");
+    const root = path.resolve(__dirname, "../src");
+    const importers: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = path.join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && readFileSync(p, "utf8").includes("delete-allowance-key")) {
+          importers.push(path.relative(path.resolve(__dirname, ".."), p).split(path.sep).join("/"));
+        }
+      }
+    };
+    walk(root);
+    expect(importers.sort()).toEqual(["src/lib/no-delete.ts", "src/lib/services/document-delete.ts"]);
+  });
+
   it("a nested delete of a different model still throws inside the allowance", async () => {
     const result = await proveNestedDifferentModelDeleteBlocked();
     expect(result).toEqual({
