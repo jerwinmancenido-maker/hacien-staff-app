@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { desktopCss } from "./desktop-css";
 import {
   canShowHomeSales,
   formatSalesAxisPeso,
@@ -318,7 +319,7 @@ describe("home concept A layout wiring", () => {
   const page = readFileSync(path.join(root, "src/app/(app)/page.tsx"), "utf8");
   const dash = readFileSync(path.join(root, "src/lib/home/dashboard.ts"), "utf8");
   const sections = readFileSync(path.join(root, "src/components/home/HomeSections.tsx"), "utf8");
-  const css = readFileSync(path.join(root, "src/app/globals.css"), "utf8");
+  const css = desktopCss(readFileSync(path.join(root, "src/app/globals.css"), "utf8"));
 
   it("uses KPI cards + Sales billed line chart + Needs action; drops Money and Non-VAT sections", () => {
     expect(page).toMatch(/HomeKpiCards/);
