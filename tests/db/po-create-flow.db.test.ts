@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { createPurchaseOrdersFromSalesOrder, voidPurchaseOrder } from "@/lib/services/purchase-orders";
 import { getCreatePosPreview, getSoPurchasing } from "@/lib/purchasing/views";
+import { arAgingSummary } from "@/lib/billing/views";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { freshYear, makeCustomer, makeSupplier, makeUser } from "./fixtures";
 
@@ -314,4 +315,52 @@ describe.skipIf(!env.hasDb)("selection-first create POs (MySQL)", () => {
     expect(row?.orderedQty).toBe("0.00");
     expect(row?.remainingQty).toBe("10.00");
   });
+  it("finds the idempotency key even under 45 later SO update audits (no fixed scan window)", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrder(year);
+    const laptop = ctx.items.find((i) => i.description === "Laptop i5")!;
+    const key = `window-key-${year}`;
+    const first = await createPurchaseOrdersFromSalesOrder(ctx.so.id, input(year, [{ key: laptop.id, supplierId: ctx.a.id, qty: "3" }], key), admin);
+    await db.auditLog.createMany({
+      data: Array.from({ length: 45 }, () => ({ entityType: "SalesOrder", entityId: ctx.so.id, action: "update" as const, after: {} })),
+    });
+    const second = await createPurchaseOrdersFromSalesOrder(ctx.so.id, input(year, [{ key: laptop.id, supplierId: ctx.b.id, qty: "9" }], key), admin);
+    expect(second.map((p) => p.id)).toEqual(first.map((p) => p.id));
+    expect(await db.purchaseOrder.count({ where: { salesOrderId: ctx.so.id } })).toBe(first.length);
+  });
+
+  it("AR aging credit includes POSTED return credit memos net of applications, like customerCreditBalance", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrder(year);
+    const suffix = `${year}-${Date.now().toString(36)}`;
+    const posted = await db.customerReturn.create({
+      data: { number: `RET-AGING-${suffix}`, salesOrderId: ctx.so.id, returnDate: new Date(Date.UTC(year, 2, 3)), status: "POSTED", createdById: admin.id },
+    });
+    const credit = await db.customerCredit.create({
+      data: { customerId: ctx.so.customerId, customerReturnId: posted.id, amount: "1000", createdById: admin.id },
+    });
+    const billing = await db.billing.create({
+      data: {
+        number: `BL-AGING-${suffix}`,
+        salesOrderId: ctx.so.id,
+        customerId: ctx.so.customerId,
+        invoiceNo: 900000 + Math.floor(Math.random() * 99999),
+        invoiceDate: new Date(Date.UTC(year, 2, 3)),
+        dueDate: new Date(Date.UTC(year, 3, 3)),
+        amount: "250",
+        netExpected: "250",
+        createdById: admin.id,
+        updatedById: admin.id,
+      },
+    });
+    await db.customerCreditApplication.create({ data: { customerCreditId: credit.id, billingId: billing.id, cashApplied: "250" } });
+    const draft = await db.customerReturn.create({
+      data: { number: `RET-AGING-D-${suffix}`, salesOrderId: ctx.so.id, returnDate: new Date(Date.UTC(year, 2, 3)), status: "VOID", createdById: admin.id },
+    });
+    await db.customerCredit.create({ data: { customerId: ctx.so.customerId, customerReturnId: draft.id, amount: "500", createdById: admin.id } });
+    const summary = await arAgingSummary();
+    const row = summary.byCustomer.find((c) => c.customerId === ctx.so.customerId);
+    expect(row?.credit).toBe("750.00");
+  });
 });
+

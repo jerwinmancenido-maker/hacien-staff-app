@@ -328,7 +328,7 @@ export function CreatePosForm({
           ) : (
             <div className="zero-block">
               <span>{formatPeso(row.unitCost)}</span>
-              {cur.checked && <span className="chip red">no cost — blocks create</span>}
+              {cur.checked && <span className="chip amber">No cost yet</span>}
               <label className="confirm-zero">
                 <input type="checkbox" checked={cur.confirmZero} onChange={(ev) => setRow(row.key, { confirmZero: ev.target.checked })} /> Confirm ₱0.00 cost
               </label>

@@ -266,10 +266,13 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
         // Lock the SO so two creates (and a double submit of the same key) queue up.
         await tx.$queryRaw`SELECT \`id\` FROM \`SalesOrder\` WHERE \`id\` = ${salesOrderId} FOR UPDATE`;
         if (idempotencyKey) {
+          // No fixed window: a capped scan would silently miss the key once
+          // an SO collects more update audits than the cap, and a missed key
+          // means a duplicate set of POs. The scan is bounded by this SO's
+          // own audit history and exits on the first match.
           const prior = await tx.auditLog.findMany({
             where: { entityType: "SalesOrder", entityId: salesOrderId, action: "update" },
             orderBy: { at: "desc" },
-            take: 40,
           });
           for (const audit of prior) {
             const after = audit.after;

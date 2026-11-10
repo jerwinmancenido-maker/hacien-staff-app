@@ -8264,6 +8264,8 @@ button.contact-card-add {
   .quotes-list table.list tr.clickable:focus-visible {
     background: var(--hover);
     border-radius: var(--radius);
+  }
+}
 
 /* Create POs — selection list + review (REQ-PO-FLOW-002). */
 .alert.info {
