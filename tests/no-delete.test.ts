@@ -101,7 +101,12 @@ describe("no hard deletes", () => {
       }
     };
     walk(root);
-    expect(hits).toEqual(["src/lib/no-delete.ts"]);
+    // The delete allowance's store lives only in no-delete.ts. One other
+    // AsyncLocalStorage is legitimate: PR-A's API request context
+    // (src/lib/api/context.ts) — it carries the apiKeyId for audit
+    // attribution and never touches deletes (the delete-call scan above
+    // still allow-lists only the delete service).
+    expect(hits.sort()).toEqual(["src/lib/api/context.ts", "src/lib/no-delete.ts"]);
     const src = readFileSync(path.resolve(__dirname, "../src/lib/services/document-delete.ts"), "utf8");
     expect(src).not.toMatch(/export function inDocumentDelete/);
     expect(src).not.toMatch(/export (const|function) allowance/);

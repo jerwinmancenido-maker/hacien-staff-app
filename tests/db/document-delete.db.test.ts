@@ -244,7 +244,7 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
     expect(third.number).not.toBe(second.quote.number);
     const activity = await listRecentHomeActivity(30);
     const row = activity.find((a) => a.entityId === second.quote.id);
-    expect(row?.summary).toContain("Deleted");
+    expect(row?.summary).toContain("deleted");
     expect(row?.href).toBeNull();
   });
 
@@ -443,7 +443,7 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
     expect(booksAfter.register.salesPeriodTotals?.invoicedAmount).toBe(booksBefore.register.salesPeriodTotals?.invoicedAmount);
     const activity = await listRecentHomeActivity(30);
     const hit = activity.find((a) => a.entityId === billing.id);
-    expect(hit?.summary).toContain("Deleted");
+    expect(hit?.summary).toContain("deleted");
     expect(hit?.href).toBeNull();
   });
 
