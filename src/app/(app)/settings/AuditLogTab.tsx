@@ -11,6 +11,7 @@ import {
   AUDIT_ENTITIES,
   AUDIT_ENTITY_LABELS,
   auditActorLabel,
+  auditDeleteLabel,
   auditRecordLink,
   auditSentence,
   resolveAuditLabels,
@@ -18,7 +19,7 @@ import {
 import { DataTable } from "@/components/DataTable";
 import { EmptyState } from "@/components/ui";
 
-const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft", "download"];
+const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft", "download", "delete"];
 const PAGE_SIZE = 50;
 
 type Search = { entity?: string; action?: string; user?: string; from?: string; to?: string; page?: string };
@@ -126,8 +127,10 @@ export async function AuditLogTab({ search }: { search: Search }) {
               { key: "what", label: "What happened", sortable: false },
             ]}
             rows={rows.map((r) => {
-              const label = r.entityId ? labels.get(`${r.entityType}:${r.entityId}`) ?? null : null;
-              const link = auditRecordLink(r.entityType, r.entityId);
+              const label =
+                (r.action === "delete" ? auditDeleteLabel(r.before) ?? auditDeleteLabel(r.after) : null) ??
+                (r.entityId ? labels.get(`${r.entityType}:${r.entityId}`) ?? null : null);
+              const link = auditRecordLink(r.entityType, r.entityId, r.action);
               return {
                 id: r.id,
                 href: link,

@@ -174,6 +174,19 @@ export function assertCanVoid(user: PermissionUser | null | undefined): void {
   if (!canVoid(user)) throw new ForbiddenError();
 }
 
+/**
+ * Hard-delete of a draft or void document: active Admin only.
+ * Inactive admins, Approver, Staff and Viewer are refused.
+ */
+export function canDeleteDocument(user: PermissionUser | null | undefined): boolean {
+  return !!user && user.active && user.isAdmin === true;
+}
+
+/** Throws ForbiddenError unless the user may delete an eligible document. */
+export function assertCanDeleteDocument(user: PermissionUser | null | undefined): void {
+  if (!canDeleteDocument(user)) throw new ForbiddenError();
+}
+
 /** Create and edit of supplier POs: active Admin only. Approve stays assertCanApprove. */
 export function assertCanMaintainPurchaseOrder(user: PermissionUser | null | undefined): void {
   if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();

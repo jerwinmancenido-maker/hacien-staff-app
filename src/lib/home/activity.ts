@@ -41,6 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
   settings_change: "changed",
   email_draft: "drafted email for",
   download: "downloaded",
+  delete: "deleted",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -116,9 +117,9 @@ export function documentHref(
 }
 
 export function activitySummary(action: string, entityType: string, who: string | null): string {
-  const verb = ACTION_LABELS[action] ?? action;
   const what = ENTITY_LABELS[entityType] ?? entityType.toLowerCase();
   const actor = who?.trim() || "Someone";
+  const verb = ACTION_LABELS[action] ?? action;
   return `${actor} ${verb} a ${what}`;
 }
 
@@ -183,7 +184,7 @@ export async function listRecentHomeActivity(
   const rows = await db.auditLog.findMany({
     where: {
       entityType: { in: entityTypes },
-      action: { in: ["create", "update", "void", "archive", "restore"] },
+      action: { in: ["create", "update", "void", "archive", "restore", "delete"] },
       entityId: { not: null },
     },
     include: { user: { select: { name: true } } },
@@ -275,8 +276,10 @@ export async function listRecentHomeActivity(
   const items: HomeActivityItem[] = rows.map((r) => {
     const after = r.after;
     let extras: { purchaseOrderId?: string | null } | undefined;
-    let docNumber = jsonField(after, "number") ?? jsonField(after, "invoiceNo");
-    let party: string | null = jsonField(after, "customerName") ?? jsonField(after, "supplierName");
+    const before = r.before;
+    let docNumber = jsonField(after, "number") ?? jsonField(before, "number") ?? jsonField(after, "invoiceNo") ?? jsonField(before, "invoiceNo");
+    let party: string | null =
+      jsonField(after, "customerName") ?? jsonField(before, "customer") ?? jsonField(before, "customerName") ?? jsonField(after, "supplierName");
 
     if (r.entityType === "Quote" && r.entityId) {
       const q = quoteMap.get(r.entityId);
@@ -320,7 +323,7 @@ export async function listRecentHomeActivity(
       atLabel: formatHomeActivityWhen(r.at),
       summary: activitySummary(r.action, r.entityType, r.user?.name ?? null),
       detail: activityDetail(docNumber, party),
-      href: documentHref(r.entityType, r.entityId, extras),
+      href: r.action === "delete" ? null : documentHref(r.entityType, r.entityId, extras),
       entityType: r.entityType,
       entityId: r.entityId,
     };

@@ -1,6 +1,7 @@
 // S-84: the audit log, made readable. Rows show a plain sentence and the
 // record's number or name (never a raw id), plus a link to the record.
-// Records are never deleted — there is no delete path anywhere.
+// A deleted draft or void document stays in this log as "Deleted", with the
+// snapshot from the audit row and no link to the removed page.
 
 import type { AuditAction } from "@prisma/client";
 import { db } from "./db";
@@ -76,10 +77,19 @@ const PAST: Record<AuditAction, string> = {
   settings_change: "Changed settings",
   email_draft: "Drafted email",
   download: "Downloaded",
+  delete: "Deleted",
 };
 
-/** Link to the record, where the app has a page for it. */
-export function auditRecordLink(entityType: string, entityId: string | null): string | undefined {
+/** Number stored on a delete snapshot, so the log can name a row that is gone. */
+export function auditDeleteLabel(snap: unknown): string | null {
+  if (!snap || typeof snap !== "object" || Array.isArray(snap)) return null;
+  const n = (snap as Record<string, unknown>).number;
+  return typeof n === "string" && n.trim() ? n.trim() : null;
+}
+
+/** Link to the record, where the app has a page for it. A delete has no link. */
+export function auditRecordLink(entityType: string, entityId: string | null, action?: string): string | undefined {
+  if (action === "delete") return undefined;
   if (!entityId) return undefined;
   switch (entityType) {
     case "Customer":
@@ -256,6 +266,18 @@ export function auditSentence(row: AuditRow, recordLabel: string | null, viewer:
   const typeLabel = AUDIT_ENTITY_LABELS[row.entityType] ?? row.entityType;
   const record = recordLabel ?? "record";
   const after = asRecord(row.after);
+  if (row.action === "delete") {
+    const snap = asRecord(row.before) ?? after;
+    const number = recordLabel ?? auditDeleteLabel(snap) ?? "record";
+    const customerRaw = snap?.customer ?? snap?.customerName;
+    const customer = typeof customerRaw === "string" && customerRaw.trim() ? customerRaw.trim() : "";
+    const reason = typeof snap?.reason === "string" && snap.reason.trim() ? snap.reason.trim() : "";
+    const invoice = snap?.invoiceNo;
+    const si = invoice != null && String(invoice).trim() ? ` (SI no. ${invoice})` : "";
+    const who = customer ? ` for ${customer}` : "";
+    const why = reason ? `: ${reason}` : "";
+    return `Deleted ${typeLabel.toLowerCase()} ${number}${who}${si}${why}`;
+  }
   if (row.action === "void") {
     const reason = after?.voidReason ?? after?.reason;
     return `Voided ${typeLabel.toLowerCase()} ${record}${typeof reason === "string" && reason ? `: ${reason}` : ""}`;
