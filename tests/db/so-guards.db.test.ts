@@ -337,7 +337,11 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       const before = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
       const partsBefore = before.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
       expect(partsBefore.length).toBeGreaterThan(1);
-      const sumBefore = partsBefore.reduce((a, x) => a + Number(x.amount), 0);
+      // The stored parts are the issue-time SHARES (they sum to the SO's
+      // full withholding). The billing's expected withholding is pro-rata,
+      // so after the SO edit + amount change the parts rescale to the NEW
+      // expected — same rates, same shares, sum tracks the expected total
+      // (it does NOT simply double, and it is never recaptured live).
       // An allowed SO edit (qty up) changes the live line mix.
       const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
       const laptop = rows[0]!;
@@ -352,11 +356,16 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       const after = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
       const partsAfter = after.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
       expect(partsAfter.map((x) => x.rate)).toEqual(partsBefore.map((x) => x.rate));
+      expect(partsAfter.map((x) => x.atcCode)).toEqual(partsBefore.map((x) => x.atcCode));
+      // Shares preserved: each part's share of the whole is unchanged.
+      const sumBefore = partsBefore.reduce((a, x) => a + Number(x.amount), 0);
       const sumAfter = partsAfter.reduce((a, x) => a + Number(x.amount), 0);
-      expect(sumAfter).toBeCloseTo(sumBefore * 2, 2);
       partsAfter.forEach((x, i) => {
-        expect(Number(x.amount)).toBeCloseTo(Number(partsBefore[i]!.amount) * 2, 2);
+        expect(Number(x.amount) / sumAfter).toBeCloseTo(Number(partsBefore[i]!.amount) / sumBefore, 4);
       });
+      // And the rescaled parts sum to the billing's NEW expected total —
+      // the value withholdingCodePrefill will split for the 2307.
+      expect(sumAfter).toBeCloseTo(Number(after.withholdingExpected), 2);
     }
   });
 });
