@@ -3,9 +3,10 @@
 // sticky top bar. Source tests (same pattern as S-66/S-71/S-84).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { desktopCss } from "./desktop-css";
 
 const page = readFileSync("src/app/(app)/settings/page.tsx", "utf8");
-const css = readFileSync("src/app/globals.css", "utf8");
+const css = desktopCss(readFileSync("src/app/globals.css", "utf8"));
 const form = (f: string) => readFileSync(`src/app/(app)/settings/${f}`, "utf8");
 
 const SECTIONS = [

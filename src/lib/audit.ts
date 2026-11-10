@@ -2,6 +2,7 @@
 // Always call writeAudit with the transaction client used for the change itself.
 
 import type { AuditAction, Prisma } from "@prisma/client";
+import { currentApiAudit } from "./api/context";
 import type { Tx, Db } from "./db";
 import { maskBankAccountNumber } from "./bank-mask";
 
@@ -104,6 +105,8 @@ export type AuditInput = {
   before?: Plain | null;
   after?: Plain | null;
   ip?: string | null;
+  /** Set by /api/v1 via the request context when omitted. Null for staff UI changes. */
+  apiKeyId?: string | null;
   /** Pass false to store before/after as given (already a diff). */
   diff?: boolean;
 };
@@ -113,6 +116,11 @@ export async function writeAudit(tx: Tx | Db, input: AuditInput): Promise<void> 
     input.diff === false
       ? { before: sanitizeAuditPlain(input.before), after: sanitizeAuditPlain(input.after) }
       : auditDiff(input.before, input.after);
+  // /api/v1 runs the existing services inside a request context so the audit
+  // row records which key did it, without each service taking an apiKeyId.
+  const viaApi = currentApiAudit();
+  const apiKeyId = input.apiKeyId !== undefined ? input.apiKeyId : (viaApi?.apiKeyId ?? null);
+  const ip = input.ip !== undefined ? input.ip : (viaApi?.ip ?? null);
   await tx.auditLog.create({
     data: {
       userId: input.userId,
@@ -121,7 +129,8 @@ export async function writeAudit(tx: Tx | Db, input: AuditInput): Promise<void> 
       action: input.action,
       before: (before ?? undefined) as Prisma.InputJsonValue | undefined,
       after: (after ?? undefined) as Prisma.InputJsonValue | undefined,
-      ip: input.ip ?? null,
+      ip,
+      apiKeyId,
     },
   });
 }
