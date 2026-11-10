@@ -2,8 +2,8 @@
 
 type P = { size?: number };
 const base = (size = 16) => ({
-  width: size,
-  height: size,
+  width: `calc(${size}px * var(--ui-scale, 1))`,
+  height: `calc(${size}px * var(--ui-scale, 1))`,
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",

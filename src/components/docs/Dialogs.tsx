@@ -99,6 +99,61 @@ export function VoidDialog({
   );
 }
 
+/** Admin delete of a draft or void document. A typed reason is required. */
+export function DeleteDialog({
+  number,
+  body,
+  onClose,
+  onDelete,
+}: {
+  number: string;
+  body: string;
+  onClose: () => void;
+  onDelete: (reason: string) => Promise<FormState>;
+}) {
+  const [reason, setReason] = useState("");
+  const [state, setState] = useState<FormState>({});
+  const [pending, setPending] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  const error = state.fieldErrors?.reason ?? (!state.ok ? state.message : undefined);
+  return (
+    <Modal title={`Delete ${number}?`} onClose={onClose} labelId="delete-title">
+      <p>{body}</p>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setPending(true);
+          const res = await onDelete(reason);
+          setPending(false);
+          if (res.ok) onClose();
+          else setState(res);
+        }}
+      >
+        <div className={`field${error ? " has-error" : ""}`}>
+          <label htmlFor="delete-reason">
+            Reason<span className="req"> *</span>
+          </label>
+          <textarea id="delete-reason" ref={ref} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="buttons">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-danger solid" disabled={pending || reason.trim().length < 3}>
+            {pending ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 /** A saved customer address offered in the Convert dialog (text = formatted, multi-line). */
 export type AddressOption = { id: string; label: string; text: string };
 

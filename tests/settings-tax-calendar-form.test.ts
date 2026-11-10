@@ -235,7 +235,8 @@ describe("SettingsForm layout helpers", () => {
 describe("settings layout CSS contracts", () => {
   it("scopes form-grid / pill-tab mobile rules to Settings and keeps ≥11px tax-cal/print headers", async () => {
     const fs = await import("node:fs");
-    const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+    const { desktopCss } = await import("./desktop-css");
+    const css = desktopCss(fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8"));
     expect(css).toMatch(/\.settings-page\s*\{[^}]*max-width:\s*960px/);
     expect(css).toMatch(/\.settings-page\s+\.form-grid|\.settings-shell\s+\.form-grid/);
     expect(css).toMatch(

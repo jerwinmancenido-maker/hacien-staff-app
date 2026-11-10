@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { desktopCss } from "./desktop-css";
 
 // S-65: customers list toolbar — search, filter tabs and buttons were
 // different heights and styles. Now: one row, one height (36px), one
@@ -18,7 +19,7 @@ describe("S-65 customers toolbar, one height and one style", () => {
   });
 
   it("toolbar controls share height 36px and font size 13px", () => {
-    const css = read("src/app/globals.css");
+    const css = desktopCss(read("src/app/globals.css"));
     // Search box was already 36px; chips and tabs are brought to match it.
     expect(css).toContain(".search-pill {\n  display: flex;");
     expect(css).toMatch(/\.search-pill \{[^}]*height: 36px;/);
@@ -30,7 +31,7 @@ describe("S-65 customers toolbar, one height and one style", () => {
   });
 
   it("toolbar tabs lose their 16px bottom margin (they sat lower than the rest)", () => {
-    const css = read("src/app/globals.css");
+    const css = desktopCss(read("src/app/globals.css"));
     expect(css).toMatch(/\.toolbar \.pill-tabs-wrap \{[^}]*margin-bottom: 0;/);
   });
 });

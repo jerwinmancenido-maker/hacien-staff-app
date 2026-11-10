@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
-import { ConvertDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
+import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
 import { quoteMarkSentGate, quoteNotApprovedError } from "@/lib/quotes/approval";
@@ -33,6 +33,8 @@ type Props = {
   canEdit: boolean;
   /** Admin or Approver. Staff keep Edit and do not see Void. */
   canVoid: boolean;
+  /** Active Admin. Delete is shown only for a draft or void quote. */
+  canDelete: boolean;
   canApproveWorkflow: boolean;
   /** An open sales order made from this quote, if any. */
   openSalesOrderId: string | null;
@@ -51,6 +53,7 @@ type Props = {
     confirmNoneAndMarkSent?: (id: string) => Promise<FormState>;
     markLost: (id: string) => Promise<FormState>;
     void: (id: string, reason: string) => Promise<FormState>;
+    delete: (id: string, reason: string) => Promise<FormState>;
     convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
@@ -71,6 +74,7 @@ export function QuoteActions({
   approvalStatus,
   canEdit,
   canVoid,
+  canDelete,
   canApproveWorkflow,
   openSalesOrderId,
   customerAddress,
@@ -81,7 +85,7 @@ export function QuoteActions({
   actions,
 }: Props) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<"void" | "convert" | "lost" | "wh-none" | "cost" | "reject" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "delete" | "convert" | "lost" | "wh-none" | "cost" | "reject" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const rejectReasonRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
@@ -147,6 +151,9 @@ export function QuoteActions({
   if (canEdit && approved && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
   if (canVoid && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
+  if (canDelete && (status === "DRAFT" || status === "VOID")) {
+    items.push({ key: "delete", label: "Delete", danger: true, onSelect: () => setDialog("delete") });
+  }
   // S-66: former standalone primary buttons, now menu items (same gates).
   if (status === "WON" && openSalesOrderId) items.push({ key: "open-so", label: "Open sales order", href: `/sales-orders/${openSalesOrderId}` });
   if (canApproveWorkflow && actions.approve && actions.reject) {
@@ -205,6 +212,14 @@ export function QuoteActions({
           body={`${number} will be marked Void and become read-only. Its number is kept and never reused.`}
           onClose={() => setDialog(null)}
           onVoid={(reason) => actions.void(id, reason)}
+        />
+      )}
+      {dialog === "delete" && (
+        <DeleteDialog
+          number={number}
+          body={`${number} will be deleted. This cannot be undone, and its number will not be reused.`}
+          onClose={() => setDialog(null)}
+          onDelete={(reason) => actions.delete(id, reason)}
         />
       )}
       {dialog === "convert" && (
@@ -301,13 +316,17 @@ type SoProps = {
   status: string;
   canEdit: boolean;
   canVoid: boolean;
+  /** Active Admin. Delete is shown only for a void sales order. */
+  canDelete: boolean;
   voidAction: (id: string, reason: string) => Promise<FormState>;
+  deleteAction: (id: string, reason: string) => Promise<FormState>;
   /** S-87: billings on this SO, for "Print billing statement" menu entries. */
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAction, billings = [], canBill = false, canCreatePos = false }: SoProps & { canBill?: boolean; canCreatePos?: boolean }) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false }: SoProps & { canBill?: boolean; canCreatePos?: boolean }) {
   const [voiding, setVoiding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
   // S-66: Record billing and Create POs used to sit beside the menu as
@@ -326,6 +345,7 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAc
   // Audit A: a closed order can still be cancelled — void is the correction
   // path for OPEN and CLOSED alike. Edit stays OPEN-only.
   if (canVoid && (status === "OPEN" || status === "CLOSED")) items.push({ key: "void", label: "Void", danger: true, onSelect: () => setVoiding(true) });
+  if (canDelete && status === "VOID") items.push({ key: "delete", label: "Delete", danger: true, onSelect: () => setDeleting(true) });
   return (
     <>
       <ActionsMenu items={items} />
@@ -335,6 +355,14 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, voidAc
           body={`${number} will be marked Void and its quote goes back to Sent. The number is kept and never reused.`}
           onClose={() => setVoiding(false)}
           onVoid={(reason) => voidAction(id, reason)}
+        />
+      )}
+      {deleting && (
+        <DeleteDialog
+          number={number}
+          body={`${number} will be deleted. This cannot be undone, and its number will not be reused.`}
+          onClose={() => setDeleting(false)}
+          onDelete={(reason) => deleteAction(id, reason)}
         />
       )}
     </>

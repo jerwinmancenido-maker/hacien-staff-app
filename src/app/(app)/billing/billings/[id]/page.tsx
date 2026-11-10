@@ -1,20 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can } from "@/lib/permissions";
+import { can, canDeleteDocument } from "@/lib/permissions";
 import { Chip } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { getBillingView } from "@/lib/billing/views";
+import { billingDeleteBlocked } from "@/lib/services/document-delete";
 import { Activity } from "@/components/Activity";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingStatusChip, MethodLabel, OverdueBadge, PRINTABLE_DISCLAIMER } from "@/components/billing/BillingParts";
-import { VoidButton } from "@/components/purchasing/DocButtons";
+import { DeleteButton, VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
 import { customerCreditBalance } from "@/lib/services/collections";
-import { markBillingCheckedAction, updateBillingExpectedDateFormAction, voidBillingAction } from "../../actions";
+import { deleteBillingAction, markBillingCheckedAction, updateBillingExpectedDateFormAction, voidBillingAction } from "../../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -35,6 +36,11 @@ export default async function BillingDetailPage({
   const canVoid = canManage && b.status !== "VOID" && b.allocations.length === 0 && b.creditApplications.length === 0;
   const credit =
     canManage && b.status !== "VOID" ? await customerCreditBalance(b.customer.id) : "0.00";
+  // A void billing the server would refuse to delete (allocations, 2307,
+  // attachments incl. archived, credit applications) is kept for BIR
+  // records — show the note, not a Delete button that only refuses.
+  const deleteBlocked =
+    canDeleteDocument(user) && b.status === "VOID" ? await billingDeleteBlocked(id) : false;
 
   return (
     <>
@@ -67,6 +73,16 @@ export default async function BillingDetailPage({
                 body="The booklet invoice number stays used and will never be reused."
                 onVoid={voidBillingAction.bind(null, id)}
               />
+            )}
+            {canDeleteDocument(user) && b.status === "VOID" && !deleteBlocked && (
+              <DeleteButton
+                number={b.number}
+                body={`${b.number} (SI no. ${b.invoiceNo}) will be deleted. This cannot be undone, and its number will not be reused.`}
+                onDelete={deleteBillingAction.bind(null, id)}
+              />
+            )}
+            {canDeleteDocument(user) && b.status === "VOID" && deleteBlocked && (
+              <span className="small muted">Kept for BIR records</span>
             )}
           </>
         }

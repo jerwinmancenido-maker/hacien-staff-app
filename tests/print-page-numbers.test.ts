@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { desktopCss } from "./desktop-css";
 
 describe("Page X of Y CSS", () => {
-  const css = readFileSync(path.resolve("src/app/globals.css"), "utf8");
+  const css = desktopCss(readFileSync(path.resolve("src/app/globals.css"), "utf8"));
 
   it("uses @page margins; page nums in @bottom-right, contact line in @bottom-left (no browser chrome boxes)", () => {
     expect(css).toContain("@page {");
