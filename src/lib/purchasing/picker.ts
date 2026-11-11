@@ -15,7 +15,7 @@
 //   (deliberate extras); the editor warns live and the service records it.
 
 import { qtyLeft } from "./plan";
-import { toScaled } from "../quotes/calc";
+import { fromScaled, toScaled } from "../quotes/calc";
 import type { ItemKind } from "../quotes/calc";
 
 export type SoPickerLineInput = {
@@ -120,7 +120,31 @@ export function buildSoPickerRows(input: {
   return rows;
 }
 
-/** True when a qty goes past what the sales order still needs (a warning). */
+/** True when a qty goes past what the sales order still needs (a warning).
+ * Render-safe: live editor qty can be half-typed ("2.", ".") — those must
+ * read as "no warning", never throw (staging re-proof on PO-2026-0016). */
 export function overOrder(qty: string, remainingQty: string): boolean {
-  return toScaled(qty || "0", 2) > toScaled(remainingQty || "0", 2);
+  try {
+    return toScaled(qty || "0", 2) > toScaled(remainingQty || "0", 2);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Qty still available on the SO for this already-saved PO line: SO qty minus
+ * what OTHER live POs hold. This PO's own qty is not subtracted — the editor
+ * compares the live line qty against this remaining with overOrder().
+ */
+export function remainingQtyForExistingPoLine(input: {
+  soQty: string;
+  thisPoId: string;
+  ordered?: { purchaseOrders: readonly { id: string; qty: string }[] } | null;
+}): string {
+  let others = 0n;
+  for (const p of input.ordered?.purchaseOrders ?? []) {
+    if (p.id === input.thisPoId) continue;
+    others += toScaled(p.qty || "0", 2);
+  }
+  return qtyLeft(input.soQty, fromScaled(others, 2));
 }
