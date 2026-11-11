@@ -9,6 +9,7 @@
 // scale-2 — the same scales the SO price lock uses.
 
 import { toScaled } from "./calc";
+import { formatPeso } from "../format";
 
 export type QuoteLineSnapshot = {
   qty: string;
@@ -34,7 +35,7 @@ export function lineChangesVsQuote(so: SoLineSnapshot, quote: QuoteLineSnapshot)
     changes.push({ field: "qty", label: `qty ${quote.qty} → ${so.qty}` });
   }
   if (toScaled(so.unitPrice, 2) !== toScaled(quote.unitPrice, 2)) {
-    changes.push({ field: "price", label: `price ₱${quote.unitPrice} → ₱${so.unitPrice}` });
+    changes.push({ field: "price", label: `price ${formatPeso(quote.unitPrice)} → ${formatPeso(so.unitPrice)}` });
   }
   if (so.kind !== quote.kind) {
     changes.push({ field: "kind", label: `kind ${quote.kind} → ${so.kind}` });
@@ -48,5 +49,5 @@ export function lineChangesVsQuote(so: SoLineSnapshot, quote: QuoteLineSnapshot)
 
 /** "Quote: 10 pcs @ ₱1,200.00, now 12 pcs @ ₱1,150.00" — the tap/hover text. */
 export function changedSummary(so: SoLineSnapshot & { unit: string }, quote: QuoteLineSnapshot & { unit: string }): string {
-  return `Quote: ${quote.qty} ${quote.unit} @ ₱${quote.unitPrice}, now ${so.qty} ${so.unit} @ ₱${so.unitPrice}`;
+  return `Quote: ${quote.qty} ${quote.unit} @ ${formatPeso(quote.unitPrice)}, now ${so.qty} ${so.unit} @ ${formatPeso(so.unitPrice)}`;
 }
