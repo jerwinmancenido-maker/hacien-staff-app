@@ -72,8 +72,9 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
               </thead>
               <tbody>
                 {summary.rows.map((po) => (
-                  <tr key={po.id}>
+                  <tr key={po.id} className="clickable row-has-link">
                     <td>
+                      <Link href={`/purchase-orders/${po.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/purchase-orders/${po.id}`}>{po.number}</Link>
                     </td>
                     <td>{po.supplierName}</td>

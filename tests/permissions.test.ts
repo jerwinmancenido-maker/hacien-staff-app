@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can, canSeeCosts, lastRoleGuard, roleFlags, stripCosts, type GuardUser, type Permission, type PermissionUser, type Role } from "@/lib/permissions";
+import { assertCanDeleteDocument, can, canDeleteDocument, canSeeCosts, ForbiddenError, lastRoleGuard, roleFlags, stripCosts, type GuardUser, type Permission, type PermissionUser, type Role } from "@/lib/permissions";
 
 function user(roles: Role[], extra: Partial<PermissionUser> = {}): PermissionUser {
   return { ...roleFlags(roles), active: true, canSeeCosts: false, ...extra };
@@ -32,6 +32,25 @@ describe("role permissions", () => {
 
   it("denies when signed out", () => {
     expect(can(null, "view")).toBe(false);
+  });
+});
+
+describe("canDeleteDocument", () => {
+  it("allows an active Admin only", () => {
+    expect(canDeleteDocument(user(["ADMIN"]))).toBe(true);
+    expect(() => assertCanDeleteDocument(user(["ADMIN"]))).not.toThrow();
+  });
+
+  it("refuses Approver, Staff, Viewer, and an inactive Admin", () => {
+    for (const roles of [["APPROVER"], ["STAFF"], ["VIEWER"]] as Role[][]) {
+      expect(canDeleteDocument(user(roles))).toBe(false);
+      expect(() => assertCanDeleteDocument(user(roles))).toThrow(ForbiddenError);
+    }
+    const inactive = user(["ADMIN"], { active: false });
+    expect(canDeleteDocument(inactive)).toBe(false);
+    expect(() => assertCanDeleteDocument(inactive)).toThrow(ForbiddenError);
+    expect(canDeleteDocument(null)).toBe(false);
+    expect(() => assertCanDeleteDocument(null)).toThrow(ForbiddenError);
   });
 });
 

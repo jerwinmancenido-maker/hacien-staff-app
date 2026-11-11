@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import type { Prisma } from "@prisma/client";
 import { DEFAULT_SETTINGS } from "./settings/defaults.ts";
 import { WITHHOLDING_DEFAULT_ROWS } from "./quotes/withholding-defaults.ts";
+import { API_BOT_EMAIL, API_BOT_FLAGS, API_BOT_NAME } from "./api/bot-user.ts";
 
 /** Models touched by the base seed. Must contain ONLY system/configuration models. */
 export const BASE_SEED_MODELS = ["settingsVersion", "user", "withholdingRate"] as const;
@@ -90,6 +91,24 @@ export async function seedBase(db: BaseSeedDb): Promise<{ createdUsers: string[]
       },
     });
     created.push(adminEmail);
+  }
+
+  // 2b. The dedicated "API / Bot" acting user for /api/v1 (REQ-API-001
+  // PR-B). Create-if-missing only — an existing row is never modified, so
+  // admin flag changes on staging/live are not overwritten by a re-seed.
+  // It can never sign in: passwordHash stays null and no invite is sent.
+  const existingBot = await db.user.findUnique({ where: { email: API_BOT_EMAIL } });
+  if (!existingBot) {
+    await db.user.create({
+      data: {
+        email: API_BOT_EMAIL,
+        name: API_BOT_NAME,
+        passwordHash: null,
+        ...API_BOT_FLAGS,
+      },
+    });
+    created.push(API_BOT_EMAIL);
+    console.log("API / Bot user created (acts for /api/v1 keys; cannot sign in).");
   }
 
   // 3. Withholding rates: upsert Pass 3 catalog and deactivate deprecated rows.

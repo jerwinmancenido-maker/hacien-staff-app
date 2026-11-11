@@ -17,6 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
   settings_change: "changed settings",
   email_draft: "drafted an email",
   download: "downloaded",
+  delete: "Deleted",
 };
 
 const ENTITY_LABELS: Record<string, string> = {

@@ -64,6 +64,7 @@ import {
 import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
 import { Modal } from "./Dialogs";
 import type { CatalogSearchResult } from "@/lib/items/search";
+import { pickerSearchOutcome } from "@/lib/items/picker-search";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -498,6 +499,7 @@ export function QuoteEditor({
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<CatalogSearchResult[]>([]);
+  const [pickerFailed, setPickerFailed] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [drawerFor, setDrawerFor] = useState<string | null>(null);
   const [drawerItem, setDrawerItem] = useState<CatalogSearchResult | null>(null);
@@ -521,14 +523,27 @@ export function QuoteEditor({
     if (q.length < 2) return;
     const seq = ++pickerSeq.current;
     const t = setTimeout(async () => {
-      if (pickerSeq.current === seq) setPickerBusy(true);
+      if (pickerSeq.current === seq) {
+        setPickerBusy(true);
+        setPickerFailed(false);
+      }
       try {
         const res = await fetch(`/api/items/search?q=${encodeURIComponent(q)}`);
-        const body = await res.json();
+        let body: unknown = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = null;
+        }
         if (pickerSeq.current !== seq) return;
-        setPickerResults(body.ok && Array.isArray(body.items) ? body.items : []);
+        const outcome = pickerSearchOutcome<CatalogSearchResult>(res.ok, body);
+        setPickerResults(outcome.items);
+        setPickerFailed(outcome.failed);
       } catch {
-        if (pickerSeq.current === seq) setPickerResults([]);
+        if (pickerSeq.current === seq) {
+          setPickerResults([]);
+          setPickerFailed(true);
+        }
       } finally {
         if (pickerSeq.current === seq) setPickerBusy(false);
       }
@@ -569,6 +584,7 @@ export function QuoteEditor({
       setPickerFor(null);
       setPickerQuery("");
       setPickerResults([]);
+      setPickerFailed(false);
     }
   }
 
@@ -603,6 +619,7 @@ export function QuoteEditor({
     setPickerFor(null);
     setPickerQuery("");
     setPickerResults([]);
+    setPickerFailed(false);
     setPickerActive(0);
   }
 
@@ -777,6 +794,7 @@ export function QuoteEditor({
     setPickerFor(null);
     setPickerQuery("");
     setPickerResults([]);
+    setPickerFailed(false);
     setPickerActive(0);
   }
 
@@ -835,6 +853,8 @@ export function QuoteEditor({
       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
         {pickerBusy ? (
           <div className="small muted">Searching the catalog…</div>
+        ) : pickerFailed ? (
+          <div className="small muted">Search failed, try again.</div>
         ) : pickerResults.length === 0 ? (
           <div className="small muted">No product found for “{q}” — this saves as a free-text line.</div>
         ) : (

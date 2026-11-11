@@ -4,7 +4,18 @@ import type { ItemInput } from "../validation/items";
 
 /** Item catalog, Step 1 (Option A). History rows stay unlinked until Step 2. */
 
-export async function listItems({ q, includeInactive = false }: { q?: string; includeInactive?: boolean }) {
+export async function listItems({
+  q,
+  includeInactive = false,
+  skip,
+  take,
+}: {
+  q?: string;
+  includeInactive?: boolean;
+  /** Page window for /api/v1. The staff UI omits these. */
+  skip?: number;
+  take?: number;
+}) {
   const query = (q ?? "").trim();
   return db.item.findMany({
     where: {
@@ -22,6 +33,8 @@ export async function listItems({ q, includeInactive = false }: { q?: string; in
         : {}),
     },
     orderBy: [{ name: "asc" }],
+    ...(skip != null ? { skip } : {}),
+    ...(take != null ? { take } : {}),
   });
 }
 

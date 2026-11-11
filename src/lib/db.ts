@@ -19,3 +19,8 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
 export function isUniqueViolation(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
+
+/** A foreign key blocked the write (e.g. a row was linked after the guard count). */
+export function isForeignKeyViolation(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003";
+}

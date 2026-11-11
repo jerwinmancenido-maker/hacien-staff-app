@@ -10,6 +10,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import {
   AUDIT_ENTITIES,
   AUDIT_ENTITY_LABELS,
+  auditActorLabel,
+  auditDeleteLabel,
   auditRecordLink,
   auditSentence,
   resolveAuditLabels,
@@ -17,7 +19,7 @@ import {
 import { DataTable } from "@/components/DataTable";
 import { EmptyState } from "@/components/ui";
 
-const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft", "download"];
+const ACTIONS: AuditAction[] = ["create", "update", "archive", "restore", "void", "login", "login_failed", "settings_change", "email_draft", "download", "delete"];
 const PAGE_SIZE = 50;
 
 type Search = { entity?: string; action?: string; user?: string; from?: string; to?: string; page?: string };
@@ -54,7 +56,13 @@ export async function AuditLogTab({ search }: { search: Search }) {
     (where.at as { lt: Date }).lt = d;
   }
   const [rows, total, users] = await Promise.all([
-    db.auditLog.findMany({ where, include: { user: { select: { name: true } } }, orderBy: { at: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    db.auditLog.findMany({
+      where,
+      include: { user: { select: { name: true } }, apiKey: { select: { name: true } } },
+      orderBy: { at: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
     db.auditLog.count({ where }),
     db.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
@@ -119,8 +127,10 @@ export async function AuditLogTab({ search }: { search: Search }) {
               { key: "what", label: "What happened", sortable: false },
             ]}
             rows={rows.map((r) => {
-              const label = r.entityId ? labels.get(`${r.entityType}:${r.entityId}`) ?? null : null;
-              const link = auditRecordLink(r.entityType, r.entityId);
+              const label =
+                (r.action === "delete" ? auditDeleteLabel(r.before) ?? auditDeleteLabel(r.after) : null) ??
+                (r.entityId ? labels.get(`${r.entityType}:${r.entityId}`) ?? null : null);
+              const link = auditRecordLink(r.entityType, r.entityId, r.action);
               return {
                 id: r.id,
                 href: link,
@@ -131,7 +141,7 @@ export async function AuditLogTab({ search }: { search: Search }) {
                       <div className="small muted">{formatDateTime(r.at).split(", ").pop()}</div>
                     </>
                   ),
-                  who: r.user?.name ?? <span className="faint">System</span>,
+                  who: auditActorLabel(r.user?.name, r.apiKey?.name) ?? <span className="faint">System</span>,
                   record: (
                     <>
                       <div>{AUDIT_ENTITY_LABELS[r.entityType] ?? r.entityType}</div>

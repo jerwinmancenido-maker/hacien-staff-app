@@ -49,11 +49,20 @@ export function shouldCheckSession(pathname: string): boolean {
   return !isPublicAssetPath(pathname);
 }
 
+/**
+ * /api/v1 authenticates with Authorization: Bearer, not the session cookie.
+ * The route handlers reject a missing or bad key. Other /api routes stay on the cookie.
+ */
+export function isMachineApiPath(pathname: string): boolean {
+  return pathname === "/api/v1" || pathname.startsWith("/api/v1/");
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // Defense in depth: even if the matcher is widened later, public assets stay open.
   if (isPublicAssetPath(pathname)) return NextResponse.next();
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
+  if (isMachineApiPath(pathname)) return NextResponse.next();
   if (!req.cookies.has("hacien_session")) {
     // File downloads answer 401 instead of redirecting to the login page.
     if (pathname.startsWith("/files/")) {

@@ -316,9 +316,12 @@ describe("professional print documents", () => {
       '@page pp-doc { @top-right { content: "QUOTATION · QT-2026-0001";',
     );
     expect(markup).toContain("@page pp-doc:first { @top-right { content: none; } }");
-    // The v8 thead strip duplicated the title block on page 1 — it is gone.
+    // The v8 thead STRIP duplicated the title block on page 1 — it is gone.
     expect(markup).not.toContain("pp-runhead");
-    expect(markup).not.toContain("pp-repeat");
+    // pp-repeat is back since 2026-11-10, but it carries the LETTERHEAD
+    // (owner: every page gets a header), never the identity strip.
+    expect(markup).toContain("pp-repeat");
+    expect(markup).toContain("pp-repeat-head");
   });
 
   it("v10: statement strip carries the title only, not the party name", () => {

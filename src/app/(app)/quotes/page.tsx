@@ -117,48 +117,50 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           )}
         </div>
       ) : (
-        <DataTable
-          label="Quotes"
-          columns={[
-            { key: "number", label: "QT no." },
-            { key: "rev", label: "Rev", numeric: true },
-            { key: "customer", label: "Customer" },
-            { key: "total", label: "Total", numeric: true },
-            ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true }] : []),
-            { key: "status", label: "Status" },
-            { key: "valid", label: "Valid until" },
-          ]}
-          rows={quotes.map((q) => ({
-            id: q.id,
-            href: `/quotes/${q.id}`,
-            inactive: q.status === "VOID",
-            cells: {
-              number: (
-                <div className="cell-primary">
-                  <div>
-                    <div className="title">{q.number}</div>
-                    <div className="sub">{formatDate(day(q.date))}</div>
+        <div className="quotes-list">
+          <DataTable
+            label="Quotes"
+            columns={[
+              { key: "number", label: "QT no.", className: "qcol-number" },
+              { key: "rev", label: "Rev", numeric: true, className: "qcol-rev" },
+              { key: "customer", label: "Customer", className: "qcol-customer" },
+              { key: "total", label: "Total", numeric: true, className: "qcol-total" },
+              ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true, className: "qcol-margin" }] : []),
+              { key: "status", label: "Status", className: "qcol-status" },
+              { key: "valid", label: "Valid until", className: "qcol-valid" },
+            ]}
+            rows={quotes.map((q) => ({
+              id: q.id,
+              href: `/quotes/${q.id}`,
+              inactive: q.status === "VOID",
+              cells: {
+                number: (
+                  <div className="cell-primary">
+                    <div>
+                      <div className="title">{q.number}</div>
+                      <div className="sub">{formatDate(day(q.date))}</div>
+                    </div>
                   </div>
-                </div>
-              ),
-              rev: q.revision,
-              customer: <PrimaryCell name={q.customerName} />,
-              total: <span className="strong">{formatPeso(q.contractPrice)}</span>,
-              margin: q.netMarginPct !== undefined ? `${q.netMarginPct}%` : null,
-              status: <QuoteStatusChip status={q.status} />,
-              valid: formatDate(day(q.validUntil)),
-            },
-            sort: {
-              number: q.number,
-              rev: q.revision,
-              customer: q.customerName,
-              total: Number(q.contractPrice),
-              margin: q.netMarginPct !== undefined ? Number(q.netMarginPct) : null,
-              status: q.status,
-              valid: q.validUntil,
-            },
-          }))}
-        />
+                ),
+                rev: q.revision,
+                customer: <PrimaryCell name={q.customerName} />,
+                total: <span className="strong">{formatPeso(q.contractPrice)}</span>,
+                margin: q.netMarginPct !== undefined ? `${q.netMarginPct}%` : null,
+                status: <QuoteStatusChip status={q.status} />,
+                valid: formatDate(day(q.validUntil)),
+              },
+              sort: {
+                number: q.number,
+                rev: q.revision,
+                customer: q.customerName,
+                total: Number(q.contractPrice),
+                margin: q.netMarginPct !== undefined ? Number(q.netMarginPct) : null,
+                status: q.status,
+                valid: q.validUntil,
+              },
+            }))}
+          />
+        </div>
       )}
     </>
   );

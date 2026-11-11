@@ -29,6 +29,10 @@ import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
 import { AuditLogTab } from "./AuditLogTab";
+import { ApiKeysTab, type ApiKeyRow } from "./ApiKeysTab";
+import { listApiKeys } from "@/lib/api/keys-admin";
+import { apiKeyPepper } from "@/lib/api/keys";
+import { API_BOT_EMAIL } from "@/lib/api/bot-user";
 
 // S-85: Settings is a left list of sections. Old ?tab= keys still resolve
 // to their section, so bookmarks and links keep working.
@@ -39,6 +43,7 @@ const SECTIONS = [
   { key: "tax", label: "Tax and BIR", help: "Tax year, BIR calendar, and withholding rates. Check with your accountant when unsure." },
   { key: "booklet", label: "Invoice booklet", help: "Booklet invoice numbers and how collections are recorded." },
   { key: "users", label: "Users and roles", help: "Who can sign in, and what each person may do." },
+  { key: "api-keys", label: "API keys", help: "Keys for other software using /api/v1. Every key acts as the API / Bot user; the full key is shown once, at creation." },
   { key: "audit", label: "Audit log", help: "Every change, sign-in and settings save, plus past settings versions. Records are never deleted." },
 ] as const;
 type Section = (typeof SECTIONS)[number]["key"];
@@ -57,6 +62,7 @@ const SECTION_BY_TAB: Record<string, Section> = {
   booklet: "booklet",
   billing: "booklet",
   users: "users",
+  "api-keys": "api-keys",
   audit: "audit",
   changelog: "audit",
 };
@@ -369,6 +375,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
+        {section === "api-keys" && <ApiKeysSection />}
+
         {section === "audit" && (
           <>
             <AuditLogTab
@@ -435,7 +443,9 @@ async function UsersTab() {
         label: u.canSeeCosts ? "Can see costs" : "Cost hidden",
         tone: u.canSeeCosts ? "dark" : "grey",
       },
-      ...(!u.active
+      ...(u.email === API_BOT_EMAIL
+        ? [{ label: "API bot – can't sign in", tone: "grey" as const }]
+        : !u.active
         ? [{ label: "Turned off", tone: "red" as const }]
         : u.passwordHash
         ? [{ label: "Active", tone: "green" as const }]
@@ -446,7 +456,7 @@ async function UsersTab() {
       { label: "Email", value: u.email },
       { label: "Costs", value: u.canSeeCosts ? "Yes" : "No" },
     ],
-    menuItems: [{ label: "Edit user", href: `/settings/users/${u.id}` }],
+    menuItems: u.email === API_BOT_EMAIL ? [] : [{ label: "Edit user", href: `/settings/users/${u.id}` }],
     sortValues: {
       name: u.name,
       roles: roleLabel(u),
@@ -538,4 +548,27 @@ async function ChangeLog() {
       </div>
     </div>
   );
+}
+
+/** REQ-API-001 PR-B: API keys section (server wrapper — loads keys, checks the pepper). */
+async function ApiKeysSection() {
+  const rows = await listApiKeys();
+  let pepperSet = true;
+  try {
+    apiKeyPepper();
+  } catch {
+    pepperSet = false;
+  }
+  const keys: ApiKeyRow[] = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    keyPrefix: r.keyPrefix,
+    scopes: r.scopes,
+    createdByName: r.createdByName,
+    createdAt: r.createdAt.toISOString(),
+    expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
+    lastUsedAt: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+    status: r.status,
+  }));
+  return <ApiKeysTab keys={keys} pepperSet={pepperSet} />;
 }
