@@ -96,3 +96,14 @@ describe("overOrder", () => {
     expect(overOrder("", "10.00")).toBe(false);
   });
 });
+
+describe("overOrder — render safety", () => {
+  it("overOrder never throws on half-typed editor input (editor crash regression)", () => {
+    expect(overOrder("2.", "1.00")).toBe(false);
+    expect(overOrder(".", "1.00")).toBe(false);
+    expect(overOrder("", "1.00")).toBe(false);
+    expect(overOrder("abc", "1.00")).toBe(false);
+    expect(overOrder("3", "2.00")).toBe(true);
+    expect(overOrder("1.00", "2.00")).toBe(false);
+  });
+});

@@ -63,3 +63,17 @@ describe("PO editor — Add from sales order (Part B)", () => {
     expect(views).toContain("orderedLines: ordered.lines");
   });
 });
+
+describe("PO editor — qty-edit crash + in-editor over-order warning (re-proof 2026-11-12)", () => {
+  it("render-time comparisons never call raw toScaled on live input", () => {
+    expect(editor).toContain("function changedVsSo(i: Row): boolean");
+    expect(editor).toContain("changedVsSo(i) && (");
+    expect(editor).not.toContain('toScaled(i.qty || "0", 2) !== toScaled(i.soQty, 2)');
+  });
+
+  it("edit data carries remainingQty per existing line (the missing warning)", () => {
+    expect(views).toContain("remainingQty: (() => {");
+    expect(views).toContain("soOrdered = ordered;");
+    expect(editor).toContain("More than what is left on the sales order ({i.remainingQty} left) — saved as an extra.");
+  });
+});

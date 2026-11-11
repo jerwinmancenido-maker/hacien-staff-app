@@ -122,5 +122,12 @@ export function buildSoPickerRows(input: {
 
 /** True when a qty goes past what the sales order still needs (a warning). */
 export function overOrder(qty: string, remainingQty: string): boolean {
-  return toScaled(qty || "0", 2) > toScaled(remainingQty || "0", 2);
+  // Render-safe: qty is live editor input, so a half-typed value ("", ".",
+  // "2.") must read as "no warning", never throw — a throw here crashed
+  // the PO editor on every keystroke (staging re-proof 2026-11-12).
+  try {
+    return toScaled(qty || "0", 2) > toScaled(remainingQty || "0", 2);
+  } catch {
+    return false;
+  }
 }

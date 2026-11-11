@@ -296,6 +296,7 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
   // The picker lists this PO's own sales order's lines/components that still
   // have unordered qty and are not already on this PO.
   let soPicker: { soNumber: string; rows: SoPickerRow[] } | null = null;
+  let soOrdered: Awaited<ReturnType<typeof loadOrderedQty>> | null = null;
   if (po.salesOrderId) {
     const so = await db.salesOrder.findUnique({
       where: { id: po.salesOrderId },
@@ -327,6 +328,7 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
         so.items.flatMap((i) => i.components.map((c) => c.id)),
         db,
       );
+      soOrdered = ordered;
       const onThisPo = new Set(
         po.items.flatMap((i) => [i.salesOrderItemId, i.salesOrderItemComponentId]).filter((x): x is string => !!x),
       );
@@ -387,6 +389,20 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
       // Marker reference: what the sales order itself says for this line.
       soQty: i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null,
       soUnitCost: i.salesOrderItem ? money(i.salesOrderItem.supplierUnitCost) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.unitCost) : null,
+      // Over-order reference for the editor's live warning: qty left on the
+      // SO line AFTER counting this line's own qty (loadOrderedQty includes
+      // this PO). The in-editor warning was missing because edit data never
+      // carried it (staging re-proof 2026-11-12 — the warning existed only
+      // in the read-only PO view).
+      remainingQty: (() => {
+        if (!soOrdered) return null;
+        const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
+        if (soQty == null) return null;
+        const bucket = i.salesOrderItemComponentId ? soOrdered.components.get(i.salesOrderItemComponentId) : i.salesOrderItemId ? soOrdered.lines.get(i.salesOrderItemId) : undefined;
+        const others = bucket ? bucket.purchaseOrders.filter((p) => p.id !== po.id).reduce((acc, p) => acc + Number(p.qty || "0"), 0) : 0;
+        const left = Number(soQty) - others - Number(money(i.qty));
+        return (left > 0 ? left : 0).toFixed(2);
+      })(),
     })),
     soPicker,
   };
