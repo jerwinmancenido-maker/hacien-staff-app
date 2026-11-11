@@ -50,6 +50,20 @@ let seq = 0;
 const newKey = () => `p${++seq}`;
 type Row = PoEditorItem & { key: string };
 
+/** "Changed vs SO" comparison that never throws on half-typed editor input
+ * (e.g. "2." while retyping 2.00 → 3.00). Unparseable counts as changed —
+ * the marker is informational. Raw toScaled here crashed the PO editor. */
+function changedVsSo(i: Row): boolean {
+  try {
+    return (
+      toScaled(i.qty || "0", 2) !== toScaled(i.soQty ?? "0", 2) ||
+      toScaled((i.unitCost || "0").replace(/,/g, ""), 2) !== toScaled(i.soUnitCost ?? "0", 2)
+    );
+  } catch {
+    return true;
+  }
+}
+
 /** Grow a line description textarea to fit its content — no clipped spec
  * lines (mirrors the quote editor's DescTextarea pattern). */
 function growDesc(el: HTMLTextAreaElement | null) {
@@ -437,7 +451,7 @@ export function PoEditor({
                   <td>
                     <PoDescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                     {i.linked && <div className="small faint">From the sales order</div>}
-                    {i.linked && i.soQty != null && (toScaled(i.qty || "0", 2) !== toScaled(i.soQty, 2) || toScaled((i.unitCost || "0").replace(/,/g, ""), 2) !== toScaled(i.soUnitCost ?? "0", 2)) && (
+                    {i.linked && i.soQty != null && changedVsSo(i) && (
                       <div className="small faint">Changed vs sales order — SO: {i.soQty} × {formatPeso(i.soUnitCost ?? "0")}</div>
                     )}
                     {i.linked && i.remainingQty != null && overOrder(i.qty, i.remainingQty) && (
