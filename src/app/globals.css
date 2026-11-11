@@ -77,10 +77,12 @@
   --red: var(--danger);
   --red-bg: var(--danger-bg);
 
-  --radius-sm: calc(4px * var(--ui-scale, 1));
-  --radius: calc(6px * var(--ui-scale, 1));
-  --radius-card: calc(6px * var(--ui-scale, 1));
-  --radius-frame: calc(6px * var(--ui-scale, 1));
+  /* UNSLOP "Soft" radius scale (approved by Jerwin 2026-11-11 with the
+     staff-app mocks): cards 16, controls 11, small 8, pills full. */
+  --radius-sm: calc(8px * var(--ui-scale, 1));
+  --radius: calc(11px * var(--ui-scale, 1));
+  --radius-card: calc(16px * var(--ui-scale, 1));
+  --radius-frame: calc(16px * var(--ui-scale, 1));
   --shadow-overlay: 0 1px calc(2px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06), 0 calc(4px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06);
   --shadow-frame: none;
   --shadow-pill: none;
@@ -8819,4 +8821,34 @@ button.contact-card-add {
 }
 .api-key-form .field {
   margin-bottom: 12px;
+}
+
+/* UNSLOP theme — approved by Jerwin 2026-11-11 ("I like the mock and the
+   color" + his pick: light default, dark follows the computer setting).
+   LIGHT is the default above (white surfaces, light end of the HACIEN blue
+   scale); when the computer is set to dark, the SAME tokens flip to the
+   charcoal Variant A set from the approved mocks. Components keep reading
+   the tokens — no component changes needed. Scope note: rules that hardcode
+   hex colours (print .pp-* pages, some badges) stay light in both modes by
+   design — prints are paper. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e9edf5;
+    --white: #12161f;
+    --grey-50: #171c28;
+    --grey-100: #1c2331;
+    --grey-200: #232b3b;
+    --grey-400: #6b7690;
+    --grey-600: #99a3b8;
+    --grey-700: #c3cbdb;
+    --blue-tint: #1d3a7a;
+    --success: #7fb69a;
+    --success-bg: #1e2f28;
+    --warning: #d9b36c;
+    --warning-bg: #332b18;
+    --danger: #de8f8f;
+    --danger-bg: #3a2323;
+    --bg: #0b0e14;
+    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+  }
 }
