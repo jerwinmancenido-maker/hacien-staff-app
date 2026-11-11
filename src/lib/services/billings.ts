@@ -40,23 +40,36 @@ async function lockSalesOrder(tx: Tx, id: string) {
 
 /** The billing's own withholding breakdown, captured from the SO at
  * record/edit time (A1 revised): the 2307 prefill splits from this stored
- * basis, so later SO edits can never move an issued SI's split. */
+ * basis, so later SO edits can never move an issued SI's split.
+ * Override lines (e.g. Admin exempt add-ons) are excluded from the pick
+ * base — same rule as billed updateSalesOrder — so capture sums align with
+ * so.withholdingTotal and do not tax the exempt amount. */
 async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithholding: unknown) {
   const items = await tx.salesOrderItem.findMany({
     where: { salesOrderId, removedAt: null },
-    select: { kind: true, total: true, supplierTotal: true, margin: true, withholdingRate: true, withholdingAtc: true },
+    select: {
+      kind: true,
+      total: true,
+      supplierTotal: true,
+      margin: true,
+      withholdingRate: true,
+      withholdingAtc: true,
+      withholdingOverride: true,
+    },
   });
   const picks = (Array.isArray(soWithholding) ? soWithholding : []) as WithholdingSnapshot[];
   const parts = withholdingBreakdownParts(
-    items.map((i) => ({
-      kind: i.kind,
-      total: money(i.total),
-      supplierTotal: money(i.supplierTotal),
-      margin: money(i.margin),
-      // Pick-less SOs split by their lines' stored rates (docTotals fallback).
-      withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
-      withholdingAtc: i.withholdingAtc,
-    })),
+    items
+      .filter((i) => !i.withholdingOverride)
+      .map((i) => ({
+        kind: i.kind,
+        total: money(i.total),
+        supplierTotal: money(i.supplierTotal),
+        margin: money(i.margin),
+        // Pick-less SOs split by their lines' stored rates (docTotals fallback).
+        withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+      })),
     picks.length ? picks : undefined,
   );
   return parts.length ? (parts as unknown as Prisma.InputJsonValue) : undefined;

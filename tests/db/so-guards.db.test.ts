@@ -553,8 +553,8 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     // Same setup as Test 2 (₱2,000.00 / ₱80.00, header {WI640, WB080}). After a
     // non-void billing, Admin adds an exempt override line (same pattern as
     // Test 1). Header must stay stacked, WH must stay ₱80.00 (goods base
-    // unchanged), and a later recordBilling must still see {WI640, WB080} —
-    // not collapse to line-driven {WI640} / ₱20.00.
+    // unchanged), and a later recordBilling must still see {WI640, WB080}
+    // with part amounts summing to so.withholdingTotal (not tax the exempt).
     {
       const year = await freshYear();
       const govItems: QuoteInput["items"] = [
@@ -596,6 +596,58 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       expect(b2Row.withholdingExpected.toFixed(2)).toBe("13.33");
       const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
       expect(b2Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
+      // Capture must not tax the exempt GOODS add-on (unfiltered → 30+90=120).
+      expect(b2Parts.map((p) => ({ atcCode: p.atcCode, amount: p.amount }))).toEqual([
+        { atcCode: "WI640", amount: "20.00" },
+        { atcCode: "WB080", amount: "60.00" },
+      ]);
+      expect(b2Parts.reduce((a, p) => a + Number(p.amount), 0).toFixed(2)).toBe("80.00");
+    }
+
+    // --- REQ-188 Test 3b: same stack + SERVICES exempt override (2307 share) -----
+    // Unfiltered capture would keep WI640 at ₱20 (goods-only) but inflate WB080
+    // to ₱90 (3% of ₱3,000) → sum ₱110 and distort 2307 shares. Filtered
+    // capture must stay WI640 ₱20 + WB080 ₱60 = ₱80.
+    {
+      const year = await freshYear();
+      const govItems: QuoteInput["items"] = [
+        { id: null, description: "Gov goods", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, govItems, ["GOV_GOODS_1", "GOV_PT_3"]);
+      expect((await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } })).withholdingTotal.toFixed(2)).toBe("80.00");
+
+      const invoiceNo1 = await nextInvoice();
+      await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo1, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => [
+          ...items,
+          { id: null, description: "Exempt service", kind: "SERVICES", qty: "1", unit: "hr", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: true },
+        ]),
+        admin,
+      );
+
+      const soAfterExempt = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfterExempt.contractPrice.toFixed(2)).toBe("3000.00");
+      expect(soAfterExempt.withholdingTotal.toFixed(2)).toBe("80.00");
+
+      const invoiceNo2 = await nextInvoice();
+      const b2 = await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo2, invoiceDate: new Date(Date.UTC(year, 2, 6)), dueDate: new Date(Date.UTC(year, 3, 5)), notes: null },
+        admin,
+      );
+      const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
+      expect(b2Row.withholdingExpected.toFixed(2)).toBe("13.33");
+      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(b2Parts.map((p) => ({ atcCode: p.atcCode, amount: p.amount }))).toEqual([
+        { atcCode: "WI640", amount: "20.00" },
+        { atcCode: "WB080", amount: "60.00" },
+      ]);
+      expect(b2Parts.reduce((a, p) => a + Number(p.amount), 0).toFixed(2)).toBe("80.00");
     }
   });
 });
