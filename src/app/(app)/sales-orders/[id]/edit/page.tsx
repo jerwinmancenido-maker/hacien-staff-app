@@ -24,6 +24,11 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
   return (
     <>
       <PageHeader title={`Edit ${so.number}`} subtitle={`${so.customer.name} · changes are audited`} />
+      {so.changedLineCount > 0 && (
+        <p className="small muted">
+          {so.changedLineCount} line{so.changedLineCount === 1 ? "" : "s"} changed from quote
+        </p>
+      )}
       <DocumentEditor
         mode="salesOrder"
         isNew={false}
@@ -57,6 +62,8 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
             itemName: i.itemName ?? null,
             orderedQty: orderedByLine.get(i.id) ?? "0.00",
             deliveredQty: i.deliveredQty ?? "0.00",
+            changedVsQuote: i.changedVsQuote,
+            changedSummary: i.changedSummary,
           })),
         }}
       />

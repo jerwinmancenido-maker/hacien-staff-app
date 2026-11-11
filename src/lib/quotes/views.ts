@@ -819,6 +819,10 @@ export type EditableItem = {
    * for the per-line floor notes. Display only. */
   orderedQty?: string;
   deliveredQty?: string;
+  /** SO editor only: "Changed vs quote" marker data from getSalesOrderView
+   * (re-proof 2026-11-11: the editor half of the markers was owed). */
+  changedVsQuote?: string[];
+  changedSummary?: string;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
@@ -836,6 +840,8 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
       itemId: i.itemId ?? null,
       itemName: i.itemName ?? null,
       deliveredQty: i.deliveredQty,
+      changedVsQuote: i.changedVsQuote,
+      changedSummary: i.changedSummary,
     };
     return withCosts
       ? {

@@ -17,7 +17,7 @@ describe("lineChangesVsQuote", () => {
 
   it("qty and price changes read plainly", () => {
     const changes = lineChangesVsQuote({ ...quote, qty: "12.00", unitPrice: "1150.00" }, quote);
-    expect(changes.map((c) => c.label)).toEqual(["qty 10.00 → 12.00", "price ₱1200.00 → ₱1150.00"]);
+    expect(changes.map((c) => c.label)).toEqual(["qty 10.00 → 12.00", "price ₱1,200.00 → ₱1,150.00"]);
   });
 
   it("kind and withholding changes are marked", () => {
@@ -30,7 +30,7 @@ describe("lineChangesVsQuote", () => {
 
   it("summary matches the approved shape", () => {
     expect(changedSummary({ ...quote, qty: "12.00", unitPrice: "1150.00", unit: "pcs" }, { ...quote, unit: "pcs" })).toBe(
-      "Quote: 10.00 pcs @ ₱1200.00, now 12.00 pcs @ ₱1150.00",
+      "Quote: 10.00 pcs @ ₱1,200.00, now 12.00 pcs @ ₱1,150.00",
     );
   });
 });

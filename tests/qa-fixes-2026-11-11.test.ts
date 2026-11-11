@@ -55,3 +55,25 @@ describe("#186 PO editor header textareas auto-grow", () => {
     expect(poEditor).not.toContain('<textarea id="notes"');
   });
 });
+
+describe("editor-half markers + formatted amounts (re-proof follow-up)", () => {
+  const editor = readFileSync("src/components/docs/DocumentEditor.tsx", "utf8");
+  const editPage = readFileSync("src/app/(app)/sales-orders/[id]/edit/page.tsx", "utf8");
+  const changed = readFileSync("src/lib/quotes/changed.ts", "utf8");
+
+  it("editableItems carries the marker fields to the editor", () => {
+    expect(views).toContain("changedVsQuote: i.changedVsQuote");
+    expect(views).toContain("changedSummary: i.changedSummary");
+  });
+
+  it("the SO editor renders the Changed tag per line and the banner on the edit page", () => {
+    expect(editor).toContain('<span className="chip dark">Changed</span> vs quote: {i.changedVsQuote.join(" · ")}');
+    expect(editPage).toContain("changedVsQuote: i.changedVsQuote");
+    expect(editPage).toContain("changedLineCount");
+  });
+
+  it("marker amounts use thousand separators (formatPeso)", () => {
+    expect(changed).toContain("formatPeso(quote.unitPrice)");
+    expect(changed).not.toContain("₱${quote.unitPrice}");
+  });
+});

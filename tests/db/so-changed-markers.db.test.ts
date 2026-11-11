@@ -93,8 +93,8 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
     expect(view?.changedLineCount).toBe(1);
     const changed = view?.items.find((i) => i.changedVsQuote);
     expect(changed?.id).toBe(soItems[0]!.id);
-    expect(changed?.changedVsQuote).toEqual(["qty 10.00 → 12.00", "price ₱52000.00 → ₱51000.00"]);
-    expect(changed?.changedSummary).toBe("Quote: 10.00 pc @ ₱52000.00, now 12.00 pc @ ₱51000.00");
+    expect(changed?.changedVsQuote).toEqual(["qty 10.00 → 12.00", "price ₱52,000.00 → ₱51,000.00"]);
+    expect(changed?.changedSummary).toBe("Quote: 10.00 pc @ ₱52,000.00, now 12.00 pc @ ₱51,000.00");
   });
 
   it("pre-stamp SO (quoteItemId NULL, the SO-2026-0006 case): the view falls back to sortOrder matching", async () => {
@@ -129,7 +129,7 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
     const view = await getSalesOrderView(so.id, admin);
     expect(view?.changedLineCount).toBe(1);
     const changed = view?.items.find((i) => i.changedVsQuote);
-    expect(changed?.changedVsQuote).toEqual(["price ₱4999.25 → ₱5000.00"]);
+    expect(changed?.changedVsQuote).toEqual(["price ₱4,999.25 → ₱5,000.00"]);
   });
 
   it("pre-stamp SO after ↑/↓ reorder: fallback fails closed (no wrong markers)", async () => {
