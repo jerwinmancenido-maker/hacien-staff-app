@@ -649,11 +649,16 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
         }
       }
       // A link on an EXISTING line may not be added, moved or dropped here —
-      // links are set when the line is created (B2).
+      // links are set when the line is created (B2). Callers that omit the
+      // link fields entirely (payloads built before Part B) are not
+      // asserting a change — the stored link stands; only an explicitly
+      // different value (including an explicit null) is a change attempt.
       for (const l of input.items) {
         if (!l.id) continue;
         const cur = existing.get(l.id)!;
-        if ((l.salesOrderItemId ?? null) !== cur.salesOrderItemId || (l.salesOrderItemComponentId ?? null) !== cur.salesOrderItemComponentId) {
+        const lineChanged = l.salesOrderItemId !== undefined && l.salesOrderItemId !== cur.salesOrderItemId;
+        const compChanged = l.salesOrderItemComponentId !== undefined && l.salesOrderItemComponentId !== cur.salesOrderItemComponentId;
+        if (lineChanged || compChanged) {
           throw new DocRuleError("A line's sales-order link can't be changed. Remove the line and add it again instead.", "items");
         }
       }
