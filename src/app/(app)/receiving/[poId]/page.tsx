@@ -63,7 +63,10 @@ export default async function ReceivingPoPage({ params, searchParams }: { params
             <tbody>
               {po.lines.map((l) => (
                 <tr key={l.id}>
-                  <td style={{ whiteSpace: "pre-wrap" }}>{l.description}</td>
+                  <td style={{ whiteSpace: "pre-wrap" }}>
+                    {l.description}
+                    {l.coverageNote && <div className="small muted">{l.coverageNote}</div>}
+                  </td>
                   <td className="num">
                     {qtyText(l.orderedQty)} {l.unit}
                   </td>

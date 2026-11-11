@@ -28,6 +28,7 @@ import {
 } from "./status";
 import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
+import { receivingCoverageNote } from "../billing/coverage";
 import {
   billExceedsPo,
   buildCostMarginSummary,
@@ -695,6 +696,9 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
       orderedQty: money(i.qty),
       receivedQty: money(i.receivedQty),
       remainingQty: remainingQty({ qty: money(i.qty), receivedQty: money(i.receivedQty) }),
+      // Markers pair 4: the same coverage as words (short / full / over),
+      // for screen readers and anywhere the bar alone is not enough.
+      coverageNote: receivingCoverageNote({ orderedQty: money(i.qty), receivedQty: money(i.receivedQty), unit: i.unit }),
     })),
     receivingReports: po.receivingReports.map((r) => ({
       id: r.id,
