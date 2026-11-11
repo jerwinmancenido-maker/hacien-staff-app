@@ -30,7 +30,7 @@ import {
 import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import { receivingCoverageNote } from "../billing/coverage";
-import { buildSoPickerRows, type SoPickerRow } from "./picker";
+import { buildSoPickerRows, remainingQtyForExistingPoLine, type SoPickerRow } from "./picker";
 import {
   billExceedsPo,
   buildCostMarginSummary,
@@ -298,6 +298,7 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
   // The picker lists this PO's own sales order's lines/components that still
   // have unordered qty and are not already on this PO.
   let soPicker: { soNumber: string; rows: SoPickerRow[] } | null = null;
+  let soOrdered: Awaited<ReturnType<typeof loadOrderedQty>> | null = null;
   if (po.salesOrderId) {
     const so = await db.salesOrder.findUnique({
       where: { id: po.salesOrderId },
@@ -329,6 +330,7 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
         so.items.flatMap((i) => i.components.map((c) => c.id)),
         db,
       );
+      soOrdered = ordered;
       const onThisPo = new Set(
         po.items.flatMap((i) => [i.salesOrderItemId, i.salesOrderItemComponentId]).filter((x): x is string => !!x),
       );
@@ -376,20 +378,36 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     deliveryAddressText: po.deliveryAddressText ?? "",
     supplierAddressText: po.supplierAddressText ?? "",
     notes: po.notes ?? "",
-    items: po.items.map((i) => ({
-      id: i.id,
-      description: i.description,
-      kind: i.kind,
-      qty: money(i.qty),
-      unit: i.unit,
-      unitCost: money(i.unitCost),
-      linked: !!(i.salesOrderItemId || i.salesOrderItemComponentId),
-      salesOrderItemId: i.salesOrderItemId,
-      salesOrderItemComponentId: i.salesOrderItemComponentId,
-      // Marker reference: what the sales order itself says for this line.
-      soQty: i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null,
-      soUnitCost: i.salesOrderItem ? money(i.salesOrderItem.supplierUnitCost) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.unitCost) : null,
-    })),
+    items: po.items.map((i) => {
+      const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
+      const bucket =
+        i.salesOrderItemComponentId && soOrdered
+          ? soOrdered.components.get(i.salesOrderItemComponentId)
+          : i.salesOrderItemId && soOrdered
+            ? soOrdered.lines.get(i.salesOrderItemId)
+            : undefined;
+      return {
+        id: i.id,
+        description: i.description,
+        kind: i.kind,
+        qty: money(i.qty),
+        unit: i.unit,
+        unitCost: money(i.unitCost),
+        linked: !!(i.salesOrderItemId || i.salesOrderItemComponentId),
+        salesOrderItemId: i.salesOrderItemId,
+        salesOrderItemComponentId: i.salesOrderItemComponentId,
+        // Marker reference: what the sales order itself says for this line.
+        soQty,
+        soUnitCost: i.salesOrderItem ? money(i.salesOrderItem.supplierUnitCost) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.unitCost) : null,
+        // Over-order reference for the editor's live warning. Previously only
+        // picker-added lines carried remainingQty, so saved over-ordered lines
+        // never warned in the editor (read-only PO view did).
+        remainingQty:
+          soQty != null && soOrdered
+            ? remainingQtyForExistingPoLine({ soQty, thisPoId: po.id, ordered: bucket })
+            : null,
+      };
+    }),
     soPicker,
   };
 }
