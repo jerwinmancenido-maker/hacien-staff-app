@@ -50,8 +50,37 @@ async function ensureWideBooklet(adminId: string) {
 
 describe.skipIf(!env.hasDb)("deposit / advance collection (MySQL)", () => {
   let admin: DocActor;
-  let invoiceSeq = 880_000 + Math.floor(Math.random() * 50_000);
-  const nextInvoice = () => ++invoiceSeq;
+  let invoiceSeq = 0;
+
+  async function nextInvoice(): Promise<number> {
+    if (invoiceSeq === 0) {
+      const [maxBilling, maxSpoiled, maxClaim] = await Promise.all([
+        db.billing.aggregate({ _max: { invoiceNo: true } }),
+        db.spoiledBookletNumber.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+        db.bookletSerialClaim.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+      ]);
+      const maxUsed = Math.max(
+        880_000,
+        Number(maxBilling._max.invoiceNo ?? 0),
+        Number(maxSpoiled._max.number ?? 0),
+        Number(maxClaim._max.number ?? 0),
+      );
+      invoiceSeq = maxUsed + Math.floor(Math.random() * 500) + 1;
+    }
+
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const candidate = ++invoiceSeq;
+      const [takenBilling, spoiled, takenClaim] = await Promise.all([
+        db.billing.findFirst({ where: { invoiceNo: candidate }, select: { id: true } }),
+        db.spoiledBookletNumber.findFirst({ where: { type: "SI", number: candidate }, select: { id: true } }),
+        db.bookletSerialClaim.findFirst({ where: { type: "SI", number: candidate }, select: { number: true } }),
+      ]);
+      if (!takenBilling && !spoiled && !takenClaim) {
+        return candidate;
+      }
+    }
+    throw new Error("Could not allocate unused SI number after 500 attempts");
+  }
 
   beforeAll(async () => {
     process.env.UPLOAD_DIR = mkdtempSync(path.join(tmpdir(), "hacien-deposit-uploads-"));
@@ -85,18 +114,31 @@ describe.skipIf(!env.hasDb)("deposit / advance collection (MySQL)", () => {
     await approveQuote(q.id, admin);
     const deliveryAddressId = await customerDeliveryAddressId(customer.id);
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "PO-1", deliveryAddressId }, admin);
-    const billing = await recordBilling(
-      {
-        salesOrderId: so.id,
-        amount: "1000.00",
-        invoiceNo: nextInvoice(),
-        invoiceDate: new Date(),
-        dueDate: new Date(),
-        notes: null,
-      },
-      admin,
-    );
-    return { customer, so, billing };
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const invoiceNo = await nextInvoice();
+      try {
+        const billing = await recordBilling(
+          {
+            salesOrderId: so.id,
+            amount: "1000.00",
+            invoiceNo,
+            invoiceDate: new Date(),
+            dueDate: new Date(),
+            notes: null,
+          },
+          admin,
+        );
+        return { customer, so, billing };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/already used|spoiled/i.test(msg) && attempt < 4) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Failed to record billing: unable to allocate unused SI number after retries");
   }
 
   it("a deposit with open billings stays fully unapplied and the billing stays OPEN", async () => {
