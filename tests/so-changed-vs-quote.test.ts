@@ -55,9 +55,9 @@ describe("marker wiring", () => {
     expect(page).toContain("changed from quote");
   });
 
-  it("the SO editor shows the per-line floor notes without PO numbers (A7)", () => {
+  it("the SO editor shows the per-line notes without PO numbers (A7)", () => {
     const editor = readFileSync("src/components/docs/DocumentEditor.tsx", "utf8");
-    expect(editor).toContain("On a PO — quantity can");
+    expect(editor).toContain("Already on a PO");
     expect(editor).toContain("Delivered ");
     const page = readFileSync("src/app/(app)/sales-orders/[id]/edit/page.tsx", "utf8");
     expect(page).toContain("orderedQty: orderedByLine.get(i.id)");
