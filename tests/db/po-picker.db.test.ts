@@ -14,7 +14,7 @@ const env = vi.hoisted(() => {
 });
 
 import { db } from "@/lib/db";
-import { createPurchaseOrdersFromSalesOrder, updatePurchaseOrder } from "@/lib/services/purchase-orders";
+import { createPurchaseOrdersFromSalesOrder, createStandalonePurchaseOrder, updatePurchaseOrder } from "@/lib/services/purchase-orders";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import type { PoInput } from "@/lib/validation/purchasing";
 import { freshYear, makeCustomer, makeSupplier, makeUser } from "./fixtures";
@@ -57,6 +57,52 @@ describe.skipIf(!env.hasDb)("PO picker — add from sales order (MySQL)", () => 
     const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-PICK", deliveryAddressId: delivAddr.id }, admin, { date: new Date(Date.UTC(year, 2, 2)) });
     const items = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
     return { customer, a, b, q, so, items };
+  }
+
+  async function salesOrderWithLot(year: number) {
+    const customer = await makeCustomer();
+    const sup = await makeSupplier();
+    const q = await createQuote(
+      {
+        customerId: customer.id,
+        contactId: customer.contacts[0]!.id,
+        date: new Date(Date.UTC(year, 2, 1)),
+        validUntil: undefined,
+        terms: "Net 30",
+        notes: null,
+        items: [
+          {
+            id: null,
+            description: "Software Bundle",
+            kind: "GOODS",
+            qty: "1",
+            unit: "lot",
+            supplierId: null,
+            supplierUnitCost: "0",
+            unitPrice: "100000",
+            isLot: true,
+            components: [
+              { id: null, itemId: null, description: "Subscription", qty: "1", unit: "lot", supplierId: sup.id, unitCost: "50000" },
+            ],
+          },
+          { id: null, description: "Laptop", kind: "GOODS", qty: "1", unit: "pc", supplierId: sup.id, supplierUnitCost: "45000", unitPrice: "52000" },
+        ],
+      },
+      admin,
+    );
+    await approveQuote(q.id, admin);
+    const delivAddr = await db.address.create({
+      data: { customerId: customer.id, kind: "DELIVERY", street: "1 Example St", isDefault: true },
+    });
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-LOT", deliveryAddressId: delivAddr.id }, admin, { date: new Date(Date.UTC(year, 2, 2)) });
+    const lot = await db.salesOrderItem.findFirstOrThrow({
+      where: { salesOrderId: so.id, isLot: true, removedAt: null },
+      include: { components: { where: { removedAt: null } } },
+    });
+    const plain = await db.salesOrderItem.findFirstOrThrow({
+      where: { salesOrderId: so.id, isLot: false, removedAt: null },
+    });
+    return { customer, sup, q, so, lot, comp: lot.components[0]!, plain };
   }
 
   /** A draft PO for supplier A holding only the laptop line (qty 4). */
@@ -214,5 +260,97 @@ describe.skipIf(!env.hasDb)("PO picker — add from sales order (MySQL)", () => 
     });
     const added = (audit?.after as { addedFromSalesOrder?: { overOrder: { qty: string; remainingQty: string } | null }[] } | null)?.addedFromSalesOrder ?? [];
     expect(added[0]?.overOrder).toEqual({ qty: "12", remainingQty: "10.00" });
+  });
+
+  it("createStandalonePurchaseOrder strips both sales-order and component links", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrderWithLot(year);
+    const po = await createStandalonePurchaseOrder(
+      {
+        supplierId: ctx.sup.id,
+        supplierContactId: null,
+        date: new Date(Date.UTC(year, 2, 5)),
+        expectedDate: null,
+        terms: "Net 30",
+        deliveryAddressText: null,
+        supplierAddressText: null,
+        notes: null,
+        items: [
+          {
+            id: null,
+            description: "Crafted standalone line",
+            kind: "GOODS",
+            qty: "1",
+            unit: "lot",
+            unitCost: "50000",
+            salesOrderItemId: ctx.lot.id,
+            salesOrderItemComponentId: ctx.comp.id,
+          },
+        ],
+      },
+      admin,
+    );
+    expect(po.salesOrderId).toBeNull();
+    const item = po.items[0]!;
+    expect(item.salesOrderItemId).toBeNull();
+    expect(item.salesOrderItemComponentId).toBeNull();
+    expect(item.activeSalesOrderItemId).toBeNull();
+    expect(item.activeSalesOrderItemComponentId).toBeNull();
+
+    const stored = await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: item.id } });
+    expect(stored.salesOrderItemId).toBeNull();
+    expect(stored.salesOrderItemComponentId).toBeNull();
+    expect(stored.activeSalesOrderItemId).toBeNull();
+    expect(stored.activeSalesOrderItemComponentId).toBeNull();
+  });
+
+  it("refuses isLot parents in update picker path and only allows component ids for lots", async () => {
+    const year = await freshYear();
+    const ctx = await salesOrderWithLot(year);
+    const [po] = await createPurchaseOrdersFromSalesOrder(
+      ctx.so.id,
+      {
+        date: new Date(Date.UTC(year, 2, 3)),
+        expectedDate: null,
+        deliveryAddressText: null,
+        supplierPicks: {},
+        idempotencyKey: `pick-lot-${year}`,
+        rows: [{ key: ctx.plain.id, supplierId: ctx.sup.id, qty: "1" }],
+      },
+      admin,
+    );
+    const fresh = await db.purchaseOrder.findUniqueOrThrow({ where: { id: po!.id }, include: { items: true } });
+    const base = asItems(fresh);
+
+    await expect(
+      updatePurchaseOrder(
+        po!.id,
+        poInput(year, fresh, [
+          ...base,
+          { id: null, description: "Lot Parent", kind: "GOODS", qty: "1", unit: "lot", unitCost: "0", salesOrderItemId: ctx.lot.id },
+        ]),
+        admin,
+      ),
+    ).rejects.toThrow(/Order the components of a lot, not the lot itself/);
+
+    const after = await updatePurchaseOrder(
+      po!.id,
+      poInput(year, fresh, [
+        ...base,
+        {
+          id: null,
+          description: "Subscription",
+          kind: "GOODS",
+          qty: "1",
+          unit: "lot",
+          unitCost: "50000",
+          salesOrderItemComponentId: ctx.comp.id,
+        },
+      ]),
+      admin,
+    );
+    const compLine = after.items.find((i) => i.salesOrderItemComponentId === ctx.comp.id);
+    expect(compLine).toBeDefined();
+    expect(compLine?.activeSalesOrderItemComponentId).toBe(ctx.comp.id);
   });
 });

@@ -523,7 +523,7 @@ export async function createStandalonePurchaseOrder(input: PoInput, actor: PoAct
   const format = snap.settings.numbering.supplierPo;
   const year = input.date.getUTCFullYear();
   await ensureSeries(db, "PURCHASE_ORDER", year, format);
-  const lines = input.items.map((i) => ({ ...i, salesOrderItemId: null }));
+  const lines = input.items.map((i) => ({ ...i, salesOrderItemId: null, salesOrderItemComponentId: null }));
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
       const number = await allocateDocNumber(tx, "PURCHASE_ORDER", year, format);
@@ -606,7 +606,7 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
             items: {
               where: { removedAt: null },
               select: {
-                id: true, description: true, qty: true, supplierId: true,
+                id: true, description: true, qty: true, supplierId: true, isLot: true,
                 components: { where: { removedAt: null }, select: { id: true, description: true, qty: true, supplierId: true } },
               },
             },
@@ -629,6 +629,9 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
             throw new DocRuleError(`"${l.description.split("\n")[0]}" is already on this purchase order — change its quantity instead.`, "items");
           }
           seenKeys.add(key);
+          if (soLineById.get(key)?.isLot) {
+            throw new DocRuleError("Order the components of a lot, not the lot itself.", "items");
+          }
           const src = l.salesOrderItemComponentId ? soCompById.get(key) : soLineById.get(key);
           if (!src) throw new DocRuleError(`"${l.description.split("\n")[0]}" is not a line of this PO's sales order.`, "items");
           if (src.supplierId && src.supplierId !== current.supplierId) {
