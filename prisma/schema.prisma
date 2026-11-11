@@ -1546,6 +1546,11 @@ model Billing {
   amount               Decimal       @db.Decimal(15, 2)
   // Pro-rata of SO.withholdingTotal for this billing amount.
   withholdingExpected  Decimal       @default(0) @db.Decimal(15, 2)
+  // Per-code withholding breakdown captured when the billing is recorded
+  // (refreshed when its amount is edited): [{ rate, atcCode, amount }].
+  // The 2307 prefill splits from THIS, so later SO edits can never move an
+  // issued SI's split (A1 revised, 2026-11-10). Null on older billings.
+  withholdingBreakdown Json?
   // amount − withholdingExpected.
   netExpected          Decimal       @db.Decimal(15, 2)
   status               BillingStatus @default(OPEN)

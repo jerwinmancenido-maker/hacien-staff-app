@@ -8,7 +8,7 @@ import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type Permissi
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { fromScaled, toScaled, withholdingBreakdownParts, type WithholdingSnapshot } from "../quotes/calc";
 import { bookletRangeError, formatBookletNumber } from "../billing/booklet";
 import { netExpected, proRataWithholding, remainingToBill } from "../billing/status";
 import type { BillingInput } from "../validation/billing";
@@ -25,14 +25,86 @@ function assertManageBilling(actor: BillingActor) {
 
 async function lockSalesOrder(tx: Tx, id: string) {
   const rows = await tx.$queryRaw<
-    { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null }[]
-  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
+    { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null; withholding: unknown }[]
+  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\`, \`withholding\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
   if (!rows[0]) throw new DocRuleError("Sales order not found.");
+  const rawWh = rows[0].withholding;
+  const withholding = typeof rawWh === "string" ? (() => { try { return JSON.parse(rawWh); } catch { return rawWh; } })() : rawWh;
   return {
     ...rows[0],
     contractPrice: money(String(rows[0].contractPrice)),
     withholdingTotal: money(String(rows[0].withholdingTotal)),
+    withholding,
   };
+}
+
+/** The billing's own withholding breakdown, captured from the SO at
+ * record/edit time (A1 revised): the 2307 prefill splits from this stored
+ * basis, so later SO edits can never move an issued SI's split.
+ * Override lines (e.g. Admin exempt add-ons) are excluded from the pick
+ * base — same rule as billed updateSalesOrder — so capture sums align with
+ * so.withholdingTotal and do not tax the exempt amount. */
+async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithholding: unknown) {
+  const items = await tx.salesOrderItem.findMany({
+    where: { salesOrderId, removedAt: null },
+    select: {
+      kind: true,
+      total: true,
+      supplierTotal: true,
+      margin: true,
+      withholdingRate: true,
+      withholdingAtc: true,
+      withholdingOverride: true,
+    },
+  });
+  const picks = (Array.isArray(soWithholding) ? soWithholding : []) as WithholdingSnapshot[];
+  const parts = withholdingBreakdownParts(
+    items
+      .filter((i) => !i.withholdingOverride)
+      .map((i) => ({
+        kind: i.kind,
+        total: money(i.total),
+        supplierTotal: money(i.supplierTotal),
+        margin: money(i.margin),
+        // Pick-less SOs split by their lines' stored rates (docTotals fallback).
+        withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+        withholdingAtc: i.withholdingAtc,
+      })),
+    picks.length ? picks : undefined,
+  );
+  return parts.length ? (parts as unknown as Prisma.InputJsonValue) : undefined;
+}
+
+type StoredBreakdownPart = { rate: string; atcCode: string | null; amount: string };
+
+/** Rescale a billing's STORED breakdown to a new amount (Bugbot, PR #188):
+ * the parts keep their issue-time shares of the withholding total — SO
+ * edits after issue must never change the mix. Cents go to the last part,
+ * the same convention as the collection split. Null when nothing stored. */
+export function rescaleBreakdown(stored: unknown, oldExpected: string, newExpected: string): Prisma.InputJsonValue | undefined {
+  if (!Array.isArray(stored) || stored.length === 0) return undefined;
+  const parts = (stored as StoredBreakdownPart[]).filter((x) => x && typeof x.rate === "string");
+  if (!parts.length) return undefined;
+  const oldT = toScaled(oldExpected, 2);
+  const newT = toScaled(newExpected, 2);
+  if (oldT <= 0n || newT === oldT) return parts as unknown as Prisma.InputJsonValue;
+  // The stored parts live on their OWN scale (they sum to the SO's full
+  // withholding at capture time), while old/newExpected are the billing's
+  // pro-rata totals — different scales. Only the RATIO carries over: the
+  // parts scale by newT/oldT around their own sum, so shares are preserved
+  // exactly and no part can go negative. (Rescaling the parts TO newT
+  // directly made the last part the remainder of a mismatched scale —
+  // negative whenever the parts' sum exceeded the expected total.)
+  const sumStored = parts.reduce((a, x) => a + toScaled(x.amount, 2), 0n);
+  const target = (sumStored * newT) / oldT;
+  let acc = 0n;
+  const out = parts.map((part, i) => {
+    const isLast = i === parts.length - 1;
+    const amt = isLast ? target - acc : (toScaled(part.amount, 2) * newT) / oldT;
+    acc += amt;
+    return { rate: part.rate, atcCode: part.atcCode ?? null, amount: fromScaled(amt, 2) };
+  });
+  return out as unknown as Prisma.InputJsonValue;
 }
 
 /** Non-void billings on an SO (amounts), for remaining-to-bill checks. */
@@ -101,6 +173,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
+            withholdingBreakdown: await captureWithholdingBreakdown(tx, so.id, so.withholding),
             netExpected: net,
             status: "OPEN",
             notes: input.notes,
@@ -222,7 +295,16 @@ export async function updateBilling(
           }
         }
 
-        const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
+        const hasBreakdown =
+          Array.isArray(before.withholdingBreakdown) &&
+          (before.withholdingBreakdown as StoredBreakdownPart[]).some((x) => x && typeof x.rate === "string");
+
+        // When a breakdown is stored, pin expected withholding to the
+        // issue-time ratio (oldExpected * newAmount / oldAmount) so an SO
+        // money edit does not move the issued SI's expected total.
+        const withholdingExpected = hasBreakdown
+          ? proRataWithholding(input.amount, money(before.amount), money(before.withholdingExpected))
+          : proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
         const net = netExpected(input.amount, withholdingExpected);
         const after = await tx.billing.update({
           where: { id },
@@ -232,6 +314,12 @@ export async function updateBilling(
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
+            // A stored breakdown is NEVER recaptured from the live SO — an
+            // edit rescales the issue-time parts to the new expected total.
+            // Only a legacy billing with none stored captures one, once.
+            withholdingBreakdown:
+              rescaleBreakdown(before.withholdingBreakdown, money(before.withholdingExpected), withholdingExpected) ??
+              (await captureWithholdingBreakdown(tx, so.id, so.withholding)),
             netExpected: net,
             notes: input.notes,
             updatedById: actor.id,

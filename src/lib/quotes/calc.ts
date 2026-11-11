@@ -336,6 +336,21 @@ export function sumWithholdingParts(parts: readonly { amount: string }[]): strin
  * (round_half_up(line.total × line.rate) per line, then sum). Null/blank rates
  * contribute 0. The `withholding` array is a read-only grouping for display.
  */
+
+/** Per-code withholding breakdown for a set of lines, as plain JSON-safe
+ * parts. Billings capture this at record time so an issued SI's 2307 split
+ * basis can never be moved by later SO edits (A1 revised, 2026-11-10). */
+export function withholdingBreakdownParts(
+  lines: LineForDocTotals[],
+  picks?: readonly WithholdingSnapshot[],
+): { rate: string; atcCode: string | null; amount: string }[] {
+  return docTotals(lines, picks).withholding.map((w) => ({
+    rate: w.rate,
+    atcCode: w.atcCode ?? null,
+    amount: w.amount,
+  }));
+}
+
 export function docTotals(lines: LineForDocTotals[], picks?: readonly WithholdingSnapshot[]): DocTotals {
   const bases = basesFromLines(lines);
   const { contract, supplier } = bases;
