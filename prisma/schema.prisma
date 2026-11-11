@@ -984,6 +984,12 @@ model SalesOrderItem {
   id               String     @id @default(cuid())
   salesOrderId     String
   salesOrder       SalesOrder @relation(fields: [salesOrderId], references: [id])
+  // Part A markers: the quote line this SO line was copied from at convert.
+  // Nullable — SOs converted before this column existed keep NULL and simply
+  // show no "Changed vs quote" marker. No FK relation on purpose: the quote
+  // line can be soft-removed later; the id is a comparison key, not a join
+  // the app depends on for money.
+  quoteItemId      String?
   sortOrder        Int
   description      String     @db.Text
   kind             ItemKind

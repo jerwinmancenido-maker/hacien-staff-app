@@ -384,6 +384,11 @@ export default async function SalesOrderPage({
           )}
           <div className="card">
             <h2>Items</h2>
+            {so.changedLineCount > 0 && (
+              <p className="small muted">
+                {so.changedLineCount} line{so.changedLineCount === 1 ? "" : "s"} changed from quote
+              </p>
+            )}
             <ItemsTable
               items={so.items.map((i) => ({
                 ...i,

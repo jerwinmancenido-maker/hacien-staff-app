@@ -953,6 +953,9 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
               .sort((a, b) => a.sortOrder - b.sortOrder)
               .map((i) => ({
                 sortOrder: i.sortOrder,
+                // Part A: remember which quote line this SO line came from,
+                // for the "Changed vs quote" markers. Display only.
+                quoteItemId: i.id,
                 description: i.description,
                 kind: i.kind,
                 qty: i.qty,
