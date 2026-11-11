@@ -4525,6 +4525,46 @@ button.contact-card-add {
 .print-placeholder { color: var(--red); font-weight: 600; }
 .plain-list { list-style: none; padding: 0; margin: 0; }
 .plain-list li { padding: calc(6px * var(--ui-scale, 1)) 0; border-bottom: 1px solid var(--border, #eee); }
+
+/* ---------- Top search results (/search) ---------- */
+.top-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: calc(28px * var(--ui-scale, 1));
+}
+.top-search-group-title {
+  margin: 0 0 calc(8px * var(--ui-scale, 1));
+  font-size: calc(13px * var(--ui-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2, #404040);
+}
+.top-search-hits li:last-child {
+  border-bottom: none;
+}
+.top-search-hit {
+  display: block;
+  color: var(--text, #0a0a0a);
+  text-decoration: none;
+  font-size: calc(14px * var(--ui-scale, 1));
+  line-height: 1.4;
+  padding: calc(4px * var(--ui-scale, 1)) 0;
+}
+.top-search-hit:hover {
+  color: var(--blue);
+}
+.top-search-see-all {
+  display: inline-block;
+  margin-top: calc(8px * var(--ui-scale, 1));
+  font-size: calc(13px * var(--ui-scale, 1));
+  font-weight: 500;
+  color: var(--blue);
+  text-decoration: none;
+}
+.top-search-see-all:hover {
+  text-decoration: underline;
+}
 @media print {
   .statement-doc { font-size: 11pt; }
   .statement-doc table { page-break-inside: auto; }
