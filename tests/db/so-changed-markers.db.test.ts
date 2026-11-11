@@ -96,4 +96,39 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
     expect(changed?.changedVsQuote).toEqual(["qty 10.00 → 12.00", "price ₱52000.00 → ₱51000.00"]);
     expect(changed?.changedSummary).toBe("Quote: 10.00 pc @ ₱52000.00, now 12.00 pc @ ₱51000.00");
   });
+
+  it("pre-stamp SO (quoteItemId NULL, the SO-2026-0006 case): the view falls back to sortOrder matching", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const supplier = await makeSupplier();
+    const q = await createQuote(
+      {
+        customerId: customer.id,
+        contactId: customer.contacts[0]!.id,
+        date: new Date(Date.UTC(year, 3, 1)),
+        validUntil: undefined,
+        terms: "Net 30",
+        notes: null,
+        items: [
+          { id: null, description: "Install (pre-stamp)", kind: "SERVICES", qty: "1", unit: "lot", supplierId: supplier.id, supplierUnitCost: "4000", unitPrice: "4999.25" },
+          { id: null, description: "Cable (pre-stamp)", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "250" },
+        ],
+      } as never,
+      admin,
+    );
+    await approveQuote(q.id, admin);
+    const delivAddr2 = await db.address.create({
+      data: { customerId: customer.id, kind: "DELIVERY", street: "2 Example St", isDefault: true },
+    });
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-MARK-2", deliveryAddressId: delivAddr2.id }, admin, { date: new Date(Date.UTC(year, 3, 2)) });
+    // Simulate a conversion from before the stamp existed.
+    await db.salesOrderItem.updateMany({ where: { salesOrderId: so.id }, data: { quoteItemId: null } });
+    // The real change (mirrors SO-2026-0006): price 4999.25 -> 5000.00 on line 1.
+    await db.salesOrderItem.updateMany({ where: { salesOrderId: so.id, sortOrder: 1 }, data: { unitPrice: "5000.00", total: "5000.00" } });
+
+    const view = await getSalesOrderView(so.id, admin);
+    expect(view?.changedLineCount).toBe(1);
+    const changed = view?.items.find((i) => i.changedVsQuote);
+    expect(changed?.changedVsQuote).toEqual(["price ₱4999.25 → ₱5000.00"]);
+  });
 });
