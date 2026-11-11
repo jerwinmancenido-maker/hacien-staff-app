@@ -25,7 +25,14 @@ function safeTotal(q: string, p: string) {
 export function BillForm({ lines, defaultDate, action, cancelHref, maxMb }: { lines: BillLine[]; defaultDate: string; action: (state: FormState, form: FormData) => Promise<FormState>; cancelHref: string; maxMb: number }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const [h, setH] = useState({ billNumber: "", billDate: defaultDate, amount: "", notes: "" });
-  const [rows, setRows] = useState<Record<string, { qty: string; unitPrice: string }>>({});
+  // Prefilled from the PO (Jerwin, 2026-11-11: "can it be prefilled with the
+  // PO, then can just change"): billed qty starts at the PO qty and the
+  // price at the PO unit cost, so the common case — the bill matches the
+  // PO — needs no typing. Staff edit only the lines where the supplier's
+  // bill differs; clearing a line's qty drops it from the bill lines.
+  const [rows, setRows] = useState<Record<string, { qty: string; unitPrice: string }>>(() =>
+    Object.fromEntries(lines.map((l) => [l.id, { qty: qty(l.qty), unitPrice: l.unitCost }])),
+  );
   const e = state.fieldErrors ?? {};
   const linesTotal = fromScaled(
     lines.reduce((a, l) => a + toScaled(safeTotal(rows[l.id]?.qty ?? "", rows[l.id]?.unitPrice ?? ""), 2), 0n),
@@ -88,7 +95,7 @@ export function BillForm({ lines, defaultDate, action, cancelHref, maxMb }: { li
             </button>
           </div>
         </div>
-        <p className="small muted">Enter what the bill charges per line to match it against the PO and receiving. Leave blank to match on the total only.</p>
+        <p className="small muted">Prefilled from the PO — change any line where the supplier bill differs, and clear a line qty if the bill does not charge for it. Clear every line to match on the total only.</p>
         {e.lines && (
           <div className="alert error" role="alert">
             {e.lines}
