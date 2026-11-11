@@ -165,7 +165,7 @@ export default async function SalesOrderPage({
                     Source quote
                   </td>
                   <td className="strong">
-                    <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link>
+                    <Link href={`/quotes/${so.quote.id}`} target="_blank" rel="noopener">{so.quote.number}</Link>
                   </td>
                   <td>{day(so.quote.date)}</td>
                   <td className="num">{formatPeso(so.quote.contractPrice)}</td>
@@ -181,7 +181,7 @@ export default async function SalesOrderPage({
                       Billing
                     </td>
                     <td className="strong">
-                      <Link href={`/billing/billings/${b.id}`}>{b.number}</Link>
+                      <Link href={`/billing/billings/${b.id}`} target="_blank" rel="noopener">{b.number}</Link>
                     </td>
                     <td>{day(b.invoiceDate)}</td>
                     <td className="num">{formatPeso(b.amount)}</td>
@@ -202,7 +202,7 @@ export default async function SalesOrderPage({
                       Collection
                     </td>
                     <td className="strong">
-                      <Link href={`/billing/collections/${c.id}`}>{c.number}</Link>
+                      <Link href={`/billing/collections/${c.id}`} target="_blank" rel="noopener">{c.number}</Link>
                     </td>
                     <td>{day(c.date)}</td>
                     <td className="num">{formatPeso(c.amountReceived)}</td>
@@ -217,7 +217,7 @@ export default async function SalesOrderPage({
                       Delivery receipt
                     </td>
                     <td className="strong">
-                      <Link href={`${base}?tab=deliveries`}>{d.drNumber}</Link>
+                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{d.drNumber}</Link>
                     </td>
                     <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
                     <td className="num">—</td>
@@ -240,7 +240,7 @@ export default async function SalesOrderPage({
                       Purchase order · {p.supplierName}
                     </td>
                     <td className="strong">
-                      {p.id ? <Link href={`/purchase-orders/${p.id}`}>{p.number}</Link> : p.number}
+                      {p.id ? <Link href={`/purchase-orders/${p.id}`} target="_blank" rel="noopener">{p.number}</Link> : p.number}
                     </td>
                     <td>—</td>
                     <td className="num">{p.total ? formatPeso(p.total) : "—"}</td>

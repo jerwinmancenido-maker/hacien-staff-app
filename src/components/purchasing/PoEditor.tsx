@@ -77,6 +77,28 @@ function PoDescTextarea({ label, value, onValue }: { label: string; value: strin
     />
   );
 }
+/** Auto-growing plain textarea (header fields): same growDesc mechanics as
+ * the line descriptions — staging QA 2026-11-11 found Notes sat at a fixed
+ * height with a scrollbar while line descriptions grew. */
+function GrowTextarea({ id, rows, value, onValue }: { id: string; rows: number; value: string; onValue: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    growDesc(ref.current);
+  }, [value]);
+  return (
+    <textarea
+      id={id}
+      ref={ref}
+      rows={rows}
+      value={value}
+      onChange={(ev) => {
+        onValue(ev.target.value);
+        growDesc(ev.target);
+      }}
+    />
+  );
+}
+
 const blank = (): Row => ({ key: newKey(), id: null, description: "", kind: "GOODS", qty: "1", unit: "pc", unitCost: "" });
 
 function safeTotal(i: PoEditorItem) {
@@ -313,17 +335,17 @@ export function PoEditor({
           </div>
           <div className="field full">
             <label htmlFor="deliveryAddressText">Deliver to</label>
-            <textarea id="deliveryAddressText" rows={3} value={h.deliveryAddressText} onChange={(ev) => setH({ ...h, deliveryAddressText: ev.target.value })} />
+            <GrowTextarea id="deliveryAddressText" rows={3} value={h.deliveryAddressText} onValue={(v) => setH({ ...h, deliveryAddressText: v })} />
             <div className="hint">Saved on the PO as typed.</div>
           </div>
           <div className="field full">
             <label htmlFor="supplierAddressText">Supplier address (on the PO)</label>
-            <textarea id="supplierAddressText" rows={3} value={h.supplierAddressText} onChange={(ev) => setH({ ...h, supplierAddressText: ev.target.value })} />
+            <GrowTextarea id="supplierAddressText" rows={3} value={h.supplierAddressText} onValue={(v) => setH({ ...h, supplierAddressText: v })} />
             <div className="hint">From the supplier&apos;s default office or billing address.</div>
           </div>
           <div className="field full">
             <label htmlFor="notes">Notes</label>
-            <textarea id="notes" rows={2} value={h.notes} onChange={(ev) => setH({ ...h, notes: ev.target.value })} />
+            <GrowTextarea id="notes" rows={2} value={h.notes} onValue={(v) => setH({ ...h, notes: v })} />
           </div>
         </div>
       </div>

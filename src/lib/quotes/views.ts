@@ -482,12 +482,70 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
   // Part A markers: compare each SO line with the quote line it was copied
   // from (quoteItemId, stamped at conversion; NULL on older SOs = no marker).
   const quoteItemIds = so.items.map((i) => i.quoteItemId).filter((x): x is string => !!x);
-  const quoteItems = quoteItemIds.length
+  let quoteItems = quoteItemIds.length
     ? await db.quoteItem.findMany({
         where: { id: { in: quoteItemIds } },
         select: { id: true, qty: true, unit: true, unitPrice: true, kind: true, withholdingRate: true, withholdingAtc: true },
       })
     : [];
+  // Fallback for SOs converted BEFORE the quoteItemId stamp existed (their
+  // lines carry NULL): match quote lines by sortOrder only when identity is
+  // still proven — equal counts, unique sortOrders on BOTH sides, and every
+  // SO line's description still equals the quote line at that sortOrder
+  // (descriptions must also be unique so identical-text lines can't swap
+  // unnoticed). SO ↑/↓ reorder renumbers sortOrder to 1..n; without the
+  // description check that would pair the wrong quote line. Any doubt → no
+  // marker, never a wrong one. Found by staging QA 2026-11-11: SO-2026-0006.
+  if (!quoteItems.length && so.items.length > 0) {
+    const all = await db.quoteItem.findMany({
+      where: { quoteId: so.quote.id, removedAt: null },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        sortOrder: true,
+        description: true,
+        qty: true,
+        unit: true,
+        unitPrice: true,
+        kind: true,
+        withholdingRate: true,
+        withholdingAtc: true,
+      },
+    });
+    if (all.length === so.items.length) {
+      const bySort = new Map(all.map((q) => [q.sortOrder, q]));
+      const soBySort = new Map(so.items.map((i) => [i.sortOrder, i]));
+      const quoteDescs = new Set(all.map((q) => q.description));
+      const soDescs = new Set(so.items.map((i) => i.description));
+      // Fail closed: duplicate sortOrders or duplicate descriptions mean we
+      // cannot prove which line is which after a possible reorder.
+      if (
+        bySort.size === all.length &&
+        soBySort.size === so.items.length &&
+        quoteDescs.size === all.length &&
+        soDescs.size === so.items.length
+      ) {
+        const linked = new Map<string, (typeof all)[number]>();
+        let ok = true;
+        for (const i of so.items) {
+          const q = bySort.get(i.sortOrder);
+          // Description must still match at this sortOrder — the stable
+          // identity beyond renumberable sortOrder (CTO review #198).
+          if (!q || q.description !== i.description) {
+            ok = false;
+            break;
+          }
+          linked.set(i.id, q);
+        }
+        if (ok) {
+          quoteItems = all;
+          for (const i of so.items) {
+            if (!i.quoteItemId) (i as { quoteItemId?: string | null }).quoteItemId = linked.get(i.id)!.id;
+          }
+        }
+      }
+    }
+  }
   const quoteItemById = new Map(quoteItems.map((q) => [q.id, q]));
   const itemViews = so.items.map((i) => {
     const view = itemView(i, withCosts);

@@ -31,7 +31,8 @@ describe("SO Documents tab — whole-row clickable", () => {
     expect(page).toContain("/attachment");
     // The DR number is a real, focusable link (the accessible control for
     // the row) — not just the aria-hidden stretched overlay.
-    expect(page).toContain("<Link href={`${base}?tab=deliveries`}>{d.drNumber}</Link>");
+    // Staging QA 2026-11-11: document numbers open a NEW tab.
+    expect(page).toContain("<Link href={`${base}?tab=deliveries`} target=\"_blank\" rel=\"noopener\">{d.drNumber}</Link>");
     // Print is hidden on VOIDED receipts, like the Deliveries tab — the DR
     // print page 404s for voided receipts (Bugbot @cde4080).
     expect(page).toContain("{!d.voidedAt && (");
