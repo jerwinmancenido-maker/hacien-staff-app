@@ -122,6 +122,10 @@ export type EditorItem = {
    * unticking Lot restores them. Editor state only — never saved. */
   preLotQty?: string;
   preLotUnit?: string;
+  /** SO editor only (Part A audit A7): downstream state for the per-line
+   * note — qty already on live POs / already delivered. Display only. */
+  orderedQty?: string;
+  deliveredQty?: string;
 };
 
 export type EditorInitial = {
@@ -785,6 +789,12 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                     <td data-label="Description">
                       <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
                       {showOverride && <div className="small muted">{OVERRIDE_NOTE}</div>}
+                      {mode === "salesOrder" && i.orderedQty != null && Number(i.orderedQty) > 0 && (
+                        <div className="small faint">Already on a PO ({i.orderedQty})</div>
+                      )}
+                      {mode === "salesOrder" && i.deliveredQty != null && Number(i.deliveredQty) > 0 && (
+                        <div className="small faint">Delivered {i.deliveredQty} — quantity can&apos;t go below that</div>
+                      )}
                     </td>
                     <td className="col-kind" data-label="Kind">
                       <select aria-label={`Line ${idx + 1} kind`} value={i.kind} disabled={pricesLocked} onChange={(ev) => changeKind(i.key, ev.target.value as ItemKind)}>

@@ -18,9 +18,11 @@ import {
 import { money, ymd } from "../documents/common";
 import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
+import { loadOrderedQty } from "../purchasing/ordered";
 import { remainingToBill } from "../billing/status";
 import { COST_NOT_SET_LABEL, approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { parseWithholdingPick } from "./withholding-defaults";
+import { changedSummary, lineChangesVsQuote } from "./changed";
 import { validityDaysFromDates } from "./validity";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
@@ -55,6 +57,8 @@ type ItemRow = {
   withholdingAtc?: string | null;
   withholdingOverride?: boolean;
   deliveredQty?: Dec | null;
+  /** Part A markers (SO rows only): the quote line this line was copied from. */
+  quoteItemId?: string | null;
   /** Catalog Step 3 (quotes only; SO rows have neither). */
   itemId?: string | null;
   item?: { name: string } | null;
@@ -85,6 +89,11 @@ export type ItemView = {
   withholdingRate: string | null;
   withholdingAtc: string | null;
   withholdingOverride: boolean;
+  /** Part A: "Changed vs quote" differences (SO views only; set by
+   * getSalesOrderView when the line's quoteItemId resolves). */
+  changedVsQuote?: string[];
+  /** Part A: the tap/hover text — "Quote: 10 pcs @ ₱…, now 12 pcs @ ₱…". */
+  changedSummary?: string;
   // Cost users only:
   supplierId?: string | null;
   supplierName?: string | null;
@@ -470,6 +479,36 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     netMargin: money(so.netMargin),
     netMarginPct: money(so.netMarginPct),
   };
+  // Part A markers: compare each SO line with the quote line it was copied
+  // from (quoteItemId, stamped at conversion; NULL on older SOs = no marker).
+  const quoteItemIds = so.items.map((i) => i.quoteItemId).filter((x): x is string => !!x);
+  const quoteItems = quoteItemIds.length
+    ? await db.quoteItem.findMany({
+        where: { id: { in: quoteItemIds } },
+        select: { id: true, qty: true, unit: true, unitPrice: true, kind: true, withholdingRate: true, withholdingAtc: true },
+      })
+    : [];
+  const quoteItemById = new Map(quoteItems.map((q) => [q.id, q]));
+  const itemViews = so.items.map((i) => {
+    const view = itemView(i, withCosts);
+    const q = i.quoteItemId ? quoteItemById.get(i.quoteItemId) : undefined;
+    if (q) {
+      const rate = (v: { toFixed(n: number): string } | null) => (v != null ? Number(v.toString()).toFixed(4) : null);
+      const changes = lineChangesVsQuote(
+        { qty: view.qty, unitPrice: view.unitPrice, kind: view.kind, withholdingRate: view.withholdingRate, withholdingAtc: view.withholdingAtc },
+        { qty: money(q.qty), unitPrice: money(q.unitPrice), kind: q.kind, withholdingRate: rate(q.withholdingRate), withholdingAtc: q.withholdingAtc ?? null },
+      );
+      if (changes.length) {
+        view.changedVsQuote = changes.map((c) => c.label);
+        view.changedSummary = changedSummary(
+          { qty: view.qty, unit: view.unit, unitPrice: view.unitPrice, kind: view.kind, withholdingRate: view.withholdingRate, withholdingAtc: view.withholdingAtc },
+          { qty: money(q.qty), unit: q.unit, unitPrice: money(q.unitPrice), kind: q.kind, withholdingRate: rate(q.withholdingRate), withholdingAtc: q.withholdingAtc ?? null },
+        );
+      }
+    }
+    return view;
+  });
+  const changedLineCount = itemViews.filter((v) => v.changedVsQuote?.length).length;
   return {
     id: so.id,
     number: so.number,
@@ -491,7 +530,9 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     contact: so.contact,
     quote: { id: so.quote.id, number: so.quote.number, status: so.quote.status, date: ymd(so.quote.date), contractPrice: money(so.quote.contractPrice) },
     withholding,
-    items: so.items.map((i) => itemView(i, withCosts)),
+    items: itemViews,
+    /** Part A: how many lines differ from the quote (0 = no summary line). */
+    changedLineCount,
     totals: totalsView(so.items, withholding, stored, withCosts),
     approval: await approvalFor(
       so.settingsVersionId,
@@ -716,6 +757,10 @@ export type EditableItem = {
   /** Lot (bundle) line + components (quotes only, cost users only). */
   isLot?: boolean;
   components?: ItemComponentView[];
+  /** SO editor only (Part A audit A7): qty already on live POs / delivered,
+   * for the per-line floor notes. Display only. */
+  orderedQty?: string;
+  deliveredQty?: string;
 };
 
 export function editableItems(items: ItemView[], withCosts: boolean): EditableItem[] {
@@ -732,6 +777,7 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
       withholdingOverride: i.withholdingOverride,
       itemId: i.itemId ?? null,
       itemName: i.itemName ?? null,
+      deliveredQty: i.deliveredQty,
     };
     return withCosts
       ? {
@@ -743,6 +789,22 @@ export function editableItems(items: ItemView[], withCosts: boolean): EditableIt
         }
       : base;
   });
+}
+
+/**
+ * Part A (audit A7): per-line ordered quantities for the SO editor's floor
+ * notes — how much of each plain line is already on live POs, from the ONE
+ * ordered-qty helper. Lot lines are skipped (their components carry the PO
+ * links; the editor's lot lines are not qty-editable anyway).
+ */
+export async function soLineOrderedQty(soId: string): Promise<Map<string, string>> {
+  const items = await db.salesOrderItem.findMany({
+    where: { salesOrderId: soId, removedAt: null, isLot: false },
+    select: { id: true },
+  });
+  if (!items.length) return new Map();
+  const { lines } = await loadOrderedQty(items.map((i) => i.id), [], db);
+  return new Map([...lines.entries()].map(([id, v]) => [id, v.qty]));
 }
 
 export type { WithholdingSnapshot };
