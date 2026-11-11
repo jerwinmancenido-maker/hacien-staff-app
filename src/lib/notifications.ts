@@ -5,6 +5,7 @@ import { accessReviewDue } from "@/lib/access-review";
 import { arAgingSummary } from "@/lib/billing/views";
 import { billingBalance } from "@/lib/billing/status";
 import { money } from "@/lib/documents/common";
+import { countWarrantiesEndingSoon, listWarrantiesEndingSoon } from "@/lib/purchasing/views";
 import type { NotificationSection } from "./notification-types";
 export type { NotificationItem, NotificationSection } from "./notification-types";
 
@@ -19,6 +20,8 @@ export type { NotificationItem, NotificationSection } from "./notification-types
  *   (cost viewers only — the PO pages are cost-gated).
  * - Access review (S-58 sync addition): Admin only, shown when the last
  *   access review is over 90 Manila days old or never happened.
+ * - SL-05 Warranty ending soon: POSTED receiving lines whose supplier
+ *   warranty ends in the next 30 Manila days (everyone with view).
  */
 
 export async function getNotifications(user: PermissionUser): Promise<NotificationSection[]> {
@@ -134,6 +137,22 @@ export async function getNotifications(user: PermissionUser): Promise<Notificati
         items: [{ label: "Review who can sign in and with which roles", href: "/settings?tab=users" }],
       });
     }
+  }
+
+  // SL-05: visible to everyone with view (layout already gates the app).
+  const warrantySoonCount = await countWarrantiesEndingSoon(today);
+  if (warrantySoonCount > 0) {
+    const warrantySoon = await listWarrantiesEndingSoon({ take: 5, now: today });
+    sections.push({
+      key: "warranty-soon",
+      label: "Warranty ending soon",
+      count: warrantySoonCount,
+      href: "/receiving?warranty=soon",
+      items: warrantySoon.map((r) => ({
+        label: `${r.purchaseOrderNumber} · ${r.supplierName} · ends ${r.warrantyEndDate}`,
+        href: `/receiving/${r.purchaseOrderId}`,
+      })),
+    });
   }
 
   return sections;

@@ -1,16 +1,87 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { listReceivingView } from "@/lib/purchasing/views";
+import { listReceivingView, listWarrantiesEndingSoon } from "@/lib/purchasing/views";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
 import { day, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 
 // Receiving: for everyone who can view. Quantities only — no prices.
-export default async function ReceivingPage({ searchParams }: { searchParams: Promise<{ q?: string; history?: string }> }) {
+export default async function ReceivingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; history?: string; warranty?: string }>;
+}) {
   const user = await requirePagePermission("view");
   const s = await searchParams;
-  const history = s.history === "1";
+  const warrantySoon = s.warranty === "soon";
+  const history = !warrantySoon && s.history === "1";
+
+  if (warrantySoon) {
+    const rows = await listWarrantiesEndingSoon();
+    return (
+      <>
+        <PageHeader title="Receiving" subtitle="Supplier warranties ending in the next 30 days." />
+        <div className="toolbar">
+          <form className="search-pill" action="/receiving" role="search">
+            <SearchIcon />
+            <label htmlFor="q" className="sr-only">
+              Search by PO number, supplier, or serial number
+            </label>
+            <input id="q" name="q" defaultValue={s.q} placeholder="Search PO no., supplier, or serial" />
+            <input type="hidden" name="warranty" value="soon" />
+          </form>
+          <Link className="filter-chip" href="/receiving">
+            Awaiting delivery
+          </Link>
+          <Link className="filter-chip" href="/receiving?history=1">
+            Received
+          </Link>
+          <Link className="filter-chip active" href="/receiving?warranty=soon">
+            Warranty ending soon
+          </Link>
+        </div>
+        {rows.length === 0 ? (
+          <div className="card">
+            <EmptyState line="No supplier warranties ending in the next 30 days." />
+          </div>
+        ) : (
+          <DataTable
+            label="Warranties ending soon"
+            columns={[
+              { key: "ends", label: "Ends" },
+              { key: "item", label: "Item" },
+              { key: "serials", label: "Serials" },
+              { key: "number", label: "PO no." },
+              { key: "supplier", label: "Supplier" },
+              { key: "so", label: "Sales order" },
+            ]}
+            rows={rows.map((r) => ({
+              id: r.id,
+              href: `/receiving/${r.purchaseOrderId}`,
+              cells: {
+                ends: <span className="strong">{day(r.warrantyEndDate)}</span>,
+                item: r.itemDescription,
+                serials: r.serialNumbers?.trim() ? r.serialNumbers : <span className="faint">—</span>,
+                number: <span className="strong">{r.purchaseOrderNumber}</span>,
+                supplier: <PrimaryCell name={r.supplierName} />,
+                so: r.salesOrderNumber ?? <span className="faint">Standalone</span>,
+              },
+              sort: {
+                ends: r.warrantyEndDate,
+                item: r.itemDescription,
+                serials: r.serialNumbers ?? "",
+                number: r.purchaseOrderNumber,
+                supplier: r.supplierName,
+                so: r.salesOrderNumber ?? "",
+              },
+            }))}
+          />
+        )}
+      </>
+    );
+  }
+
   const rows = await listReceivingView({ q: s.q, history }, user);
 
   return (
@@ -30,6 +101,9 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
         </Link>
         <Link className={`filter-chip${history ? " active" : ""}`} href="/receiving?history=1">
           Received
+        </Link>
+        <Link className="filter-chip" href="/receiving?warranty=soon">
+          Warranty ending soon
         </Link>
       </div>
       {rows.length === 0 ? (

@@ -14,6 +14,7 @@ import { db } from "../db";
 import { canApprove, canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
+import { manilaToday } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
 import { remainingQty } from "./receipt";
@@ -39,6 +40,7 @@ import {
   valueReceived,
   type CostMarginSummary,
 } from "./cost-margin";
+import { warrantySoonWindow } from "./warranty-soon";
 
 type Viewer = PermissionUser & { id: string; isAdmin: boolean };
 
@@ -896,6 +898,71 @@ export async function purchasingStats(where: Prisma.PurchaseOrderWhereInput = {}
     db.purchaseOrder.count({ where: { ...where, status: { in: RECEIVABLE } } }),
   ]);
   return { openPos: open._count, openPosTotal: money(open._sum.subtotal ?? "0"), awaitingReceipt: awaiting };
+}
+
+// ---------------------------------------------------------------------------
+// SL-05: warranties ending soon (POSTED RR lines only; no prices)
+// ---------------------------------------------------------------------------
+
+export type WarrantySoonRow = {
+  id: string;
+  warrantyEndDate: string;
+  itemDescription: string;
+  serialNumbers: string | null;
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  supplierName: string;
+  salesOrderNumber: string | null;
+};
+
+const warrantySoonWhere = (now?: Date): Prisma.ReceivingReportItemWhereInput => {
+  const { from, to } = warrantySoonWindow(manilaToday(now));
+  return {
+    warrantyEndDate: { gte: from, lte: to },
+    receivingReport: { status: "POSTED" },
+    purchaseOrderItem: { removedAt: null },
+  };
+};
+
+/** Receiving lines whose supplier warranty ends in the next 30 Manila days, soonest first. */
+export async function listWarrantiesEndingSoon(opts: { take?: number; now?: Date } = {}): Promise<WarrantySoonRow[]> {
+  const rows = await db.receivingReportItem.findMany({
+    where: warrantySoonWhere(opts.now),
+    select: {
+      id: true,
+      warrantyEndDate: true,
+      serialNumbers: true,
+      purchaseOrderItem: { select: { description: true } },
+      receivingReport: {
+        select: {
+          purchaseOrder: {
+            select: {
+              id: true,
+              number: true,
+              supplier: { select: { name: true } },
+              salesOrder: { select: { number: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ warrantyEndDate: "asc" }, { id: "asc" }],
+    take: opts.take ?? 500,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    warrantyEndDate: ymd(r.warrantyEndDate)!,
+    itemDescription: r.purchaseOrderItem.description,
+    serialNumbers: r.serialNumbers,
+    purchaseOrderId: r.receivingReport.purchaseOrder.id,
+    purchaseOrderNumber: r.receivingReport.purchaseOrder.number,
+    supplierName: r.receivingReport.purchaseOrder.supplier.name,
+    salesOrderNumber: r.receivingReport.purchaseOrder.salesOrder?.number ?? null,
+  }));
+}
+
+export async function countWarrantiesEndingSoon(now?: Date): Promise<number> {
+  return db.receivingReportItem.count({ where: warrantySoonWhere(now) });
 }
 
 export { PO_STATUSES };
