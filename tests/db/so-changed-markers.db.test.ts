@@ -131,4 +131,72 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
     const changed = view?.items.find((i) => i.changedVsQuote);
     expect(changed?.changedVsQuote).toEqual(["price ₱4999.25 → ₱5000.00"]);
   });
+
+  it("pre-stamp SO after ↑/↓ reorder: fallback fails closed (no wrong markers)", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const supplier = await makeSupplier();
+    const q = await createQuote(
+      {
+        customerId: customer.id,
+        contactId: customer.contacts[0]!.id,
+        date: new Date(Date.UTC(year, 4, 1)),
+        validUntil: undefined,
+        terms: "Net 30",
+        notes: null,
+        items: [
+          { id: null, description: "Alpha line", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "100" },
+          { id: null, description: "Beta line", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "200", unitPrice: "200" },
+        ],
+      } as never,
+      admin,
+    );
+    await approveQuote(q.id, admin);
+    const delivAddr3 = await db.address.create({
+      data: { customerId: customer.id, kind: "DELIVERY", street: "3 Example St", isDefault: true },
+    });
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "B-MARK-3", deliveryAddressId: delivAddr3.id }, admin, {
+      date: new Date(Date.UTC(year, 4, 2)),
+    });
+    await db.salesOrderItem.updateMany({ where: { salesOrderId: so.id }, data: { quoteItemId: null } });
+
+    const soRows = await db.salesOrderItem.findMany({
+      where: { salesOrderId: so.id, removedAt: null },
+      orderBy: { sortOrder: "asc" },
+    });
+    expect(soRows).toHaveLength(2);
+    // Swap order like DocumentEditor ↑/↓ then save — planItems renumbers to 1..n.
+    // Naive sortOrder matching would compare Beta↔quote Alpha and stamp wrong Changed.
+    const reversed = [...soRows].reverse();
+    await updateSalesOrder(
+      so.id,
+      {
+        contactId: so.contactId,
+        buyerPoNo: "B-MARK-3",
+        buyerPoDate: null,
+        deliveryAddress: so.deliveryAddress,
+        terms: so.terms,
+        notes: so.notes,
+        priceOverrideReason: "Reorder lines for packing",
+        items: reversed.map((i) => ({
+          id: i.id,
+          description: i.description,
+          kind: i.kind,
+          qty: i.qty.toFixed(2),
+          unit: i.unit,
+          unitPrice: i.unitPrice.toFixed(2),
+          supplierId: i.supplierId,
+          supplierUnitCost: i.supplierUnitCost.toFixed(2),
+          withholdingRate: i.withholdingRate != null ? Number(i.withholdingRate).toFixed(4) : null,
+          withholdingAtc: i.withholdingAtc,
+          withholdingOverride: i.withholdingOverride,
+        })),
+      } as never,
+      admin,
+    );
+
+    const view = await getSalesOrderView(so.id, admin);
+    expect(view?.changedLineCount).toBe(0);
+    expect(view?.items.every((i) => !i.changedVsQuote)).toBe(true);
+  });
 });

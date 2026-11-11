@@ -19,9 +19,12 @@ describe("#193 marker fallback for pre-stamp conversions", () => {
     expect(views).toContain("where: { quoteId: so.quote.id, removedAt: null }");
   });
 
-  it("requires equal counts and a sortOrder match for every line", () => {
+  it("requires equal counts, unique sortOrders, and description match at each sortOrder", () => {
     expect(views).toContain("if (all.length === so.items.length)");
+    expect(views).toContain("bySort.size === all.length");
+    expect(views).toContain("soBySort.size === so.items.length");
     expect(views).toContain("const q = bySort.get(i.sortOrder);");
+    expect(views).toContain("q.description !== i.description");
   });
 });
 
