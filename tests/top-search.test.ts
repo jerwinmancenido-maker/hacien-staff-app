@@ -6,6 +6,7 @@ import {
   TOP_SEARCH_MIN_Q,
   mergeReceivingSearchRows,
   normalizeTopSearchQuery,
+  receivingSeeAllHref,
   takeTopSearchHits,
   topSearchListHref,
 } from "@/lib/search/top-search";
@@ -22,12 +23,22 @@ describe("top search query length", () => {
     expect(normalizeTopSearchQuery("ab")).toBe("ab");
     expect(normalizeTopSearchQuery("  QT-1  ")).toBe("QT-1");
   });
+
+  it("coerces string[] searchParams (first value) and ignores non-strings", () => {
+    expect(normalizeTopSearchQuery(["ab", "cd"])).toBe("ab");
+    expect(normalizeTopSearchQuery(["  QT-1  ", "other"])).toBe("QT-1");
+    expect(normalizeTopSearchQuery(["x"])).toBeNull();
+    expect(normalizeTopSearchQuery([])).toBeNull();
+    expect(normalizeTopSearchQuery(undefined)).toBeNull();
+    expect(normalizeTopSearchQuery(null)).toBeNull();
+  });
 });
 
 describe("top search helpers", () => {
   it("builds list hrefs with the same q", () => {
     expect(topSearchListHref("/sales-orders", "SN-9")).toBe("/sales-orders?q=SN-9");
     expect(topSearchListHref("/billing/billings", "ac me")).toBe("/billing/billings?q=ac+me");
+    expect(topSearchListHref("/receiving", "SN-9", { history: "1" })).toBe("/receiving?q=SN-9&history=1");
   });
 
   it("caps each group at 5 hits", () => {
@@ -49,6 +60,13 @@ describe("top search helpers", () => {
     const open = [{ id: "a", number: "PO-1" }, { id: "b", number: "PO-2" }];
     const history = [{ id: "b", number: "PO-2" }, { id: "c", number: "PO-3" }];
     expect(mergeReceivingSearchRows(open, history).map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("adds history=1 on Receiving See all when shown hits are history-only", () => {
+    const openIds = new Set(["a"]);
+    expect(receivingSeeAllHref("SN", openIds, ["a"])).toBe("/receiving?q=SN");
+    expect(receivingSeeAllHref("SN", openIds, ["c"])).toBe("/receiving?q=SN&history=1");
+    expect(receivingSeeAllHref("SN", openIds, ["a", "c"])).toBe("/receiving?q=SN&history=1");
   });
 });
 
@@ -75,12 +93,13 @@ describe("top search wiring", () => {
     expect(src).toContain('requirePagePermission("view")');
     expect(src).toContain("listQuotesView({ q }, user)");
     expect(src).toContain("listSalesOrdersView({ q })");
-    expect(src).toContain("listCustomers({ q, matchTin: showTin })");
-    expect(src).toContain("listSuppliers({ q, matchTin: showTin })");
+    expect(src).toContain("listCustomers({ q, matchTin: showTin, take: TOP_SEARCH_GROUP_LIMIT })");
+    expect(src).toContain("listSuppliers({ q, matchTin: showTin, take: TOP_SEARCH_GROUP_LIMIT })");
     expect(src).toContain("listPurchaseOrdersView({ q }, user)");
     expect(src).toContain("listReceivingView({ q }, user)");
     expect(src).toContain("listReceivingView({ q, history: true }, user)");
     expect(src).toContain("listBillings({ q })");
+    expect(src).toContain("receivingSeeAllHref");
     expect(src).toContain("See all in Sales orders →");
     expect(src).toContain('title="No matches"');
     expect(src).toContain("Try a number, a name, or a serial.");

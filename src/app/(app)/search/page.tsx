@@ -9,14 +9,16 @@ import { listCustomers, listSuppliers } from "@/lib/services/companies";
 import { QUOTE_STATUS_LABELS, SO_STATUS_LABELS } from "@/components/docs/DocParts";
 import { EmptyState, PageHeader } from "@/components/ui";
 import {
+  TOP_SEARCH_GROUP_LIMIT,
   mergeReceivingSearchRows,
   normalizeTopSearchQuery,
+  receivingSeeAllHref,
   takeTopSearchHits,
   topSearchListHref,
   type TopSearchHit,
 } from "@/lib/search/top-search";
 
-type SearchParams = { q?: string };
+type SearchParams = { q?: string | string[] };
 
 type SearchGroup = {
   key: string;
@@ -51,8 +53,8 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
     await Promise.all([
       listQuotesView({ q }, user),
       listSalesOrdersView({ q }),
-      listCustomers({ q, matchTin: showTin }),
-      listSuppliers({ q, matchTin: showTin }),
+      listCustomers({ q, matchTin: showTin, take: TOP_SEARCH_GROUP_LIMIT }),
+      listSuppliers({ q, matchTin: showTin, take: TOP_SEARCH_GROUP_LIMIT }),
       listPurchaseOrdersView({ q }, user),
       listReceivingView({ q }, user),
       listReceivingView({ q, history: true }, user),
@@ -60,6 +62,14 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
     ]);
 
   const receiving = mergeReceivingSearchRows(receivingOpen, receivingHistory);
+  const receivingOpenIds = new Set(receivingOpen.map((r) => r.id));
+  const receivingHits = takeTopSearchHits(receiving, (r) => ({
+    id: r.id,
+    href: `/receiving/${r.id}`,
+    primary: r.number,
+    secondary: r.supplier.name,
+    status: PO_STATUS_LABELS[r.status] ?? r.status,
+  }));
 
   const groups: SearchGroup[] = [
     {
@@ -131,14 +141,12 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
       key: "receiving",
       title: "Receiving",
       seeAllLabel: "See all in Receiving →",
-      seeAllHref: topSearchListHref("/receiving", q),
-      hits: takeTopSearchHits(receiving, (r) => ({
-        id: r.id,
-        href: `/receiving/${r.id}`,
-        primary: r.number,
-        secondary: r.supplier.name,
-        status: PO_STATUS_LABELS[r.status] ?? r.status,
-      })),
+      seeAllHref: receivingSeeAllHref(
+        q,
+        receivingOpenIds,
+        receivingHits.map((h) => h.id),
+      ),
+      hits: receivingHits,
     },
     {
       key: "billings",
