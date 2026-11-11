@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "../db.ts";
 
 /**
  * The dedicated acting user for /api/v1 (REQ-API-001 decision 3): every API

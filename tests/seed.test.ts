@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -165,5 +166,85 @@ describe("base seed plan creates no business records", () => {
       ].includes(c.model.toLowerCase()),
     );
     expect(touchedBusinessModels).toEqual([]);
+  });
+});
+
+describe("seed load graph ESM extensions (Release 6 hotfix regression)", () => {
+  it("every runtime relative import in the seed load graph has an explicit file extension", () => {
+    const root = path.resolve(__dirname, "..");
+    const visited = new Set<string>();
+    const queue = [
+      path.resolve(root, "prisma/seed.mts"),
+      path.resolve(root, "prisma/seed-demo.mts"),
+    ];
+
+    const offenders: { file: string; specifier: string }[] = [];
+
+    while (queue.length > 0) {
+      const file = queue.shift()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+
+      const content = readFileSync(file, "utf8");
+      const regex = /(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?from\s+)?["'](\.[^"']+)["']/g;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(content)) !== null) {
+        const specifier = match[1]!;
+        const isTypeOnly = /import\s+type\b|export\s+type\b/.test(match[0]);
+        if (isTypeOnly) continue; // type-only imports are stripped by Node --experimental-strip-types
+        const ext = path.extname(specifier);
+        const resolved = path.resolve(path.dirname(file), specifier);
+
+        if (!ext) {
+          offenders.push({
+            file: path.relative(root, file),
+            specifier,
+          });
+        }
+
+        let target: string | null = null;
+        if (ext && existsSync(resolved)) {
+          target = resolved;
+        } else if (existsSync(`${resolved}.ts`)) {
+          target = `${resolved}.ts`;
+        } else if (existsSync(`${resolved}.mts`)) {
+          target = `${resolved}.mts`;
+        }
+
+        if (target && !visited.has(target)) {
+          queue.push(target);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("node --experimental-strip-types successfully loads the seed graph modules without ERR_MODULE_NOT_FOUND", () => {
+    const root = path.resolve(__dirname, "..");
+    const script = `
+      Promise.all([
+        import("./src/lib/no-delete.ts"),
+        import("./src/lib/seed-guard.ts"),
+        import("./src/lib/seed-base.ts"),
+        import("./prisma/seed-demo.mts"),
+      ]).then(() => process.stdout.write("LOADED_OK"));
+    `;
+
+    const out = execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "-e", script],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          DATABASE_URL: "mysql://nobody:nothing@127.0.0.1:1/none",
+        },
+      },
+    );
+
+    expect(out).toContain("LOADED_OK");
   });
 });
