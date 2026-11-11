@@ -3,12 +3,12 @@
 // inside updateSalesOrder, under the SO row lock —
 //  A1: once any non-void billing exists, the BIR core is frozen for
 //      everyone: no line removals, no withholding rate/ATC/pick changes
-//      (the 2307 split reads the live SO). Qty/price edits and line adds
-//      stay open under the price lock (Admin + typed reason, audited).
-//      Each billing captures its own withholding breakdown at record time
-//      (Billing.withholdingBreakdown), and the 2307 prefill splits from
-//      it — proven below: an allowed edit cannot move an issued SI's
-//      prefill.
+//      (the 2307 split uses the billing's stored breakdown). Qty/price
+//      edits and line adds stay open under the price lock (Admin + typed
+//      reason, audited). Each billing captures its own withholding
+//      breakdown at record time (Billing.withholdingBreakdown), and the
+//      2307 prefill splits from it — proven below: an allowed edit cannot
+//      move an issued SI's prefill.
 //  A2: contract price can never drop below the billed total.
 //  A3: qty can never drop below the live ordered qty (PO not VOID, PO line
 //      not removed); a line — or a lot whose component — is on a PO cannot
@@ -547,6 +547,55 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       await expect(
         updateSalesOrder(so.id, await soInput(so.id, (items) => items, { withholdingCodes: ["GOV_GOODS_1"] }), admin),
       ).rejects.toThrow(/Withholding can't change after a billing is issued/);
+    }
+
+    // --- REQ-188 Test 3: Billed stacked GOV_PT + Admin exempt override add-on -----
+    // Same setup as Test 2 (₱2,000.00 / ₱80.00, header {WI640, WB080}). After a
+    // non-void billing, Admin adds an exempt override line (same pattern as
+    // Test 1). Header must stay stacked, WH must stay ₱80.00 (goods base
+    // unchanged), and a later recordBilling must still see {WI640, WB080} —
+    // not collapse to line-driven {WI640} / ₱20.00.
+    {
+      const year = await freshYear();
+      const govItems: QuoteInput["items"] = [
+        { id: null, description: "Gov goods", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, govItems, ["GOV_GOODS_1", "GOV_PT_3"]);
+      const soInitial = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soInitial.withholdingTotal.toFixed(2)).toBe("80.00");
+      expect(snapshotList(soInitial.withholding).map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
+
+      const invoiceNo1 = await nextInvoice();
+      await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo1, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => [
+          ...items,
+          { id: null, description: "Exempt addon", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: true },
+        ]),
+        admin,
+      );
+
+      const soAfterExempt = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfterExempt.contractPrice.toFixed(2)).toBe("3000.00");
+      expect(soAfterExempt.withholdingTotal.toFixed(2)).toBe("80.00");
+      const snapsAfterExempt = snapshotList(soAfterExempt.withholding);
+      expect(snapsAfterExempt.map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
+
+      const invoiceNo2 = await nextInvoice();
+      const b2 = await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo2, invoiceDate: new Date(Date.UTC(year, 2, 6)), dueDate: new Date(Date.UTC(year, 3, 5)), notes: null },
+        admin,
+      );
+      const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
+      // proRataWithholding(500, 3000, 80) = 13.33; stack must still drive the breakdown
+      expect(b2Row.withholdingExpected.toFixed(2)).toBe("13.33");
+      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(b2Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
     }
   });
 });

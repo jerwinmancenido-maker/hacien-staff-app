@@ -266,12 +266,27 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       // While billings exist, freeze the stored snapshot on the header and
       // recompute WH money against that snapshot (A1), so stacked codes
       // like GOV_PT are never collapsed and qty/price edits move real totals.
-      // Line overrides (e.g. exempt 0% lines) keep line-driven totals.
-      const hasLineOverride = items.some((i) => i.withholdingOverride);
-      const billedTotals =
-        liveBillings.length && !hasLineOverride && storedSnapshots.length > 0
-          ? docTotals(items, storedSnapshots)
+      // Keep this path even when a line has withholdingOverride (e.g. an
+      // Admin exempt add-on): falling back to line-driven totals collapses
+      // stacked GOV_PT via rateFromDocWithholding. Override lines stay out
+      // of the pick base so an exempt add-on neither drops the stack nor
+      // taxes the exempt amount; netReceived still uses the full contract.
+      const billedWh =
+        liveBillings.length && storedSnapshots.length > 0
+          ? docTotals(
+              items.filter((i) => !i.withholdingOverride),
+              storedSnapshots,
+            )
           : null;
+      const billedTotals = billedWh
+        ? {
+            withholdingTotal: billedWh.withholdingTotal,
+            netReceived: fromScaled(
+              toScaled(preserved.totals.contractPrice, 2) - toScaled(billedWh.withholdingTotal, 2),
+              2,
+            ),
+          }
+        : null;
       const finalWithholding = liveBillings.length
         ? (before.withholding as unknown as Prisma.InputJsonValue)
         : (preserved.withholding as unknown as Prisma.InputJsonValue);
@@ -346,12 +361,12 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         // A1 (REVISED — looser rule; Jerwin direct 2026-11-10 17:17, final
         // approval 17:22): once an SI exists, the BIR core is frozen for
         // everyone — no line removals and no withholding rate/ATC/pick
-        // changes, because the 2307 split reads the live SO. Everything
-        // else stays editable: qty/price changes and line adds go through
-        // the price lock below (Admin + typed reason, audited) and the
-        // A2/A3 floors. Each billing also carries its own withholding
-        // breakdown from record time, so allowed edits cannot move an
-        // issued SI's split.
+        // changes. The 2307 split uses the billing's stored breakdown.
+        // Everything else stays editable: qty/price changes and line adds
+        // go through the price lock below (Admin + typed reason, audited)
+        // and the A2/A3 floors. Each billing also carries its own
+        // withholding breakdown from record time, so allowed edits cannot
+        // move an issued SI's split.
         const siNo = liveBillings[0]!.invoiceNo;
         const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
         if (removedIds.length) {
