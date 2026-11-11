@@ -323,15 +323,21 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         contractPrice: money(finalTotals.contractPrice),
         withholdingTotal: money(finalTotals.withholdingTotal),
         netReceived: money(finalTotals.netReceived),
-        // Compare the planned / persisted rows that will actually be saved.
-        lines: items.map((i) => ({
-          id: i.id ?? null,
-          qty: money(i.qty),
-          unitPrice: money(i.unitPrice),
-          kind: i.kind,
-          withholdingRate: i.withholdingRate ?? null,
-          withholdingAtc: i.withholdingAtc ?? null,
-        })),
+        // Same NULL-rate fill as beforePrices: a notes-only save with legacy
+        // null line rates must not look like a withholding/price change to
+        // salesOrderPricesChanged (A2 billed floor / price lock).
+        lines: items.map((i) => {
+          const storedRate = i.withholdingRate != null ? i.withholdingRate : null;
+          const fromDoc = storedRate == null ? rateFromDocWithholding(before.withholding, i.kind) : null;
+          return {
+            id: i.id ?? null,
+            qty: money(i.qty),
+            unitPrice: money(i.unitPrice),
+            kind: i.kind,
+            withholdingRate: storedRate ?? fromDoc?.withholdingRate ?? null,
+            withholdingAtc: i.withholdingAtc ?? fromDoc?.withholdingAtc ?? null,
+          };
+        }),
       };
       // Delivered qty is authoritative: cannot remove a delivered line or drop
       // ordered qty below what was already delivered (check before price lock).

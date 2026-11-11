@@ -25,6 +25,7 @@ import {
   PRICE_LOCK_MESSAGE,
   PRICE_OVERRIDE_REASON,
   salesOrderPriceLockError,
+  salesOrderPricesChanged,
   voidSalesOrder,
   type SoPriceSnapshot,
 } from "@/lib/services/sales-orders";
@@ -124,6 +125,19 @@ describe("won sales order price lock", () => {
     const changed = snap({ lines: [{ ...line, qty: "2.00" }], contractPrice: "163001.50", netReceived: "163001.50" });
     expect(salesOrderPriceLockError({ isAdmin: true, reason: "  ", before, after: changed })).toBe(PRICE_OVERRIDE_REASON);
     expect(salesOrderPriceLockError({ isAdmin: true, reason: "Quote was 81500.75", before, after: changed })).toBeNull();
+  });
+
+  it("treats normalized null-rate fills as unchanged (REQ-205 notes-only floor)", () => {
+    // updateSalesOrder fills both before/after from the doc snapshot when
+    // stored line rates are null — both sides must compare equal.
+    const filled = snap({ lines: [{ ...line, withholdingRate: "0.0100", withholdingAtc: "WI158" }] });
+    expect(salesOrderPricesChanged(filled, filled)).toBe(false);
+    const priceCut = snap({
+      contractPrice: "1000.00",
+      netReceived: "1000.00",
+      lines: [{ ...line, unitPrice: "1000.00" }],
+    });
+    expect(salesOrderPricesChanged(filled, priceCut)).toBe(true);
   });
 });
 
