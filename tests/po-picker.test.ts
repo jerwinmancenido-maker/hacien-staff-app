@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildSoPickerRows, overOrder, type SoPickerLineInput } from "@/lib/purchasing/picker";
+import {
+  buildSoPickerRows,
+  overOrder,
+  remainingQtyForExistingPoLine,
+  type SoPickerLineInput,
+} from "@/lib/purchasing/picker";
+import { toScaled } from "@/lib/quotes/calc";
 
 const line = (patch: Partial<SoPickerLineInput> = {}): SoPickerLineInput => ({
   id: "so-line-1",
@@ -94,5 +100,58 @@ describe("overOrder", () => {
     expect(overOrder("10", "10.00")).toBe(false);
     expect(overOrder("9.99", "10.00")).toBe(false);
     expect(overOrder("", "10.00")).toBe(false);
+  });
+});
+
+describe("overOrder — render safety (PO editor qty crash)", () => {
+  it("never throws on half-typed or invalid live qty (staging re-proof inputs)", () => {
+    // toScaled itself still throws — the helper must swallow that for render.
+    expect(() => toScaled("2.", 2)).toThrow(/Not a decimal number/);
+    expect(() => toScaled(".", 2)).toThrow(/Not a decimal number/);
+    expect(overOrder("2.", "1.00")).toBe(false);
+    expect(overOrder(".", "1.00")).toBe(false);
+    expect(overOrder("", "1.00")).toBe(false);
+    expect(overOrder("abc", "1.00")).toBe(false);
+    expect(overOrder("3", "2.00")).toBe(true);
+    expect(overOrder("1.00", "2.00")).toBe(false);
+    expect(overOrder("2", "1.00")).toBe(true);
+    expect(overOrder("1", "1.00")).toBe(false);
+  });
+});
+
+describe("remainingQtyForExistingPoLine — editor over-order warning for saved lines", () => {
+  it("excludes this PO so an already over-ordered saved line still has remaining to compare against", () => {
+    // Fixture shape: SO qty 1, this PO holds 2, no other POs → remaining for
+    // the line is the full SO qty (1.00). Live overOrder(2, 1) warns; overOrder(1, 1) does not.
+    const remaining = remainingQtyForExistingPoLine({
+      soQty: "1.00",
+      thisPoId: "po-this",
+      ordered: { purchaseOrders: [{ id: "po-this", qty: "2.00" }] },
+    });
+    expect(remaining).toBe("1.00");
+    expect(overOrder("2.00", remaining)).toBe(true);
+    expect(overOrder("1.00", remaining)).toBe(false);
+    expect(overOrder("3", remaining)).toBe(true);
+  });
+
+  it("subtracts only other POs' holds", () => {
+    const remaining = remainingQtyForExistingPoLine({
+      soQty: "10.00",
+      thisPoId: "po-this",
+      ordered: {
+        purchaseOrders: [
+          { id: "po-other", qty: "4.00" },
+          { id: "po-this", qty: "3.00" },
+        ],
+      },
+    });
+    expect(remaining).toBe("6.00");
+    expect(overOrder("7", remaining)).toBe(true);
+    expect(overOrder("6", remaining)).toBe(false);
+  });
+
+  it("returns the full SO qty when nothing else is ordered", () => {
+    expect(remainingQtyForExistingPoLine({ soQty: "5.00", thisPoId: "po-this", ordered: null })).toBe("5.00");
+    expect(remainingQtyForExistingPoLine({ soQty: "5.00", thisPoId: "po-this" })).toBe("5.00");
   });
 });
