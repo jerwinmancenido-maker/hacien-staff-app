@@ -8891,3 +8891,43 @@ button.contact-card-add {
     --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
   }
 }
+
+/* PO editor "Add from sales order" picker (Part B). Appended at the very end
+   on purpose: #185/#186 append their own blocks here too — keep this block
+   after merging either of them. */
+.so-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 14px;
+  background: var(--grey-50);
+}
+.so-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.so-picker-row:first-of-type {
+  border-top: none;
+}
+.so-picker-row.is-greyed {
+  opacity: 0.55;
+}
+.so-picker-main {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.so-picker-controls {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.so-picker-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

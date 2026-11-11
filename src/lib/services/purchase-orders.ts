@@ -25,6 +25,7 @@ import {
   type PoStatus,
 } from "../purchasing/status";
 import { loadOrderedQty } from "../purchasing/ordered";
+import { overOrder } from "../purchasing/picker";
 import {
   planPoSelection,
   planPurchaseOrders,
@@ -567,11 +568,96 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
+      // Part B (audit B1): lock the sales order row BEFORE the PO, so a
+      // picker save and an SO edit (or a second PO's picker save) cannot
+      // interleave — remaining qty is re-checked under both locks.
+      if (current.salesOrderId) {
+        await tx.$queryRaw`SELECT \`id\` FROM \`SalesOrder\` WHERE \`id\` = ${current.salesOrderId} FOR UPDATE`;
+      }
       const before = await lockPurchaseOrder(tx, id);
       const err = poActionError(before.status, "edit");
       if (err) throw new DocRuleError(err);
       const existing = new Map(before.items.map((i) => [i.id, i]));
       for (const l of input.items) if (l.id && !existing.has(l.id)) throw new DocRuleError("One of the lines no longer exists. Reload and try again.", "items");
+
+      // Part B: "Add from sales order" — link ids arrive on NEW lines only
+      // (audit B2). Each is re-checked against THIS PO's sales order under
+      // the locks above: it must belong to that SO, its supplier must be the
+      // PO's supplier or none, and it must not already sit on this PO.
+      // Quantity past the remaining qty is NOT refused (Jerwin's settlement:
+      // deliberate extras) — it is recorded in the audit row as over-order.
+      type AddedFromSo = {
+        description: string;
+        salesOrderItemId: string | null;
+        salesOrderItemComponentId: string | null;
+        wasNoSupplier: boolean;
+        overOrder: { qty: string; remainingQty: string } | null;
+      };
+      const addedFromSo: AddedFromSo[] = [];
+      const claimByKey = new Map<string, boolean>();
+      const newLinked = input.items.filter((l) => !l.id && (l.salesOrderItemId || l.salesOrderItemComponentId));
+      if (newLinked.length) {
+        const soId = current.salesOrderId;
+        if (!soId) throw new DocRuleError("This purchase order is not from a sales order, so its lines can't link to one.", "items");
+        const so = await tx.salesOrder.findUnique({
+          where: { id: soId },
+          select: {
+            status: true,
+            items: {
+              where: { removedAt: null },
+              select: {
+                id: true, description: true, qty: true, supplierId: true,
+                components: { where: { removedAt: null }, select: { id: true, description: true, qty: true, supplierId: true } },
+              },
+            },
+          },
+        });
+        if (!so) throw new DocRuleError("The sales order behind this PO no longer exists.", "items");
+        if (so.status !== "OPEN") throw new DocRuleError("That sales order is closed, so no more lines can be added from it.", "items");
+        const soLineById = new Map(so.items.map((i) => [i.id, i]));
+        const soCompById = new Map(so.items.flatMap((i) => i.components.map((c) => [c.id, c] as const)));
+        const onThisPo = new Set(
+          before.items.flatMap((i) => [i.salesOrderItemId, i.salesOrderItemComponentId]).filter((x): x is string => !!x),
+        );
+        const ordered = await loadOrderedQty([...soLineById.keys()], [...soCompById.keys()], tx);
+        const claimedLines = await orderedSoLineIds([...soLineById.keys()], tx);
+        const claimedComps = await orderedSoComponentIds([...soCompById.keys()], tx);
+        const seenKeys = new Set<string>();
+        for (const l of newLinked) {
+          const key = (l.salesOrderItemComponentId ?? l.salesOrderItemId)!;
+          if (seenKeys.has(key) || onThisPo.has(key)) {
+            throw new DocRuleError(`"${l.description.split("\n")[0]}" is already on this purchase order — change its quantity instead.`, "items");
+          }
+          seenKeys.add(key);
+          const src = l.salesOrderItemComponentId ? soCompById.get(key) : soLineById.get(key);
+          if (!src) throw new DocRuleError(`"${l.description.split("\n")[0]}" is not a line of this PO's sales order.`, "items");
+          if (src.supplierId && src.supplierId !== current.supplierId) {
+            throw new DocRuleError(`"${l.description.split("\n")[0]}" belongs to a different supplier — it needs its own purchase order.`, "items");
+          }
+          const bucket = l.salesOrderItemComponentId ? ordered.components.get(key) : ordered.lines.get(key);
+          const remainingQty = qtyLeft(money(src.qty), bucket?.qty ?? "0.00");
+          addedFromSo.push({
+            description: l.description,
+            salesOrderItemId: l.salesOrderItemId ?? null,
+            salesOrderItemComponentId: l.salesOrderItemComponentId ?? null,
+            wasNoSupplier: !src.supplierId,
+            overOrder: overOrder(l.qty, remainingQty) ? { qty: l.qty, remainingQty } : null,
+          });
+          // The unique claim goes to the first live PO line; a later PO's
+          // line still links (non-unique columns) without the claim (S5/B3).
+          claimByKey.set(key, l.salesOrderItemComponentId ? !claimedComps.has(key) : !claimedLines.has(key));
+        }
+      }
+      // A link on an EXISTING line may not be added, moved or dropped here —
+      // links are set when the line is created (B2).
+      for (const l of input.items) {
+        if (!l.id) continue;
+        const cur = existing.get(l.id)!;
+        if ((l.salesOrderItemId ?? null) !== cur.salesOrderItemId || (l.salesOrderItemComponentId ?? null) !== cur.salesOrderItemComponentId) {
+          throw new DocRuleError("A line's sales-order link can't be changed. Remove the line and add it again instead.", "items");
+        }
+      }
+
       const keep = new Set(input.items.map((l) => l.id).filter(Boolean));
       const removed = before.items.filter((i) => !keep.has(i.id)).map((i) => i.id);
       if (removed.length) {
@@ -583,7 +669,26 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
       for (const [n, l] of input.items.entries()) {
         const data = { sortOrder: n, description: l.description, kind: l.kind, qty: l.qty, unit: l.unit, unitCost: l.unitCost, total: lineTotal(l.qty, l.unitCost) };
         if (l.id) await tx.purchaseOrderItem.update({ where: { id: l.id }, data });
-        else await tx.purchaseOrderItem.create({ data: { ...data, purchaseOrderId: id } });
+        else if (l.salesOrderItemId || l.salesOrderItemComponentId) {
+          const key = (l.salesOrderItemComponentId ?? l.salesOrderItemId)!;
+          const linked = itemCreate(l, n, claimByKey.get(key) ?? false);
+          await tx.purchaseOrderItem.create({
+            data: {
+              purchaseOrderId: id,
+              sortOrder: n,
+              description: l.description,
+              kind: l.kind,
+              qty: l.qty,
+              unit: l.unit,
+              unitCost: l.unitCost,
+              total: linked.total,
+              salesOrderItemId: linked.salesOrderItemId,
+              activeSalesOrderItemId: linked.activeSalesOrderItemId,
+              salesOrderItemComponentId: linked.salesOrderItemComponentId,
+              activeSalesOrderItemComponentId: linked.activeSalesOrderItemComponentId,
+            },
+          });
+        } else await tx.purchaseOrderItem.create({ data: { ...data, purchaseOrderId: id } });
       }
       const next = afterEdit(before.status);
       const after = await tx.purchaseOrder.update({
@@ -609,7 +714,14 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
         entityId: id,
         action: "update",
         before: { ...poAudit(before), ...(next.clearsApproval ? { approval: "approved" } : {}) },
-        after: { ...poAudit(after), ...(next.clearsApproval ? { approval: "cleared (edited after approval)" } : {}) },
+        after: {
+          ...poAudit(after),
+          ...(next.clearsApproval ? { approval: "cleared (edited after approval)" } : {}),
+          // Part B (audit B5): picker-added lines carry the create-shaped
+          // record — which SO line, whether it had no supplier, and whether
+          // the qty deliberately went past what the SO still needs.
+          ...(addedFromSo.length ? { addedFromSalesOrder: addedFromSo } : {}),
+        },
       });
       return after;
     }, DOC_TX),

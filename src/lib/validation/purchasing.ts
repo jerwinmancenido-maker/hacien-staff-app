@@ -37,6 +37,13 @@ const amount = (label: string, opts: { positive?: boolean } = {}) =>
 
 export const poLineSchema = z.object({
   id: optionalId,
+  // Part B picker: link ids are accepted on NEW lines only (no id yet); the
+  // service refuses them anywhere else and re-checks them against the PO's
+  // own sales order. Existing lines keep the link they were created with.
+  // Optional properties: every older payload (and every test fixture) omits
+  // them entirely.
+  salesOrderItemId: optionalId.optional(),
+  salesOrderItemComponentId: optionalId.optional(),
   description: z.string().trim().min(1, "Description is required.").max(2000),
   kind: z.enum(ITEM_KINDS, { error: "Pick goods or services." }),
   qty: amount("Qty", { positive: true }),

@@ -29,6 +29,7 @@ import {
 import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import { receivingCoverageNote } from "../billing/coverage";
+import { buildSoPickerRows, type SoPickerRow } from "./picker";
 import {
   billExceedsPo,
   buildCostMarginSummary,
@@ -276,8 +277,91 @@ export type PurchaseOrderView = NonNullable<Awaited<ReturnType<typeof getPurchas
 /** Raw values for the PO edit form (cost users only). */
 export async function getPurchaseOrderEditData(id: string, viewer: PermissionUser) {
   assertCosts(viewer);
-  const po = await db.purchaseOrder.findUnique({ where: { id }, include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } } });
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          salesOrderItem: { select: { qty: true, supplierUnitCost: true } },
+          salesOrderItemComponent: { select: { qty: true, unitCost: true } },
+        },
+      },
+    },
+  });
   if (!po) return null;
+
+  // Part B: the "Add from sales order" picker + "Changed vs SO" markers.
+  // The picker lists this PO's own sales order's lines/components that still
+  // have unordered qty and are not already on this PO.
+  let soPicker: { soNumber: string; rows: SoPickerRow[] } | null = null;
+  if (po.salesOrderId) {
+    const so = await db.salesOrder.findUnique({
+      where: { id: po.salesOrderId },
+      select: {
+        number: true,
+        items: {
+          where: { removedAt: null },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true, description: true, kind: true, qty: true, unit: true, isLot: true,
+            supplierId: true, supplierUnitCost: true,
+            supplier: { select: { name: true } },
+            components: {
+              where: { removedAt: null },
+              orderBy: { sortOrder: "asc" },
+              select: {
+                id: true, description: true, qty: true, unit: true,
+                supplierId: true, unitCost: true,
+                supplier: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (so) {
+      const ordered = await loadOrderedQty(
+        so.items.filter((i) => !i.isLot).map((i) => i.id),
+        so.items.flatMap((i) => i.components.map((c) => c.id)),
+        db,
+      );
+      const onThisPo = new Set(
+        po.items.flatMap((i) => [i.salesOrderItemId, i.salesOrderItemComponentId]).filter((x): x is string => !!x),
+      );
+      soPicker = {
+        soNumber: so.number,
+        rows: buildSoPickerRows({
+          lines: so.items.map((i) => ({
+            id: i.id,
+            description: i.description,
+            kind: i.kind,
+            qty: money(i.qty),
+            unit: i.unit,
+            supplierId: i.supplierId,
+            supplierName: i.supplier?.name ?? null,
+            unitCost: money(i.supplierUnitCost),
+            isLot: i.isLot,
+            components: i.components.map((c) => ({
+              id: c.id,
+              description: c.description,
+              qty: money(c.qty),
+              unit: c.unit,
+              supplierId: c.supplierId,
+              supplierName: c.supplier?.name ?? null,
+              unitCost: money(c.unitCost),
+            })),
+          })),
+          orderedLines: ordered.lines,
+          orderedComponents: ordered.components,
+          poSupplierId: po.supplierId,
+          onThisPo,
+        }),
+      };
+    }
+  }
+
   return {
     id: po.id,
     number: po.number,
@@ -290,7 +374,21 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     deliveryAddressText: po.deliveryAddressText ?? "",
     supplierAddressText: po.supplierAddressText ?? "",
     notes: po.notes ?? "",
-    items: po.items.map((i) => ({ id: i.id, description: i.description, kind: i.kind, qty: money(i.qty), unit: i.unit, unitCost: money(i.unitCost), linked: !!i.salesOrderItemId })),
+    items: po.items.map((i) => ({
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: money(i.qty),
+      unit: i.unit,
+      unitCost: money(i.unitCost),
+      linked: !!(i.salesOrderItemId || i.salesOrderItemComponentId),
+      salesOrderItemId: i.salesOrderItemId,
+      salesOrderItemComponentId: i.salesOrderItemComponentId,
+      // Marker reference: what the sales order itself says for this line.
+      soQty: i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null,
+      soUnitCost: i.salesOrderItem ? money(i.salesOrderItem.supplierUnitCost) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.unitCost) : null,
+    })),
+    soPicker,
   };
 }
 
@@ -512,9 +610,20 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
         select: {
           id: true,
           qty: true,
+          isLot: true,
           purchaseOrderItems: {
-            where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+            where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } }, salesOrderItemComponentId: null },
             select: { qty: true },
+          },
+          components: {
+            where: { removedAt: null },
+            select: {
+              qty: true,
+              purchaseOrderItems: {
+                where: { removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
+                select: { qty: true },
+              },
+            },
           },
         },
       },
@@ -548,8 +657,13 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
 
   let uncoveredLineCount = 0;
   for (const item of so.items) {
-    const ordered = sumMoney(item.purchaseOrderItems.map((x) => money(x.qty)));
-    if (lineNeedsMorePo(money(item.qty), ordered)) uncoveredLineCount += 1;
+    // Audit B4: a lot is covered when its COMPONENTS are ordered — the lot
+    // line's own PO rows are only the component buys' parent links, never
+    // counted against the lot's qty of 1.
+    const uncovered = item.isLot
+      ? item.components.some((c) => lineNeedsMorePo(money(c.qty), sumMoney(c.purchaseOrderItems.map((x) => money(x.qty)))))
+      : lineNeedsMorePo(money(item.qty), sumMoney(item.purchaseOrderItems.map((x) => money(x.qty))));
+    if (uncovered) uncoveredLineCount += 1;
   }
 
   const poInputs = pos.map((po) => {

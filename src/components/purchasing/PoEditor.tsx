@@ -11,11 +11,28 @@ import { AddSupplierDialog } from "./AddSupplierDialog";
 import { useFormAction } from "@/components/useFormAction";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
+import { overOrder, type SoPickerRow } from "@/lib/purchasing/picker";
 import type { FormState } from "@/lib/validation/forms";
 
 export type PoEditorSupplier = { id: string; name: string; defaultTerms: string | null; address: string | null; contacts: { id: string; name: string; isMain: boolean }[] };
 
-export type PoEditorItem = { id: string | null; description: string; kind: ItemKind; qty: string; unit: string; unitCost: string; linked?: boolean };
+export type PoEditorItem = {
+  id: string | null;
+  description: string;
+  kind: ItemKind;
+  qty: string;
+  unit: string;
+  unitCost: string;
+  linked?: boolean;
+  /** Part B: the SO link this line was created with (set by the picker). */
+  salesOrderItemId?: string | null;
+  salesOrderItemComponentId?: string | null;
+  /** Qty still unordered on the SO when the line was picked (warning only). */
+  remainingQty?: string | null;
+  /** The SO line's own qty / unit cost, for the "Changed vs SO" marker. */
+  soQty?: string | null;
+  soUnitCost?: string | null;
+};
 
 export type PoEditorInitial = {
   supplierId: string;
@@ -79,6 +96,7 @@ export function PoEditor({
   status,
   action,
   cancelHref,
+  soPicker,
 }: {
   isNew: boolean;
   initial: PoEditorInitial;
@@ -89,6 +107,8 @@ export function PoEditor({
   status?: string;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
+  /** Part B: "Add from sales order" rows (edit page of an SO-born PO only). */
+  soPicker?: { soNumber: string; rows: SoPickerRow[] } | null;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const [h, setH] = useState(() => ({ ...initial }));
@@ -96,6 +116,44 @@ export function PoEditor({
   const [supplierList, setSupplierList] = useState(suppliers);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [addSupplierOpen, setAddSupplierOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQty, setPickerQty] = useState<Record<string, string>>({});
+  const [pickerCost, setPickerCost] = useState<Record<string, string>>({});
+
+  /** Add one picker row as a linked PO line. A zero cost needs a confirm
+   * (audit B5); going past the remaining qty only warns (settled rule). */
+  function addFromPicker(row: SoPickerRow) {
+    const qty = pickerQty[row.key] ?? row.remainingQty;
+    const unitCost = pickerCost[row.key] ?? row.unitCost;
+    if (!Number((unitCost || "0").replace(/,/g, ""))) {
+      const first = row.description.split("\n")[0];
+      if (!window.confirm(`"${first}" has no cost yet. Add it at ₱0.00? You can set the cost on the line after.`)) return;
+    }
+    const picked: Row = {
+      key: newKey(),
+      id: null,
+      description: row.description,
+      kind: row.kind,
+      qty,
+      unit: row.unit,
+      unitCost,
+      linked: true,
+      salesOrderItemId: row.isComponent ? null : row.key,
+      salesOrderItemComponentId: row.isComponent ? row.key : null,
+      remainingQty: row.remainingQty,
+      soQty: row.soQty,
+      soUnitCost: row.unitCost,
+    };
+    setItems((xs) => {
+      // A single untouched blank row gives way to the picked line.
+      const onlyBlank = xs.length === 1 && !xs[0]!.id && !xs[0]!.description.trim() && !xs[0]!.salesOrderItemId && !xs[0]!.salesOrderItemComponentId;
+      return onlyBlank ? [picked] : [...xs, picked];
+    });
+  }
+
+  const pickerRows = (soPicker?.rows ?? []).filter(
+    (r) => !items.some((i) => (i.salesOrderItemComponentId ?? i.salesOrderItemId) === r.key),
+  );
   const e = state.fieldErrors ?? {};
   const supplier = supplierList.find((s) => s.id === h.supplierId);
   const terms = h.terms && !termsOptions.includes(h.terms) ? [...termsOptions, h.terms] : termsOptions;
@@ -151,7 +209,16 @@ export function PoEditor({
     deliveryAddressText: h.deliveryAddressText,
     supplierAddressText: h.supplierAddressText,
     notes: h.notes,
-    items: items.map((i) => ({ id: i.id, description: i.description, kind: i.kind, qty: i.qty, unit: i.unit, unitCost: i.unitCost })),
+    items: items.map((i) => ({
+      id: i.id,
+      description: i.description,
+      kind: i.kind,
+      qty: i.qty,
+      unit: i.unit,
+      unitCost: i.unitCost,
+      salesOrderItemId: i.salesOrderItemId ?? null,
+      salesOrderItemComponentId: i.salesOrderItemComponentId ?? null,
+    })),
   };
   const itemErrors = Object.entries(e).filter(([k]) => k.startsWith("items"));
 
@@ -265,11 +332,62 @@ export function PoEditor({
         <div className="card-head">
           <h2>Items</h2>
           <div className="right">
+            {soPicker && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen}>
+                Add from sales order
+              </button>
+            )}
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blank()])}>
               Add line
             </button>
           </div>
         </div>
+        {pickerOpen && soPicker && (
+          <div className="so-picker">
+            <div className="small faint" style={{ marginBottom: 8 }}>
+              From {soPicker.soNumber}. Lines that can still be ordered for this supplier — quantity starts at what is left.
+              Ordering more than what is left is allowed; it is saved as an extra and recorded.
+            </div>
+            {pickerRows.length === 0 ? (
+              <div className="small">Nothing left to add from this sales order.</div>
+            ) : (
+              pickerRows.map((row) => {
+                const qty = pickerQty[row.key] ?? row.remainingQty;
+                const cost = pickerCost[row.key] ?? row.unitCost;
+                const greyed = row.state === "other-supplier";
+                return (
+                  <div key={row.key} className={`so-picker-row${greyed ? " is-greyed" : ""}`}>
+                    <div className="so-picker-main">
+                      <div>{row.description.split("\n")[0]}</div>
+                      <div className="small faint">
+                        {row.parentDescription && <>Part of: {row.parentDescription.split("\n")[0]} · </>}
+                        On the order: {row.soQty} {row.unit} · Already ordered: {row.orderedQty} · Left: {row.remainingQty}
+                      </div>
+                      {row.state === "no-supplier" && <div className="small">No supplier on the order. Will be bought from {supplier?.name ?? "this PO's supplier"}.</div>}
+                      {greyed && <div className="small">Belongs to {row.supplierName} — it needs its own purchase order.</div>}
+                      {!greyed && overOrder(qty, row.remainingQty) && <div className="small warn-text">More than what is left — saved as an extra.</div>}
+                    </div>
+                    {!greyed && (
+                      <div className="so-picker-controls">
+                        <label className="small faint">
+                          Qty
+                          <input aria-label={`Qty for ${row.description.split("\n")[0]}`} inputMode="decimal" className="w-num-s" value={qty} onChange={(ev) => setPickerQty((m) => ({ ...m, [row.key]: ev.target.value }))} />
+                        </label>
+                        <label className="small faint">
+                          Unit cost
+                          <input aria-label={`Unit cost for ${row.description.split("\n")[0]}`} inputMode="decimal" className="w-num" value={cost} onChange={(ev) => setPickerCost((m) => ({ ...m, [row.key]: formatMoneyInput(ev.target.value) }))} />
+                        </label>
+                        <button type="button" className="btn btn-sm" onClick={() => addFromPicker(row)}>
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
         {itemErrors.length > 0 && (
           <div className="alert error" role="alert">
             {itemErrors.map(([k, m]) => {
@@ -297,6 +415,12 @@ export function PoEditor({
                   <td>
                     <PoDescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                     {i.linked && <div className="small faint">From the sales order</div>}
+                    {i.linked && i.soQty != null && (toScaled(i.qty || "0", 2) !== toScaled(i.soQty, 2) || toScaled((i.unitCost || "0").replace(/,/g, ""), 2) !== toScaled(i.soUnitCost ?? "0", 2)) && (
+                      <div className="small faint">Changed vs sales order — SO: {i.soQty} × {formatPeso(i.soUnitCost ?? "0")}</div>
+                    )}
+                    {i.linked && i.remainingQty != null && overOrder(i.qty, i.remainingQty) && (
+                      <div className="small warn-text">More than what is left on the sales order ({i.remainingQty} left) — saved as an extra.</div>
+                    )}
                   </td>
                   <td className="col-kind">
                     <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => setItem(i.key, { kind: ev.target.value as ItemKind })}>
@@ -323,6 +447,11 @@ export function PoEditor({
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blank()])}>
+            Add line
+          </button>
         </div>
         <div className="totals-wrap">
           <div className="totals-box" aria-label="Totals">
