@@ -16,6 +16,7 @@
 // Runs on MySQL 8 (TEST_DATABASE_URL); skipped locally.
 
 import { describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 
 const env = vi.hoisted(() => {
   const url = process.env.TEST_DATABASE_URL;
@@ -648,6 +649,95 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         { atcCode: "WB080", amount: "60.00" },
       ]);
       expect(b2Parts.reduce((a, p) => a + Number(p.amount), 0).toFixed(2)).toBe("80.00");
+    }
+
+    // --- REQ-205 Bugbot HIGH: legacy null breakdown must not recapture -----
+    // Pre-migration billings have withholdingBreakdown = null. After an
+    // allowed SO money edit, a notes/amount save must keep the stored
+    // withholdingExpected and leave breakdown null (never freeze the
+    // post-edit live-SO split onto the issued SI). Collection prefill
+    // stays on bare codes for the same reason.
+    {
+      const year = await freshYear();
+      const goodsItems: QuoteInput["items"] = [
+        { id: null, description: "Base goods", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "1000", unitPrice: "100000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, goodsItems, ["GOODS_1"]);
+      const invoiceNo = await nextInvoice();
+      const billing = await recordBilling(
+        { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      // Simulate a pre-migration row: clear the captured breakdown.
+      await db.billing.update({
+        where: { id: billing.id },
+        data: { withholdingBreakdown: Prisma.DbNull },
+      });
+      const before = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      expect(before.withholdingBreakdown).toBeNull();
+      expect(before.withholdingExpected.toFixed(2)).toBe("100.00");
+
+      // Allowed SO money edit after issue (grow contract; WH base unchanged).
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => [
+          ...items,
+          { id: null, description: "Exempt addon", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "50000", withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: true },
+        ]),
+        admin,
+      );
+      const soAfter = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfter.contractPrice.toFixed(2)).toBe("150000.00");
+
+      // Notes-only billing save must not recapture from the edited SO.
+      await updateBilling(
+        billing.id,
+        { amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: "Legacy notes" },
+        admin,
+      );
+      const after = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      expect(after.withholdingExpected.toFixed(2)).toBe("100.00");
+      expect(after.withholdingBreakdown).toBeNull();
+      expect(after.notes).toBe("Legacy notes");
+
+      // Prefill for a legacy null breakdown stays bare (no live-SO amounts).
+      const prefill = await withholdingCodePrefill(db as never, billing.id);
+      expect(prefill.every((p) => p.amount === "")).toBe(true);
+    }
+
+    // --- REQ-205 Bugbot MEDIUM: null line rates + notes-only below billed --
+    // beforePrices fills NULL rates from the doc snapshot; afterPrices must
+    // do the same or salesOrderPricesChanged trips the A2 floor on a
+    // notes-only save. Real price cuts below billed stay refused.
+    {
+      const year = await freshYear();
+      const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
+      const invoiceNo = await nextInvoice();
+      await recordBilling(
+        { salesOrderId: so.id, amount: "500000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const laptop = rows[0]!;
+      // Legacy below-billed state + null line rates (pre-stamp rows).
+      await db.salesOrderItem.update({ where: { id: laptop.id }, data: { unitPrice: "29000", total: "290000", withholdingRate: null, withholdingAtc: null } });
+      await db.salesOrderItem.updateMany({
+        where: { salesOrderId: so.id, id: { not: laptop.id }, removedAt: null },
+        data: { withholdingRate: null, withholdingAtc: null },
+      });
+      await db.salesOrder.update({
+        where: { id: so.id },
+        data: { contractPrice: "310000.00", withholdingTotal: "3300.00", netReceived: "306700.00" },
+      });
+
+      await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Null-rate notes save" }), admin);
+      const afterNotes = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(afterNotes.notes).toBe("Null-rate notes save");
+      expect(afterNotes.contractPrice.toFixed(2)).toBe("310000.00");
+
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items.map((i) => (i.id === laptop.id ? { ...i, unitPrice: "1000" } : i))), admin),
+      ).rejects.toThrow(/below what is already billed/);
     }
   });
 });
