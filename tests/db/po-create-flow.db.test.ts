@@ -329,6 +329,35 @@ describe.skipIf(!env.hasDb)("selection-first create POs (MySQL)", () => {
     expect(await db.purchaseOrder.count({ where: { salesOrderId: ctx.so.id } })).toBe(first.length);
   });
 
+  async function allocateUnusedInvoiceNo(): Promise<number> {
+    const [maxBilling, maxSpoiled] = await Promise.all([
+      db.billing.aggregate({ _max: { invoiceNo: true } }),
+      db.spoiledBookletNumber.aggregate({ _max: { number: true } }),
+    ]);
+    let candidate =
+      Math.max(
+        1_000_000,
+        Number(maxBilling._max.invoiceNo ?? 0),
+        Number(maxSpoiled._max.number ?? 0),
+      ) +
+      Math.floor(Math.random() * 500) +
+      1;
+
+    for (let attempt = 0; attempt < 50; attempt++, candidate++) {
+      const [existingBilling, existingSpoiled] = await Promise.all([
+        db.billing.findUnique({ where: { invoiceNo: candidate }, select: { id: true } }),
+        db.spoiledBookletNumber.findFirst({
+          where: { number: candidate },
+          select: { id: true },
+        }),
+      ]);
+      if (!existingBilling && !existingSpoiled) {
+        return candidate;
+      }
+    }
+    return candidate;
+  }
+
   it("AR aging credit includes POSTED return credit memos net of applications, like customerCreditBalance", async () => {
     const year = await freshYear();
     const ctx = await salesOrder(year);
@@ -339,20 +368,36 @@ describe.skipIf(!env.hasDb)("selection-first create POs (MySQL)", () => {
     const credit = await db.customerCredit.create({
       data: { customerId: ctx.so.customerId, customerReturnId: posted.id, amount: "1000", createdById: admin.id },
     });
-    const billing = await db.billing.create({
-      data: {
-        number: `BL-AGING-${suffix}`,
-        salesOrderId: ctx.so.id,
-        customerId: ctx.so.customerId,
-        invoiceNo: 900000 + Math.floor(Math.random() * 99999),
-        invoiceDate: new Date(Date.UTC(year, 2, 3)),
-        dueDate: new Date(Date.UTC(year, 3, 3)),
-        amount: "250",
-        netExpected: "250",
-        createdById: admin.id,
-        updatedById: admin.id,
-      },
-    });
+    let billing: Awaited<ReturnType<typeof db.billing.create>> | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const invoiceNo = await allocateUnusedInvoiceNo();
+      try {
+        billing = await db.billing.create({
+          data: {
+            number: `BL-AGING-${suffix}-${attempt}`,
+            salesOrderId: ctx.so.id,
+            customerId: ctx.so.customerId,
+            invoiceNo,
+            invoiceDate: new Date(Date.UTC(year, 2, 3)),
+            dueDate: new Date(Date.UTC(year, 3, 3)),
+            amount: "250",
+            netExpected: "250",
+            createdById: admin.id,
+            updatedById: admin.id,
+          },
+        });
+        break;
+      } catch (err: unknown) {
+        const isUniqueError =
+          (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "P2002") ||
+          String(err).includes("Billing_invoiceNo_key");
+        if (isUniqueError && attempt < 4) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!billing) throw new Error("Failed to create billing after retries");
     await db.customerCreditApplication.create({ data: { customerCreditId: credit.id, billingId: billing.id, cashApplied: "250" } });
     const draft = await db.customerReturn.create({
       data: { number: `RET-AGING-D-${suffix}`, salesOrderId: ctx.so.id, returnDate: new Date(Date.UTC(year, 2, 3)), status: "VOID", createdById: admin.id },

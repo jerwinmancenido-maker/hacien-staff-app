@@ -4,7 +4,7 @@
 // a preview; the server recomputes and stores them on save. Lines that came
 // from a sales order keep their link when edited.
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { AddContactDialog } from "@/components/docs/AddContactDialog";
 import { SearchPicker } from "@/components/SearchPicker";
 import { AddSupplierDialog } from "./AddSupplierDialog";
@@ -32,6 +32,34 @@ export type PoEditorInitial = {
 let seq = 0;
 const newKey = () => `p${++seq}`;
 type Row = PoEditorItem & { key: string };
+
+/** Grow a line description textarea to fit its content — no clipped spec
+ * lines (mirrors the quote editor's DescTextarea pattern). */
+function growDesc(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "0px";
+  el.style.height = `${Math.max(el.scrollHeight + 2, 36)}px`;
+}
+
+function PoDescTextarea({ label, value, onValue }: { label: string; value: string; onValue: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    growDesc(ref.current);
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      aria-label={label}
+      className="po-desc"
+      rows={1}
+      value={value}
+      onChange={(ev) => {
+        onValue(ev.target.value);
+        growDesc(ev.target);
+      }}
+    />
+  );
+}
 const blank = (): Row => ({ key: newKey(), id: null, description: "", kind: "GOODS", qty: "1", unit: "pc", unitCost: "" });
 
 function safeTotal(i: PoEditorItem) {
@@ -250,42 +278,42 @@ export function PoEditor({
             })}
           </div>
         )}
-        <div className="edit-table items-edit">
+        <div className="edit-table items-edit po-items-edit">
           <table className="list">
             <thead>
               <tr>
                 <th>Description</th>
-                <th>Kind</th>
-                <th className="num">Qty</th>
-                <th>Unit</th>
-                <th className="num">Unit cost</th>
-                <th className="num">Total</th>
-                <th aria-label="Line actions" />
+                <th className="col-kind">Kind</th>
+                <th className="num col-qty">Qty</th>
+                <th className="col-unit">Unit</th>
+                <th className="num col-money">Unit cost</th>
+                <th className="num col-money">Total</th>
+                <th className="col-actions" aria-label="Line actions" />
               </tr>
             </thead>
             <tbody>
               {items.map((i, idx) => (
                 <tr key={i.key}>
                   <td>
-                    <textarea aria-label={`Line ${idx + 1} description`} rows={1} value={i.description} onChange={(ev) => setItem(i.key, { description: ev.target.value })} />
+                    <PoDescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                     {i.linked && <div className="small faint">From the sales order</div>}
                   </td>
-                  <td>
+                  <td className="col-kind">
                     <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => setItem(i.key, { kind: ev.target.value as ItemKind })}>
                       <option value="GOODS">Goods</option>
                       <option value="SERVICES">Services</option>
                     </select>
                   </td>
-                  <td className="num">
+                  <td className="num col-qty">
                     <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                   </td>
-                  <td>
+                  <td className="col-unit">
                     <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
                   </td>
-                  <td className="num">
+                  <td className="num col-money">
                     <input aria-label={`Line ${idx + 1} unit cost`} inputMode="decimal" className="w-num" value={i.unitCost} onChange={(ev) => setItem(i.key, { unitCost: formatMoneyInput(ev.target.value) })} />
                   </td>
-                  <td className="num strong">{formatPeso(safeTotal(i))}</td>
+                  <td className="num col-money strong">{formatPeso(safeTotal(i))}</td>
                   <td className="line-actions">
                     <button type="button" className="btn-link danger" aria-label={`Remove line ${idx + 1}`} disabled={items.length === 1} onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}>
                       ✕
