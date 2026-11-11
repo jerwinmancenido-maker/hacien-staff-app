@@ -29,6 +29,7 @@ import { withholdingCodePrefill } from "@/lib/services/collections";
 import { approveQuote, convertQuoteToSalesOrder, createQuote } from "@/lib/services/quotes";
 import { updateSalesOrder } from "@/lib/services/sales-orders";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { snapshotList } from "@/lib/services/withholding";
 import type { QuoteInput } from "@/lib/validation/quotes";
 import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, quoteInput, tag } from "./fixtures";
 
@@ -39,6 +40,37 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     const admin = await makeUser("costs");
     await ensureWideBooklet(admin.id);
     const supplier = await makeSupplier();
+
+    let invoiceSeq = 0;
+    async function nextInvoice(): Promise<number> {
+      if (invoiceSeq === 0) {
+        const [maxBilling, maxSpoiled, maxClaim] = await Promise.all([
+          db.billing.aggregate({ _max: { invoiceNo: true } }),
+          db.spoiledBookletNumber.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+          db.bookletSerialClaim.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+        ]);
+        const maxUsed = Math.max(
+          900_000,
+          Number(maxBilling._max.invoiceNo ?? 0),
+          Number(maxSpoiled._max.number ?? 0),
+          Number(maxClaim._max.number ?? 0),
+        );
+        invoiceSeq = maxUsed + Math.floor(Math.random() * 500) + 1;
+      }
+
+      for (let attempt = 0; attempt < 500; attempt++) {
+        const candidate = ++invoiceSeq;
+        const [takenBilling, spoiled, takenClaim] = await Promise.all([
+          db.billing.findFirst({ where: { invoiceNo: candidate }, select: { id: true } }),
+          db.spoiledBookletNumber.findFirst({ where: { type: "SI", number: candidate }, select: { id: true } }),
+          db.bookletSerialClaim.findFirst({ where: { type: "SI", number: candidate }, select: { number: true } }),
+        ]);
+        if (!takenBilling && !spoiled && !takenClaim) {
+          return candidate;
+        }
+      }
+      throw new Error("Could not allocate unused SI number after 500 attempts");
+    }
 
     async function openSo(year: number, items?: QuoteInput["items"], pick?: string[]) {
       const customer = await makeCustomer(pick ?? null);
@@ -197,7 +229,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     {
       const year = await freshYear();
       const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
-      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const invoiceNo = await nextInvoice();
       const billing = await recordBilling(
         {
           salesOrderId: so.id,
@@ -279,7 +311,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     {
       const year = await freshYear();
       const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
-      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const invoiceNo = await nextInvoice();
       await recordBilling(
         {
           salesOrderId: so.id,
@@ -305,7 +337,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     {
       const year = await freshYear();
       const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
-      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const invoiceNo = await nextInvoice();
       await recordBilling(
         { salesOrderId: so.id, amount: "500000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
@@ -337,7 +369,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         { id: null, description: "Gov goods", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
       ];
       const { so } = await openSo(year, govItems, ["GOODS_1", "GOV_PT_3"]);
-      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const invoiceNo = await nextInvoice();
       await recordBilling(
         { salesOrderId: so.id, amount: "500.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
@@ -356,7 +388,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     {
       const year = await freshYear();
       const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
-      const invoiceNo = 900_000 + Math.floor(Math.random() * 90_000);
+      const invoiceNo = await nextInvoice();
       const billing = await recordBilling(
         { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
@@ -397,6 +429,124 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       partsAfter.forEach((x) => {
         expect(Number(x.amount)).toBeGreaterThan(0);
       });
+    }
+
+    // --- REQ-188 Test 1: Same-amount updateBilling after an allowed SO money edit -----
+    // With a stored breakdown: expected must stay ₱100.00, not move to ₱66.67.
+    // Setup: bill ₱10,000.00 on a ₱100,000.00 / ₱1,000.00 WH order, then grow the
+    // contract to ₱150,000.00 with WH still ₱1,000.00, then save the billing at the
+    // same ₱10,000.00 (notes/dates may change). Assert withholdingExpected stays
+    // 100.00, ATCs/shares stay, and the parts are not recaptured from the live SO.
+    {
+      const year = await freshYear();
+      const goodsItems: QuoteInput["items"] = [
+        { id: null, description: "Base goods", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "1000", unitPrice: "100000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, goodsItems, ["GOODS_1"]);
+      const invoiceNo = await nextInvoice();
+      const billing = await recordBilling(
+        { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const billedRowBefore = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      expect(billedRowBefore.withholdingExpected.toFixed(2)).toBe("100.00");
+      const partsBefore = billedRowBefore.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(partsBefore.length).toBe(1);
+      expect(partsBefore[0]!.rate).toBe("0.0100");
+
+      // Grow contract to ₱150,000.00 with WH still ₱1,000.00 via an allowed Admin save
+      // (adding an exempt line of ₱50,000.00 with 0% WH).
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => [
+          ...items,
+          { id: null, description: "Exempt addon", kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "50000", withholdingRate: "0.0000", withholdingAtc: null, withholdingOverride: true },
+        ]),
+        admin,
+      );
+      const soAfterGrow = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfterGrow.contractPrice.toFixed(2)).toBe("150000.00");
+      expect(soAfterGrow.withholdingTotal.toFixed(2)).toBe("1000.00");
+
+      // Save billing at the same ₱10,000.00 amount (e.g. notes change)
+      await updateBilling(
+        billing.id,
+        { amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: "Updated note" },
+        admin,
+      );
+
+      const billedRowAfter = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      // Must stay 100.00, not move to 66.67
+      expect(billedRowAfter.withholdingExpected.toFixed(2)).toBe("100.00");
+      const partsAfter = billedRowAfter.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(partsAfter).toEqual(partsBefore);
+    }
+
+    // --- REQ-188 Test 2: Billed stacked GOV_PT SO: freeze stored snapshot on edits -----
+    // Goods line qty 2 × ₱1,000 = ₱2,000 with picks GOV_GOODS_1 + GOV_PT_3 →
+    // header {WI640, WB080} / WH ₱80.00.
+    // After a notes save and after an allowed Admin qty save, assert header ATCs
+    // stay {WI640, WB080} and that a later recordBilling / captureWithholdingBreakdown
+    // path still sees the stack, not a collapsed {WI640} / ₱20.00.
+    // A notes-only save must also keep WH ₱80.00.
+    {
+      const year = await freshYear();
+      const govItems: QuoteInput["items"] = [
+        { id: null, description: "Gov goods", kind: "GOODS", qty: "2", unit: "pc", supplierId: supplier.id, supplierUnitCost: "100", unitPrice: "1000", withholdingRate: null, withholdingAtc: null, withholdingOverride: false } as never,
+      ];
+      const { so } = await openSo(year, govItems, ["GOV_GOODS_1", "GOV_PT_3"]);
+      const soInitial = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soInitial.withholdingTotal.toFixed(2)).toBe("80.00");
+      const initialSnaps = snapshotList(soInitial.withholding);
+      expect(initialSnaps.map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
+
+      const invoiceNo1 = await nextInvoice();
+      const b1 = await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo1, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
+        admin,
+      );
+      const b1Row = await db.billing.findUniqueOrThrow({ where: { id: b1.id } });
+      const b1Parts = b1Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(b1Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
+
+      // Notes-only save: must keep both ATCs and ₱80.00
+      await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Preserve stack test" }), admin);
+      const soAfterNotes = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfterNotes.withholdingTotal.toFixed(2)).toBe("80.00");
+      const snapsAfterNotes = snapshotList(soAfterNotes.withholding);
+      expect(snapsAfterNotes.map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
+
+      // Allowed Admin qty save: qty 2 -> 3 (contract grows to ₱3,000.00, WH to ₱120.00)
+      const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
+      const line = rows[0]!;
+      await updateSalesOrder(
+        so.id,
+        await soInput(so.id, (items) => items.map((i) => (i.id === line.id ? { ...i, qty: "3" } : i))),
+        admin,
+      );
+      const soAfterQty = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+      expect(soAfterQty.contractPrice.toFixed(2)).toBe("3000.00");
+      expect(soAfterQty.withholdingTotal.toFixed(2)).toBe("120.00");
+      const snapsAfterQty = snapshotList(soAfterQty.withholding);
+      expect(snapsAfterQty.map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
+
+      // Later recordBilling path still sees the stack, not a collapsed {WI640}
+      const invoiceNo2 = await nextInvoice();
+      const b2 = await recordBilling(
+        { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo2, invoiceDate: new Date(Date.UTC(year, 2, 6)), dueDate: new Date(Date.UTC(year, 3, 5)), notes: null },
+        admin,
+      );
+      const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
+      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
+      expect(b2Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
+
+      // Refuse re-apply and pick changes while billings exist
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items, { reapplyWithholding: true }), admin),
+      ).rejects.toThrow(/Withholding can't change after a billing is issued/);
+      await expect(
+        updateSalesOrder(so.id, await soInput(so.id, (items) => items, { withholdingCodes: ["GOV_GOODS_1"] }), admin),
+      ).rejects.toThrow(/Withholding can't change after a billing is issued/);
     }
   });
 });

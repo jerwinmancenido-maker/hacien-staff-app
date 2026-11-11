@@ -28,10 +28,13 @@ async function lockSalesOrder(tx: Tx, id: string) {
     { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null; withholding: unknown }[]
   >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\`, \`withholding\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
   if (!rows[0]) throw new DocRuleError("Sales order not found.");
+  const rawWh = rows[0].withholding;
+  const withholding = typeof rawWh === "string" ? (() => { try { return JSON.parse(rawWh); } catch { return rawWh; } })() : rawWh;
   return {
     ...rows[0],
     contractPrice: money(String(rows[0].contractPrice)),
     withholdingTotal: money(String(rows[0].withholdingTotal)),
+    withholding,
   };
 }
 
@@ -43,7 +46,7 @@ async function captureWithholdingBreakdown(tx: Tx, salesOrderId: string, soWithh
     where: { salesOrderId, removedAt: null },
     select: { kind: true, total: true, supplierTotal: true, margin: true, withholdingRate: true, withholdingAtc: true },
   });
-  const picks = (soWithholding ?? []) as WithholdingSnapshot[];
+  const picks = (Array.isArray(soWithholding) ? soWithholding : []) as WithholdingSnapshot[];
   const parts = withholdingBreakdownParts(
     items.map((i) => ({
       kind: i.kind,
@@ -279,7 +282,16 @@ export async function updateBilling(
           }
         }
 
-        const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
+        const hasBreakdown =
+          Array.isArray(before.withholdingBreakdown) &&
+          (before.withholdingBreakdown as StoredBreakdownPart[]).some((x) => x && typeof x.rate === "string");
+
+        // When a breakdown is stored, pin expected withholding to the
+        // issue-time ratio (oldExpected * newAmount / oldAmount) so an SO
+        // money edit does not move the issued SI's expected total.
+        const withholdingExpected = hasBreakdown
+          ? proRataWithholding(input.amount, money(before.amount), money(before.withholdingExpected))
+          : proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
         const net = netExpected(input.amount, withholdingExpected);
         const after = await tx.billing.update({
           where: { id },

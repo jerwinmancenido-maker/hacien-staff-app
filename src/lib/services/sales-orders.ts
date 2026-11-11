@@ -5,7 +5,7 @@ import type { Prisma, SalesOrder, SalesOrderItem, SalesOrderItemComponent } from
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { docTotals, fromScaled, toScaled } from "../quotes/calc";
 import { salesOrderMoney } from "../billing/status";
 import { soDeliveryProgress } from "../sales-orders/delivery";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
@@ -212,17 +212,47 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
+      // SO guards (REQ-PLAN-AUDIT-001 A1–A3; owner-approved 2026-11-10).
+      // Everything below is computed inside the SO row lock taken above, so
+      // a concurrent PO create/picker save cannot slip past the floors.
+      const liveBillings = await tx.billing.findMany({
+        where: { salesOrderId: id, status: { not: "VOID" } },
+        select: { invoiceNo: true, amount: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (liveBillings.length) {
+        const siNo = liveBillings[0]!.invoiceNo;
+        const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
+        if (input.reapplyWithholding === true) {
+          throw new DocRuleError(whFrozen, "items");
+        }
+        if (input.withholdingCodes !== undefined) {
+          const storedSet = new Set(snapshotList(before.withholding).map((w) => w.code));
+          const inputSet = new Set(input.withholdingCodes ?? []);
+          const pickChanged = inputSet.size !== storedSet.size || [...inputSet].some((c) => !storedSet.has(c));
+          if (pickChanged) {
+            throw new DocRuleError(whFrozen, "items");
+          }
+        }
+      }
+
+      const storedSnapshots = snapshotList(before.withholding);
       // Re-apply uses the customer's current saved pick (explicit staff action).
       // Changing the customer pick alone never rewrites this SO.
+      // While billings exist, withholding is frozen to the stored snapshot.
       const pickCodes =
-        input.withholdingCodes !== undefined
-          ? input.withholdingCodes
-          : parseWithholdingPick(customer.defaultWithholding);
+        liveBillings.length
+          ? storedSnapshots.map((w) => w.code)
+          : input.withholdingCodes !== undefined
+            ? input.withholdingCodes
+            : parseWithholdingPick(customer.defaultWithholding);
       const rates = await listWithholdingRates(tx, { activeOnly: false });
       const pickSnapshots =
-        pickCodes && pickCodes.length
-          ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
-          : [];
+        liveBillings.length
+          ? storedSnapshots
+          : pickCodes && pickCodes.length
+            ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+            : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
@@ -232,6 +262,27 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
       if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
+
+      // While billings exist, freeze the stored snapshot on the header and
+      // recompute WH money against that snapshot (A1), so stacked codes
+      // like GOV_PT are never collapsed and qty/price edits move real totals.
+      // Line overrides (e.g. exempt 0% lines) keep line-driven totals.
+      const hasLineOverride = items.some((i) => i.withholdingOverride);
+      const billedTotals =
+        liveBillings.length && !hasLineOverride && storedSnapshots.length > 0
+          ? docTotals(items, storedSnapshots)
+          : null;
+      const finalWithholding = liveBillings.length
+        ? (before.withholding as unknown as Prisma.InputJsonValue)
+        : (preserved.withholding as unknown as Prisma.InputJsonValue);
+      const finalTotals = billedTotals
+        ? {
+            ...preserved.totals,
+            withholdingTotal: billedTotals.withholdingTotal,
+            netReceived: billedTotals.netReceived,
+          }
+        : preserved.totals;
+
       const priceOverrideReason = (input.priceOverrideReason ?? "").trim();
       const beforePrices = {
         contractPrice: money(before.contractPrice),
@@ -254,9 +305,9 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         }),
       };
       const afterPrices = {
-        contractPrice: money(preserved.totals.contractPrice),
-        withholdingTotal: money(preserved.totals.withholdingTotal),
-        netReceived: money(preserved.totals.netReceived),
+        contractPrice: money(finalTotals.contractPrice),
+        withholdingTotal: money(finalTotals.withholdingTotal),
+        netReceived: money(finalTotals.netReceived),
         // Compare the planned / persisted rows that will actually be saved.
         lines: items.map((i) => ({
           id: i.id ?? null,
@@ -291,14 +342,6 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           );
         }
       }
-      // SO guards (REQ-PLAN-AUDIT-001 A1–A3; owner-approved 2026-11-10).
-      // Everything below is computed inside the SO row lock taken above, so
-      // a concurrent PO create/picker save cannot slip past the floors.
-      const liveBillings = await tx.billing.findMany({
-        where: { salesOrderId: id, status: { not: "VOID" } },
-        select: { invoiceNo: true, amount: true },
-        orderBy: { createdAt: "asc" },
-      });
       if (liveBillings.length) {
         // A1 (REVISED — looser rule; Jerwin direct 2026-11-10 17:17, final
         // approval 17:22): once an SI exists, the BIR core is frozen for
@@ -439,8 +482,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           ...(input.noaDate !== undefined ? { noaDate: input.noaDate ?? null } : {}),
           ...(input.agencyPoNo !== undefined ? { agencyPoNo: input.agencyPoNo } : {}),
           ...(input.iarDate !== undefined ? { iarDate: input.iarDate ?? null } : {}),
-          withholding: preserved.withholding as unknown as Prisma.InputJsonValue,
-          ...preserved.totals,
+          withholding: finalWithholding,
+          ...finalTotals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
