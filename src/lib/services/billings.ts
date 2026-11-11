@@ -295,16 +295,15 @@ export async function updateBilling(
           }
         }
 
-        const hasBreakdown =
-          Array.isArray(before.withholdingBreakdown) &&
-          (before.withholdingBreakdown as StoredBreakdownPart[]).some((x) => x && typeof x.rate === "string");
-
-        // When a breakdown is stored, pin expected withholding to the
-        // issue-time ratio (oldExpected * newAmount / oldAmount) so an SO
-        // money edit does not move the issued SI's expected total.
-        const withholdingExpected = hasBreakdown
-          ? proRataWithholding(input.amount, money(before.amount), money(before.withholdingExpected))
-          : proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
+        // Pin expected withholding to the issue-time ratio
+        // (oldExpected * newAmount / oldAmount) — never recompute from the
+        // live SO. A later SO money edit must not move an issued SI's
+        // expected total (including legacy rows with a null breakdown).
+        const withholdingExpected = proRataWithholding(
+          input.amount,
+          money(before.amount),
+          money(before.withholdingExpected),
+        );
         const net = netExpected(input.amount, withholdingExpected);
         const after = await tx.billing.update({
           where: { id },
@@ -314,12 +313,14 @@ export async function updateBilling(
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
-            // A stored breakdown is NEVER recaptured from the live SO — an
-            // edit rescales the issue-time parts to the new expected total.
-            // Only a legacy billing with none stored captures one, once.
-            withholdingBreakdown:
-              rescaleBreakdown(before.withholdingBreakdown, money(before.withholdingExpected), withholdingExpected) ??
-              (await captureWithholdingBreakdown(tx, so.id, so.withholding)),
+            // Never recapture from the live SO on edit. A stored breakdown
+            // rescales to the new expected; a legacy null stays null
+            // (undefined = leave the column unchanged). Capture is issue-time only.
+            withholdingBreakdown: rescaleBreakdown(
+              before.withholdingBreakdown,
+              money(before.withholdingExpected),
+              withholdingExpected,
+            ),
             netExpected: net,
             notes: input.notes,
             updatedById: actor.id,
