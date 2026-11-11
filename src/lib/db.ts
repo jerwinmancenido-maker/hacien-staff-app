@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-import { noDeleteExtension } from "./no-delete";
+import { noDeleteExtension } from "./no-delete.ts";
 
 function createClient() {
   return new PrismaClient().$extends(noDeleteExtension);
