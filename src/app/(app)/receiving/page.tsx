@@ -18,7 +18,7 @@ export default async function ReceivingPage({
   const history = !warrantySoon && s.history === "1";
 
   if (warrantySoon) {
-    const rows = await listWarrantiesEndingSoon();
+    const rows = await listWarrantiesEndingSoon({ q: s.q });
     return (
       <>
         <PageHeader title="Receiving" subtitle="Supplier warranties ending in the next 30 days." />
@@ -43,7 +43,13 @@ export default async function ReceivingPage({
         </div>
         {rows.length === 0 ? (
           <div className="card">
-            <EmptyState line="No supplier warranties ending in the next 30 days." />
+            <EmptyState
+              line={
+                s.q?.trim()
+                  ? `No warranties ending in the next 30 days match "${s.q.trim()}".`
+                  : "No supplier warranties ending in the next 30 days."
+              }
+            />
           </div>
         ) : (
           <DataTable

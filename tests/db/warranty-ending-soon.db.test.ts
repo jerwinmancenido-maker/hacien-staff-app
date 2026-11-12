@@ -124,4 +124,61 @@ describe.skipIf(!env.hasDb)("SL-05 warranties ending soon (MySQL)", () => {
     expect(count).toBeGreaterThanOrEqual(1);
     expect(rows.filter((r) => r.purchaseOrderId === po!.id)).toHaveLength(1);
   });
+
+  it("filters by q — PO number, supplier, or serial (Bugbot fix on PR #202)", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const supplier = await makeSupplier();
+    const q = await createQuote(
+      {
+        customerId: customer.id,
+        contactId: customer.contacts[0]!.id,
+        date: new Date(Date.UTC(year, 2, 1)),
+        validUntil: undefined,
+        terms: "Net 30",
+        notes: null,
+        items: [
+          { id: null, description: `Server q ${tag()}`, kind: "GOODS", qty: "1", unit: "pc", supplierId: supplier.id, supplierUnitCost: "1000", unitPrice: "1500" },
+        ],
+      },
+      admin,
+    );
+    await approveQuote(q.id, admin);
+    const delivAddr = await db.address.create({
+      data: { customerId: customer.id, kind: "DELIVERY", street: "SL-05 q test", isDefault: true },
+    });
+    const so = await convertQuoteToSalesOrder(q.id, { buyerPoNo: "SL05Q", deliveryAddressId: delivAddr.id }, admin, {
+      date: new Date(Date.UTC(year, 2, 2)),
+    });
+    const [po] = await createPurchaseOrdersFromSalesOrder(
+      so.id,
+      { date: new Date(Date.UTC(year, 2, 3)), expectedDate: null, deliveryAddressText: null, supplierPicks: {} },
+      admin,
+    );
+    await approvePurchaseOrder(po!.id, admin);
+    await markPurchaseOrderSent(po!.id, admin);
+    const lines = await db.purchaseOrderItem.findMany({ where: { purchaseOrderId: po!.id } });
+    const serial = `SN-Q-${tag()}`;
+    const now = manilaToday(new Date(`${year}-06-15T12:00:00+08:00`));
+    await postReceivingReport(
+      po!.id,
+      {
+        receivedDate: new Date(Date.UTC(year, 3, 1)),
+        receivedById: staff.id,
+        deliveryRef: "DR-SL05-Q",
+        notes: null,
+        lines: [{ lineId: lines[0]!.id, qty: "1", warrantyEndDate: addDays(now, 9).toISOString().slice(0, 10), serialNumbers: serial }],
+      },
+      staff,
+    );
+
+    const ours = (rows: { purchaseOrderId: string }[]) => rows.filter((r) => r.purchaseOrderId === po!.id);
+    // Serial fragment, PO number, and supplier name each find the row…
+    expect(ours(await listWarrantiesEndingSoon({ now, q: serial.slice(0, 8) }))).toHaveLength(1);
+    expect(ours(await listWarrantiesEndingSoon({ now, q: po!.number }))).toHaveLength(1);
+    const supplierRow = await db.supplier.findUniqueOrThrow({ where: { id: supplier.id } });
+    expect(ours(await listWarrantiesEndingSoon({ now, q: supplierRow.name.slice(0, 6) }))).toHaveLength(1);
+    // …and a term that matches nothing on this PO leaves it out.
+    expect(ours(await listWarrantiesEndingSoon({ now, q: `ZZ-NOMATCH-${tag()}` }))).toHaveLength(0);
+  });
 });

@@ -943,9 +943,26 @@ const warrantySoonWhere = (now?: Date): Prisma.ReceivingReportItemWhereInput => 
 };
 
 /** Receiving lines whose supplier warranty ends in the next 30 Manila days, soonest first. */
-export async function listWarrantiesEndingSoon(opts: { take?: number; now?: Date } = {}): Promise<WarrantySoonRow[]> {
+export async function listWarrantiesEndingSoon(opts: { take?: number; now?: Date; q?: string } = {}): Promise<WarrantySoonRow[]> {
+  const q = opts.q?.trim();
   const rows = await db.receivingReportItem.findMany({
-    where: warrantySoonWhere(opts.now),
+    where: {
+      ...warrantySoonWhere(opts.now),
+      // The receiving page's warranty-soon toolbar promises search by PO
+      // number, supplier, or serial (same contains pattern as
+      // listReceivingView); the bell count stays unfiltered (no q passed).
+      ...(q
+        ? {
+            OR: [
+              { serialNumbers: { contains: q } },
+              { purchaseOrderItem: { description: { contains: q } } },
+              { receivingReport: { purchaseOrder: { number: { contains: q } } } },
+              { receivingReport: { purchaseOrder: { supplier: { name: { contains: q } } } } },
+              { receivingReport: { purchaseOrder: { salesOrder: { number: { contains: q } } } } },
+            ],
+          }
+        : {}),
+    },
     select: {
       id: true,
       warrantyEndDate: true,
