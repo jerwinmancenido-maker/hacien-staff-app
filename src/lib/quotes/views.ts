@@ -27,6 +27,7 @@ import { validityDaysFromDates } from "./validity";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
+import { soHasRemainingToDeliver } from "../sales-orders/delivery";
 
 type StoredMoney = {
   contractPrice: string;
@@ -616,13 +617,16 @@ export type SalesOrderListFilter = {
   needsPo?: boolean;
   /** OPEN SOs with remaining-to-bill &gt; 0 (Home Pipeline / open filter). */
   open?: boolean;
+  /** OPEN SOs with at least one live line still short of delivery. */
+  toDeliver?: boolean;
 };
 
 export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const q = filter.q?.trim();
   const needsPo = filter.needsPo === true;
   const openUnbilled = filter.open === true;
-  const status = needsPo || openUnbilled ? "OPEN" : filter.status;
+  const toDeliver = filter.toDeliver === true;
+  const status = needsPo || openUnbilled || toDeliver ? "OPEN" : filter.status;
   const where: Prisma.SalesOrderWhereInput = {
     ...(status ? { status } : {}),
     ...(q
@@ -646,17 +650,30 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
         ...(openUnbilled
           ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
           : {}),
+        ...(toDeliver
+          ? { items: { where: { removedAt: null }, select: { qty: true, deliveredQty: true } } }
+          : {}),
       },
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 500,
     });
-    type Row = (typeof rows)[number] & { billings?: { amount: unknown }[] };
+    type Row = (typeof rows)[number] & {
+      billings?: { amount: unknown }[];
+      items?: { qty: unknown; deliveredQty: unknown }[];
+    };
     const mapped = [];
     for (const raw of rows as Row[]) {
       const contractPrice = money(raw.contractPrice);
       if (openUnbilled) {
         const billed = (raw.billings ?? []).map((b) => money(b.amount));
         if (toScaled(remainingToBill(contractPrice, billed), 2) <= 0n) continue;
+      }
+      if (toDeliver) {
+        const live = (raw.items ?? []).map((i) => ({
+          qty: money(i.qty),
+          deliveredQty: money(i.deliveredQty),
+        }));
+        if (!soHasRemainingToDeliver(live)) continue;
       }
       mapped.push({
         id: raw.id,

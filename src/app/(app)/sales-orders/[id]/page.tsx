@@ -25,6 +25,7 @@ import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
+import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
 import { deleteSalesOrderAction, recordDeliveryAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
@@ -419,8 +420,16 @@ export default async function SalesOrderPage({
             </div>
           </div>
           <p className="small muted">
-            Deliveries: {deliveries.length} receipt{deliveries.length === 1 ? "" : "s"} ·{" "}
-            <Link href={`${base}?tab=deliveries`}>View →</Link>
+            Deliveries:{" "}
+            {soDeliveryOverviewLabel(
+              soDeliveryProgress(
+                so.items.map((i) => ({
+                  qty: i.qty,
+                  deliveredQty: i.deliveredQty ?? "0.00",
+                })),
+              ),
+            )}{" "}
+            · <Link href={`${base}?tab=deliveries`}>View →</Link>
           </p>
           {billingSummary && (
             <div className="card" aria-label="Billing">
