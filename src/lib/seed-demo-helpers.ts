@@ -134,7 +134,7 @@ export const SUPPLIERS: {
   addresses: SeedAddress[];
   taxType: "VAT" | "NON_VAT" | "NO_RECEIPT";
   defaultTerms: string;
-  bank?: { bankAccountName: string; bankAccountNumber: string; bankBranch: string; bankNotes?: string };
+  bank?: { bankName: string; bankAccountName: string; bankAccountNumber: string; bankBranch: string; bankNotes?: string };
   contacts: SeedContact[];
 }[] = [
   {
@@ -144,9 +144,10 @@ export const SUPPLIERS: {
     taxType: "VAT",
     defaultTerms: "Net 30",
     bank: {
+      bankName: "UnionBank",
       bankAccountName: "UNO Computer Supply Inc.",
       bankAccountNumber: "0000-0000-0000",
-      bankBranch: "UnionBank – Sample Branch",
+      bankBranch: "Sample Branch",
       bankNotes: "Fake account for testing.",
     },
     contacts: [

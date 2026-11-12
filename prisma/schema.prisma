@@ -238,7 +238,10 @@ model Supplier {
   address           String?         @db.Text
   taxType           SupplierTaxType
   defaultTerms      String?         @db.VarChar(100)
-  // UnionBank details used when paying this supplier.
+  // The supplier's OWN bank details, used when paying this supplier.
+  // bankName is the supplier's bank (picked from the PH bank list or typed
+  // via "Other"); legacy rows keep it NULL and resolve from bankBranch.
+  bankName          String?         @db.VarChar(191)
   bankAccountName   String?         @db.VarChar(191)
   bankAccountNumber String?         @db.VarChar(64)
   bankBranch        String?         @db.VarChar(191)

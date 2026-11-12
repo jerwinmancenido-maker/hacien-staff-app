@@ -99,7 +99,7 @@ export const supplierPaymentInputSchema = z
       if (!v.checkBank) ctx.addIssue({ code: "custom", message: "Bank is required for checks.", path: ["checkBank"] });
     }
     if (v.method === "BANK_TRANSFER" && !v.reference) {
-      ctx.addIssue({ code: "custom", message: "Add the UnionBank reference", path: ["reference"] });
+      ctx.addIssue({ code: "custom", message: "Add the bank transfer reference", path: ["reference"] });
     }
     if (v.method === "E_WALLET" && !v.reference) {
       ctx.addIssue({ code: "custom", message: "Reference number is required.", path: ["reference"] });

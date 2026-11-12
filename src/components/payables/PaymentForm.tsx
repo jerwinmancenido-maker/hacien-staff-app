@@ -63,6 +63,7 @@ export function PaymentForm({
   supplierId,
   supplierName,
   supplierBankNumber,
+  supplierBankName,
   defaults,
   openBills,
   cashAccounts = [],
@@ -73,6 +74,8 @@ export function PaymentForm({
   supplierId: string;
   supplierName: string;
   supplierBankNumber?: string | null;
+  /** The supplier's OWN bank (resolved server-side); never assume one. */
+  supplierBankName?: string | null;
   defaults: { date: string; amountPaid: string; method: string; cashAccountId?: string };
   openBills: OpenBillRow[];
   cashAccounts?: CashAccountOption[];
@@ -159,7 +162,10 @@ export function PaymentForm({
           <div>
             <Link href={`/suppliers/${supplierId}`}>{supplierName}</Link>
             {supplierBankNumber && (
-              <div className="hint">UnionBank · {maskBankAccountNumber(supplierBankNumber)}</div>
+              <div className="hint">
+                {supplierBankName ? `${supplierBankName} · ` : ""}
+                {maskBankAccountNumber(supplierBankNumber)}
+              </div>
             )}
             <div className="hint">Open balance: {formatPeso(totalOpen)}</div>
           </div>
@@ -187,7 +193,7 @@ export function PaymentForm({
         <div className={`field${e.reference ? " has-error" : ""}`}>
           <label htmlFor="reference">
             {method === "BANK_TRANSFER"
-              ? "UnionBank reference"
+              ? "Bank transfer reference"
               : method === "CHECK"
                 ? "Check number"
                 : "Reference"}
@@ -197,7 +203,7 @@ export function PaymentForm({
             name="reference"
             placeholder={
               method === "BANK_TRANSFER"
-                ? "e.g. UnionBank transaction ref"
+                ? "e.g. bank transaction reference"
                 : method === "CHECK"
                   ? "e.g. 0012345"
                   : "e.g. transfer or GCash reference"
@@ -205,7 +211,10 @@ export function PaymentForm({
             defaultValue={state.values?.reference ?? ""}
           />
           {method === "BANK_TRANSFER" && supplierBankNumber && (
-            <div className="hint">Paying to UnionBank · {maskBankAccountNumber(supplierBankNumber)}</div>
+            <div className="hint">
+              Paying to {supplierBankName ? `${supplierBankName} · ` : ""}
+              {maskBankAccountNumber(supplierBankNumber)}
+            </div>
           )}
           {e.reference && <div className="error">{e.reference}</div>}
         </div>
@@ -214,7 +223,7 @@ export function PaymentForm({
           <>
             <div className={`field${e.checkBank ? " has-error" : ""}`}>
               <label htmlFor="checkBank">Bank name</label>
-              <input id="checkBank" name="checkBank" placeholder="e.g. UnionBank" defaultValue={state.values?.checkBank ?? ""} />
+              <input id="checkBank" name="checkBank" placeholder="Name of the bank" defaultValue={state.values?.checkBank ?? ""} />
               {e.checkBank && <div className="error">{e.checkBank}</div>}
             </div>
             <div className={`field${e.checkDate ? " has-error" : ""}`}>

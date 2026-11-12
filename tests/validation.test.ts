@@ -86,7 +86,11 @@ describe("supplier validation", () => {
     });
     expect(r.success).toBe(true);
     expect(missingBankDetails(r.data!)).toBe(true);
-    expect(missingBankDetails({ bankAccountName: "UNO Inc.", bankAccountNumber: "123" })).toBe(false);
+    // Account name + number alone are no longer enough — the supplier's bank
+    // must be known too (explicitly, or via a legacy "Bank – Branch" text).
+    expect(missingBankDetails({ bankAccountName: "UNO Inc.", bankAccountNumber: "123" })).toBe(true);
+    expect(missingBankDetails({ bankName: "BPI", bankAccountName: "UNO Inc.", bankAccountNumber: "123" })).toBe(false);
+    expect(missingBankDetails({ bankAccountName: "UNO Inc.", bankAccountNumber: "123", bankBranch: "UnionBank – Ortigas" })).toBe(false);
   });
 });
 

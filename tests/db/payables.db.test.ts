@@ -798,7 +798,7 @@ describe.skipIf(!env.hasDb)("supplier payments / payables (MySQL)", () => {
         admin,
         paymentProof,
       ),
-    ).rejects.toThrow(/UnionBank reference/);
+    ).rejects.toThrow(/bank transfer reference/);
 
     const partial = await recordSupplierPayment(
       {

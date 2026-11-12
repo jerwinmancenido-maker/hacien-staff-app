@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { canMaintainSupplierPayment } from "@/lib/permissions";
 import { maskBankAccountNumber } from "@/lib/bank-mask";
+import { resolveSupplierBank } from "@/lib/banks";
 import { db } from "@/lib/db";
 import { formatPeso, manilaToday } from "@/lib/format";
 import { ymd } from "@/lib/documents/common";
@@ -74,7 +75,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
 
   const supplier = await db.supplier.findUnique({
     where: { id: sp.supplierId },
-    select: { id: true, name: true, bankAccountNumber: true },
+    select: { id: true, name: true, bankAccountNumber: true, bankName: true, bankBranch: true },
   });
   if (!supplier) notFound();
   const maskedBankNumber = maskBankAccountNumber(supplier.bankAccountNumber);
@@ -97,6 +98,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           supplierId={supplier.id}
           supplierName={supplier.name}
           supplierBankNumber={maskedBankNumber}
+          supplierBankName={resolveSupplierBank(supplier).bankName}
           defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
           cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({
