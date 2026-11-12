@@ -147,6 +147,7 @@ const CRUMB_LABELS: Record<string, string> = {
   backups: "Backups",
   quotes: "Quotes",
   "sales-orders": "Sales Orders",
+  search: "Search",
   "supplier-pos": "Supplier POs",
   "purchase-orders": "Supplier POs",
   receiving: "Receiving",

@@ -248,7 +248,15 @@ export async function duplicateCustomer(id: string, actor: CustomerSaveActor | s
 // Suppliers
 // ---------------------------------------------------------------------------
 
-export type SupplierFilter = { q?: string; matchTin?: boolean; taxType?: SupplierTaxType; showInactive?: boolean; onlyIds?: string[] };
+export type SupplierFilter = {
+  q?: string;
+  matchTin?: boolean;
+  taxType?: SupplierTaxType;
+  showInactive?: boolean;
+  onlyIds?: string[];
+  /** Optional cap (e.g. top search). Staff list omits this and loads the filtered set. */
+  take?: number;
+};
 
 export function listSuppliers(f: SupplierFilter) {
   const q = f.q?.trim();
@@ -268,6 +276,7 @@ export function listSuppliers(f: SupplierFilter) {
     },
     include: mainAddress,
     orderBy: { name: "asc" },
+    ...(f.take != null ? { take: f.take } : {}),
   });
 }
 
