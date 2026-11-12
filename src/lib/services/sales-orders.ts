@@ -287,9 +287,19 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ),
           }
         : null;
+      // PR-2b: the stored snapshot is the order's pick of record. A save
+      // that carries a pick (or an explicit re-apply) stores THAT pick's
+      // snapshots; any other unbilled save keeps the stored snapshot
+      // untouched. Rebuilding it from the lines (preserved.withholding)
+      // collapses stacked picks — a line at a combined rate has no single
+      // code — into LINE_* summaries, and the header pick would no longer
+      // round-trip on the next edit. Totals still always come from the
+      // lines (preserved.totals).
       const finalWithholding = liveBillings.length
         ? (before.withholding as unknown as Prisma.InputJsonValue)
-        : (preserved.withholding as unknown as Prisma.InputJsonValue);
+        : input.withholdingCodes !== undefined || input.reapplyWithholding === true
+          ? (pickSnapshots as unknown as Prisma.InputJsonValue)
+          : (before.withholding as unknown as Prisma.InputJsonValue);
       const finalTotals = billedTotals
         ? {
             ...preserved.totals,

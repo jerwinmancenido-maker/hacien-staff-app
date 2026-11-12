@@ -38,8 +38,15 @@ describe("SO editor withholding pick wiring (source pins)", () => {
     expect(editor).toContain("pickCodesChanged(initialPick, pick)");
   });
 
-  it("shows the partial-application count (A6)", () => {
-    expect(editor).toContain("Set on {soPickCoverage.covered} of {soPickCoverage.total} lines");
+  it("shows the partial-application count (A6), worded for what really happens", () => {
+    expect(editor).toContain("Pick applies to {soPickCoverage.applied} of {soPickCoverage.total} lines.");
+    expect(editor).toContain("keep their own WH% / ATC.");
+    expect(editor).toContain("get no withholding from this pick.");
+  });
+
+  it("defaults new and kind-changed lines from the header pick, not the customer's", () => {
+    expect(editor).toContain("lineWithholdingSnapshotFromPicks(pickSnapshots ?? [], kind)");
+    expect(editor).toContain("blankItem(pickSnapshots ?? [])");
   });
 
   it("locks the pick on a billed SO with the SI number, fed from the page", () => {

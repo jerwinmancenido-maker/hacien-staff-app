@@ -428,10 +428,19 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
    * when some lines are NOT covered so a partial change is never silent. */
   const soPickCoverage = (() => {
     if (mode !== "salesOrder" || !pick || pick.length === 0 || !pickSnapshots || items.length === 0) return null;
-    const covered = items.filter(
-      (i) => !i.withholdingOverride && pickSnapshots.some((p) => rateAppliesToKind(p.lineKind, i.kind)),
-    ).length;
-    return covered < items.length ? { covered, total: items.length } : null;
+    // A pick change rewrites every non-override line from the pick: a
+    // kind the pick covers takes the pick's rate, a kind it does not
+    // cover is cleared to no withholding. Override (hand-set) lines are
+    // never touched. The note must say exactly that.
+    let applied = 0;
+    let kept = 0;
+    let cleared = 0;
+    for (const i of items) {
+      if (i.withholdingOverride) kept++;
+      else if (pickSnapshots.some((p) => rateAppliesToKind(p.lineKind, i.kind))) applied++;
+      else cleared++;
+    }
+    return kept > 0 || cleared > 0 ? { applied, kept, cleared, total: items.length } : null;
   })();
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
@@ -502,7 +511,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       xs.map((x) => {
         if (x.key !== key) return x;
         if (x.withholdingOverride) return { ...x, kind };
-        const wh = lineWithholdingSnapshotFromPicks(linePicks, kind);
+        const wh = lineWithholdingSnapshotFromPicks(pickSnapshots ?? [], kind);
         return { ...x, kind, withholdingRate: wh.withholdingRate, withholdingAtc: wh.withholdingAtc, withholdingOverride: false };
       }),
     );
@@ -792,7 +801,9 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
               />
               {soPickCoverage && (
                 <div className="hint">
-                  Set on {soPickCoverage.covered} of {soPickCoverage.total} lines — the rest keep their own WH% / ATC.
+                  Pick applies to {soPickCoverage.applied} of {soPickCoverage.total} lines.
+                  {soPickCoverage.kept > 0 && ` ${soPickCoverage.kept} hand-set line${soPickCoverage.kept > 1 ? "s" : ""} keep their own WH% / ATC.`}
+                  {soPickCoverage.cleared > 0 && ` ${soPickCoverage.cleared} line${soPickCoverage.cleared > 1 ? "s" : ""} get no withholding from this pick.`}
                 </div>
               )}
               {computedDocRates.length > 0 && (
@@ -817,7 +828,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
               {REAPPLY_WITHHOLDING_LABEL}
             </button>
             {!pricesLocked && (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(linePicks)])}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(pickSnapshots ?? [])])}>
                 Add line
               </button>
             )}

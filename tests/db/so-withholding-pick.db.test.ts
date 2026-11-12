@@ -237,6 +237,40 @@ describe.skipIf(!env.hasDb)("SO header withholding pick (PR-2b)", () => {
     expect(svc2.withholdingRate!.toFixed(4)).toBe("0.0000");
     expect(after4.codes).toEqual(["GOV_GOODS_1"]);
     expect(after4.withholdingTotal).toBe("5200.00");
+
+    // --- 5. A stacked pick round-trips (Bugbot finding on PR #208) ------
+    // GOV_PT applies on top of the goods rate, so the goods line stores a
+    // combined 4% with no single ATC. Rebuilding the stored snapshot from
+    // the lines would collapse the stack into a LINE_* summary code; an
+    // untouched save must keep the stored pick exactly.
+    const year3 = await freshYear();
+    const { so: so3 } = await openSo(year3, ["GOV_GOODS_1", "GOV_PT_3"]);
+    const before5 = await stored(so3.id);
+    expect(before5.codes).toEqual(["GOV_GOODS_1", "GOV_PT_3"]);
+    expect(before5.withholdingTotal).toBe("21400.00"); // goods 520,000×1% + whole 540,000×3%
+
+    await updateSalesOrder(
+      so3.id,
+      await soInput(so3.id, (items) => items, { notes: "stack untouched" }, null),
+      admin,
+    );
+    const after5 = await stored(so3.id);
+    expect(after5.codes).toEqual(["GOV_GOODS_1", "GOV_PT_3"]);
+    expect(after5.withholdingTotal).toBe("21400.00");
+
+    // And a pick change stores the new pick itself, not a line summary.
+    await updateSalesOrder(
+      so3.id,
+      await soInput(
+        so3.id,
+        (items) => items.map((i) => ({ ...i, withholdingRate: "0.0300", withholdingAtc: "WB080" })),
+        { withholdingCodes: ["GOV_PT_3"] },
+      ),
+      admin,
+    );
+    const after6 = await stored(so3.id);
+    expect(after6.codes).toEqual(["GOV_PT_3"]);
+    expect(after6.withholdingTotal).toBe("16200.00"); // whole 540,000 × 3%
   });
 });
 
