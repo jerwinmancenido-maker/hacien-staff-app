@@ -31,6 +31,7 @@ import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import { receivingCoverageNote } from "../billing/coverage";
 import { buildSoPickerRows, remainingQtyForExistingPoLine, type SoPickerRow } from "./picker";
+import { attachmentKindLabel } from "../attachment-kinds";
 import {
   billExceedsPo,
   buildCostMarginSummary,
@@ -122,6 +123,20 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       approvedBy: userName,
       createdBy: userName,
       updatedBy: userName,
+      // REQ-ATTACH-001: the PO's OWN files (supplier quotes). Cost data —
+      // stripped with the bills below for viewers who can't see costs.
+      attachments: {
+        where: { archivedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          fileName: true,
+          sizeBytes: true,
+          kind: true,
+          createdAt: true,
+          uploadedBy: { select: { name: true } },
+        },
+      },
       receivingReports: {
         orderBy: [{ receivedDate: "desc" }, { createdAt: "desc" }],
         include: { receivedBy: userName, items: true, attachments: attachmentSelect },
@@ -254,6 +269,15 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
         withholdingApplied: money(a.withholdingApplied),
       })),
     })),
+    attachments: po.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      sizeBytes: a.sizeBytes,
+      kind: a.kind,
+      kindLabel: attachmentKindLabel(a.kind),
+      uploadedBy: a.uploadedBy.name,
+      createdAt: a.createdAt,
+    })),
     match,
     postedReceipts: po.receivingReports.filter((r) => r.status === "POSTED").length,
     approval: {
@@ -271,6 +295,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     subtotal: null,
     items: view.items.map((i) => ({ ...i, unitCost: null, total: null })),
     bills: [],
+    attachments: [],
     match: null,
   };
 }

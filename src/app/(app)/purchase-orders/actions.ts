@@ -22,6 +22,10 @@ import { formFiles } from "@/lib/form-files";
 import { billInputSchema, closeReasonSchema, createFromSoSchema, poInputSchema, returnInputSchema } from "@/lib/validation/purchasing";
 import { voidReasonSchema } from "@/lib/validation/quotes";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { db } from "@/lib/db";
+import { DocRuleError } from "@/lib/documents/common";
+import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
+import { pickedAttachmentKind, PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 
 function payload(form: FormData): unknown {
   try {
@@ -152,6 +156,36 @@ export async function voidBillAction(purchaseOrderId: string, billId: string, re
     await voidSupplierBill(billId, parsed.data, user);
     refresh(purchaseOrderId);
     return { ok: true, message: "Bill voided." };
+  });
+}
+
+/**
+ * REQ-ATTACH-001: attach files (the supplier's quote, other documents) to
+ * this purchase order. Cost-gated like every PO write — the files are cost
+ * data. A void PO takes no new files.
+ */
+export async function uploadPurchaseOrderAttachmentsAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async (): Promise<FormState> => {
+    const user = await requireCostAction("edit_data");
+    const po = await db.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
+    if (!po) throw new DocRuleError("Purchase order not found.");
+    if (po.status === "VOID") throw new DocRuleError("This purchase order is void, so files can't be attached to it.");
+    const kind = pickedAttachmentKind(str(form, "kind"), PURCHASE_ORDER_ATTACHMENT_KINDS);
+    if (!kind) return { fieldErrors: { kind: "Pick what kind of file this is." } };
+    const { files, error } = await formFiles(form);
+    if (error) return { fieldErrors: { files: error } };
+    if (files.length === 0) return { fieldErrors: { files: "Pick at least one file to upload." } };
+    const uploads = await prepareUploads(files);
+    try {
+      await db.$transaction(async (tx) => {
+        await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { purchaseOrderId: id }, user.id);
+      });
+    } catch (e) {
+      await discardUploads(uploads);
+      throw e;
+    }
+    refresh(id);
+    return { ok: true, message: "Files attached." };
   });
 }
 

@@ -14,6 +14,10 @@ import { govDealInputSchema, salesOrderInputSchema, voidReasonSchema } from "@/l
 import { parseDeliveryForm } from "@/lib/validation/deliveries";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 import { formFiles } from "@/lib/form-files";
+import { db } from "@/lib/db";
+import { DocRuleError } from "@/lib/documents/common";
+import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
+import { pickedAttachmentKind, SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 
 export async function saveSalesOrderAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   let goTo: string | null = null;
@@ -128,6 +132,37 @@ export async function updateSalesOrderGovDealAction(salesOrderId: string, _prev:
 
 export async function voidDeliveryForOrder(salesOrderId: string, deliveryId: string, reason: string): Promise<FormState> {
   return voidDeliveryAction(deliveryId, salesOrderId, reason);
+}
+
+/**
+ * REQ-ATTACH-001: attach files (the customer's PO, other documents) to this
+ * sales order. Same shape as the quote conforme upload. Deliberately NO
+ * billing check: files are documents, not money, so attaching stays allowed
+ * after the order is billed. A void order takes no new files.
+ */
+export async function uploadSalesOrderAttachmentsAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async (): Promise<FormState> => {
+    const user = await requireActionPermission("edit_data");
+    const so = await db.salesOrder.findUnique({ where: { id }, select: { status: true } });
+    if (!so) throw new DocRuleError("Sales order not found.");
+    if (so.status === "VOID") throw new DocRuleError("This sales order is void, so files can't be attached to it.");
+    const kind = pickedAttachmentKind(str(form, "kind"), SALES_ORDER_ATTACHMENT_KINDS);
+    if (!kind) return { fieldErrors: { kind: "Pick what kind of file this is." } };
+    const { files, error } = await formFiles(form);
+    if (error) return { fieldErrors: { files: error } };
+    if (files.length === 0) return { fieldErrors: { files: "Pick at least one file to upload." } };
+    const uploads = await prepareUploads(files);
+    try {
+      await db.$transaction(async (tx) => {
+        await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { salesOrderId: id }, user.id);
+      });
+    } catch (e) {
+      await discardUploads(uploads);
+      throw e;
+    }
+    revalidatePath(`/sales-orders/${id}`);
+    return { ok: true, message: "Files attached." };
+  });
 }
 
 /** Audit D: record a customer return (credit memo); the goods come back and the customer gets credit. */

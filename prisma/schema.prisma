@@ -976,6 +976,7 @@ model SalesOrder {
   billings       Billing[]
   deliveries     Delivery[]
   customerReturns CustomerReturn[]
+  attachments    DocumentAttachment[]
 
   @@index([quoteId])
   @@index([customerId])
@@ -1179,6 +1180,7 @@ model PurchaseOrder {
   receivingReports ReceivingReport[]
   bills            SupplierBill[]
   supplierReturns  SupplierReturn[]
+  attachments      DocumentAttachment[]
 
   @@index([supplierId])
   @@index([salesOrderId])
@@ -1453,9 +1455,10 @@ model SupplierBillItem {
 
 // Files attached to a receiving report (delivery receipt photo), a supplier
 // bill (invoice scan), a billing (filled-in booklet copy), a collection, a
-// supplier payment (proof of payment), or a BIR 2307. Same storage as business
-// documents: random key under UPLOAD_DIR, magic-byte sniffed, never deleted
-// (archivedAt instead).
+// supplier payment (proof of payment), a BIR 2307, or — REQ-ATTACH-001 — a
+// sales order (customer PO) or purchase order (supplier quote). Same storage
+// as business documents: random key under UPLOAD_DIR, magic-byte sniffed,
+// never deleted (archivedAt instead).
 model DocumentAttachment {
   id                        String                   @id @default(cuid())
   receivingReportId         String?
@@ -1482,6 +1485,16 @@ model DocumentAttachment {
   taxCalendarCompletion     TaxCalendarCompletion?   @relation(fields: [taxCalendarCompletionId], references: [id])
   quoteId                   String?
   quote                       Quote?                         @relation(fields: [quoteId], references: [id])
+  salesOrderId              String?
+  // onDelete SetNull (unlike the other owners' RESTRICT): plan amendment (a)
+  // lets a void SO be deleted once its files are archived, and the archived
+  // rows must survive that delete — the FK nulls instead of blocking it.
+  salesOrder                SalesOrder?              @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderId           String?
+  purchaseOrder             PurchaseOrder?           @relation(fields: [purchaseOrderId], references: [id])
+  // REQ-ATTACH-001: per-file label on SO/PO files (CUSTOMER_PO,
+  // SUPPLIER_QUOTE, OTHER — see src/lib/attachment-kinds.ts). Null elsewhere.
+  kind                      String?                  @db.VarChar(40)
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int
@@ -1503,6 +1516,9 @@ model DocumentAttachment {
   @@index([deliveryId])
   @@index([spoiledBookletNumberId])
   @@index([taxCalendarCompletionId])
+  @@index([quoteId])
+  @@index([salesOrderId])
+  @@index([purchaseOrderId])
 }
 
 // ---------------------------------------------------------------------------
