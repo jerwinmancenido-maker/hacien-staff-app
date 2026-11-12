@@ -63,6 +63,9 @@ export type ItemsTableRow = {
   withholdingAtc?: string | null;
   withholdingOverride?: boolean;
   overrideNote?: string | null;
+  /** Part A: "Changed vs quote" differences + the quote-vs-now summary. */
+  changedVsQuote?: string[];
+  changedSummary?: string;
   supplierName?: string | null;
   supplierUnitCost?: string;
   supplierTotal?: string;
@@ -101,6 +104,11 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
                 </div>
                 <div className="small muted">{i.kind === "SERVICES" ? "Services" : "Goods"}</div>
                 {i.overrideNote ? <div className="small muted">{i.overrideNote}</div> : null}
+                {i.changedVsQuote?.length ? (
+                  <div className="small muted" title={i.changedSummary}>
+                    <span className="chip dark">Changed</span> vs quote: {i.changedVsQuote.join(" · ")}
+                  </div>
+                ) : null}
                 {(i.withholdingRate != null || i.withholdingAtc) && (
                   <div className="small faint">
                     WH {i.withholdingRate != null ? `${(Number(i.withholdingRate) * 100).toFixed(2).replace(/\.?0+$/, "")}%` : "—"}

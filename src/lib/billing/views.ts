@@ -11,6 +11,7 @@ import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType } 
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
+import { billingCoverageNote, billingPositionNote } from "./coverage";
 import { getNonVatMeter } from "../services/non-vat";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
@@ -180,6 +181,31 @@ export async function getBillingView(id: string) {
   const applied = appliedOf([...b.allocations, ...b.creditApplications]);
   const balance = billingBalance(money(b.amount), applied);
   const od = overdueInfo(b.dueDate, balance, grace, undefined, isGov);
+  // Markers pair 3 (Billing vs SO): where this billing sits against the
+  // whole order — total billed so far + this billing's position. Live
+  // (non-void) billings only; VOID billings keep the plain view.
+  const siblings =
+    b.status !== "VOID"
+      ? await db.billing.findMany({
+          where: { salesOrderId: b.salesOrderId, status: { not: "VOID" } },
+          select: { id: true, amount: true },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+  const billedTotal = fromScaled(
+    siblings.reduce((acc, s) => acc + toScaled(money(s.amount), 2), 0n),
+    2,
+  );
+  const billingCoverage =
+    b.status !== "VOID"
+      ? {
+          note: billingCoverageNote({ billedTotal, contractPrice: money(b.salesOrder.contractPrice) }),
+          position: billingPositionNote(
+            siblings.findIndex((s) => s.id === b.id),
+            siblings.length,
+          ),
+        }
+      : null;
   return {
     id: b.id,
     number: b.number,
@@ -199,6 +225,8 @@ export async function getBillingView(id: string) {
     needsAdminCheck: b.needsAdminCheck,
     customer: b.customer,
     salesOrder: { ...b.salesOrder, contractPrice: money(b.salesOrder.contractPrice) },
+    /** Markers pair 3: coverage vs the SO (null on VOID billings). */
+    billingCoverage,
     balance,
     applied,
     overdue: od,

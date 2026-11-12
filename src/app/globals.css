@@ -77,10 +77,12 @@
   --red: var(--danger);
   --red-bg: var(--danger-bg);
 
-  --radius-sm: calc(4px * var(--ui-scale, 1));
-  --radius: calc(6px * var(--ui-scale, 1));
-  --radius-card: calc(6px * var(--ui-scale, 1));
-  --radius-frame: calc(6px * var(--ui-scale, 1));
+  /* UNSLOP "Soft" radius scale (approved by Jerwin 2026-11-11 with the
+     staff-app mocks): cards 16, controls 11, small 8, pills full. */
+  --radius-sm: calc(8px * var(--ui-scale, 1));
+  --radius: calc(11px * var(--ui-scale, 1));
+  --radius-card: calc(16px * var(--ui-scale, 1));
+  --radius-frame: calc(16px * var(--ui-scale, 1));
   --shadow-overlay: 0 1px calc(2px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06), 0 calc(4px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06);
   --shadow-frame: none;
   --shadow-pill: none;
@@ -8819,4 +8821,113 @@ button.contact-card-add {
 }
 .api-key-form .field {
   margin-bottom: 12px;
+}
+
+/* PO editor items table (owner 2026-11-10): fixed layout + set column
+   widths, so the description column keeps the remaining space instead of
+   being squeezed by width:100% inputs in an auto-layout table, and the
+   description textarea grows to fit its text (no clipped spec lines). */
+.edit-table.items-edit.po-items-edit table.list {
+  table-layout: fixed;
+}
+.edit-table.items-edit.po-items-edit .col-kind {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+.edit-table.items-edit.po-items-edit .col-qty {
+  width: 5rem;
+  min-width: 5rem;
+}
+.edit-table.items-edit.po-items-edit .col-unit {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+.edit-table.items-edit.po-items-edit .col-money {
+  width: 7.75rem;
+  min-width: 7.75rem;
+}
+.edit-table.items-edit.po-items-edit .col-actions,
+.edit-table.items-edit.po-items-edit td.line-actions {
+  width: 2.75rem;
+  min-width: 2.75rem;
+}
+.edit-table.items-edit.po-items-edit textarea.po-desc {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  field-sizing: content;
+  min-height: 2.5em;
+}
+
+/* UNSLOP theme — approved by Jerwin 2026-11-11 ("I like the mock and the
+   color" + his pick: light default, dark follows the computer setting).
+   LIGHT is the default above (white surfaces, light end of the HACIEN blue
+   scale); when the computer is set to dark, the SAME tokens flip to the
+   charcoal Variant A set from the approved mocks. Components keep reading
+   the tokens — no component changes needed. Scope note: rules that hardcode
+   hex colours (print .pp-* pages, some badges) stay light in both modes by
+   design — prints are paper. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e9edf5;
+    --white: #12161f;
+    --grey-50: #171c28;
+    --grey-100: #1c2331;
+    --grey-200: #232b3b;
+    --grey-400: #6b7690;
+    --grey-600: #99a3b8;
+    --grey-700: #c3cbdb;
+    --blue-tint: #1d3a7a;
+    --success: #7fb69a;
+    --success-bg: #1e2f28;
+    --warning: #d9b36c;
+    --warning-bg: #332b18;
+    --danger: #de8f8f;
+    --danger-bg: #3a2323;
+    --bg: #0b0e14;
+    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+  }
+}
+
+/* PO editor "Add from sales order" picker (Part B). Appended at the very end
+   on purpose: #185/#186 append their own blocks here too — keep this block
+   after merging either of them. */
+.so-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 14px;
+  background: var(--grey-50);
+}
+.so-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.so-picker-row:first-of-type {
+  border-top: none;
+}
+.so-picker-row.is-greyed {
+  opacity: 0.55;
+}
+.so-picker-main {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.so-picker-controls {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.so-picker-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }

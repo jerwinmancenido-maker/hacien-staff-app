@@ -984,6 +984,12 @@ model SalesOrderItem {
   id               String     @id @default(cuid())
   salesOrderId     String
   salesOrder       SalesOrder @relation(fields: [salesOrderId], references: [id])
+  // Part A markers: the quote line this SO line was copied from at convert.
+  // Nullable — SOs converted before this column existed keep NULL and simply
+  // show no "Changed vs quote" marker. No FK relation on purpose: the quote
+  // line can be soft-removed later; the id is a comparison key, not a join
+  // the app depends on for money.
+  quoteItemId      String?
   sortOrder        Int
   description      String     @db.Text
   kind             ItemKind
@@ -1546,6 +1552,11 @@ model Billing {
   amount               Decimal       @db.Decimal(15, 2)
   // Pro-rata of SO.withholdingTotal for this billing amount.
   withholdingExpected  Decimal       @default(0) @db.Decimal(15, 2)
+  // Per-code withholding breakdown captured when the billing is recorded
+  // (refreshed when its amount is edited): [{ rate, atcCode, amount }].
+  // The 2307 prefill splits from THIS, so later SO edits can never move an
+  // issued SI's split (A1 revised, 2026-11-10). Null on older billings.
+  withholdingBreakdown Json?
   // amount − withholdingExpected.
   netExpected          Decimal       @db.Decimal(15, 2)
   status               BillingStatus @default(OPEN)

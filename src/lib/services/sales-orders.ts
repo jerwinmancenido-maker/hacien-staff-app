@@ -5,7 +5,7 @@ import type { Prisma, SalesOrder, SalesOrderItem, SalesOrderItemComponent } from
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { docTotals, fromScaled, toScaled } from "../quotes/calc";
 import { salesOrderMoney } from "../billing/status";
 import { soDeliveryProgress } from "../sales-orders/delivery";
 import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
@@ -212,17 +212,47 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         withholdingAtc: i.withholdingAtc,
         withholdingOverride: i.withholdingOverride,
       }));
+      // SO guards (REQ-PLAN-AUDIT-001 A1–A3; owner-approved 2026-11-10).
+      // Everything below is computed inside the SO row lock taken above, so
+      // a concurrent PO create/picker save cannot slip past the floors.
+      const liveBillings = await tx.billing.findMany({
+        where: { salesOrderId: id, status: { not: "VOID" } },
+        select: { invoiceNo: true, amount: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (liveBillings.length) {
+        const siNo = liveBillings[0]!.invoiceNo;
+        const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
+        if (input.reapplyWithholding === true) {
+          throw new DocRuleError(whFrozen, "items");
+        }
+        if (input.withholdingCodes !== undefined) {
+          const storedSet = new Set(snapshotList(before.withholding).map((w) => w.code));
+          const inputSet = new Set(input.withholdingCodes ?? []);
+          const pickChanged = inputSet.size !== storedSet.size || [...inputSet].some((c) => !storedSet.has(c));
+          if (pickChanged) {
+            throw new DocRuleError(whFrozen, "items");
+          }
+        }
+      }
+
+      const storedSnapshots = snapshotList(before.withholding);
       // Re-apply uses the customer's current saved pick (explicit staff action).
       // Changing the customer pick alone never rewrites this SO.
+      // While billings exist, withholding is frozen to the stored snapshot.
       const pickCodes =
-        input.withholdingCodes !== undefined
-          ? input.withholdingCodes
-          : parseWithholdingPick(customer.defaultWithholding);
+        liveBillings.length
+          ? storedSnapshots.map((w) => w.code)
+          : input.withholdingCodes !== undefined
+            ? input.withholdingCodes
+            : parseWithholdingPick(customer.defaultWithholding);
       const rates = await listWithholdingRates(tx, { activeOnly: false });
       const pickSnapshots =
-        pickCodes && pickCodes.length
-          ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
-          : [];
+        liveBillings.length
+          ? storedSnapshots
+          : pickCodes && pickCodes.length
+            ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+            : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
         reapplyWithholding: input.reapplyWithholding === true,
@@ -232,6 +262,42 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
       const preserved = preserveLegacyWithholdingOnSave(before, planned);
       if (!preserved.ok) throw new DocRuleError(preserved.message);
       const items = preserved.items;
+
+      // While billings exist, freeze the stored snapshot on the header and
+      // recompute WH money against that snapshot (A1), so stacked codes
+      // like GOV_PT are never collapsed and qty/price edits move real totals.
+      // Keep this path even when a line has withholdingOverride (e.g. an
+      // Admin exempt add-on): falling back to line-driven totals collapses
+      // stacked GOV_PT via rateFromDocWithholding. Override lines stay out
+      // of the pick base so an exempt add-on neither drops the stack nor
+      // taxes the exempt amount; netReceived still uses the full contract.
+      const billedWh =
+        liveBillings.length && storedSnapshots.length > 0
+          ? docTotals(
+              items.filter((i) => !i.withholdingOverride),
+              storedSnapshots,
+            )
+          : null;
+      const billedTotals = billedWh
+        ? {
+            withholdingTotal: billedWh.withholdingTotal,
+            netReceived: fromScaled(
+              toScaled(preserved.totals.contractPrice, 2) - toScaled(billedWh.withholdingTotal, 2),
+              2,
+            ),
+          }
+        : null;
+      const finalWithholding = liveBillings.length
+        ? (before.withholding as unknown as Prisma.InputJsonValue)
+        : (preserved.withholding as unknown as Prisma.InputJsonValue);
+      const finalTotals = billedTotals
+        ? {
+            ...preserved.totals,
+            withholdingTotal: billedTotals.withholdingTotal,
+            netReceived: billedTotals.netReceived,
+          }
+        : preserved.totals;
+
       const priceOverrideReason = (input.priceOverrideReason ?? "").trim();
       const beforePrices = {
         contractPrice: money(before.contractPrice),
@@ -254,18 +320,24 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         }),
       };
       const afterPrices = {
-        contractPrice: money(preserved.totals.contractPrice),
-        withholdingTotal: money(preserved.totals.withholdingTotal),
-        netReceived: money(preserved.totals.netReceived),
-        // Compare the planned / persisted rows that will actually be saved.
-        lines: items.map((i) => ({
-          id: i.id ?? null,
-          qty: money(i.qty),
-          unitPrice: money(i.unitPrice),
-          kind: i.kind,
-          withholdingRate: i.withholdingRate ?? null,
-          withholdingAtc: i.withholdingAtc ?? null,
-        })),
+        contractPrice: money(finalTotals.contractPrice),
+        withholdingTotal: money(finalTotals.withholdingTotal),
+        netReceived: money(finalTotals.netReceived),
+        // Same NULL-rate fill as beforePrices: a notes-only save with legacy
+        // null line rates must not look like a withholding/price change to
+        // salesOrderPricesChanged (A2 billed floor / price lock).
+        lines: items.map((i) => {
+          const storedRate = i.withholdingRate != null ? i.withholdingRate : null;
+          const fromDoc = storedRate == null ? rateFromDocWithholding(before.withholding, i.kind) : null;
+          return {
+            id: i.id ?? null,
+            qty: money(i.qty),
+            unitPrice: money(i.unitPrice),
+            kind: i.kind,
+            withholdingRate: storedRate ?? fromDoc?.withholdingRate ?? null,
+            withholdingAtc: i.withholdingAtc ?? fromDoc?.withholdingAtc ?? null,
+          };
+        }),
       };
       // Delivered qty is authoritative: cannot remove a delivered line or drop
       // ordered qty below what was already delivered (check before price lock).
@@ -287,6 +359,109 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         if (delivered > 0n && toScaled(money(item.qty), 2) < delivered) {
           throw new DocRuleError(
             `Ordered quantity cannot be below delivered (${money(prev.deliveredQty).replace(/\.00$/, "")}).`,
+            `items.${item.id}.qty`,
+          );
+        }
+      }
+      if (liveBillings.length) {
+        // A1 (REVISED — looser rule; Jerwin direct 2026-11-10 17:17, final
+        // approval 17:22): once an SI exists, the BIR core is frozen for
+        // everyone — no line removals and no withholding rate/ATC/pick
+        // changes. The 2307 split uses the billing's stored breakdown.
+        // Everything else stays editable: qty/price changes and line adds
+        // go through the price lock below (Admin + typed reason, audited)
+        // and the A2/A3 floors. Each billing also carries its own
+        // withholding breakdown from record time, so allowed edits cannot
+        // move an issued SI's split.
+        const siNo = liveBillings[0]!.invoiceNo;
+        const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
+        if (removedIds.length) {
+          throw new DocRuleError(
+            `This order already has SI no. ${siNo}. Lines can't be removed after a billing is issued — void that billing first.`,
+            "items",
+          );
+        }
+        const beforeLineById = new Map(beforePrices.lines.map((l) => [l.id, l]));
+        for (const line of afterPrices.lines) {
+          if (!line.id) continue;
+          const prevLine = beforeLineById.get(line.id);
+          if (!prevLine) continue;
+          // beforePrices fills a stored NULL rate from the doc snapshot
+          // (that fill is not a change); normalize the planned line the
+          // same way — a line added with no rate keeps the snapshot rate,
+          // so a plain re-save must not trip this freeze. A submitted
+          // (non-null) rate or ATC still has to match exactly.
+          const plannedRate = line.withholdingRate ?? null;
+          const plannedFromDoc = plannedRate == null ? rateFromDocWithholding(before.withholding, line.kind) : null;
+          const effRate = plannedRate ?? plannedFromDoc?.withholdingRate ?? null;
+          const effAtc = (line.withholdingAtc ?? null) ?? (plannedRate == null ? (plannedFromDoc?.withholdingAtc ?? null) : null);
+          if (!rateEq(prevLine.withholdingRate, effRate) || (prevLine.withholdingAtc ?? null) !== effAtc) {
+            throw new DocRuleError(whFrozen, "items");
+          }
+        }
+      }
+      if (liveBillings.length) {
+        // A2 hard floor: the contract price can never drop below what is
+        // already billed (holds even if A1 is ever relaxed).
+        const billedTotal = liveBillings.reduce((a, b) => a + toScaled(money(b.amount), 2), 0n);
+        // The floor applies ONLY on money-moving saves (CTO ruling via
+        // Errands, 2026-11-11): a save that moves no price, qty, kind,
+        // withholding or line set never trips it — notes, terms, address,
+        // contact and cost-only saves on a billed order go through, even
+        // one already below billed from before this guard existed.
+        if (
+          salesOrderPricesChanged(beforePrices, afterPrices) &&
+          toScaled(afterPrices.contractPrice, 2) < billedTotal
+        ) {
+          throw new DocRuleError(
+            "The order total can't go below what is already billed.",
+            "items",
+          );
+        }
+      }
+      // A3 ordered floor: live ordered qty per SO line / lot component =
+      // PO lines not removed, on POs not VOID (a CLOSED PO counts its full
+      // qty). Same live rule as the purchasing views.
+      const componentIds = before.items.flatMap((i) => (i.components ?? []).map((c) => c.id));
+      const livePoLines = await tx.purchaseOrderItem.findMany({
+        where: {
+          removedAt: null,
+          purchaseOrder: { salesOrderId: id, status: { not: "VOID" } },
+          OR: [
+            { salesOrderItemId: { in: [...beforeById.keys()] } },
+            ...(componentIds.length ? [{ salesOrderItemComponentId: { in: componentIds } }] : []),
+          ],
+        },
+        select: { salesOrderItemId: true, salesOrderItemComponentId: true, qty: true },
+      });
+      const orderedByLine = new Map<string, bigint>();
+      const orderedByComponent = new Map<string, bigint>();
+      for (const l of livePoLines) {
+        if (l.salesOrderItemId) orderedByLine.set(l.salesOrderItemId, (orderedByLine.get(l.salesOrderItemId) ?? 0n) + toScaled(money(l.qty), 2));
+        if (l.salesOrderItemComponentId) orderedByComponent.set(l.salesOrderItemComponentId, (orderedByComponent.get(l.salesOrderItemComponentId) ?? 0n) + toScaled(money(l.qty), 2));
+      }
+      const lineOrdered = (lineId: string): bigint => {
+        const prev = beforeById.get(lineId);
+        let total = orderedByLine.get(lineId) ?? 0n;
+        for (const c of prev?.components ?? []) total += orderedByComponent.get(c.id) ?? 0n;
+        return total;
+      };
+      for (const rid of removedIds) {
+        if (lineOrdered(rid) > 0n) {
+          throw new DocRuleError(
+            "This line is already on a purchase order. Void that PO before removing the line.",
+            `items.${rid}`,
+          );
+        }
+      }
+      for (const item of items) {
+        if (!item.id) continue;
+        const prev = beforeById.get(item.id);
+        if (!prev || prev.isLot) continue;
+        const ordered = orderedByLine.get(item.id) ?? 0n;
+        if (ordered > 0n && toScaled(money(item.qty), 2) < ordered) {
+          throw new DocRuleError(
+            `Ordered quantity cannot be below what is already on a purchase order (${fromScaled(ordered, 2)}).`,
             `items.${item.id}.qty`,
           );
         }
@@ -328,8 +503,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           ...(input.noaDate !== undefined ? { noaDate: input.noaDate ?? null } : {}),
           ...(input.agencyPoNo !== undefined ? { agencyPoNo: input.agencyPoNo } : {}),
           ...(input.iarDate !== undefined ? { iarDate: input.iarDate ?? null } : {}),
-          withholding: preserved.withholding as unknown as Prisma.InputJsonValue,
-          ...preserved.totals,
+          withholding: finalWithholding,
+          ...finalTotals,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },

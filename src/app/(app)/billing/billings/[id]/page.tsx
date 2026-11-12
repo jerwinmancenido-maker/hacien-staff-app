@@ -134,7 +134,15 @@ export default async function BillingDetailPage({
             </>
           )}
           <dt>Amount</dt>
-          <dd className="num">{formatPeso(b.amount)}</dd>
+          <dd className="num">
+            {formatPeso(b.amount)}
+            {b.billingCoverage && (
+              <div className="small muted">
+                {b.billingCoverage.note}
+                {b.billingCoverage.position ? ` ${b.billingCoverage.position}` : ""}
+              </div>
+            )}
+          </dd>
           <dt>Withholding expected</dt>
           <dd className="num">{formatPeso(b.withholdingExpected)}</dd>
           <dt>Net expected</dt>

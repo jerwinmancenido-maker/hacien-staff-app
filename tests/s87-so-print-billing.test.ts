@@ -33,7 +33,10 @@ describe("S-87 print billing statement from the SO", () => {
     const start = src.indexOf('tab === "documents"');
     expect(start).toBeGreaterThanOrEqual(0);
     const tab = src.slice(start, src.indexOf('tab === "deliveries"', start));
-    expect(tab).toContain("<th>Link</th>");
+    // Owner 2026-11-10: the Link/Open column was removed — the rows are
+    // whole-row clickable (stretched link); Print stays as its own link.
+    expect(tab).not.toContain("<th>Link</th>");
+    expect(tab).toContain("row-stretched-link");
     expect(tab).toContain("`/print/billings/${b.id}`");
     expect(tab).toContain('target="_blank"');
     expect(src).toContain("View billings →");

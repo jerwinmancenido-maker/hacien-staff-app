@@ -9,7 +9,7 @@ import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type Permissi
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
-import { docTotals, fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
+import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
 import { validateAllocations, planCreditApplication, type AllocationInput, type BillingForAlloc, type CreditSource } from "../billing/allocations";
 import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { billingToday } from "../billing/dates";
@@ -157,11 +157,10 @@ export function splitBillingWithholding(
 
 /**
  * Per-ATC prefill amounts for a billing's remaining withholding, for the new
- * collection form. The SO's per-code breakdown (from docTotals on its lines +
- * snapshot) is pro-rated by the billing's remaining share; the form posts
- * these amounts so the 2307 record keeps the split instead of collapsing
- * onto the first code. Falls back to bare codes (blank amounts) when the SO
- * has no usable breakdown.
+ * collection form. Prefers the billing's stored issue-time breakdown,
+ * pro-rated by remaining expected withholding, so later SO edits can never
+ * move an issued SI's 2307 split. Legacy billings with a null breakdown get
+ * bare codes (blank amounts) — never a live-SO fallback.
  */
 export async function withholdingCodePrefill(
   tx: Tx,
@@ -173,28 +172,18 @@ export async function withholdingCodePrefill(
   });
   if (!billing) return [];
   const bare = (await withholdingCodesFromSo(tx, billing.salesOrderId)).map((c) => ({ ...c, amount: "" }));
-  const so = await tx.salesOrder.findUnique({
-    where: { id: billing.salesOrderId },
-    select: {
-      withholding: true,
-      items: {
-        where: { removedAt: null },
-        select: { kind: true, total: true, supplierTotal: true, margin: true },
-      },
-    },
-  });
-  if (!so) return bare;
-  const picks = (so.withholding ?? []) as WithholdingSnapshot[];
-  const parts = docTotals(
-    so.items.map((i) => ({
-      kind: i.kind,
-      total: money(i.total),
-      supplierTotal: money(i.supplierTotal),
-      margin: money(i.margin),
-    })),
-    picks.length ? picks : undefined,
-  ).withholding;
-  if (!parts.length) return bare;
+  // A1 (revised): use the billing's stored split only. Older billings (null)
+  // stay on bare codes — do not rebuild from the live SO after an allowed
+  // post-issue money edit.
+  const storedBreakdown = (billing.withholdingBreakdown ?? null) as
+    | { rate: string; atcCode: string | null; amount: string }[]
+    | null;
+  if (!storedBreakdown?.length) return bare;
+  const parts = storedBreakdown.map((x) => ({
+    rate: x.rate,
+    atcCode: x.atcCode ?? null,
+    amount: money(x.amount),
+  }));
   const already = billing.allocations.reduce((a, x) => a + toScaled(money(x.withholdingApplied), 2), 0n);
   const remaining = toScaled(money(billing.withholdingExpected), 2) - already;
   if (remaining <= 0n) return bare;
