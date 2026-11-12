@@ -224,14 +224,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         const siNo = liveBillings[0]!.invoiceNo;
         const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
         if (input.reapplyWithholding === true) {
-          throw new DocRuleError(whFrozen, "items");
+          throw new DocRuleError(whFrozen, "withholdingCodes");
         }
         if (input.withholdingCodes !== undefined) {
           const storedSet = new Set(snapshotList(before.withholding).map((w) => w.code));
           const inputSet = new Set(input.withholdingCodes ?? []);
           const pickChanged = inputSet.size !== storedSet.size || [...inputSet].some((c) => !storedSet.has(c));
           if (pickChanged) {
-            throw new DocRuleError(whFrozen, "items");
+            throw new DocRuleError(whFrozen, "withholdingCodes");
           }
         }
       }
@@ -247,11 +247,18 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ? input.withholdingCodes
             : parseWithholdingPick(customer.defaultWithholding);
       const rates = await listWithholdingRates(tx, { activeOnly: false });
+      // `existing` for the snapshot build rescues ONLY codes with no
+      // active rate (a deactivated rate already on this order keeps its
+      // stored rate/ATC). An active code must take the CURRENT Settings
+      // snapshot — the editor rewrote the lines from current rates, so
+      // reusing the stored snapshot for it would desync header and lines.
+      const activeCodes = new Set(rates.filter((r) => r.active).map((r) => r.code));
+      const existingForBuild = storedSnapshots.filter((s) => !activeCodes.has(s.code));
       const pickSnapshots =
         liveBillings.length
           ? storedSnapshots
           : pickCodes && pickCodes.length
-            ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+            ? buildWithholdingSnapshot(pickCodes, rates, existingForBuild, { skipUnknown: true })
             : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
@@ -287,9 +294,19 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ),
           }
         : null;
+      // PR-2b: the stored snapshot is the order's pick of record. A save
+      // that carries a pick (or an explicit re-apply) stores THAT pick's
+      // snapshots; any other unbilled save keeps the stored snapshot
+      // untouched. Rebuilding it from the lines (preserved.withholding)
+      // collapses stacked picks — a line at a combined rate has no single
+      // code — into LINE_* summaries, and the header pick would no longer
+      // round-trip on the next edit. Totals still always come from the
+      // lines (preserved.totals).
       const finalWithholding = liveBillings.length
         ? (before.withholding as unknown as Prisma.InputJsonValue)
-        : (preserved.withholding as unknown as Prisma.InputJsonValue);
+        : input.withholdingCodes !== undefined || input.reapplyWithholding === true
+          ? (pickSnapshots as unknown as Prisma.InputJsonValue)
+          : (before.withholding as unknown as Prisma.InputJsonValue);
       const finalTotals = billedTotals
         ? {
             ...preserved.totals,

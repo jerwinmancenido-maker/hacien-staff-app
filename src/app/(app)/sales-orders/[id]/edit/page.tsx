@@ -5,7 +5,8 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getSalesOrderView, soLineOrderedQty } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { DocumentEditor } from "@/components/docs/DocumentEditor";
-import { editorCustomers, editorSuppliers } from "../../../quotes/editor-data";
+import { editorCustomers, editorRates, editorSuppliers } from "../../../quotes/editor-data";
+import { db } from "@/lib/db";
 import { saveSalesOrderAction } from "../../actions";
 
 export default async function EditSalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,10 +16,16 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
   if (!so) notFound();
   if (so.status !== "OPEN") redirect(`/sales-orders/${id}`);
   const { settings } = await getSettingsSnapshot();
-  const [customers, suppliers, orderedByLine] = await Promise.all([
+  const [customers, suppliers, orderedByLine, rates, firstBilling] = await Promise.all([
     editorCustomers({ id: so.customer.id }),
     editorSuppliers(user),
     soLineOrderedQty(id),
+    editorRates(so.withholding),
+    db.billing.findFirst({
+      where: { salesOrderId: id, status: { not: "VOID" } },
+      orderBy: { createdAt: "asc" },
+      select: { invoiceNo: true },
+    }),
   ]);
 
   return (
@@ -33,13 +40,14 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
         mode="salesOrder"
         isNew={false}
         customers={customers}
-        rates={so.withholding}
+        rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
         contactRoles={settings.lists.contactRoles}
         action={saveSalesOrderAction.bind(null, id)}
         cancelHref={`/sales-orders/${id}`}
         priceLock={user.isAdmin ? "override" : "locked"}
+        whFrozenSiNo={firstBilling?.invoiceNo ?? null}
         initial={{
           customerId: so.customer.id,
           contactId: so.contact?.id ?? "",
