@@ -271,6 +271,35 @@ describe.skipIf(!env.hasDb)("SO header withholding pick (PR-2b)", () => {
     const after6 = await stored(so3.id);
     expect(after6.codes).toEqual(["GOV_PT_3"]);
     expect(after6.withholdingTotal).toBe("16200.00"); // whole 540,000 × 3%
+
+    // --- 6. A deactivated rate already on the order survives a pick save --
+    // buildWithholdingSnapshot only keeps an inactive code when it is in
+    // the `existing` list; updateSalesOrder must pass the stored snapshots
+    // or a still-checked deactivated code silently drops out of the pick
+    // (and off the lines) on the next pick-carrying save.
+    const year4 = await freshYear();
+    const { so: so4 } = await openSo(year4, ["GOV_SERVICES_2"]);
+    await db.withholdingRate.update({ where: { code: "GOV_SERVICES_2" }, data: { active: false } });
+    try {
+      await updateSalesOrder(
+        so4.id,
+        await soInput(
+          so4.id,
+          (items) =>
+            items.map((i) =>
+              i.kind === "GOODS" ? { ...i, withholdingRate: "0.0100", withholdingAtc: "WI640" } : i,
+            ),
+          { withholdingCodes: ["GOV_GOODS_1", "GOV_SERVICES_2"] },
+        ),
+        admin,
+      );
+    } finally {
+      await db.withholdingRate.update({ where: { code: "GOV_SERVICES_2" }, data: { active: true } });
+    }
+    const after7 = await stored(so4.id);
+    expect(after7.codes).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(after7.rows.find((r) => r.kind === "SERVICES")!.withholdingRate!.toFixed(4)).toBe("0.0200");
+    expect(after7.withholdingTotal).toBe("5600.00");
   });
 });
 

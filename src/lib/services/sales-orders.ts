@@ -251,7 +251,7 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         liveBillings.length
           ? storedSnapshots
           : pickCodes && pickCodes.length
-            ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+            ? buildWithholdingSnapshot(pickCodes, rates, storedSnapshots, { skipUnknown: true })
             : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
