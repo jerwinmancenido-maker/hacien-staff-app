@@ -11,7 +11,7 @@ import { writeAudit } from "../audit";
 import { checkUpload, uploadMaxBytes } from "../business-docs/sniff";
 import { discardUnreferencedFile, newStorageKey, saveFile } from "../business-docs/storage";
 import { DocRuleError } from "../documents/common";
-import { assertCanDeleteDocument, type PermissionUser } from "../permissions";
+import { assertCanDeleteDocument, canSeeCosts, ForbiddenError, type PermissionUser } from "../permissions";
 
 export type UploadFile = { name: string; size: number; bytes: Uint8Array };
 
@@ -103,6 +103,16 @@ export async function archiveAttachment(id: string, actor: PermissionUser & { id
     const att = await tx.documentAttachment.findUnique({ where: { id } });
     if (!att) throw new DocRuleError("Attachment not found.");
     if (att.archivedAt) throw new DocRuleError("That file was already removed.");
+    // Scope: this remove path exists only for SO/PO files. Other documents'
+    // files (quote conforme, billing scans, …) are not removable here —
+    // archiving one would hide it from its own document's views.
+    if (!att.salesOrderId && !att.purchaseOrderId) {
+      throw new DocRuleError("That file isn't attached to a sales order or purchase order, so it can't be removed here.");
+    }
+    // A PO's files are supplier quotes — cost data, gated exactly like
+    // their upload and download: an admin who can't see costs can't
+    // remove them either.
+    if (att.purchaseOrderId && !canSeeCosts(actor)) throw new ForbiddenError();
     const updated = await tx.documentAttachment.update({ where: { id }, data: { archivedAt: new Date() } });
     await writeAudit(tx, {
       userId: actor.id,

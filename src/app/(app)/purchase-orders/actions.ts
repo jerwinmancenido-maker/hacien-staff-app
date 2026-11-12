@@ -178,6 +178,11 @@ export async function uploadPurchaseOrderAttachmentsAction(id: string, _prev: Fo
     const uploads = await prepareUploads(files);
     try {
       await db.$transaction(async (tx) => {
+        // Re-check inside the transaction: a void that lands between the
+        // check above and this insert must not leave files on a VOID PO.
+        const fresh = await tx.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
+        if (!fresh) throw new DocRuleError("Purchase order not found.");
+        if (fresh.status === "VOID") throw new DocRuleError("This purchase order is void, so files can't be attached to it.");
         await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { purchaseOrderId: id }, user.id);
       });
     } catch (e) {

@@ -134,6 +134,31 @@ describe.skipIf(!env.hasDb)("attachments on sales orders and purchase orders (My
     await expect(archiveAttachment(row.id, admin)).rejects.toThrow(/already removed/i);
   });
 
+  it("archiving refuses a file that belongs to neither a sales order nor a purchase order", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const quote = await createQuote(quoteInput(customer.id, year), admin);
+    const row = await attach({ quoteId: quote.id }, "OTHER");
+    await expect(archiveAttachment(row.id, admin)).rejects.toThrow(/can't be removed here/i);
+    const still = await db.documentAttachment.findUnique({ where: { id: row.id } });
+    expect(still!.archivedAt).toBeNull();
+  });
+
+  it("archiving a purchase order file refuses an admin who can't see costs", async () => {
+    const year = await freshYear();
+    const supplier = await makeSupplier();
+    const po = await createStandalonePurchaseOrder(standalonePo(supplier.id, year), admin);
+    const row = await attach({ purchaseOrderId: po.id }, "SUPPLIER_QUOTE");
+    const noCostsAdmin = await db.user.create({
+      data: { email: `nocosts-${tag()}@test.example.com`, name: "No-costs admin", isAdmin: true, canSeeCosts: false },
+    });
+    await expect(archiveAttachment(row.id, noCostsAdmin as DocActor)).rejects.toBeInstanceOf(ForbiddenError);
+    const still = await db.documentAttachment.findUnique({ where: { id: row.id } });
+    expect(still!.archivedAt).toBeNull();
+    const updated = await archiveAttachment(row.id, admin);
+    expect(updated.archivedAt).not.toBeNull();
+  });
+
   it("A3: a void sales order with a live attachment can't be deleted; after archiving, it can", async () => {
     const year = await freshYear();
     const so = await openSo(year);

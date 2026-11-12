@@ -154,6 +154,11 @@ export async function uploadSalesOrderAttachmentsAction(id: string, _prev: FormS
     const uploads = await prepareUploads(files);
     try {
       await db.$transaction(async (tx) => {
+        // Re-check inside the transaction: a void that lands between the
+        // check above and this insert must not leave files on a VOID order.
+        const fresh = await tx.salesOrder.findUnique({ where: { id }, select: { status: true } });
+        if (!fresh) throw new DocRuleError("Sales order not found.");
+        if (fresh.status === "VOID") throw new DocRuleError("This sales order is void, so files can't be attached to it.");
         await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { salesOrderId: id }, user.id);
       });
     } catch (e) {
