@@ -247,11 +247,18 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ? input.withholdingCodes
             : parseWithholdingPick(customer.defaultWithholding);
       const rates = await listWithholdingRates(tx, { activeOnly: false });
+      // `existing` for the snapshot build rescues ONLY codes with no
+      // active rate (a deactivated rate already on this order keeps its
+      // stored rate/ATC). An active code must take the CURRENT Settings
+      // snapshot — the editor rewrote the lines from current rates, so
+      // reusing the stored snapshot for it would desync header and lines.
+      const activeCodes = new Set(rates.filter((r) => r.active).map((r) => r.code));
+      const existingForBuild = storedSnapshots.filter((s) => !activeCodes.has(s.code));
       const pickSnapshots =
         liveBillings.length
           ? storedSnapshots
           : pickCodes && pickCodes.length
-            ? buildWithholdingSnapshot(pickCodes, rates, storedSnapshots, { skipUnknown: true })
+            ? buildWithholdingSnapshot(pickCodes, rates, existingForBuild, { skipUnknown: true })
             : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,

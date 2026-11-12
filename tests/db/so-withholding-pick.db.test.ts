@@ -300,6 +300,37 @@ describe.skipIf(!env.hasDb)("SO header withholding pick (PR-2b)", () => {
     expect(after7.codes).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
     expect(after7.rows.find((r) => r.kind === "SERVICES")!.withholdingRate!.toFixed(4)).toBe("0.0200");
     expect(after7.withholdingTotal).toBe("5600.00");
+
+    // --- 7. An ACTIVE rate edited in Settings wins over the stored one ---
+    // The `existing` rescue (case 6) must not freeze stale rates: when
+    // the Settings rate for a code changed, a pick save stores the
+    // CURRENT snapshot, matching the lines the editor just rewrote.
+    const year5 = await freshYear();
+    const { so: so5 } = await openSo(year5, ["GOV_GOODS_1"]);
+    await db.withholdingRate.update({ where: { code: "GOV_GOODS_1" }, data: { rate: "0.0200" } });
+    try {
+      await updateSalesOrder(
+        so5.id,
+        await soInput(
+          so5.id,
+          (items) =>
+            items.map((i) =>
+              i.kind === "GOODS"
+                ? { ...i, withholdingRate: "0.0200", withholdingAtc: "WI640" }
+                : { ...i, withholdingRate: svcRate, withholdingAtc: svcAtc },
+            ),
+          { withholdingCodes: ["GOV_GOODS_1", "GOV_SERVICES_2"] },
+        ),
+        admin,
+      );
+    } finally {
+      await db.withholdingRate.update({ where: { code: "GOV_GOODS_1" }, data: { rate: "0.0100" } });
+    }
+    const so5Row = await db.salesOrder.findUniqueOrThrow({ where: { id: so5.id } });
+    const snaps5 = snapshotList(so5Row.withholding);
+    expect(snaps5.map((w) => w.code).sort()).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(snaps5.find((w) => w.code === "GOV_GOODS_1")!.rate).toBe("0.0200");
+    expect(so5Row.withholdingTotal.toFixed(2)).toBe("10800.00"); // goods 520,000×2% + services 20,000×2%
   });
 });
 
