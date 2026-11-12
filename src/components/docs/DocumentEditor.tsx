@@ -31,6 +31,8 @@ import {
 import {
   lineDiffersFromUsualPicks,
   lineWithholdingSnapshotFromPicks,
+  pickCodesChanged,
+  rateAppliesToKind,
   WITHHOLDING_NOT_SET_NOTICE,
   WITHHOLDING_INTERNAL_PANEL_LABEL,
   customerWithholdingHint,
@@ -174,6 +176,9 @@ type Props = {
   cancelHref: string;
   /** Sales order only. locked = Staff/Approver. override = Admin must give a reason to change prices. */
   priceLock?: "locked" | "override";
+  /** Sales order only: first live SI number when the order already has a
+   * billing — withholding is frozen (A1), so the header pick renders locked. */
+  whFrozenSiNo?: number | null;
 };
 
 let seq = 0;
@@ -310,7 +315,25 @@ function visibleRates(rates: WithholdingSnapshot[]): WithholdingSnapshot[] {
   return rates.filter((r) => r.code !== WITHHOLDING_DEFAULT_CODES.GOV_VAT_5);
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock }: Props) {
+/** The read-only withholding summary chips (SO header, locked/frozen states). */
+function WhSummaryChips({ docRates }: { docRates: { code: string; label: string; atcCode?: string | null }[] }) {
+  return (
+    <div className="wh-computed" role="status" aria-label="Withholding from line rates">
+      {docRates.length === 0 ? (
+        <span className="small faint">None from line rates</span>
+      ) : (
+        docRates.map((r) => (
+          <span key={r.code} className="chip">
+            {r.label}
+            {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
+          </span>
+        ))
+      )}
+    </div>
+  );
+}
+
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock, whFrozenSiNo }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -321,8 +344,9 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [addContactOpen, setAddContactOpen] = useState(false);
 
+  const initialPick = resolveInitialPick(initial);
   const [h, setH] = useState(() => {
-    const pick = resolveInitialPick(initial);
+    const pick = initialPick;
     return {
       customerId: initial.customerId,
       contactId: initial.contactId,
@@ -338,7 +362,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
     };
   });
 
-  const initialPickSnaps = pickSnapshotsFromCodes(resolveInitialPick(initial), rates) ?? [];
+  const initialPickSnaps = pickSnapshotsFromCodes(initialPick, rates) ?? [];
   const [items, setItems] = useState<EditorItem[]>(() =>
     initial.items.length
       ? initial.items.map((i) => ({
@@ -395,7 +419,20 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const computedDocRates = withholdingSnapshotFromLines(lineInputs);
 
   const priceFieldsChanged = salesOrderPriceFieldsChanged(initial.items, items);
-  const showPriceReason = priceLock === "override" && (priceFieldsChanged || !!e.priceOverrideReason);
+  /** PR-2b: the SO header pick counts as a price change on its own, even
+   * when the rewritten lines happen to land on identical rates/ATCs. */
+  const pickChanged = mode === "salesOrder" && pickCodesChanged(initialPick, pick);
+  const showPriceReason = priceLock === "override" && (priceFieldsChanged || pickChanged || !!e.priceOverrideReason);
+  /** A6: how many lines the current SO pick actually sets — a pick covers
+   * lines by kind, and per-line overrides keep their own WH%/ATC. Shown
+   * when some lines are NOT covered so a partial change is never silent. */
+  const soPickCoverage = (() => {
+    if (mode !== "salesOrder" || !pick || pick.length === 0 || !pickSnapshots || items.length === 0) return null;
+    const covered = items.filter(
+      (i) => !i.withholdingOverride && pickSnapshots.some((p) => rateAppliesToKind(p.lineKind, i.kind)),
+    ).length;
+    return covered < items.length ? { covered, total: items.length } : null;
+  })();
 
   const setItem = (key: string, patch: Partial<EditorItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   const move = (idx: number, by: number) =>
@@ -415,7 +452,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
     nextPick: string[] | null,
     nextItems: EditorItem[],
     headerPatch: Partial<typeof h> = {},
-    opts: { skipOverrides?: boolean } = {},
+    opts: { skipOverrides?: boolean; markReapply?: boolean } = {},
   ) {
     const snaps = pickSnapshotsFromCodes(nextPick, rates) ?? [];
     const refreshed = nextItems.map((i) => {
@@ -432,7 +469,10 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
       withholdingPick: nextPick,
       withholdingCodes: nextPick,
     }));
-    setReapplyWithholding(true);
+    // Only a genuine re-apply (button / customer change) marks the save as
+    // one; a manual header pick change (PR-2b) sends withholdingCodes with
+    // the flag OFF — the flag alone would trip the billed freeze.
+    setReapplyWithholding(opts.markReapply !== false);
   }
 
   function pickCustomer(id: string) {
@@ -448,6 +488,13 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   function changeQuotePick(next: string[] | null) {
     const filtered = filterGovVatCodes(next);
     applyPickDefaults(filtered, items, {}, { skipOverrides: true });
+  }
+
+  /** PR-2b: SO header pick change — same application as the quote pick,
+   * but NOT a customer re-apply, so the reapply flag stays off. */
+  function changeSoPick(next: string[] | null) {
+    const filtered = filterGovVatCodes(next);
+    applyPickDefaults(filtered, items, {}, { skipOverrides: true, markReapply: false });
   }
 
   function changeKind(key: string, kind: ItemKind) {
@@ -525,6 +572,10 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           deliveryAddress: h.deliveryAddress,
           terms: h.terms,
           notes: h.notes,
+          // PR-2b: send the header pick ONLY when it actually changed —
+          // an untouched pick must never rewrite the stored snapshot or
+          // trip the billed freeze on an unrelated save.
+          ...(pickChanged ? { withholdingCodes: pick } : {}),
           reapplyWithholding: reapplyWithholding || undefined,
           priceOverrideReason: showPriceReason ? priceOverrideReason : undefined,
           items: items.map(itemPayload),
@@ -708,25 +759,46 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                 </div>
               )}
             </div>
-          ) : (
+          ) : whFrozenSiNo != null ? (
             <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
               <span className="label">Withholding</span>
-              <div className="wh-computed" role="status" aria-label="Withholding from line rates">
-                {computedDocRates.length === 0 ? (
-                  <span className="small faint">None from line rates</span>
-                ) : (
-                  computedDocRates.map((r) => (
-                    <span key={r.code} className="chip">
-                      {r.label}
-                      {r.atcCode && !r.label.includes(r.atcCode) ? ` · ${r.atcCode}` : ""}
-                    </span>
-                  ))
-                )}
-              </div>
+              <WhSummaryChips docRates={computedDocRates} />
+              {e.withholdingCodes || e.withholding ? (
+                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+              ) : (
+                <div className="hint">
+                  Withholding is locked — this order already has SI no. {whFrozenSiNo}. Void that billing to change it.
+                </div>
+              )}
+            </div>
+          ) : pricesLocked ? (
+            <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+              <span className="label">Withholding</span>
+              <WhSummaryChips docRates={computedDocRates} />
               {e.withholdingCodes || e.withholding ? (
                 <div className="error">{e.withholdingCodes ?? e.withholding}</div>
               ) : (
                 <div className="hint">From each line&apos;s WH% · ATC (read-only). Re-apply customer&apos;s withholding to refresh.</div>
+              )}
+            </div>
+          ) : (
+            <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+              <WithholdingPickField
+                rates={rates}
+                value={pick}
+                onChange={changeSoPick}
+                error={e.withholdingCodes ?? e.withholding}
+                clearToNotSet
+              />
+              {soPickCoverage && (
+                <div className="hint">
+                  Set on {soPickCoverage.covered} of {soPickCoverage.total} lines — the rest keep their own WH% / ATC.
+                </div>
+              )}
+              {computedDocRates.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <WhSummaryChips docRates={computedDocRates} />
+                </div>
               )}
             </div>
           )}

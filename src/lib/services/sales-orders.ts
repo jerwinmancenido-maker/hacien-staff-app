@@ -224,14 +224,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         const siNo = liveBillings[0]!.invoiceNo;
         const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
         if (input.reapplyWithholding === true) {
-          throw new DocRuleError(whFrozen, "items");
+          throw new DocRuleError(whFrozen, "withholdingCodes");
         }
         if (input.withholdingCodes !== undefined) {
           const storedSet = new Set(snapshotList(before.withholding).map((w) => w.code));
           const inputSet = new Set(input.withholdingCodes ?? []);
           const pickChanged = inputSet.size !== storedSet.size || [...inputSet].some((c) => !storedSet.has(c));
           if (pickChanged) {
-            throw new DocRuleError(whFrozen, "items");
+            throw new DocRuleError(whFrozen, "withholdingCodes");
           }
         }
       }
