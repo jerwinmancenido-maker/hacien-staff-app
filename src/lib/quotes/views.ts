@@ -29,6 +29,7 @@ import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
 import { soHasRemainingToDeliver } from "../sales-orders/delivery";
 import { attachmentKindLabel } from "../attachment-kinds";
+import { buildRevisionChain } from "./revision-chain";
 
 type StoredMoney = {
   contractPrice: string;
@@ -297,6 +298,15 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     },
   });
   if (!q) return null;
+  // Phase 2 #5: revision chain (display-only). The chain id is the Rev 1
+  // quote's id, stamped on every later revision at copy time; quotes from
+  // before the stamp existed have no chain and show nothing extra.
+  const chainRootId = q.revisionChainId ?? q.id;
+  const chainMembers = await db.quote.findMany({
+    where: { OR: [{ id: chainRootId }, { revisionChainId: chainRootId }] },
+    select: { id: true, number: true, revision: true, createdAt: true },
+  });
+  const revisionChain = buildRevisionChain(q.id, chainMembers);
   const withholding = snapshotList(q.withholding);
   const withholdingPick = parseWithholdingPick(q.withholdingPick);
   const stored = {
@@ -313,6 +323,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     id: q.id,
     number: q.number,
     revision: q.revision,
+    revisionChain,
     status: q.status,
     approvalStatus,
     approvalLabel: QUOTE_APPROVAL_LABELS[approvalStatus],

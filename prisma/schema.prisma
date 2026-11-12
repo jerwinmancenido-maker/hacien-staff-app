@@ -743,6 +743,11 @@ model Quote {
   id                String      @id @default(cuid())
   number            String      @unique @db.VarChar(40)
   revision          Int         @default(1)
+  // Finish-all Phase 2 #5: revision chain. Null on a Rev 1 original and on
+  // plain duplicates; a NEW REVISION copy stores the id of the chain's
+  // Rev 1 quote here, so the quote page can link every revision in the
+  // chain — and still name a revision number whose quote was deleted.
+  revisionChainId   String?
   customerId        String
   customer          Customer    @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -831,6 +836,7 @@ model Quote {
   @@index([status])
   @@index([approvalStatus])
   @@index([date])
+  @@index([revisionChainId])
 }
 
 // Item catalog, Step 1 (Option A): master list of products staff quote.
