@@ -28,6 +28,7 @@ import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
 import { soHasRemainingToDeliver } from "../sales-orders/delivery";
+import { attachmentKindLabel } from "../attachment-kinds";
 
 type StoredMoney = {
   contractPrice: string;
@@ -471,6 +472,19 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     },
   });
   if (!so) return null;
+  // REQ-ATTACH-001: the order's OWN files (customer PO etc.), live ones only.
+  const ownAttachments = await db.documentAttachment.findMany({
+    where: { salesOrderId: id, archivedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      fileName: true,
+      sizeBytes: true,
+      kind: true,
+      createdAt: true,
+      uploadedBy: { select: { name: true } },
+    },
+  });
   const withholding = snapshotList(so.withholding);
   const stored = {
     contractPrice: money(so.contractPrice),
@@ -604,6 +618,15 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     updatedBy: so.updatedBy.name,
     settingsVersionId: so.settingsVersionId,
     canSeeCosts: withCosts,
+    attachments: ownAttachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      sizeBytes: a.sizeBytes,
+      kind: a.kind,
+      kindLabel: attachmentKindLabel(a.kind),
+      uploadedBy: a.uploadedBy.name,
+      createdAt: a.createdAt,
+    })),
   };
 }
 export type SalesOrderView = NonNullable<Awaited<ReturnType<typeof getSalesOrderView>>>;

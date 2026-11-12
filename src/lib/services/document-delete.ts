@@ -172,6 +172,13 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Delete
     if (returns > 0) throw new DocRuleError("This sales order has a customer return, so it can't be deleted.");
     const deliveries = await tx.delivery.count({ where: { salesOrderId: id } });
     if (deliveries > 0) throw new DocRuleError("This sales order has a delivery, so it can't be deleted.");
+    // REQ-ATTACH-001 (plan amendment (a)): count only NON-archived files.
+    // Deliberately unlike the quote/billing/collection counts above, which
+    // include archived files: here, archiving a file (the Admin "remove")
+    // is what frees the order for deletion. Do not "align" this with the
+    // other counts — the divergence is the approved behaviour.
+    const attachments = await tx.documentAttachment.count({ where: { salesOrderId: id, archivedAt: null } });
+    if (attachments > 0) throw new DocRuleError(ATTACHMENT);
 
     const items = await tx.salesOrderItem.findMany({ where: { salesOrderId: id }, select: { id: true } });
     const itemIds = items.map((i) => i.id);

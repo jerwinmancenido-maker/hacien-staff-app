@@ -1,6 +1,7 @@
-// Download of a receiving report / supplier bill attachment. Signed out → 401.
-// RR files (delivery receipts) need "view"; bill files are cost data and also
-// need "Can see costs". Unknown id or missing file → 404. Read by storage key only.
+// Download of a receiving report / supplier bill / purchase order attachment.
+// Signed out → 401. RR files (delivery receipts) need "view"; bill files and
+// PO files (supplier quotes) are cost data and also need "Can see costs".
+// Unknown id or missing file → 404. Read by storage key only.
 
 import { Readable } from "node:stream";
 import { db } from "./db";
@@ -22,6 +23,9 @@ export async function attachmentDownload(user: (PermissionUser & { id: string })
   const att = await db.documentAttachment.findUnique({ where: { id } });
   if (!att) return text(404, "Not found.");
   if (att.supplierBillId && !canSeeCosts(user)) return text(403, "You don't have permission to download this file.");
+  // REQ-ATTACH-001: a purchase order's files are supplier quotes — cost data,
+  // gated exactly like supplier bill files above.
+  if (att.purchaseOrderId && !canSeeCosts(user)) return text(403, "You don't have permission to download this file.");
   const file = await openFile(att.storageKey).catch(() => null);
   if (!file) return text(404, "The file is missing from storage.");
   await writeAudit(db, {
@@ -40,6 +44,8 @@ export async function attachmentDownload(user: (PermissionUser & { id: string })
       supplierWithholding2307Id: att.supplierWithholding2307Id,
       deliveryId: att.deliveryId,
       quoteId: att.quoteId,
+      salesOrderId: att.salesOrderId,
+      purchaseOrderId: att.purchaseOrderId,
       taxCalendarCompletionId: att.taxCalendarCompletionId,
     },
     diff: false,

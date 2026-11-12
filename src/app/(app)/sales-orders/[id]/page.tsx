@@ -21,12 +21,15 @@ import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
+import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
+import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
+import { SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
 import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
-import { deleteSalesOrderAction, recordDeliveryAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { deleteSalesOrderAction, recordDeliveryAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -135,7 +138,7 @@ export default async function SalesOrderPage({
           {
             key: "attachments",
             label: "Attachments",
-            count: deliveries.flatMap((d) => d.attachments).length,
+            count: so.attachments.length + deliveries.flatMap((d) => d.attachments).length,
             href: `${base}?tab=attachments`,
           },
         ]}
@@ -359,7 +362,23 @@ export default async function SalesOrderPage({
       )}
 
       {tab === "attachments" && (
-        <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
+        <div className="details-stack">
+          <OwnAttachmentsCard
+            title="Sales order files"
+            emptyText="No files attached to this sales order yet. Attach the customer's PO here."
+            files={so.attachments}
+            canArchive={canDeleteDocument(user)}
+            archiveAction={archiveAttachmentAction}
+            upload={
+              can(user, "edit_data") && so.status !== "VOID"
+                ? { action: uploadSalesOrderAttachmentsAction.bind(null, so.id), kinds: SALES_ORDER_ATTACHMENT_KINDS, idPrefix: "so-attach" }
+                : null
+            }
+          />
+          {deliveries.some((d) => d.attachments.length > 0) && (
+            <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
+          )}
+        </div>
       )}
 
       {tab === "overview" && (
