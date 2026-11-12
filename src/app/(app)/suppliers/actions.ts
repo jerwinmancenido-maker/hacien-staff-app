@@ -12,8 +12,8 @@ import { z } from "zod";
 import { supplierSchema } from "@/lib/validation/companies";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
-const FIELDS = ["name", "tin", "defaultTerms", "bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes", "notes"] as const;
-const BANK_FIELDS = ["bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes"] as const;
+const FIELDS = ["name", "tin", "defaultTerms", "bankName", "bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes", "notes"] as const;
+const BANK_FIELDS = ["bankName", "bankAccountName", "bankAccountNumber", "bankBranch", "bankNotes"] as const;
 
 export async function saveSupplierAction(id: string | null, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);
@@ -36,6 +36,7 @@ export async function saveSupplierAction(id: string | null, _prev: FormState, fo
       const existing = await db.supplier.findUnique({ where: { id } });
       if (existing) {
         if (!user.isAdmin) {
+          input.bankName = existing.bankName ?? "";
           input.bankAccountName = existing.bankAccountName ?? "";
           input.bankAccountNumber = existing.bankAccountNumber ?? "";
           input.bankBranch = existing.bankBranch ?? "";
@@ -122,6 +123,7 @@ export async function createInlineSupplierAction(_prev: CreateInlineSupplierStat
       tin: str(form, "tin"),
       taxType: str(form, "taxType") || undefined,
       defaultTerms: str(form, "defaultTerms"),
+      bankName: "",
       bankAccountName: "",
       bankAccountNumber: "",
       bankBranch: "",

@@ -164,7 +164,7 @@ async function upsertSupplier2307(
 function assertPaymentMethodFields(input: SupplierPaymentInput) {
   const reference = input.reference?.trim() ?? "";
   if (input.method === "BANK_TRANSFER" && !reference) {
-    throw new DocRuleError("Add the UnionBank reference", "reference");
+    throw new DocRuleError("Add the bank transfer reference", "reference");
   }
   if (input.method === "E_WALLET" && !reference) {
     throw new DocRuleError("Reference number is required.", "reference");

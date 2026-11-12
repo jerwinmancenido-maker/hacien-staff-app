@@ -8,6 +8,7 @@ import { formatAddress } from "@/lib/addresses/format";
 import { missingBankDetails, SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import { formatPeso } from "@/lib/format";
 import { maskBankAccountNumber, maskSuppliersForViewer } from "@/lib/bank-mask";
+import { resolveSupplierBank } from "@/lib/banks";
 import { supplierPayableBalance } from "@/lib/payables/views";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { PillTabs } from "@/components/PillTabs";
@@ -70,7 +71,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       ) : isMissingBank ? (
         "No bank details"
       ) : (
-        x.bankBranch || "Supplier"
+        resolveSupplierBank(x).branch || resolveSupplierBank(x).bankName || "Supplier"
       ),
       chips: [
         {
@@ -90,7 +91,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           label: "Bank",
           value: isMissingBank
             ? "No bank details"
-            : `UnionBank · ${maskBankAccountNumber(x.bankAccountNumber) || "Account set"}`,
+            : `${resolveSupplierBank(x).bankName} · ${maskBankAccountNumber(x.bankAccountNumber) || "Account set"}`,
         },
       ],
       amount: {

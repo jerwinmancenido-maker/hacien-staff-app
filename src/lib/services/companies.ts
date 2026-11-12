@@ -296,7 +296,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
-        if (!isAdmin && (input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
+        if (!isAdmin && (input.bankName || input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
           throw new CompanyRuleError("Only an Admin can add or edit bank details.", "bankAccountNumber");
         }
         const created = await tx.supplier.create({
@@ -317,6 +317,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
         !isMaskedBankAccountNumber(submittedNumber) &&
         submittedNumber !== before.bankAccountNumber;
       const bankAltered =
+        (input.bankName != null && input.bankName !== before.bankName) ||
         (input.bankAccountName != null && input.bankAccountName !== before.bankAccountName) ||
         numberChanged ||
         (input.bankBranch != null && input.bankBranch !== before.bankBranch) ||
@@ -329,6 +330,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
       const finalInput: SupplierInput = !isAdmin
         ? {
             ...input,
+            bankName: before.bankName,
             bankAccountName: before.bankAccountName,
             bankAccountNumber: before.bankAccountNumber,
             bankBranch: before.bankBranch,

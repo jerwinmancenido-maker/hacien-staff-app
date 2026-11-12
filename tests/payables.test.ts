@@ -275,7 +275,7 @@ function paymentInput(over: Partial<SupplierPaymentInput> = {}): SupplierPayment
 }
 
 describe("Q06 S-41: Payment validation messages", () => {
-  it("requires UnionBank reference when method is bank transfer", () => {
+  it("requires a bank transfer reference when method is bank transfer", () => {
     const missingRef = supplierPaymentInputSchema.safeParse({
       supplierId: "sup-1",
       date: "2026-11-02",
@@ -289,7 +289,7 @@ describe("Q06 S-41: Payment validation messages", () => {
     expect(missingRef.success).toBe(false);
     if (!missingRef.success) {
       const issue = missingRef.error.issues.find((i) => i.path.includes("reference"));
-      expect(issue?.message).toBe("Add the UnionBank reference");
+      expect(issue?.message).toBe("Add the bank transfer reference");
     }
 
     const withRef = supplierPaymentInputSchema.safeParse({
@@ -380,7 +380,7 @@ describe("Q06 S-41: Payment validation messages", () => {
       field: "files",
     });
     await expect(recordSupplierPayment(paymentInput({ reference: null }), admin, proof)).rejects.toBeInstanceOf(DocRuleError);
-    await expect(recordSupplierPayment(paymentInput({ reference: "   " }), admin, proof)).rejects.toThrow(/UnionBank reference/);
+    await expect(recordSupplierPayment(paymentInput({ reference: "   " }), admin, proof)).rejects.toThrow(/bank transfer reference/);
     await expect(
       recordSupplierPayment(paymentInput({ method: "CHECK", reference: "0012345", checkBank: null }), admin, proof),
     ).rejects.toThrow(/Bank is required for checks/);
