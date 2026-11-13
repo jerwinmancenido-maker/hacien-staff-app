@@ -126,18 +126,37 @@ describe.skipIf(!env.hasDb)("customerExposure (db)", () => {
     expect(e1.overLimit).toBe(true);
     expect(creditLimitWarningText(e1)).toContain("₱110,000.00");
 
-    // C4: saving SO-B while over the limit SUCCEEDS (same items, notes edit).
+    // C4: saving SO-B while over the limit SUCCEEDS (its exact stored items,
+    // only the notes change — no price/qty edit is involved).
+    const storedB = await db.salesOrder.findUniqueOrThrow({
+      where: { id: soB.id },
+      include: { items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" } } },
+    });
     const saved = await updateSalesOrder(
       soB.id,
       {
-        buyerPoNo: "EXP",
-        contactId,
-        terms: "Net 30",
+        // The won-SO price lock asks an Admin for a reason on editor saves
+        // that recompute totals — a pre-existing rule, unrelated to credit.
+        // With it, the save proceeds: the credit limit itself never blocks.
+        priceOverrideReason: "C4 over-limit save",
+        buyerPoNo: storedB.buyerPoNo,
+        contactId: storedB.contactId,
+        terms: storedB.terms,
         notes: "over-limit save",
-        deliveryAddress: null,
-        items: [
-          { id: null, description: "Goods", kind: "GOODS", qty: "1", unit: "lot", supplierId: null, supplierUnitCost: "0", unitPrice: "80000.00" },
-        ],
+        deliveryAddress: storedB.deliveryAddress,
+        items: storedB.items.map((i) => ({
+          id: i.id,
+          description: i.description,
+          kind: i.kind,
+          qty: Number(i.qty).toFixed(2),
+          unit: i.unit,
+          unitPrice: Number(i.unitPrice).toFixed(2),
+          supplierId: i.supplierId,
+          supplierUnitCost: Number(i.supplierUnitCost).toFixed(2),
+          withholdingRate: null as string | null,
+          withholdingAtc: null as string | null,
+          withholdingOverride: false,
+        })),
       },
       admin,
     );
