@@ -333,6 +333,8 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
  * Approval, sent state and the buyer PO number are NOT carried over — the
  * copy is a new document that needs its own approval and buyer PO ref.
  * `revision` is 1 for a duplicate, original + 1 for a new revision.
+ * A new revision also stamps `revisionChainId` (the chain's Rev 1 quote
+ * id) so the quote page can link the whole revision chain (Phase 2 #5).
  */
 export async function copyQuote(id: string, actor: DocActor, revision: number): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
@@ -360,6 +362,9 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
         data: {
           number,
           revision,
+          // Phase 2 #5: a new revision (revision > 1) joins the original's
+          // chain; a plain duplicate (revision 1) starts no chain.
+          revisionChainId: revision > 1 ? (original.revisionChainId ?? original.id) : null,
           customerId: original.customerId,
           contactId: original.contactId,
           date: today,

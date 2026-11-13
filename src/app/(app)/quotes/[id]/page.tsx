@@ -111,6 +111,27 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           />
         }
       />
+      {q.revisionChain.length > 0 && (
+        <p className="muted small" style={{ margin: "4px 0 10px" }}>
+          Revisions:{" "}
+          {q.revisionChain.map((entry, i) => (
+            <span key={entry.kind === "quote" ? entry.id : `deleted-${entry.revision}`}>
+              {i > 0 && " · "}
+              {entry.kind === "deleted" ? (
+                <>Rev {entry.revision} — deleted</>
+              ) : entry.isCurrent ? (
+                <b>
+                  Rev {entry.revision} ({entry.number}) — this one
+                </b>
+              ) : (
+                <Link href={`/quotes/${entry.id}`}>
+                  Rev {entry.revision} ({entry.number})
+                </Link>
+              )}
+            </span>
+          ))}
+        </p>
+      )}
       {q.status === "VOID" && (
         <div className="alert error" role="status">
           <b>Void.</b> {q.voidReason} This quote is read-only.
