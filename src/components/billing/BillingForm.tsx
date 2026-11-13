@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
+import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { FileInput } from "@/components/FileInput";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -18,6 +19,8 @@ export function BillingForm({
   submitLabel = "Record billing",
   // Audit C: warn (don't block) when nothing has been delivered yet.
   deliveryWarning = false,
+  // Phase 2 #6: credit-limit warning text from customerExposure (or null).
+  creditWarning = null,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   defaults: {
@@ -36,6 +39,7 @@ export function BillingForm({
   canEdit: boolean;
   submitLabel?: string;
   deliveryWarning?: boolean;
+  creditWarning?: string | null;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
@@ -53,6 +57,7 @@ export function BillingForm({
         submit(ev.currentTarget);
       }}
     >
+      <CreditLimitWarning text={creditWarning} />
       {deliveryWarning && (
         <div className="alert warn" role="status">
           Nothing has been delivered on this order yet. You can still record this billing — payment-first
