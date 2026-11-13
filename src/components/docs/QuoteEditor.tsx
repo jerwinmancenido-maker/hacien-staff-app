@@ -512,7 +512,7 @@ export function QuoteEditor({
   const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
   const [costHints, setCostHints] = useState<Record<string, string>>({});
   const costCacheRef = useRef<Map<string, SupplierCostRow[]>>(new Map());
-  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[] } | null>(null);
+  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[]; failed: boolean; attempt: number } | null>(null);
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
@@ -551,7 +551,10 @@ export function QuoteEditor({
     return () => clearTimeout(t);
   }, [pickerFor, pickerQuery]);
 
-  // Component catalog search: same endpoint + debounce as the line picker.
+  // Component catalog search: same endpoint + debounce as the line picker,
+  // and the same failure handling (L1): a failed search routes through
+  // pickerSearchOutcome and shows "Search failed, try again." with a retry
+  // (attempt bump re-runs this effect) instead of failing silently.
   useEffect(() => {
     if (!compPicker) return;
     const q = compPicker.query.trim();
@@ -560,16 +563,22 @@ export function QuoteEditor({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`/api/items/search?q=${encodeURIComponent(q)}`);
-        const data = (await res.json()) as { ok?: boolean; items?: CatalogSearchResult[] };
+        let body: unknown = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = null;
+        }
         if (pickerSeq.current !== seq) return;
-        setCompPicker((p) => (p ? { ...p, results: data.ok && Array.isArray(data.items) ? data.items : [] } : p));
+        const outcome = pickerSearchOutcome<CatalogSearchResult>(res.ok, body);
+        setCompPicker((p) => (p ? { ...p, results: outcome.items, failed: outcome.failed } : p));
       } catch {
-        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [] } : p));
+        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [], failed: true } : p));
       }
     }, 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compPicker?.query, compPicker?.lineKey, compPicker?.compKey]);
+  }, [compPicker?.query, compPicker?.lineKey, compPicker?.compKey, compPicker?.attempt]);
 
   /** Typing a description searches the catalog (unlinked lines only).
    * Lot lines skip it: their description is the printed spec text. */
@@ -1785,15 +1794,28 @@ export function QuoteEditor({
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
                                     ></textarea>
-                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        {compPicker.failed ? (
+                                          <div className="small muted">
+                                            Search failed, try again.{" "}
+                                            <button
+                                              type="button"
+                                              className="btn-link small"
+                                              aria-label={`Retry search for component ${cIdx + 1} of line ${idx + 1}`}
+                                              onClick={() => setCompPicker((p) => (p ? { ...p, failed: false, attempt: p.attempt + 1 } : p))}
+                                            >
+                                              Retry search
+                                            </button>
+                                          </div>
+                                        ) : (
                                         <ul className="plain-list">
                                           {compPicker.results.map((r) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
@@ -1809,6 +1831,7 @@ export function QuoteEditor({
                                             );
                                           })}
                                         </ul>
+                                        )}
                                       </div>
                                     ) : null}
                                   </div>
@@ -2169,15 +2192,28 @@ export function QuoteEditor({
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
                                     ></textarea>
-                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        {compPicker.failed ? (
+                                          <div className="small muted">
+                                            Search failed, try again.{" "}
+                                            <button
+                                              type="button"
+                                              className="btn-link small"
+                                              aria-label={`Retry search for component ${cIdx + 1} of line ${idx + 1}`}
+                                              onClick={() => setCompPicker((p) => (p ? { ...p, failed: false, attempt: p.attempt + 1 } : p))}
+                                            >
+                                              Retry search
+                                            </button>
+                                          </div>
+                                        ) : (
                                         <ul className="plain-list">
                                           {compPicker.results.map((r) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
@@ -2193,6 +2229,7 @@ export function QuoteEditor({
                                             );
                                           })}
                                         </ul>
+                                        )}
                                       </div>
                                     ) : null}
                                   </div>
