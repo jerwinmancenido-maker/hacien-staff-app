@@ -17,6 +17,10 @@ export function BillingForm({
   seriesTo,
   canEdit,
   submitLabel = "Record billing",
+  cancelHref = "/billing/billings",
+  // D5 edit screen reuses this form but updateBilling takes no files —
+  // scans are managed from the billing's Attachments tab, not here.
+  showFiles = true,
   // Audit C: warn (don't block) when nothing has been delivered yet.
   deliveryWarning = false,
   // Phase 2 #6: credit-limit warning text from customerExposure (or null).
@@ -38,6 +42,8 @@ export function BillingForm({
   seriesTo: number;
   canEdit: boolean;
   submitLabel?: string;
+  cancelHref?: string;
+  showFiles?: boolean;
   deliveryWarning?: boolean;
   creditWarning?: string | null;
 }) {
@@ -74,7 +80,7 @@ export function BillingForm({
         <button className="btn" type="submit" disabled={pending}>
           {pending ? "Saving…" : submitLabel}
         </button>
-        <Link className="btn btn-secondary" href="/billing/billings">
+        <Link className="btn btn-secondary" href={cancelHref}>
           Cancel
         </Link>
         <span className="small faint">Printables say “not an official invoice”.</span>
@@ -119,12 +125,14 @@ export function BillingForm({
           <textarea id="notes" name="notes" rows={3} defaultValue={v("notes")} />
           {e.notes && <div className="error">{e.notes}</div>}
         </div>
-        <div className={`field full${e.files ? " has-error" : ""}`}>
-          <label htmlFor="files">Scan of filled-in booklet (optional)</label>
-          <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg" multiple />
-          <NoIdUploadWarning />
-          {e.files ? <div className="error">{e.files}</div> : <div className="hint">PDF, JPG or PNG · max 10 MB each</div>}
-        </div>
+        {showFiles && (
+          <div className={`field full${e.files ? " has-error" : ""}`}>
+            <label htmlFor="files">Scan of filled-in booklet (optional)</label>
+            <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg" multiple />
+            <NoIdUploadWarning />
+            {e.files ? <div className="error">{e.files}</div> : <div className="hint">PDF, JPG or PNG · max 10 MB each</div>}
+          </div>
+        )}
       </div>
     </form>
   );

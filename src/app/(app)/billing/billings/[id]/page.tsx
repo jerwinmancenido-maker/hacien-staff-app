@@ -59,6 +59,11 @@ export default async function BillingDetailPage({
             <Link className="btn btn-secondary" href={`/print/billings/${id}`} target="_blank">
               Print / Save PDF
             </Link>
+            {canManage && b.status !== "VOID" && (
+              <Link className="btn btn-secondary" href={`/billing/billings/${id}/edit`}>
+                Edit billing
+              </Link>
+            )}
             {user.isAdmin && b.needsAdminCheck && b.status !== "VOID" && (
               <form action={markBillingCheckedAction.bind(null, id)}>
                 <button className="btn" type="submit">
