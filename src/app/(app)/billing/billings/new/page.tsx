@@ -7,6 +7,7 @@ import { money } from "@/lib/documents/common";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { dueDateFromTerms, billingToday } from "@/lib/billing/dates";
 import { remainingToBill } from "@/lib/billing/status";
+import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
 import { getBookletView } from "@/lib/billing/views";
 import { isoDate } from "@/lib/format";
 import { toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
@@ -92,6 +93,9 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
   const due = dueDateFromTerms(today, so.terms);
   // Audit C: warn (don't block) when nothing has been delivered yet.
   const deliveredCount = await db.delivery.count({ where: { salesOrderId: so.id, voidedAt: null } });
+  // Phase 2 #6: credit-limit warning from the ONE customerExposure helper —
+  // the same figure the sales-order page quotes (scenario C1). Warning only.
+  const exposure = await customerExposure(db, so.customer.id);
   // Prefill amount = remaining; withholding snapshot exists on SO for later collections.
   void (so.withholding as WithholdingSnapshot[]);
 
@@ -109,6 +113,7 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
           salesOrderLabel={`${so.number} · ${so.customer.name}`}
           remaining={remaining}
           deliveryWarning={deliveredCount === 0}
+          creditWarning={creditLimitWarningText(exposure)}
           nextInvoiceHint={booklet.nextFree}
           seriesFrom={snap.settings.invoiceBooklet.seriesFrom}
           seriesTo={snap.settings.invoiceBooklet.seriesTo}

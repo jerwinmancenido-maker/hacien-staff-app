@@ -6,6 +6,9 @@ import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listBillings, listSalesOrderCollections } from "@/lib/billing/views";
+import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
+import { db } from "@/lib/db";
+import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { salesOrderMoney } from "@/lib/billing/status";
 import { soBillingSummary } from "@/lib/services/billings";
 import { toScaled } from "@/lib/quotes/calc";
@@ -73,6 +76,11 @@ export default async function SalesOrderPage({
       ])
     : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
+  // Phase 2 #6: credit-limit warning (never a block). The SO save action
+  // redirects to this page, so this banner is what "warn on SO save" shows;
+  // the figure comes from the ONE customerExposure helper the billing form
+  // also uses, so both screens always quote the same number (scenario C1).
+  const exposure = await customerExposure(db, so.customer.id);
   const overdueOnSo = billings.find((b) => b.overdue.overdue && !b.isGovernment);
 
   // Documents is for everyone; Cost & margin stays cost-users only.
@@ -109,6 +117,7 @@ export default async function SalesOrderPage({
           <b>Void.</b> {so.voidReason}
         </div>
       )}
+      <CreditLimitWarning text={creditLimitWarningText(exposure)} />
 
       <PillTabs
         active={tab}
