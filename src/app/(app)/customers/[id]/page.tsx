@@ -34,6 +34,9 @@ import {
 } from "@/lib/quotes/withholding-defaults";
 import { CustomerForm } from "../CustomerForm";
 import { duplicateCustomerAction, saveCustomerAction, setCustomerActiveAction } from "../actions";
+import { sendStatementReminderAction } from "./statement-actions";
+import { StatementReminderForm } from "@/components/billing/StatementReminderForm";
+import { statementReminderPreview } from "@/lib/services/statement-reminder";
 
 export default async function CustomerPage({
   params,
@@ -310,10 +313,11 @@ async function CustomerPriceHistory({ customerId }: { customerId: string }) {
 }
 
 async function CustomerBalances({ customerId, canManage }: { customerId: string; canManage: boolean }) {
-  const [ar, billings, collections] = await Promise.all([
+  const [ar, billings, collections, reminderPreview] = await Promise.all([
     customerArSnapshot(customerId),
     listBillings({ customerId }),
     listCollections({ customerId }),
+    canManage ? statementReminderPreview(customerId) : Promise.resolve(null),
   ]);
   const openForCredit = billings
     .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
@@ -358,6 +362,14 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
         {canManage && (
           <ApplyCreditForm customerId={customerId} availableCredit={ar.credit} billings={openForCredit} />
         )}
+        {canManage && reminderPreview ? (
+          <StatementReminderForm
+            configured={reminderPreview.configured}
+            recipient={reminderPreview.recipient}
+            lastSentAt={reminderPreview.lastSentAt}
+            action={sendStatementReminderAction.bind(null, customerId)}
+          />
+        ) : null}
       </div>
       <div className="card">
         <h2>Open billings</h2>
