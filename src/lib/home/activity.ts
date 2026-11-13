@@ -42,6 +42,7 @@ const ACTION_LABELS: Record<string, string> = {
   email_draft: "drafted email for",
   download: "downloaded",
   delete: "deleted",
+  send_email: "sent email for",
 };
 
 const ENTITY_LABELS: Record<string, string> = {

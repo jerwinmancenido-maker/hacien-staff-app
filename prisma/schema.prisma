@@ -225,8 +225,29 @@ model Customer {
   collections  Collection[]
   withholdings Withholding2307[]
   customerCredits CustomerCredit[]
+  statementReminderSends StatementReminderSend[]
 
   @@index([name])
+}
+
+// Phase 3 #9: one row per statement/payment reminder email actually sent.
+// Written only after a successful send, in the same transaction as its
+// audit row. Doubles as the duplicate-guard source (same customer +
+// recipient + period inside the guard window is refused).
+model StatementReminderSend {
+  id             String   @id @default(cuid())
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  recipient      String   @db.VarChar(191)
+  periodFrom     DateTime?
+  periodTo       DateTime?
+  // Snapshot of the statement closing balance at send time (pesos).
+  closingBalance Decimal  @db.Decimal(15, 2)
+  sentById       String   @db.VarChar(191)
+  sentAt         DateTime @default(now())
+
+  @@index([customerId, sentAt])
+  @@index([recipient, sentAt])
 }
 
 model Supplier {
@@ -410,6 +431,9 @@ enum AuditAction {
   // Admin delete of a draft or void document. Appended at the end so existing
   // rows keep their values (MySQL ENUM order). No backfill.
   delete
+  // Phase 3 #9: a statement/payment reminder email was sent. Appended at
+  // the end so existing rows keep their values (MySQL ENUM order).
+  send_email
 }
 
 // ---------------------------------------------------------------------------

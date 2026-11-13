@@ -34,6 +34,7 @@ export const AUDIT_ENTITIES = [
   "TaxPaidQuarter",
   "SpoiledBookletNumber",
   "EmailSuppression",
+  "StatementReminder",
 ] as const;
 
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
@@ -63,6 +64,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   TaxPaidQuarter: "Tax paid",
   SpoiledBookletNumber: "Spoiled booklet no.",
   EmailSuppression: "Email suppression",
+  StatementReminder: "Statement reminder",
 };
 
 const PAST: Record<AuditAction, string> = {
@@ -78,6 +80,7 @@ const PAST: Record<AuditAction, string> = {
   email_draft: "Drafted email",
   download: "Downloaded",
   delete: "Deleted",
+  send_email: "Sent email",
 };
 
 /** Number stored on a delete snapshot, so the log can name a row that is gone. */
