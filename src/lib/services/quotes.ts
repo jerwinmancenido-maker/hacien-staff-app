@@ -32,6 +32,7 @@ import {
 } from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
+import { assertPeriodOpen } from "./period-close";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -900,6 +901,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
       assertQuoteApproved(quote);
+      await assertPeriodOpen(tx, date);
       await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });
       if (!input.deliveryAddressId) {
         throw new DocRuleError("Pick a delivery address from the customer's saved addresses.", "deliveryAddressId");

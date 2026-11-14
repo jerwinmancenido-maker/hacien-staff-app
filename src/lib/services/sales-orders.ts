@@ -15,6 +15,7 @@ import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { voidReasonSchema, type GovDealInput, type SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
+import { assertPeriodOpen } from "./period-close";
 
 type SoWithItems = SalesOrder & { items: (SalesOrderItem & { components?: SalesOrderItemComponent[] })[] };
 
@@ -185,6 +186,9 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
     db.$transaction(async (tx) => {
       const before = await lockSalesOrder(tx, id);
       if (before.status !== "OPEN") throw new DocRuleError("Only an open sales order can be edited.");
+      // Period close: the SO input carries no date and this update never
+      // writes `date`, so the old and new period are the same stored date.
+      await assertPeriodOpen(tx, before.date);
       if (input.contactId) {
         const contact = await tx.contact.findUnique({ where: { id: input.contactId } });
         if (!contact || contact.customerId !== before.customerId || !contact.active) {
@@ -598,6 +602,7 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
   return db.$transaction(async (tx) => {
     const before = await lockSalesOrder(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This sales order is already void.");
+    await assertPeriodOpen(tx, before.date);
     await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
     const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });

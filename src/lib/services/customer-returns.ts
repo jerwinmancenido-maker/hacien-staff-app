@@ -17,6 +17,7 @@ import { refreshSalesOrderCloseState } from "./sales-orders";
 import { recomputeBillingStatus } from "./billings";
 import type { CustomerReturnInput } from "../validation/customer-returns";
 import { voidReasonSchema } from "../validation/quotes";
+import { assertPeriodOpen } from "./period-close";
 
 export type CustomerReturnActor = PermissionUser & { id: string };
 
@@ -59,6 +60,7 @@ export async function postCustomerReturn(salesOrderId: string, input: CustomerRe
     db.$transaction(async (tx) => {
       const so = await lockForReturn(tx, salesOrderId);
       if (so.status === "VOID") throw new DocRuleError("Cannot return items on a void sales order.");
+      await assertPeriodOpen(tx, input.returnDate);
       const check = checkCustomerReturn(so.lines, input.lines);
       if (!check.ok) throw new DocRuleError(check.message, "lines");
       const number = await allocateDocNumber(tx, "CUSTOMER_RETURN", year, RETURN_FORMAT);
@@ -123,6 +125,7 @@ export async function voidCustomerReturn(id: string, reason: string, actor: Cust
       if (!ret) throw new DocRuleError("Return not found.");
       if (ret.status === "VOID") throw new DocRuleError("This return is already void.");
       const so = await lockForReturn(tx, ret.salesOrderId);
+      await assertPeriodOpen(tx, ret.returnDate);
       const byId = new Map(so.lines.map((l) => [l.id, l]));
       for (const item of ret.items) {
         const line = byId.get(item.salesOrderItemId);

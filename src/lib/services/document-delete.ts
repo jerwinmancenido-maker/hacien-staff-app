@@ -13,6 +13,7 @@ import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/comm
 import { assertNotDelete, deleteAllowanceGate, HardDeleteError, noDeleteExtension } from "../no-delete";
 import { assertCanDeleteDocument, type PermissionUser } from "../permissions";
 import { voidReasonSchema } from "../validation/quotes";
+import { assertPeriodOpen } from "./period-close";
 
 /** The gate's run method, reachable only via DELETE_ALLOWANCE_KEY. */
 const withDeleteAllowance = deleteAllowanceGate[DELETE_ALLOWANCE_KEY];
@@ -161,6 +162,7 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Delete
     });
     if (!so) throw new DocRuleError("Sales order not found.");
     if (so.status !== "VOID") throw new DocRuleError("Only a void sales order can be deleted.");
+    await assertPeriodOpen(tx, so.date);
 
     const billings = await tx.billing.count({ where: { salesOrderId: id } });
     if (billings > 0) throw new DocRuleError("This sales order has a billing. Delete the billing first.");
@@ -250,6 +252,7 @@ export async function deleteBilling(id: string, reason: string, actor: DeleteAct
     });
     if (!billing) throw new DocRuleError("Billing not found.");
     if (billing.status !== "VOID") throw new DocRuleError("Only a void billing can be deleted.");
+    await assertPeriodOpen(tx, billing.invoiceDate);
 
     // Any allocation, including one left behind by a void collection.
     const allocations = await tx.collectionAllocation.count({ where: { billingId: id } });
@@ -338,6 +341,7 @@ export async function deleteCollection(id: string, reason: string, actor: Delete
     });
     if (!collection) throw new DocRuleError("Collection not found.");
     if (collection.status !== "VOID") throw new DocRuleError("Only a void collection can be deleted.");
+    await assertPeriodOpen(tx, collection.date);
     if (collection.receiptNo && collection.receiptNo.trim()) {
       throw new DocRuleError("This collection has an official receipt number, so it can't be deleted.");
     }
