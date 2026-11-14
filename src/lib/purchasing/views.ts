@@ -829,7 +829,19 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
           notes: true,
           voidReason: true,
           receivedBy: { select: { name: true } },
-          items: { select: { purchaseOrderItemId: true, qtyReceived: true, warrantyEndDate: true, serialNumbers: true } },
+          items: {
+            select: {
+              id: true,
+              purchaseOrderItemId: true,
+              qtyReceived: true,
+              warrantyEndDate: true,
+              serialNumbers: true,
+              warrantyClaims: {
+                orderBy: { createdAt: "asc" },
+                select: { id: true, serialNumber: true, fault: true, supplierRef: true, status: true, createdAt: true, createdBy: { select: { name: true } } },
+              },
+            },
+          },
           attachments: attachmentSelect,
         },
       },
@@ -868,9 +880,30 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
+      items: r.items.map((x) => ({ id: x.id, description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
+    // Phase 3 #8b: this PO's warranty claims, flattened from its receiving
+    // lines (grouped by receiving report, newest report first). The page
+    // only shows them when the feature flag is on; no costs in the payload.
+    warrantyClaims: po.receivingReports.flatMap((r) =>
+      r.items.flatMap((x) =>
+        x.warrantyClaims.map((c) => ({
+          id: c.id,
+          receivingReportItemId: x.id,
+          receivingReportNumber: r.number,
+          receivingReportStatus: r.status,
+          itemDescription: desc.get(x.purchaseOrderItemId) ?? "(removed line)",
+          serialNumber: c.serialNumber,
+          lineSerialNumbers: x.serialNumbers,
+          fault: c.fault,
+          supplierRef: c.supplierRef,
+          status: c.status,
+          createdAt: ymd(c.createdAt)!,
+          createdBy: c.createdBy.name,
+        })),
+      ),
+    ),
   };
   return stripCosts(view, viewer);
 }
@@ -1018,6 +1051,76 @@ export async function listWarrantiesEndingSoon(opts: { take?: number; now?: Date
     purchaseOrderNumber: r.receivingReport.purchaseOrder.number,
     supplierName: r.receivingReport.purchaseOrder.supplier.name,
     salesOrderNumber: r.receivingReport.purchaseOrder.salesOrder?.number ?? null,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 #8b: warranty claims list (all POs; no prices)
+// ---------------------------------------------------------------------------
+
+export type WarrantyClaimRow = {
+  id: string;
+  status: string;
+  fault: string;
+  serialNumber: string | null;
+  supplierRef: string | null;
+  createdAt: string;
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  supplierName: string;
+  itemDescription: string;
+  receivingReportNumber: string;
+};
+
+/** Every warranty claim, newest first, with its supplier / PO context. */
+export async function listWarrantyClaims(opts: { q?: string } = {}): Promise<WarrantyClaimRow[]> {
+  const q = opts.q?.trim();
+  const rows = await db.warrantyClaim.findMany({
+    where: q
+      ? {
+          OR: [
+            { fault: { contains: q } },
+            { serialNumber: { contains: q } },
+            { receivingReportItem: { receivingReport: { purchaseOrder: { number: { contains: q } } } } },
+            { receivingReportItem: { receivingReport: { purchaseOrder: { supplier: { name: { contains: q } } } } } },
+            { receivingReportItem: { purchaseOrderItem: { description: { contains: q } } } },
+          ],
+        }
+      : {},
+    select: {
+      id: true,
+      status: true,
+      fault: true,
+      serialNumber: true,
+      supplierRef: true,
+      createdAt: true,
+      receivingReportItem: {
+        select: {
+          purchaseOrderItem: { select: { description: true } },
+          receivingReport: {
+            select: {
+              number: true,
+              purchaseOrder: { select: { id: true, number: true, supplier: { select: { name: true } } } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 500,
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    status: c.status,
+    fault: c.fault,
+    serialNumber: c.serialNumber,
+    supplierRef: c.supplierRef,
+    createdAt: ymd(c.createdAt)!,
+    purchaseOrderId: c.receivingReportItem.receivingReport.purchaseOrder.id,
+    purchaseOrderNumber: c.receivingReportItem.receivingReport.purchaseOrder.number,
+    supplierName: c.receivingReportItem.receivingReport.purchaseOrder.supplier.name,
+    itemDescription: c.receivingReportItem.purchaseOrderItem.description,
+    receivingReportNumber: c.receivingReportItem.receivingReport.number,
   }));
 }
 

@@ -331,6 +331,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.payables2307Enabled,
                 hint: "OFF by default. Leave OFF — HACIEN does not withhold tax from suppliers unless tagged by BIR as a withholding agent. Env override: PAYABLES_2307_ENABLED.",
               },
+              {
+                name: "warrantyClaimsEnabled",
+                label: "Enable Warranty claims (supplier claims on receiving lines)",
+                kind: "checkbox",
+                value: s.features.warrantyClaimsEnabled,
+                hint: "OFF by default. Turn on to file and track supplier warranty claims from the Receiving pages. Env override: WARRANTY_CLAIMS_ENABLED.",
+              },
             ]}
           />
         )}

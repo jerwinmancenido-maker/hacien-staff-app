@@ -295,6 +295,8 @@ export const settingsSections = {
     booksEnabled: z.boolean(),
     /** Issue supplier 2307s (withholding agent). OFF — HACIEN is not a withholding agent by default. */
     payables2307Enabled: z.boolean(),
+    /** Phase 3 #8b: supplier warranty claims on receiving lines. OFF by default. */
+    warrantyClaimsEnabled: z.boolean().default(false),
   }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,
