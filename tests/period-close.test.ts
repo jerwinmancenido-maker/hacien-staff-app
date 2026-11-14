@@ -10,6 +10,7 @@ import {
   isValidYearMonth,
   monthLabel,
   periodCloseEnabledFromEnv,
+  previousYearMonth,
   yearMonthOf,
 } from "@/lib/period-close-shared";
 import { assertPeriodOpen, closePeriod, reopenPeriod } from "@/lib/services/period-close";
@@ -41,6 +42,12 @@ describe("period key + labels", () => {
     expect(isValidYearMonth("2026-00")).toBe(false);
     expect(isValidYearMonth("26-11")).toBe(false);
     expect(isValidYearMonth("2026-1")).toBe(false);
+  });
+
+  it("steps back one month for the Books card's default close target", () => {
+    expect(previousYearMonth("2026-11")).toBe("2026-10");
+    expect(previousYearMonth("2026-01")).toBe("2025-12");
+    expect(previousYearMonth("not-a-month")).toBe("not-a-month");
   });
 
   it("labels months in plain words and names the month in the refusal", () => {

@@ -33,6 +33,14 @@ export function monthLabel(yearMonth: string): string {
   return `${MONTH_NAMES[Number(month) - 1]} ${year}`;
 }
 
+/** The month before a valid "YYYY-MM" key (the Books card's default close target). */
+export function previousYearMonth(yearMonth: string): string {
+  if (!isValidYearMonth(yearMonth)) return yearMonth;
+  const [year, month] = yearMonth.split("-").map(Number) as [number, number];
+  const prev = new Date(Date.UTC(year, month - 2, 1));
+  return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 /** The refusal every guarded posting path surfaces for a closed month. */
 export function closedPeriodMessage(yearMonth: string): string {
   return `${monthLabel(yearMonth)} is closed. An Admin can reopen it under Books → Period close.`;
