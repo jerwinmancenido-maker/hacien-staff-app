@@ -46,6 +46,23 @@ export function sumMoney(values: readonly string[]): string {
   );
 }
 
+/**
+ * Phase 4 #7 (expense-link): total of an SO's linked POSTED expenses,
+ * counted ONCE per expense id (L2). An expense linked to both the SO
+ * and one of its POs must subtract once, never twice — callers may
+ * pass rows gathered from either link, so dedupe here at the seam.
+ */
+export function sumLinkedExpenses(rows: readonly { id: string; amount: string }[]): string {
+  const seen = new Set<string>();
+  const amounts: string[] = [];
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    amounts.push(r.amount);
+  }
+  return sumMoney(amounts);
+}
+
 export type CostBasis = "BILLED" | "RECEIVED" | "PO_TOTAL";
 
 export const COST_BASIS_LABELS: Record<CostBasis, string> = {
@@ -174,8 +191,10 @@ export type CostMarginSummary = {
   contractPrice: string;
   /** Stored SO withholding total (per-line sum when last saved as a draft). */
   withholdingTotal: string;
-  /** Sum of incurred costs (billed or received). PO totals are not included. */
+  /** Sum of incurred costs (billed or received). PO totals are not included. Includes linked expenses. */
   incurredCost: string;
+  /** Phase 4 #7: POSTED expenses linked to this SO (directly or via its POs), counted once. */
+  linkedExpenses: string;
   /** Quote / SO planned supplier cost. */
   plannedCost: string;
   costState: CostState;
@@ -200,6 +219,8 @@ export function buildCostMarginSummary(input: {
   pos: readonly CostMarginPoInput[];
   /** SO lines still short of PO coverage (ordered < SO qty). */
   uncoveredLineCount: number;
+  /** Phase 4 #7: total of POSTED expenses linked to this order (L5). Default 0. */
+  linkedExpenses?: string;
 }): CostMarginSummary {
   const rows: CostMarginPoRow[] = input.pos.map((p) => {
     const chosen = chooseCostBasis(p);
@@ -211,10 +232,15 @@ export function buildCostMarginSummary(input: {
   });
   const totalCost = sumMoney(rows.map((r) => r.cost));
   const incurredParts = input.pos.map((p) => incurredAmount(p)).filter((v): v is string => v != null);
-  const incurredCost = sumMoney(incurredParts);
+  const poIncurredCost = sumMoney(incurredParts);
+  const linkedExpenses = fromScaled(toScaled(input.linkedExpenses ?? "0.00", CENTS), CENTS);
+  const hasLinked = toScaled(linkedExpenses, CENTS) !== 0n;
+  // L5: incurred ("Cost so far") = PO incurred + linked expenses.
+  const incurredCost = sumMoney([poIncurredCost, linkedExpenses]);
   const incurredCount = incurredParts.length;
+  const hasIncurred = incurredCount > 0 || hasLinked;
   const costState: CostState =
-    incurredCount === 0
+    !hasIncurred
       ? "none"
       : input.pos.length > 0 && incurredCount === input.pos.length && input.uncoveredLineCount === 0
         ? "full"
@@ -253,6 +279,7 @@ export function buildCostMarginSummary(input: {
     rows,
     totalCost,
     incurredCost,
+    linkedExpenses,
     plannedCost: input.plannedCost,
     costState,
     marginLabel,

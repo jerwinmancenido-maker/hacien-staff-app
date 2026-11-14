@@ -37,6 +37,7 @@ import {
   buildCostMarginSummary,
   lineHasUnorderedQty,
   lineNeedsMorePo,
+  sumLinkedExpenses,
   sumMoney,
   valueReceived,
   type CostMarginSummary,
@@ -729,12 +730,27 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
     };
   });
 
+  // Phase 4 #7 (L2): POSTED expenses linked to this SO directly or via
+  // one of its POs — ONE query over the two indexed FKs; a row matching
+  // both links is returned once by the OR, and sumLinkedExpenses dedupes
+  // by id at the seam regardless. VOID expenses never count (L4).
+  const poIds = pos.map((p) => p.id);
+  const linkedRows = await db.expense.findMany({
+    where: {
+      status: "POSTED",
+      OR: [{ salesOrderId }, ...(poIds.length > 0 ? [{ purchaseOrderId: { in: poIds } }] : [])],
+    },
+    select: { id: true, amount: true },
+  });
+  const linkedExpenses = sumLinkedExpenses(linkedRows.map((r) => ({ id: r.id, amount: money(r.amount) })));
+
   return buildCostMarginSummary({
     contractPrice: money(so.contractPrice),
     plannedCost: money(so.supplierCost),
     withholdingTotal: money(so.withholdingTotal),
     pos: poInputs,
     uncoveredLineCount,
+    linkedExpenses,
   });
 }
 

@@ -53,6 +53,16 @@ export const cashAccountInputSchema = z
 
 export type CashAccountInput = z.infer<typeof cashAccountInputSchema>;
 
+// Optional order link (Phase 4 #7 re-planned): blank / omitted -> null.
+// Optional property: every older payload (and every test fixture) omits it.
+const optionalOrderId = z
+  .string()
+  .trim()
+  .max(64)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null));
+
 export const expenseInputSchema = z
   .object({
     date: ymd,
@@ -60,6 +70,11 @@ export const expenseInputSchema = z
       .string()
       .trim()
       .transform((v) => v || null),
+    // .optional() keeps the output property optional, so older callers that
+    // omit the links still typecheck; recordExpense normalises
+    // undefined -> null, and parseExpenseForm always supplies "" -> null.
+    salesOrderId: optionalOrderId.optional(),
+    purchaseOrderId: optionalOrderId.optional(),
     payeeText: z
       .string()
       .trim()
@@ -153,6 +168,8 @@ export function parseExpenseForm(
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     receiptNo: String(form.get("receiptNo") ?? ""),
     notes: String(form.get("notes") ?? ""),
+    salesOrderId: String(form.get("salesOrderId") ?? ""),
+    purchaseOrderId: String(form.get("purchaseOrderId") ?? ""),
   };
   const parsed = expenseInputSchema.safeParse(values);
   if (!parsed.success) {

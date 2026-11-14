@@ -67,6 +67,8 @@ export async function listExpenses(filters: { status?: "POSTED" | "VOID" | "ALL"
       category: { select: { id: true, label: true, code: true } },
       cashAccount: { select: { id: true, name: true } },
       supplier: { select: { id: true, name: true } },
+      salesOrder: { select: { id: true, number: true } },
+      purchaseOrder: { select: { id: true, number: true } },
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     take: 200,
@@ -80,6 +82,8 @@ export async function getExpense(id: string) {
       category: true,
       cashAccount: true,
       supplier: { select: { id: true, name: true } },
+      salesOrder: { select: { id: true, number: true } },
+      purchaseOrder: { select: { id: true, number: true } },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "asc" } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -115,6 +119,35 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
           const supplier = await tx.supplier.findUnique({ where: { id: input.supplierId } });
           if (!supplier) throw new DocRuleError("That supplier was not found. Pick another or type a payee name.", "supplierId");
         }
+        // Phase 4 #7 (re-planned) L3: a linked order must exist and not be
+        // VOID; when both links are set and the PO belongs to an SO, it must
+        // be that SO. The pickers only offer non-VOID orders — the service
+        // is the rule, the picker is convenience.
+        const salesOrderId = input.salesOrderId ?? null;
+        const purchaseOrderId = input.purchaseOrderId ?? null;
+        let linkedSo: { id: string; number: string } | null = null;
+        let linkedPo: { id: string; number: string; salesOrderId: string | null } | null = null;
+        if (salesOrderId) {
+          const so = await tx.salesOrder.findUnique({
+            where: { id: salesOrderId },
+            select: { id: true, number: true, status: true },
+          });
+          if (!so) throw new DocRuleError("That sales order was not found. Pick another or leave it unlinked.", "salesOrderId");
+          if (so.status === "VOID") throw new DocRuleError("That sales order is void — pick another or leave it unlinked.", "salesOrderId");
+          linkedSo = { id: so.id, number: so.number };
+        }
+        if (purchaseOrderId) {
+          const po = await tx.purchaseOrder.findUnique({
+            where: { id: purchaseOrderId },
+            select: { id: true, number: true, status: true, salesOrderId: true },
+          });
+          if (!po) throw new DocRuleError("That purchase order was not found. Pick another or leave it unlinked.", "purchaseOrderId");
+          if (po.status === "VOID") throw new DocRuleError("That purchase order is void — pick another or leave it unlinked.", "purchaseOrderId");
+          linkedPo = { id: po.id, number: po.number, salesOrderId: po.salesOrderId };
+        }
+        if (linkedSo && linkedPo && linkedPo.salesOrderId && linkedPo.salesOrderId !== linkedSo.id) {
+          throw new DocRuleError("That PO belongs to a different sales order.", "purchaseOrderId");
+        }
 
         const number = await allocateDocNumber(tx, "EXPENSE", year, format);
         const expense = await tx.expense.create({
@@ -129,6 +162,8 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
             cashAccountId: input.cashAccountId,
             receiptNo: input.receiptNo,
             notes: input.notes,
+            salesOrderId,
+            purchaseOrderId,
             createdById: actor.id,
           },
         });
@@ -147,6 +182,8 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
             withholdingApplied: input.withholdingApplied,
             cashAccount: account.name,
             receiptNo: input.receiptNo,
+            ...(linkedSo ? { salesOrder: linkedSo.number } : {}),
+            ...(linkedPo ? { purchaseOrder: linkedPo.number } : {}),
             attachments: uploads.length,
           },
         });

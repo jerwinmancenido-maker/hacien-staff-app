@@ -14,6 +14,8 @@ export function ExpenseForm({
   accounts,
   categories,
   suppliers,
+  salesOrders = [],
+  purchaseOrders = [],
   canEdit,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -27,10 +29,14 @@ export function ExpenseForm({
     cashAccountId: string;
     receiptNo: string;
     notes: string;
+    salesOrderId?: string;
+    purchaseOrderId?: string;
   };
   accounts: CashAccountOption[];
   categories: { id: string; label: string }[];
   suppliers: { id: string; name: string }[];
+  salesOrders?: { id: string; label: string }[];
+  purchaseOrders?: { id: string; label: string }[];
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
@@ -149,6 +155,39 @@ export function ExpenseForm({
               {e.payeeText && <div className="error">{e.payeeText}</div>}
             </div>
           )}
+        </div>
+        <div className={`field${e.salesOrderId ? " has-error" : ""}`}>
+          <label htmlFor="salesOrderId">Linked sales order (optional)</label>
+          <select
+            id="salesOrderId"
+            name="salesOrderId"
+            defaultValue={state.values?.salesOrderId ?? defaults.salesOrderId ?? ""}
+          >
+            <option value="">No linked order</option>
+            {salesOrders.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <div className="hint">Delivery fee for this order (e.g. Lalamove)? Pick Transport and link the order.</div>
+          {e.salesOrderId && <div className="error">{e.salesOrderId}</div>}
+        </div>
+        <div className={`field${e.purchaseOrderId ? " has-error" : ""}`}>
+          <label htmlFor="purchaseOrderId">Linked purchase order (optional)</label>
+          <select
+            id="purchaseOrderId"
+            name="purchaseOrderId"
+            defaultValue={state.values?.purchaseOrderId ?? defaults.purchaseOrderId ?? ""}
+          >
+            <option value="">No linked order</option>
+            {purchaseOrders.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
         </div>
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>
           <label htmlFor="receiptNo">OR / receipt no.</label>
