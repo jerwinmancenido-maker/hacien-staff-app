@@ -70,6 +70,7 @@ model User {
   receivingReportsBy     ReceivingReport[]    @relation("ReceivingReportReceivedBy")
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierReturnsMade  SupplierReturn[]     @relation("SupplierReturnCreatedBy")
+  warrantyClaimsMade   WarrantyClaim[]      @relation("WarrantyClaimCreatedBy")
   customerReturnsMade  CustomerReturn[]     @relation("CustomerReturnCreatedBy")
   customerCreditsMade  CustomerCredit[]     @relation("CustomerCreditCreatedBy")
   supplierBillsCreated   SupplierBill[]
@@ -1302,8 +1303,46 @@ model ReceivingReportItem {
   // S-48: serial numbers received on this line, comma-separated.
   serialNumbers       String?           @db.Text
 
+  warrantyClaims WarrantyClaim[]
+
   @@index([receivingReportId])
   @@index([purchaseOrderItemId])
+}
+
+// Phase 3 #8b: supplier warranty claims. One claim per receiving line
+// (ReceivingReportItem); supplier, PO and serials come through the
+// receiving record. Supplier-side only — no customer or money fields.
+// Status set approved by Jerwin 2026-11-14: OPEN -> SENT_TO_SUPPLIER ->
+// APPROVED / REJECTED -> REPLACED / CLOSED. Every status change is
+// audited in the same transaction (see services/warranty-claims.ts).
+enum WarrantyClaimStatus {
+  OPEN
+  SENT_TO_SUPPLIER
+  APPROVED
+  REJECTED
+  REPLACED
+  CLOSED
+}
+
+model WarrantyClaim {
+  id                    String              @id @default(cuid())
+  receivingReportItemId String
+  receivingReportItem   ReceivingReportItem @relation(fields: [receivingReportItemId], references: [id])
+  // The one serial being claimed, when the receiving line recorded
+  // serials. Null = the claim covers the line as a whole.
+  serialNumber          String?             @db.VarChar(100)
+  // What is wrong with the goods (staff words, required).
+  fault                 String              @db.Text
+  // Supplier's own claim / RMA reference, once they give one.
+  supplierRef           String?             @db.VarChar(64)
+  status                WarrantyClaimStatus @default(OPEN)
+  createdById           String
+  createdBy             User                @relation("WarrantyClaimCreatedBy", fields: [createdById], references: [id])
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([receivingReportItemId])
+  @@index([status])
 }
 
 // S-50: returns to supplier (RMA). Posting reduces the PO line's receivedQty
