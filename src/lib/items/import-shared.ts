@@ -21,6 +21,24 @@ export const ITEM_IMPORT_COLUMNS = [
   "defaultunitprice",
 ] as const;
 
+import type { ImportRowPreview } from "./import";
+
+/** State shared by the import page's server action and its client form. */
+export interface ItemsImportActionState {
+  stage: "upload" | "preview" | "done";
+  message?: string;
+  fileError?: string | null;
+  fileName?: string;
+  csvText?: string;
+  rows?: ImportRowPreview[];
+  /** Spreadsheet lines already removed in an earlier preview round. */
+  excludedLines?: number[];
+  /** Changes whenever the server returns fresh rows, so the form resets its removed-row state. */
+  nonce?: string;
+  batchId?: string;
+  count?: number;
+}
+
 /** Sync check from env only (useful in unit tests without DB). */
 export function itemsImportEnabledFromEnv(env: Record<string, string | undefined> = process.env): boolean | null {
   const raw = (env.ITEMS_IMPORT_ENABLED ?? "").trim().toLowerCase();
