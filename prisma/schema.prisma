@@ -435,6 +435,9 @@ enum AuditAction {
   // Phase 3 #9: a statement/payment reminder email was sent. Appended at
   // the end so existing rows keep their values (MySQL ENUM order).
   send_email
+  // Phase 4 #4: one audit row per CSV items import (entityId = batch id).
+  // Appended at the end so existing rows keep their values.
+  import
 }
 
 // ---------------------------------------------------------------------------
