@@ -297,6 +297,8 @@ export const settingsSections = {
     payables2307Enabled: z.boolean(),
     /** Phase 3 #8b: supplier warranty claims on receiving lines. OFF by default. */
     warrantyClaimsEnabled: z.boolean().default(false),
+    /** Phase 4 #4: CSV import for the Item catalog. OFF by default. */
+    itemsImportEnabled: z.boolean().default(false),
   }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,

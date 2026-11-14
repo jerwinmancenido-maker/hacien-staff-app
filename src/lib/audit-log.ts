@@ -81,6 +81,7 @@ const PAST: Record<AuditAction, string> = {
   download: "Downloaded",
   delete: "Deleted",
   send_email: "Sent email",
+  import: "Imported",
 };
 
 /** Number stored on a delete snapshot, so the log can name a row that is gone. */

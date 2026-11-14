@@ -614,6 +614,53 @@ a.tracker-card:hover {
   opacity: 0;
   overflow: hidden;
 }
+
+/* Phase 4 #4: CSV import preview — stacked rows on phone widths (390px),
+   a grid on desktop. Never a wide table (master plan H10). */
+.import-rows {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.import-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.import-row-head {
+  display: none;
+}
+.import-row-removed {
+  opacity: 0.55;
+}
+.import-cell-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+@media (min-width: 769px) {
+  .import-row {
+    display: grid;
+    grid-template-columns: 48px 2fr 1fr 64px 1fr 2fr 96px;
+    gap: 12px;
+    align-items: start;
+  }
+  .import-row-head {
+    display: grid;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .import-cell-label {
+    display: none;
+  }
+}
 .btn-danger {
   background: var(--card);
   color: var(--red);
