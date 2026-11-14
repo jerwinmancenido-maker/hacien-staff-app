@@ -16,6 +16,7 @@ import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationIn
 import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type PayablesActor = PermissionUser & { id: string };
 
@@ -203,6 +204,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         }));
         const billIds = allocInputs.map((a) => a.supplierBillId);
         await lockBills(tx, billIds);
+        await assertPeriodOpen(tx, input.date);
         await assertBillsAllocatable(tx, billIds);
         const open = await billsForAlloc(tx, supplier.id);
         const issue = validatePaymentAllocations(input.amountPaid, allocInputs, open);
@@ -313,6 +315,7 @@ export async function voidSupplierPayment(id: string, reason: string, actor: Pay
         tx,
         before.allocations.map((a) => a.supplierBillId),
       );
+      await assertPeriodOpen(tx, before.date);
 
       const issued = before.withholdings.filter((w) => w.status === "ISSUED");
       if (issued.length) {

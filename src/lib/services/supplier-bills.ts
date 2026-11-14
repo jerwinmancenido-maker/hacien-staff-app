@@ -12,6 +12,7 @@ import { poActionError } from "../purchasing/status";
 import type { BillInput } from "../validation/purchasing";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { assertPoAccess, lockPurchaseOrder, type PoActor } from "./purchase-orders";
+import { assertPeriodOpen } from "./period-close";
 
 export const billKey = (supplierId: string, billNumber: string) => `${supplierId}:${billNumber.trim().toLowerCase()}`;
 
@@ -41,6 +42,7 @@ export async function recordSupplierBill(purchaseOrderId: string, input: BillInp
   try {
     return await db.$transaction(async (tx) => {
       const po = await lockPurchaseOrder(tx, purchaseOrderId);
+      await assertPeriodOpen(tx, input.billDate);
       const err = poActionError(po.status, "bill");
       if (err) throw new DocRuleError(err);
       const lines = billLines(input.lines, new Set(po.items.map((i) => i.id)));
@@ -128,6 +130,7 @@ export async function voidSupplierBill(id: string, reason: string, actor: PoActo
     });
     if (!before) throw new DocRuleError("Bill not found.");
     if (before.status === "VOID") throw new DocRuleError("This bill is already void.");
+    await assertPeriodOpen(tx, before.billDate);
     if (before.allocations.length) {
       throw new DocRuleError("This bill has posted supplier payments. Void those payments first.");
     }
