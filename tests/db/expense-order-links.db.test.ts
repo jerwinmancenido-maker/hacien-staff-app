@@ -1,7 +1,6 @@
 // Phase 4 #7 (re-planned): expense order links — service persist +
-// pair validation (scenarios X4 / X5 persist halves) against MySQL 8
-// (TEST_DATABASE_URL). Requires CASH_ENABLED for mutations.
-// The Cost & margin halves of X1–X3 / X5 land with build step 3.
+// pair validation (X4 / X5) and Cost & margin halves (X1–X3 / X5)
+// against MySQL 8 (TEST_DATABASE_URL). Requires CASH_ENABLED.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +18,7 @@ import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { createCashAccount, type CashActor } from "@/lib/services/cash-accounts";
 import { getExpense, recordExpense, voidExpense } from "@/lib/services/expenses";
+import { getSoCostMargin } from "@/lib/purchasing/views";
 import { createPurchaseOrdersFromSalesOrder, createStandalonePurchaseOrder } from "@/lib/services/purchase-orders";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
@@ -208,5 +208,67 @@ describe.skipIf(!env.hasDb)("expense order links (MySQL)", () => {
     const after = await db.expense.findUniqueOrThrow({ where: { id: exp.id } });
     expect(after.status).toBe("VOID");
     expect(after.salesOrderId).toBe(so.id);
+  });
+
+  // Cost & margin halves (step 3). Fixture SO: contract 5000, planned
+  // supplier cost 4000, no bills/receipts — so PO incurred starts at 0.
+  it("X1 margin: SO-only linked expense raises Cost so far and lowers margins, planned unchanged", async () => {
+    const year = await freshYear();
+    const { so } = await makeSo(year);
+    const before = await getSoCostMargin(so.id, admin);
+    expect(before?.linkedExpenses).toBe("0.00");
+    expect(before?.incurredCost).toBe("0.00");
+    expect(before?.costState).toBe("none");
+    await recordExpense(expenseInput(year, { salesOrderId: so.id }), admin);
+    const after = await getSoCostMargin(so.id, admin);
+    expect(after?.linkedExpenses).toBe("350.00");
+    expect(after?.incurredCost).toBe("350.00");
+    expect(after?.costState).toBe("partial");
+    expect(after?.marginLabel).toBe("Margin so far");
+    expect(after?.actual.margin).toBe("4650.00");
+    expect(after?.afterWithholding.margin).toBe("4650.00");
+    expect(after?.planned.margin).toBe(before?.planned.margin);
+  });
+
+  it("X2 margin: PO-only link reaches that PO's SO; standalone PO touches no SO", async () => {
+    const year = await freshYear();
+    const { supplier, so } = await makeSo(year);
+    const po = await makePoForSo(year, so.id, supplier.id);
+    await recordExpense(expenseInput(year, { purchaseOrderId: po.id }), admin);
+    const margin = await getSoCostMargin(so.id, admin);
+    expect(margin?.linkedExpenses).toBe("350.00");
+    expect(margin?.incurredCost).toBe("350.00");
+
+    const other = await makeSo(year);
+    const standalone = await makeStandalonePo(year);
+    await recordExpense(expenseInput(year, { purchaseOrderId: standalone.id }), admin);
+    const otherMargin = await getSoCostMargin(other.so.id, admin);
+    expect(otherMargin?.linkedExpenses).toBe("0.00");
+    expect(otherMargin?.incurredCost).toBe("0.00");
+  });
+
+  it("X3 margin: an expense linked to both the SO and its PO counts ONCE", async () => {
+    const year = await freshYear();
+    const { supplier, so } = await makeSo(year);
+    const po = await makePoForSo(year, so.id, supplier.id);
+    await recordExpense(expenseInput(year, { salesOrderId: so.id, purchaseOrderId: po.id }), admin);
+    const margin = await getSoCostMargin(so.id, admin);
+    expect(margin?.linkedExpenses).toBe("350.00");
+    expect(margin?.incurredCost).toBe("350.00");
+  });
+
+  it("X5 margin: voiding the linked expense restores the margin; unlinked expense changes nothing", async () => {
+    const year = await freshYear();
+    const { so } = await makeSo(year);
+    await recordExpense(expenseInput(year), admin);
+    const unlinked = await getSoCostMargin(so.id, admin);
+    expect(unlinked?.linkedExpenses).toBe("0.00");
+    const exp = await recordExpense(expenseInput(year, { salesOrderId: so.id }), admin);
+    expect((await getSoCostMargin(so.id, admin))?.incurredCost).toBe("350.00");
+    await voidExpense(exp.id, "Wrong order linked — reverse", admin);
+    const restored = await getSoCostMargin(so.id, admin);
+    expect(restored?.linkedExpenses).toBe("0.00");
+    expect(restored?.incurredCost).toBe("0.00");
+    expect(restored?.costState).toBe("none");
   });
 });
