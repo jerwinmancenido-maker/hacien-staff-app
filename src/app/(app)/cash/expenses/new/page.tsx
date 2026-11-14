@@ -16,12 +16,24 @@ export default async function NewExpensePage() {
   const user = await requirePagePermission("view");
   if (!can(user, "manage_cash")) redirect("/no-access");
 
-  const [accounts, categories, suppliers, defaultAccount, defaultCategory] = await Promise.all([
+  const [accounts, categories, suppliers, defaultAccount, defaultCategory, salesOrders, purchaseOrders] = await Promise.all([
     listActiveCashAccounts(),
     listExpenseCategories(true),
     db.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true }, take: 500 }),
     defaultCashAccountId(),
     defaultExpenseCategoryId(),
+    db.salesOrder.findMany({
+      where: { status: { not: "VOID" } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: { id: true, number: true, customer: { select: { name: true } } },
+      take: 200,
+    }),
+    db.purchaseOrder.findMany({
+      where: { status: { not: "VOID" } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: { id: true, number: true, supplier: { select: { name: true } } },
+      take: 200,
+    }),
   ]);
   const today = isoDate(manilaToday());
 
@@ -41,6 +53,8 @@ export default async function NewExpensePage() {
           }))}
           categories={categories.map((c) => ({ id: c.id, label: c.label }))}
           suppliers={suppliers}
+          salesOrders={salesOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.customer.name}` }))}
+          purchaseOrders={purchaseOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.supplier.name}` }))}
           defaults={{
             date: today,
             supplierId: "",
@@ -51,6 +65,8 @@ export default async function NewExpensePage() {
             cashAccountId: defaultAccount ?? accounts[0]?.id ?? "",
             receiptNo: "",
             notes: "",
+            salesOrderId: "",
+            purchaseOrderId: "",
           }}
         />
       </div>

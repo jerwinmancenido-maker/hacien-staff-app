@@ -75,6 +75,22 @@ export default async function ExpenseDetailPage({
           </dd>
           <dt>Category</dt>
           <dd>{e.category.label}</dd>
+          {e.salesOrder && (
+            <>
+              <dt>Linked sales order</dt>
+              <dd>
+                <Link href={`/sales-orders/${e.salesOrder.id}`}>{e.salesOrder.number}</Link>
+              </dd>
+            </>
+          )}
+          {e.purchaseOrder && (
+            <>
+              <dt>Linked purchase order</dt>
+              <dd>
+                <Link href={`/purchase-orders/${e.purchaseOrder.id}`}>{e.purchaseOrder.number}</Link>
+              </dd>
+            </>
+          )}
           <dt>Paid from</dt>
           <dd>
             <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
