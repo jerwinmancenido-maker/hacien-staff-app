@@ -166,6 +166,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         payables2307Enabled: checked(get("payables2307Enabled")),
         warrantyClaimsEnabled: checked(get("warrantyClaimsEnabled")),
         itemsImportEnabled: checked(get("itemsImportEnabled")),
+        periodCloseEnabled: checked(get("periodCloseEnabled")),
       };
     case "taxCalendar": {
       const keys = [
