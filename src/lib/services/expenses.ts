@@ -12,6 +12,7 @@ import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/comm
 import { toScaled } from "../quotes/calc";
 import type { ExpenseInput } from "../validation/cash";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type ExpenseActor = PermissionUser & { id: string };
 
@@ -107,6 +108,7 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
   try {
     return await withTxRetry(() =>
       db.$transaction(async (tx) => {
+        await assertPeriodOpen(tx, input.date);
         const account = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
         if (!account || !account.active) {
           throw new DocRuleError("Pick an active cash account. Add one under Cash → Accounts first.", "cashAccountId");
@@ -208,6 +210,7 @@ export async function voidExpense(id: string, reason: string, actor: ExpenseActo
       const before = await tx.expense.findUnique({ where: { id } });
       if (!before) throw new DocRuleError("Expense not found.");
       if (before.status === "VOID") throw new DocRuleError("This expense is already void.");
+      await assertPeriodOpen(tx, before.date);
 
       const now = new Date();
       const after = await tx.expense.update({

@@ -38,6 +38,7 @@ export type AuditEntityType =
   | "SpoiledBookletNumber"
   | "StatementReminder"
   | "WarrantyClaim"
+  | "PeriodLock"
   | "EmailSuppression";
 
 type Plain = Record<string, unknown>;

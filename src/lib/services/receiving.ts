@@ -17,6 +17,7 @@ import type { ReceiptInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type RrActor = PermissionUser & { id: string };
 
@@ -74,6 +75,7 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
         const po = await lockForReceiving(tx, purchaseOrderId);
         const err = poActionError(po.status, "receive");
         if (err) throw new DocRuleError(err);
+        await assertPeriodOpen(tx, input.receivedDate);
         const check = checkReceipt(po.lines as OpenLine[], input.lines);
         if (!check.ok) throw new ReceiptError(check.message, check.errors);
         const number = await allocateDocNumber(tx, "RECEIVING_REPORT", year, format);
@@ -147,6 +149,7 @@ export async function voidReceivingReport(id: string, reason: string, actor: RrA
       await tx.$queryRaw`SELECT \`id\` FROM \`ReceivingReport\` WHERE \`id\` = ${id} FOR UPDATE`;
       const rr = await tx.receivingReport.findUniqueOrThrow({ where: { id }, include: { items: true } });
       if (rr.status === "VOID") throw new DocRuleError("This receiving report is already void.");
+      await assertPeriodOpen(tx, rr.receivedDate);
       if (!["SENT", "PARTIALLY_RECEIVED", "RECEIVED"].includes(po.status)) {
         throw new DocRuleError(po.status === "CLOSED" ? "The PO is closed; its receiving reports can't be voided." : "The PO is void.");
       }

@@ -299,6 +299,8 @@ export const settingsSections = {
     warrantyClaimsEnabled: z.boolean().default(false),
     /** Phase 4 #4: CSV import for the Item catalog. OFF by default. */
     itemsImportEnabled: z.boolean().default(false),
+    /** Phase 4 #10: period close controls on the Books page. OFF by default. */
+    periodCloseEnabled: z.boolean().default(false),
   }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,

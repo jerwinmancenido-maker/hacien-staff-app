@@ -7,7 +7,10 @@ import { TAX_CALENDAR_PAGE } from "@/lib/tax/calendar-constants";
 import { formatDate } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
+import { PeriodCloseCard } from "@/components/books/PeriodCloseCard";
 import { PageHeader } from "@/components/ui";
+import { previousYearMonth, yearMonthOf } from "@/lib/period-close-shared";
+import { isPeriodCloseEnabled, listPeriodLocks } from "@/lib/services/period-close";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
@@ -16,9 +19,13 @@ export default async function BooksHomePage({
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  await requirePagePermission("view_books");
+  const user = await requirePagePermission("view_books");
   const sp = await searchParams;
   const period = parseBooksPeriod(sp.from, sp.to);
+  // Phase 4 #10 (P7): the Period close card renders only when the flag
+  // is on; the flag is the LAST proof step, so the card appears then.
+  const periodCloseOn = await isPeriodCloseEnabled();
+  const periodLocks = periodCloseOn ? await listPeriodLocks() : [];
 
   return (
     <>
@@ -28,6 +35,19 @@ export default async function BooksHomePage({
       />
       <BooksNav active="home" />
       <BooksBanner />
+      {periodCloseOn ? (
+        <PeriodCloseCard
+          locks={periodLocks.map((l) => ({
+            yearMonth: l.yearMonth,
+            closed: l.closed,
+            closedAt: l.closedAt ? l.closedAt.toISOString() : null,
+            reopenedAt: l.reopenedAt ? l.reopenedAt.toISOString() : null,
+            reopenReason: l.reopenReason,
+          }))}
+          isAdmin={user.active && user.isAdmin}
+          defaultMonth={previousYearMonth(yearMonthOf(new Date()))}
+        />
+      ) : null}
       <div className="card">
         <p style={{ marginTop: 0 }}>
           Build book-style registers from records you already entered. Pick a register, check the dates

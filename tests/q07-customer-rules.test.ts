@@ -80,6 +80,13 @@ const fake = vi.hoisted(() => {
       },
     },
     withholdingRate: table(() => state.withholdingRates, "withholdingRate"),
+    // Phase 4 #10: convertQuoteToSalesOrder calls assertPeriodOpen, which
+    // looks up the PeriodLock row for the SO month. No rows here = open.
+    periodLock: {
+      async findUnique() {
+        return null;
+      },
+    },
     series: {
       async upsert() {
         return { seq: 1 };

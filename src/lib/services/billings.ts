@@ -16,6 +16,7 @@ import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { claimBookletSerial, lockSiBookletNumber, moveSiBookletClaim } from "./booklet";
 import { refreshSalesOrderCloseState } from "./sales-orders";
+import { assertPeriodOpen } from "./period-close";
 
 export type BillingActor = PermissionUser & { id: string };
 
@@ -134,6 +135,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
       db.$transaction(async (tx) => {
         const so = await lockSalesOrder(tx, input.salesOrderId);
         if (so.status !== "OPEN") throw new DocRuleError("Only open sales orders can be billed.");
+        await assertPeriodOpen(tx, input.invoiceDate);
 
         const existing = await nonVoidBillings(tx, so.id);
         const remaining = remainingToBill(
@@ -262,6 +264,8 @@ export async function updateBilling(
 
         const so = await lockSalesOrder(tx, before.salesOrderId);
         if (so.status !== "OPEN") throw new DocRuleError("The sales order is closed or void; this billing can't be edited.");
+        await assertPeriodOpen(tx, before.invoiceDate);
+        await assertPeriodOpen(tx, input.invoiceDate);
 
         const others = (await nonVoidBillings(tx, so.id)).filter((b) => b.id !== id);
         const remaining = remainingToBill(
@@ -409,6 +413,7 @@ export async function voidBilling(id: string, reason: string, actor: BillingActo
       const before = await tx.billing.findUnique({ where: { id } });
       if (!before) throw new DocRuleError("Billing not found.");
       if (before.status === "VOID") throw new DocRuleError("This billing is already void.");
+      await assertPeriodOpen(tx, before.invoiceDate);
 
       const postedAlloc = await tx.collectionAllocation.count({
         where: { billingId: id, collection: { status: "POSTED" } },

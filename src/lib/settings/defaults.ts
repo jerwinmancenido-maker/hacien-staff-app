@@ -119,6 +119,7 @@ export const DEFAULT_SETTINGS: Settings = {
     payables2307Enabled: false,
     warrantyClaimsEnabled: false,
     itemsImportEnabled: false,
+    periodCloseEnabled: false,
   },
   // Q16 S-95: Default chosen — all OFF until UniSMS keys, DPA + DB location,
   // and HACIEN sender ID are confirmed.

@@ -71,6 +71,8 @@ model User {
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierReturnsMade  SupplierReturn[]     @relation("SupplierReturnCreatedBy")
   warrantyClaimsMade   WarrantyClaim[]      @relation("WarrantyClaimCreatedBy")
+  periodLocksClosed    PeriodLock[]         @relation("PeriodLockClosedBy")
+  periodLocksReopened  PeriodLock[]         @relation("PeriodLockReopenedBy")
   customerReturnsMade  CustomerReturn[]     @relation("CustomerReturnCreatedBy")
   customerCreditsMade  CustomerCredit[]     @relation("CustomerCreditCreatedBy")
   supplierBillsCreated   SupplierBill[]
@@ -1351,6 +1353,25 @@ model WarrantyClaim {
 
   @@index([receivingReportItemId])
   @@index([status])
+}
+
+// Phase 4 #10: period close. One row per closed/open month ("2026-11").
+// `closed` is the row's CURRENT state; the close/reopen stamps keep the
+// LAST close and LAST reopen (the full history lives in the audit log).
+// Additive only — old code never reads this table.
+model PeriodLock {
+  id           String    @id @default(cuid())
+  yearMonth    String    @unique @db.VarChar(7)
+  closed       Boolean   @default(false)
+  closedById   String?
+  closedBy     User?     @relation("PeriodLockClosedBy", fields: [closedById], references: [id])
+  closedAt     DateTime?
+  reopenedById String?
+  reopenedBy   User?     @relation("PeriodLockReopenedBy", fields: [reopenedById], references: [id])
+  reopenedAt   DateTime?
+  reopenReason String?   @db.VarChar(500)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 // S-50: returns to supplier (RMA). Posting reduces the PO line's receivedQty

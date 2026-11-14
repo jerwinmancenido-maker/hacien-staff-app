@@ -339,6 +339,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 hint: "OFF by default. Turn on to import items from a .csv file on the Items page. Env override: ITEMS_IMPORT_ENABLED.",
               },
               {
+                name: "periodCloseEnabled",
+                label: "Enable Period close (Books — lock a month against new postings)",
+                kind: "checkbox",
+                value: s.features.periodCloseEnabled,
+                hint: "OFF by default. Turn on to close and reopen months on the Books page. Closing a month refuses new postings dated in it until an Admin reopens it. Env override: PERIOD_CLOSE_ENABLED.",
+              },
+              {
                 name: "warrantyClaimsEnabled",
                 label: "Enable Warranty claims (supplier claims on receiving lines)",
                 kind: "checkbox",
