@@ -879,6 +879,8 @@ model Item {
   details          String?   @db.Text
   defaultUnitPrice Decimal?  @db.Decimal(15, 2)
   active           Boolean   @default(true)
+  // Phase 4 #4: CSV import batch stamp (nullable; null = created manually).
+  importBatchId    String?   @db.VarChar(40)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   quoteItems       QuoteItem[]
@@ -887,6 +889,7 @@ model Item {
 
   @@index([active])
   @@index([name])
+  @@index([importBatchId])
 }
 
 // Items are never deleted: a line removed in the editor gets `removedAt`.

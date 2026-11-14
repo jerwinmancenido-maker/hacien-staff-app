@@ -332,6 +332,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 hint: "OFF by default. Leave OFF — HACIEN does not withhold tax from suppliers unless tagged by BIR as a withholding agent. Env override: PAYABLES_2307_ENABLED.",
               },
               {
+                name: "itemsImportEnabled",
+                label: "Enable CSV import (Item catalog)",
+                kind: "checkbox",
+                value: s.features.itemsImportEnabled,
+                hint: "OFF by default. Turn on to import items from a .csv file on the Items page. Env override: ITEMS_IMPORT_ENABLED.",
+              },
+              {
                 name: "warrantyClaimsEnabled",
                 label: "Enable Warranty claims (supplier claims on receiving lines)",
                 kind: "checkbox",
