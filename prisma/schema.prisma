@@ -1014,6 +1014,7 @@ model SalesOrder {
   deliveries     Delivery[]
   customerReturns CustomerReturn[]
   attachments    DocumentAttachment[]
+  expenses       Expense[]
 
   @@index([quoteId])
   @@index([customerId])
@@ -1218,6 +1219,7 @@ model PurchaseOrder {
   bills            SupplierBill[]
   supplierReturns  SupplierReturn[]
   attachments      DocumentAttachment[]
+  expenses         Expense[]
 
   @@index([supplierId])
   @@index([salesOrderId])
@@ -2037,6 +2039,14 @@ model Expense {
   cashAccount        CashAccount    @relation(fields: [cashAccountId], references: [id])
   receiptNo          String?        @db.VarChar(64)
   notes              String?        @db.Text
+  // Phase 4 #7 (re-planned): optional link to the order this expense is a
+  // cost of (e.g. a Lalamove delivery fee). Null = unlinked (the expense
+  // behaves exactly as before). SET NULL on delete: an expense is money
+  // history and survives an order hard-delete as unlinked history.
+  salesOrderId       String?
+  salesOrder         SalesOrder?    @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   status             ExpenseStatus  @default(POSTED)
   voidedAt           DateTime?
   voidReason         String?        @db.Text
@@ -2052,6 +2062,8 @@ model Expense {
   @@index([cashAccountId])
   @@index([categoryId])
   @@index([supplierId])
+  @@index([salesOrderId])
+  @@index([purchaseOrderId])
 }
 
 // Internal TRF-YYYY-####. Move money between cash accounts (e.g. cash deposit).

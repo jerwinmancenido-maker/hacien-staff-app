@@ -293,6 +293,40 @@ describe("cash validation", () => {
     if (ok.success) expect(ok.data.withholdingApplied).toBe("1.00");
   });
 
+  it("expense order links: blank or omitted -> null, a picked id is kept", () => {
+    const base = {
+      date: "2026-01-01",
+      supplierId: "",
+      payeeText: "Lalamove",
+      categoryId: "cat",
+      amount: "350.00",
+      withholdingApplied: "",
+      cashAccountId: "acc",
+      receiptNo: "",
+      notes: "",
+    };
+    const omitted = expenseInputSchema.safeParse(base);
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      // Omitted stays undefined in the raw parse; recordExpense normalises
+      // undefined -> null (the form parser always supplies "" -> null).
+      expect(omitted.data.salesOrderId ?? null).toBeNull();
+      expect(omitted.data.purchaseOrderId ?? null).toBeNull();
+    }
+    const blank = expenseInputSchema.safeParse({ ...base, salesOrderId: "", purchaseOrderId: "  " });
+    expect(blank.success).toBe(true);
+    if (blank.success) {
+      expect(blank.data.salesOrderId).toBeNull();
+      expect(blank.data.purchaseOrderId).toBeNull();
+    }
+    const picked = expenseInputSchema.safeParse({ ...base, salesOrderId: " so-1 ", purchaseOrderId: "" });
+    expect(picked.success).toBe(true);
+    if (picked.success) {
+      expect(picked.data.salesOrderId).toBe("so-1");
+      expect(picked.data.purchaseOrderId).toBeNull();
+    }
+  });
+
   it("rejects same from/to on transfer", () => {
     const bad = cashTransferInputSchema.safeParse({
       date: "2026-01-01",
