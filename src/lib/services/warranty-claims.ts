@@ -22,7 +22,7 @@ import {
   splitSerialNumbers,
   WARRANTY_CLAIM_STATUS_LABELS,
   type WarrantyClaimStatus,
-} from "../purchasing/warranty-claims";
+} from "../purchasing/warranty-claims-shared";
 import type { CreateWarrantyClaimInput } from "../validation/warranty-claims";
 
 export type WarrantyClaimActor = PermissionUser & { id: string };

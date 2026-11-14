@@ -1,7 +1,7 @@
 // Phase 3 #8b: warranty claim form inputs.
 
 import { z } from "zod";
-import { WARRANTY_CLAIM_STATUSES } from "../purchasing/warranty-claims";
+import { WARRANTY_CLAIM_STATUSES } from "../purchasing/warranty-claims-shared";
 
 const optionalText = (max: number) =>
   z

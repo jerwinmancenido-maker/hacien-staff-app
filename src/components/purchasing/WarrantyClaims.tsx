@@ -12,7 +12,7 @@ import {
   WARRANTY_CLAIM_TRANSITIONS,
   splitSerialNumbers,
   type WarrantyClaimStatus,
-} from "@/lib/purchasing/warranty-claims";
+} from "@/lib/purchasing/warranty-claims-shared";
 
 type ClaimAction = (state: FormState, form: FormData) => Promise<FormState>;
 

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { listReceivingView, listWarrantiesEndingSoon, listWarrantyClaims } from "@/lib/purchasing/views";
-import { isWarrantyClaimsEnabled, WARRANTY_CLAIM_STATUS_LABELS, type WarrantyClaimStatus } from "@/lib/purchasing/warranty-claims";
+import { isWarrantyClaimsEnabled } from "@/lib/purchasing/warranty-claims";
+import { WARRANTY_CLAIM_STATUS_LABELS, type WarrantyClaimStatus } from "@/lib/purchasing/warranty-claims-shared";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";

@@ -7,7 +7,8 @@ import { EmptyState, PageHeader } from "@/components/ui";
 import { day, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { RrTable } from "@/components/purchasing/RrTable";
 import { WarrantyClaimCreateForm, WarrantyClaimStatusForm } from "@/components/purchasing/WarrantyClaims";
-import { isWarrantyClaimsEnabled, splitSerialNumbers, WARRANTY_CLAIM_STATUS_LABELS, type WarrantyClaimStatus } from "@/lib/purchasing/warranty-claims";
+import { isWarrantyClaimsEnabled } from "@/lib/purchasing/warranty-claims";
+import { splitSerialNumbers, WARRANTY_CLAIM_STATUS_LABELS, type WarrantyClaimStatus } from "@/lib/purchasing/warranty-claims-shared";
 import { voidReceivingReportAction } from "../actions";
 import { changeWarrantyClaimStatusAction, createWarrantyClaimAction } from "../warranty-actions";
 
