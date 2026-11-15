@@ -47,14 +47,15 @@ jobs:
         run: npm ci
 
       - name: Create throwaway test database
+        # Use the mysql:8 image client over the network; apt mysql-client on
+        # ubuntu-latest can upgrade host mysql-server and fail dpkg configure.
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq mysql-client
-          mysql -h127.0.0.1 -uroot -plocal_only_dummy -e "
-            CREATE DATABASE IF NOT EXISTS hacien_test;
-            GRANT ALL PRIVILEGES ON hacien_test.* TO 'hacien'@'%';
-            FLUSH PRIVILEGES;
-          "
+          docker run --rm --network host mysql:8 \
+            mysql -h127.0.0.1 -uroot -plocal_only_dummy -e "
+              CREATE DATABASE IF NOT EXISTS hacien_test;
+              GRANT ALL PRIVILEGES ON hacien_test.* TO 'hacien'@'%';
+              FLUSH PRIVILEGES;
+            "
 
       - name: Apply migrations
         run: |
