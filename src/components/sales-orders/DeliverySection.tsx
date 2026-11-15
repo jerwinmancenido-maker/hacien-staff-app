@@ -112,7 +112,7 @@ export function DeliverySection({
         </div>
       </div>
 
-      <div className="table-wrap">
+      <div className="table-wrap items-table">
         <table className="list" aria-label="Delivery progress per item">
           <thead>
             <tr>
@@ -145,11 +145,11 @@ export function DeliverySection({
                   </td>
                   <td>
                     {isDone ? (
-                      <span className="chip chip-grey">Fully delivered</span>
+                      <span className="chip green">Fully delivered</span>
                     ) : isPartial ? (
-                      <span className="chip chip-grey">Partially delivered</span>
+                      <span className="chip amber">Partially delivered</span>
                     ) : (
-                      <span className="chip chip-grey faint">Not delivered</span>
+                      <span className="chip faint">Not delivered</span>
                     )}
                   </td>
                 </tr>
@@ -164,7 +164,7 @@ export function DeliverySection({
           onSubmit={onSubmit}
           noValidate
           encType="multipart/form-data"
-          style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border, #E5E7EB)" }}
+          style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}
         >
           <h3>Record delivery</h3>
           {state.message && (
@@ -241,7 +241,7 @@ export function DeliverySection({
                 Deliver all remaining
               </button>
             </div>
-            <div className="table-wrap">
+            <div className="table-wrap items-table">
               <table className="list" aria-label="Items delivered in this batch">
                 <thead>
                   <tr>
@@ -352,7 +352,7 @@ export function DeliverySection({
       {deliveries.length > 0 ? (
         <div style={{ marginTop: "20px" }}>
           <h3>Delivery records</h3>
-          <div className="table-wrap">
+          <div className="table-wrap items-table">
             <table className="list" aria-label="Delivery records">
               <thead>
                 <tr>
@@ -388,7 +388,7 @@ export function DeliverySection({
                     <td>{day(d.receivedDate)}</td>
                     <td>
                       {d.idSightChecked ? (
-                        <span className="chip chip-grey small">
+                        <span className="chip">
                           ID sight-checked (not copied)
                         </span>
                       ) : (

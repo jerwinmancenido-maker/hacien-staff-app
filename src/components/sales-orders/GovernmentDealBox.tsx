@@ -104,7 +104,7 @@ export function GovernmentDealBox({ so, canEdit }: GovDealProps) {
               />
             </div>
           </div>
-          <div className="form-actions" style={{ marginTop: "12px" }}>
+          <div className="form-actions">
             <button className="btn" type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save government deal"}
             </button>
