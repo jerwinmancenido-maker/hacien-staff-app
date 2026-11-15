@@ -9058,8 +9058,16 @@ button.contact-card-add {
     min-width: 0;
     padding: calc(4px * var(--ui-scale, 1)) 0;
   }
+  /* Keep every real child in the control column so linked-line notes
+     ("From the sales order", Changed vs SO, over-order) sit under the
+     textarea instead of filling the label column via auto-placement. */
+  .po-editor .edit-table.po-items-edit td > * {
+    grid-column: 2;
+    min-width: 0;
+  }
   .po-editor .edit-table.po-items-edit td::before {
     content: attr(data-label);
+    grid-column: 1;
     font-size: calc(12px * var(--ui-scale, 1));
     font-weight: 600;
     color: var(--text-2);
