@@ -63,7 +63,8 @@ async function readJsonBody(req: NextRequest): Promise<unknown> {
     }
   }
   const text = await req.text();
-  if (text.length > API_BODY_MAX_BYTES) {
+  // Cap by UTF-8 bytes (Content-Length is bytes); text.length is UTF-16 units.
+  if (Buffer.byteLength(text, "utf8") > API_BODY_MAX_BYTES) {
     throw new ApiError(413, "payload_too_large", "Request body is too large.");
   }
   if (!text.trim()) throw new ApiError(400, "invalid_json", "Send a JSON object.");

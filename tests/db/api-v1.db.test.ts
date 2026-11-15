@@ -606,12 +606,23 @@ describe("api v1", () => {
     expect((await declared.json()).error.code).toBe("payload_too_large");
 
     const raw = `{"name":"CapActual ${tag()}","notes":"${"x".repeat(API_BODY_MAX_BYTES)}"}`;
-    expect(raw.length).toBeGreaterThan(API_BODY_MAX_BYTES);
+    expect(Buffer.byteLength(raw, "utf8")).toBeGreaterThan(API_BODY_MAX_BYTES);
     const actual = await postCustomer(
       request("/api/v1/customers", key.token, { method: "POST", idem: idemKey(), rawBody: raw }),
     );
     expect(actual.status).toBe(413);
     expect((await actual.json()).error.code).toBe("payload_too_large");
+
+    // Multi-byte UTF-8: character length can stay under the cap while bytes exceed it.
+    const wide = "é".repeat(Math.floor(API_BODY_MAX_BYTES / 2) + 8);
+    const wideRaw = `{"name":"CapUtf8 ${tag()}","notes":"${wide}"}`;
+    expect(wideRaw.length).toBeLessThanOrEqual(API_BODY_MAX_BYTES);
+    expect(Buffer.byteLength(wideRaw, "utf8")).toBeGreaterThan(API_BODY_MAX_BYTES);
+    const utf8 = await postCustomer(
+      request("/api/v1/customers", key.token, { method: "POST", idem: idemKey(), rawBody: wideRaw }),
+    );
+    expect(utf8.status).toBe(413);
+    expect((await utf8.json()).error.code).toBe("payload_too_large");
   });
 
   it("replays a duplicate PATCH with the same Idempotency-Key", async () => {
