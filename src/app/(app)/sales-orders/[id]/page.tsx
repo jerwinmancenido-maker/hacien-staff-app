@@ -391,7 +391,7 @@ export default async function SalesOrderPage({
       )}
 
       {tab === "overview" && (
-        <div className="details-stack">
+        <>
           <div className="card">
             <dl className="kv kv-grid">
               <dt>Customer</dt>
@@ -498,7 +498,7 @@ export default async function SalesOrderPage({
             )}
           </p>
           {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
-        </div>
+        </>
       )}
     </>
   );
