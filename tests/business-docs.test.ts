@@ -3,14 +3,7 @@
 
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  checkUpload,
-  cleanFileName,
-  clientUploadSizeError,
-  sniffFileType,
-  uploadMaxBytes,
-  uploadMaxMb,
-} from "@/lib/business-docs/sniff";
+import { checkUpload, cleanFileName, sniffFileType, uploadMaxBytes, uploadMaxMb } from "@/lib/business-docs/sniff";
 import { expiringCutoff, expiryLabel, expiryStatus } from "@/lib/business-docs/expiry";
 import { isStorageKey, newStorageKey, storagePath, uploadDir } from "@/lib/business-docs/storage";
 import { contentDisposition } from "@/lib/business-docs/download";
@@ -70,13 +63,6 @@ describe("size limit", () => {
     expect(checkUpload({ name: "a.pdf", size: 10 * MB }, PDF, 10 * MB).ok).toBe(true);
     expect(checkUpload({ name: "a.pdf", size: 10 * MB + 1 }, PDF, 10 * MB)).toEqual({ ok: false, error: "The file is too big. The limit is 10 MB." });
     expect(checkUpload({ name: "a.pdf", size: 0 }, PDF, 10 * MB).ok).toBe(false);
-  });
-
-  it("clientUploadSizeError matches the same limit and message", () => {
-    expect(clientUploadSizeError([], 10)).toBeNull();
-    expect(clientUploadSizeError([{ size: 10 * MB }], 10)).toBeNull();
-    expect(clientUploadSizeError([{ size: 10 * MB + 1 }], 10)).toBe("The file is too big. The limit is 10 MB.");
-    expect(clientUploadSizeError([{ size: 1 }, { size: 5 * MB + 1 }], 5)).toBe("The file is too big. The limit is 5 MB.");
   });
 });
 

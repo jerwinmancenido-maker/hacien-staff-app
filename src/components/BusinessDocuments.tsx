@@ -250,7 +250,11 @@ function UploadForm({
             id="file"
             name="file"
             accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-            onFilesChange={(files) => setFileError(clientUploadSizeError(files, maxMb))}
+            onFilesChange={(files) => {
+              const err = clientUploadSizeError(files, maxMb);
+              setFileError(err);
+              return err;
+            }}
           />
           <NoIdUploadWarning />
         </Field>

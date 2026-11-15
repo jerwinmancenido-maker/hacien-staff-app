@@ -229,7 +229,11 @@ export function ExpenseForm({
             name="files"
             accept=".pdf,.png,.jpg,.jpeg"
             multiple
-            onFilesChange={(files) => setFileError(clientUploadSizeError(files, maxMb))}
+            onFilesChange={(files) => {
+              const err = clientUploadSizeError(files, maxMb);
+              setFileError(err);
+              return err;
+            }}
           />
           <NoIdUploadWarning />
           {(e.files || fileError) && <div className="error">{e.files ?? fileError}</div>}

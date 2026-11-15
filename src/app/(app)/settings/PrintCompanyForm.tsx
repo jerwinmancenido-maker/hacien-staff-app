@@ -179,7 +179,11 @@ export function PrintCompanyForm({
                     id="logo"
                     name="logo"
                     accept="image/png,image/jpeg,image/webp"
-                    onFilesChange={(files) => setFileError(clientUploadSizeError(files, maxMb))}
+                    onFilesChange={(files) => {
+                      const err = clientUploadSizeError(files, maxMb);
+                      setFileError(err);
+                      return err;
+                    }}
                   />
                   <div className="hint">Optional. PNG/JPEG/WebP. Falls back to the business name when empty.</div>
                   {(e.logo || fileError) && <div className="error">{e.logo ?? fileError}</div>}

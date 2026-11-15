@@ -47,7 +47,11 @@ export function AttachmentUploadForm({
           id={`${idPrefix}-files`}
           name="files"
           multiple
-          onFilesChange={(files) => setFileError(clientUploadSizeError(files, maxMb))}
+          onFilesChange={(files) => {
+            const err = clientUploadSizeError(files, maxMb);
+            setFileError(err);
+            return err;
+          }}
         />
         {(e.files || fileError) && <div className="error">{e.files ?? fileError}</div>}
       </div>
