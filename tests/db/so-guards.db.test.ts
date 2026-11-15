@@ -114,6 +114,7 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         terms: so.terms,
         notes: so.notes,
         priceOverrideReason: REASON,
+        updatedAt: so.updatedAt.toISOString(),
         items: edit(items),
         ...extra,
       } as never;

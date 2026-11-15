@@ -17,6 +17,20 @@ export class DocRuleError extends Error {
   }
 }
 
+/** Stale-edit guard (SO / PO): another save landed while this form was open. */
+export const STALE_EDIT_MESSAGE =
+  "This order changed while you were editing — reload to see the latest, then re-apply your changes.";
+
+/** Parse the editor's loaded `updatedAt` ISO and refuse when it no longer matches the locked row. */
+export function requireMatchingUpdatedAt(stored: Date, expectedIso: string | null | undefined): Date {
+  if (!expectedIso) throw new DocRuleError(STALE_EDIT_MESSAGE);
+  const expected = new Date(expectedIso);
+  if (Number.isNaN(expected.getTime()) || expected.getTime() !== stored.getTime()) {
+    throw new DocRuleError(STALE_EDIT_MESSAGE);
+  }
+  return stored;
+}
+
 /** Document transactions wait for the number-series row lock, so allow more time than Prisma's 2s/5s defaults. */
 export const DOC_TX = { maxWait: 15_000, timeout: 30_000 } as const;
 

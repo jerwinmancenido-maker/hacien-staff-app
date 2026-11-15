@@ -11,7 +11,7 @@ import { manilaToday } from "../format";
 import { assertCan, assertCanMaintainPurchaseOrder, assertCanVoid, canSeeCosts, ForbiddenError, type Permission, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
-import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
+import { DocRuleError, DOC_TX, money, requireMatchingUpdatedAt, STALE_EDIT_MESSAGE, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, lineAmounts, toScaled } from "../quotes/calc";
 import { formatAddress } from "../addresses/format";
 import {
@@ -577,6 +577,9 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
       const before = await lockPurchaseOrder(tx, id);
       const err = poActionError(before.status, "edit");
       if (err) throw new DocRuleError(err);
+      // Stale-edit guard: refuse before any line writes (and before
+      // approval-reset) when the page's loaded updatedAt no longer matches.
+      const expectedUpdatedAt = requireMatchingUpdatedAt(before.updatedAt, input.updatedAt);
       const existing = new Map(before.items.map((i) => [i.id, i]));
       for (const l of input.items) if (l.id && !existing.has(l.id)) throw new DocRuleError("One of the lines no longer exists. Reload and try again.", "items");
 
@@ -699,8 +702,8 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
         } else await tx.purchaseOrderItem.create({ data: { ...data, purchaseOrderId: id } });
       }
       const next = afterEdit(before.status);
-      const after = await tx.purchaseOrder.update({
-        where: { id },
+      const headerWrite = await tx.purchaseOrder.updateMany({
+        where: { id, updatedAt: expectedUpdatedAt },
         data: {
           supplierContactId: input.supplierContactId,
           date: input.date,
@@ -714,6 +717,10 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
           ...(next.clearsApproval ? { approvedById: null, approvedAt: null, revision: before.revision + 1 } : {}),
           updatedById: actor.id,
         },
+      });
+      if (headerWrite.count !== 1) throw new DocRuleError(STALE_EDIT_MESSAGE);
+      const after = await tx.purchaseOrder.findUniqueOrThrow({
+        where: { id },
         include: { items: { where: { removedAt: null } } },
       });
       await writeAudit(tx, {
