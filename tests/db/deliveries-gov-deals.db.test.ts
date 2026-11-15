@@ -271,6 +271,10 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
       admin,
     );
 
+    const soFresh = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      select: { updatedAt: true },
+    });
     await expect(
       updateSalesOrder(
         so.id,
@@ -280,6 +284,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
           terms: so.terms,
           notes: so.notes,
           deliveryAddress: so.deliveryAddress,
+          updatedAt: soFresh.updatedAt.toISOString(),
           items: [
             {
               id: item.id,

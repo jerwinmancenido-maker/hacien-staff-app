@@ -109,6 +109,7 @@ describe("lot sales orders and component POs (db)", () => {
         deliveryAddress: so.deliveryAddress,
         terms: so.terms,
         notes: "edited note",
+        updatedAt: so.updatedAt.toISOString(),
         items: items.map((i) => ({
           id: i.id,
           description: i.description,
