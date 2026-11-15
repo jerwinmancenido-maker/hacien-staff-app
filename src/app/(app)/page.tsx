@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { manilaHour, TIME_ZONE } from "@/lib/format";
 import { loadHomeDashboard } from "@/lib/home/dashboard";
+import { withConnectionRetry } from "@/lib/connection-retry";
 import { PageHeader } from "@/components/ui";
 import {
   HomeGettingStarted,
@@ -33,7 +34,10 @@ function homeDateLabel(now = new Date()) {
 
 export default async function HomePage() {
   const user = await requireUser();
-  const dash = await loadHomeDashboard(user);
+  // Read-only load: one retry rides out a transient database connection
+  // failure (P1001 on a cold pool is the proven B-1 trigger) instead of
+  // failing the whole first page load.
+  const dash = await withConnectionRetry(() => loadHomeDashboard(user));
   const first = user.name.split(" ")[0];
   const showSales = !!dash.sales && !!dash.kpis;
   const hasBot = !!dash.tax || dash.recent.length > 0 || !!dash.pipeline;
