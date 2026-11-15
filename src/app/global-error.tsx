@@ -1,55 +1,29 @@
 // Root error boundary (App Router). Rendered in place of the whole app when
-// the root layout itself fails, so it cannot use the layout's CSS — inline
-// styles only. The error is sent to Sentry (a no-op when no DSN is set).
+// the root layout itself fails, so it cannot use the layout's CSS — the
+// shared ErrorRecovery body uses inline styles only. The error is sent to
+// Sentry (a no-op when no DSN is set).
+//
+// "Try again" uses Next's `retry` prop (refetch from the server, then
+// re-render) instead of the old `reset()`-only button, which re-rendered
+// the same failed data and could never recover (B-1).
 
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
-import { useEffect } from "react";
+import { ErrorRecovery } from "@/components/ErrorRecovery";
 
 export default function GlobalError({
   error,
   reset,
+  retry,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
+  retry?: () => void;
 }) {
-  useEffect(() => {
-    Sentry.captureException(error);
-  }, [error]);
-
   return (
     <html lang="en">
       <body>
-        <main
-          style={{
-            maxWidth: 560,
-            margin: "10vh auto",
-            padding: 24,
-            fontFamily: "system-ui, sans-serif",
-            color: "#111",
-          }}
-        >
-          <h1 style={{ fontSize: 24 }}>Something went wrong.</h1>
-          <p style={{ color: "#555" }}>
-            The page hit an unexpected error. Try again, or go back and continue from where you were.
-          </p>
-          <button
-            type="button"
-            onClick={() => reset()}
-            style={{
-              background: "#2563EB",
-              color: "#fff",
-              border: 0,
-              borderRadius: 6,
-              padding: "10px 16px",
-              cursor: "pointer",
-              fontSize: 15,
-            }}
-          >
-            Try again
-          </button>
-        </main>
+        <ErrorRecovery error={error} reset={reset} retry={retry} />
       </body>
     </html>
   );
