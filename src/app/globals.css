@@ -3881,6 +3881,11 @@ pre.json {
   align-items: center;
   min-height: calc(32px * var(--ui-scale, 1));
 }
+/* SO detail: Purchasing progress is a head-only card (no body rows). Drop the
+   empty-head bottom margin so the card stays calm without changing copy. */
+.so-purchasing-progress .card-head {
+  margin-bottom: 0;
+}
 /* Sales order header chip: wrap inside the column instead of running off the edge. */
 .so-wh {
   min-width: 0;

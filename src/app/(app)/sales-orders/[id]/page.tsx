@@ -159,7 +159,7 @@ export default async function SalesOrderPage({
         <div className="card">
           <h2>Documents</h2>
           <p className="small muted">Source quote, billings, collections, delivery receipts and purchase orders for this order. Receiving and supplier bills stay in the Cost &amp; margin tab.</p>
-          <div className="table-wrap">
+          <div className="table-wrap items-table">
             <table className="list" aria-label="Documents">
               <thead>
                 <tr>
@@ -320,7 +320,7 @@ export default async function SalesOrderPage({
           {returns.length === 0 ? (
             <EmptyState line="Nothing returned yet. Returned goods come off what was delivered, and their value becomes customer credit." />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap items-table">
               <table className="list" aria-label="Customer returns">
                 <thead>
                   <tr>
@@ -486,7 +486,7 @@ export default async function SalesOrderPage({
               </p>
             </div>
           )}
-          <div className="card" aria-label="Purchasing">
+          <div className="card so-purchasing-progress" aria-label="Purchasing">
             <div className="card-head">
               <h2>Purchasing progress</h2>
               <div className="right small muted">
@@ -501,7 +501,6 @@ export default async function SalesOrderPage({
                 )}
               </div>
             </div>
-
           </div>
           {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>
