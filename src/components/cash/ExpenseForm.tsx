@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { FileInput } from "@/components/FileInput";
+import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
 
@@ -17,6 +18,7 @@ export function ExpenseForm({
   salesOrders = [],
   purchaseOrders = [],
   canEdit,
+  maxMb,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   defaults: {
@@ -38,11 +40,13 @@ export function ExpenseForm({
   salesOrders?: { id: string; label: string }[];
   purchaseOrders?: { id: string; label: string }[];
   canEdit: boolean;
+  maxMb: number;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
   const [useSupplier, setUseSupplier] = useState(!!defaults.supplierId);
   const [showWh, setShowWh] = useState(!!defaults.withholdingApplied && defaults.withholdingApplied !== "0" && defaults.withholdingApplied !== "0.00");
+  const [fileError, setFileError] = useState<string | null>(null);
 
   if (!canEdit) {
     return (
@@ -218,15 +222,21 @@ export function ExpenseForm({
           <label htmlFor="notes">Notes</label>
           <textarea id="notes" name="notes" rows={2} defaultValue={state.values?.notes ?? defaults.notes} />
         </div>
-        <div className={`field full${e.files ? " has-error" : ""}`}>
+        <div className={`field full${e.files || fileError ? " has-error" : ""}`}>
           <label htmlFor="files">Receipt photo / PDF (optional)</label>
-          <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <FileInput
+            id="files"
+            name="files"
+            accept=".pdf,.png,.jpg,.jpeg"
+            multiple
+            onFilesChange={(files) => setFileError(clientUploadSizeError(files, maxMb))}
+          />
           <NoIdUploadWarning />
-          {e.files && <div className="error">{e.files}</div>}
+          {(e.files || fileError) && <div className="error">{e.files ?? fileError}</div>}
         </div>
       </div>
       <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending}>
+        <button className="btn" type="submit" disabled={pending || !!fileError}>
           {pending ? "Saving…" : "Record expense"}
         </button>
         <Link className="btn btn-secondary" href="/cash/expenses">

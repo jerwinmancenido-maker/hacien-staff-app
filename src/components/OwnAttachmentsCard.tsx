@@ -4,6 +4,7 @@
 // are the client pieces.
 import { formatDate } from "@/lib/format";
 import type { AttachmentKind } from "@/lib/attachment-kinds";
+import { uploadMaxMb } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import { AttachmentArchiveButton } from "./AttachmentArchiveButton";
 import { AttachmentUploadForm } from "./AttachmentUploadForm";
@@ -62,7 +63,9 @@ export function OwnAttachmentsCard({
           ))}
         </ul>
       )}
-      {upload && <AttachmentUploadForm action={upload.action} kinds={upload.kinds} idPrefix={upload.idPrefix} />}
+      {upload && (
+        <AttachmentUploadForm action={upload.action} kinds={upload.kinds} idPrefix={upload.idPrefix} maxMb={uploadMaxMb()} />
+      )}
     </div>
   );
 }
