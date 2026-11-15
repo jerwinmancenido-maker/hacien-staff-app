@@ -13,7 +13,7 @@ export function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) 
 }
 
 export function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  return withApi(req, { scope: "customers:write", permission: "edit_data" }, async (api) => {
+  return withApi(req, { scope: "customers:write", permission: "edit_data", idempotency: "required" }, async (api) => {
     const { id } = await ctx.params;
     const saved = await writeCustomer(id, api.body, api.user);
     return apiOk({ customer: serializeCustomer(saved, api.user) });

@@ -23,9 +23,12 @@ export type ApiContext = {
 type GuardOpts = {
   scope?: string;
   permission?: Permission;
-  /** POST writes require Idempotency-Key. */
+  /** Claimed writes require Idempotency-Key. */
   idempotency?: "required";
 };
+
+/** Reject request bodies larger than this (content-length and actual bytes). */
+export const API_BODY_MAX_BYTES = 256 * 1024;
 
 function logServerError(e: unknown): void {
   const name = e instanceof Error ? e.name : "Error";
@@ -52,7 +55,18 @@ function asApiError(e: unknown): ApiError {
 }
 
 async function readJsonBody(req: NextRequest): Promise<unknown> {
+  const declared = req.headers.get("content-length");
+  if (declared != null && declared !== "") {
+    const n = Number(declared);
+    if (Number.isFinite(n) && n > API_BODY_MAX_BYTES) {
+      throw new ApiError(413, "payload_too_large", "Request body is too large.");
+    }
+  }
   const text = await req.text();
+  // Cap by UTF-8 bytes (Content-Length is bytes); text.length is UTF-16 units.
+  if (Buffer.byteLength(text, "utf8") > API_BODY_MAX_BYTES) {
+    throw new ApiError(413, "payload_too_large", "Request body is too large.");
+  }
   if (!text.trim()) throw new ApiError(400, "invalid_json", "Send a JSON object.");
   try {
     return JSON.parse(text) as unknown;
@@ -74,7 +88,7 @@ async function storedPayload(res: Response): Promise<unknown> {
 
 /**
  * Auth, per-key rate limit, scope, the acting user's UI permission, and
- * POST idempotency. Handlers call the existing services inside the audit context.
+ * write idempotency. Handlers call the existing services inside the audit context.
  */
 export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: ApiContext) => Promise<Response>): Promise<Response> {
   const method = req.method.toUpperCase();
@@ -132,7 +146,9 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
       {
         apiKeyId: auth.apiKeyId,
         ip,
-        settleWrite: claimedKey
+        // Create-specific: settle 201 + customer inside the write transaction.
+        // Other claimed writes fall through to the generic settle below.
+        settleWrite: claimedKey && method === "POST"
           ? async (tx, record) => {
               const customer = serializeCustomer(record as CustomerShape, auth.user);
               await settleIdempotentWrite(tx, {
@@ -148,9 +164,14 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
     );
     if (claimedKey) {
       const stored = await db.apiCallLog.findUnique({ where: { id: logId as string }, select: { status: true, responseJson: true } });
-      // The customer transaction already stored the result. A missing result means it did not commit.
       if (!stored || stored.status === 0 || stored.responseJson == null) {
-        throw new ApiError(500, "internal", "Something went wrong.");
+        // Generic settle: store the handler response when settleWrite did not.
+        // Never store 5xx bodies (null responseJson stays pending for retry).
+        if (res.status >= 500) {
+          await finishCall(logId as string, res.status);
+        } else {
+          await finishCall(logId as string, res.status, await storedPayload(res));
+        }
       }
     } else if (logId) {
       await finishCall(logId, res.status);
@@ -161,7 +182,12 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
     if (logId) {
       if (claimedKey) {
         const res = apiError(error);
-        await finishCall(logId, res.status, await storedPayload(res));
+        // Store 4xx for replay; leave 5xx without a body so retries can reclaim.
+        if (error.status >= 500) {
+          await finishCall(logId, res.status);
+        } else {
+          await finishCall(logId, res.status, await storedPayload(res));
+        }
         return res;
       }
       await finishCall(logId, error.status);

@@ -20,10 +20,12 @@ import { GET as listCustomersRoute, POST as postCustomer } from "@/app/api/v1/cu
 import { GET as getItemRoute } from "@/app/api/v1/items/[id]/route";
 import { GET as listItemsRoute } from "@/app/api/v1/items/route";
 import { ApiError } from "@/lib/api/errors";
+import { API_BODY_MAX_BYTES } from "@/lib/api/guard";
 import { hashRequestBody, IDEMPOTENCY_PENDING_MS, IDEMPOTENCY_TTL_MS, settleIdempotentWrite } from "@/lib/api/idempotency";
 import { generateApiKey } from "@/lib/api/keys";
 import { db } from "@/lib/db";
 import { getSettingsSnapshot } from "@/lib/settings";
+import * as companies from "@/lib/services/companies";
 import { saveItem } from "@/lib/services/items";
 import { makeUser, tag } from "./fixtures";
 
@@ -57,16 +59,29 @@ async function issueKey(
   return { id: row.id, token: generated.token, prefix: generated.keyPrefix };
 }
 
-function request(pathname: string, token: string | null, init: { method?: string; body?: unknown; idem?: string | null; ip?: string } = {}) {
+function request(
+  pathname: string,
+  token: string | null,
+  init: {
+    method?: string;
+    body?: unknown;
+    rawBody?: string;
+    contentLength?: number;
+    idem?: string | null;
+    ip?: string;
+  } = {},
+) {
   const headers = new Headers();
   if (token) headers.set("authorization", `Bearer ${token}`);
-  if (init.body !== undefined) headers.set("content-type", "application/json");
+  const payload = init.rawBody !== undefined ? init.rawBody : init.body !== undefined ? JSON.stringify(init.body) : undefined;
+  if (payload !== undefined) headers.set("content-type", "application/json");
+  if (init.contentLength != null) headers.set("content-length", String(init.contentLength));
   if (init.idem) headers.set("idempotency-key", init.idem);
   if (init.ip) headers.set("x-forwarded-for", init.ip);
   return new NextRequest(`http://localhost${pathname}`, {
     method: init.method ?? "GET",
     headers,
-    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    body: payload,
   });
 }
 
@@ -282,9 +297,10 @@ describe("api v1", () => {
 
     const id = firstBody.data.customer.id as string;
     const renamed = `Renamed ${tag()}`;
-    const patched = await patchCustomer(request(`/api/v1/customers/${id}`, key.token, { method: "PATCH", ip: "203.0.113.11", body: { name: renamed } }), {
-      params: Promise.resolve({ id }),
-    });
+    const patched = await patchCustomer(
+      request(`/api/v1/customers/${id}`, key.token, { method: "PATCH", idem: idemKey(), ip: "203.0.113.11", body: { name: renamed } }),
+      { params: Promise.resolve({ id }) },
+    );
     expect(patched.status).toBe(200);
     expect((await patched.json()).data.customer.name).toBe(renamed);
     const row = await db.customer.findUnique({ where: { id } });
@@ -309,6 +325,7 @@ describe("api v1", () => {
     const res = await patchCustomer(
       request(`/api/v1/customers/${id}`, staffKey.token, {
         method: "PATCH",
+        idem: idemKey(),
         body: { withholdingType: "GOVERNMENT", defaultWithholding: [] },
       }),
       { params: Promise.resolve({ id }) },
@@ -531,5 +548,119 @@ describe("api v1", () => {
     const orphanAfter = await db.apiCallLog.findUnique({ where: { id: orphan.id } });
     expect(orphanAfter?.status).toBe(0);
     expect(orphanAfter?.responseJson).toBeNull();
+  });
+
+  it("does not store a 5xx idempotent body; a stale retry re-executes", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const key = await issueKey(admin.id, ["customers:write"]);
+    const term = await terms();
+    const name = `FiveXx ${tag()}`;
+    const body = customerBody(name, term);
+    const idem = idemKey();
+    const spy = vi.spyOn(companies, "saveCustomer").mockRejectedValueOnce(new Error("forced-5xx"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const first = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem, body }));
+      expect(first.status).toBe(500);
+      expect((await first.json()).error.code).toBe("internal");
+      const claim = await db.apiCallLog.findFirst({ where: { apiKeyId: key.id, idempotencyKey: idem } });
+      expect(claim).toBeTruthy();
+      expect(claim?.responseJson).toBeNull();
+      expect(await db.customer.count({ where: { name } })).toBe(0);
+
+      const immediate = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem, body }));
+      expect(immediate.status).toBe(409);
+      expect((await immediate.json()).error.code).toBe("idempotency_in_progress");
+
+      await db.apiCallLog.updateMany({
+        where: { apiKeyId: key.id, idempotencyKey: idem },
+        data: { at: new Date(Date.now() - IDEMPOTENCY_PENDING_MS - 1000) },
+      });
+      spy.mockRestore();
+      const retry = await postCustomer(request("/api/v1/customers", key.token, { method: "POST", idem, body }));
+      expect(retry.status).toBe(201);
+      expect(retry.headers.get("idempotency-replayed")).toBeNull();
+      expect((await retry.json()).data.customer.name).toBe(name);
+      expect(await db.customer.count({ where: { name } })).toBe(1);
+    } finally {
+      spy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("rejects a body over the 256 KB cap", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const key = await issueKey(admin.id, ["customers:write"]);
+    const term = await terms();
+    const declared = await postCustomer(
+      request("/api/v1/customers", key.token, {
+        method: "POST",
+        idem: idemKey(),
+        contentLength: API_BODY_MAX_BYTES + 1,
+        body: customerBody(`CapDeclared ${tag()}`, term),
+      }),
+    );
+    expect(declared.status).toBe(413);
+    expect((await declared.json()).error.code).toBe("payload_too_large");
+
+    const raw = `{"name":"CapActual ${tag()}","notes":"${"x".repeat(API_BODY_MAX_BYTES)}"}`;
+    expect(Buffer.byteLength(raw, "utf8")).toBeGreaterThan(API_BODY_MAX_BYTES);
+    const actual = await postCustomer(
+      request("/api/v1/customers", key.token, { method: "POST", idem: idemKey(), rawBody: raw }),
+    );
+    expect(actual.status).toBe(413);
+    expect((await actual.json()).error.code).toBe("payload_too_large");
+
+    // Multi-byte UTF-8: character length can stay under the cap while bytes exceed it.
+    const wide = "é".repeat(Math.floor(API_BODY_MAX_BYTES / 2) + 8);
+    const wideRaw = `{"name":"CapUtf8 ${tag()}","notes":"${wide}"}`;
+    expect(wideRaw.length).toBeLessThanOrEqual(API_BODY_MAX_BYTES);
+    expect(Buffer.byteLength(wideRaw, "utf8")).toBeGreaterThan(API_BODY_MAX_BYTES);
+    const utf8 = await postCustomer(
+      request("/api/v1/customers", key.token, { method: "POST", idem: idemKey(), rawBody: wideRaw }),
+    );
+    expect(utf8.status).toBe(413);
+    expect((await utf8.json()).error.code).toBe("payload_too_large");
+  });
+
+  it("replays a duplicate PATCH with the same Idempotency-Key", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const key = await issueKey(admin.id, ["customers:write", "customers:read"]);
+    const term = await terms();
+    const created = await postCustomer(
+      request("/api/v1/customers", key.token, { method: "POST", idem: idemKey(), body: customerBody(`PatchIdem ${tag()}`, term) }),
+    );
+    expect(created.status).toBe(201);
+    const id = (await created.json()).data.customer.id as string;
+
+    const missing = await patchCustomer(request(`/api/v1/customers/${id}`, key.token, { method: "PATCH", body: { notes: "n" } }), {
+      params: Promise.resolve({ id }),
+    });
+    expect(missing.status).toBe(400);
+    expect((await missing.json()).error.code).toBe("idempotency_key_required");
+
+    const idem = idemKey();
+    const renamed = `PatchOnce ${tag()}`;
+    const body = { name: renamed };
+    const first = await patchCustomer(request(`/api/v1/customers/${id}`, key.token, { method: "PATCH", idem, body }), {
+      params: Promise.resolve({ id }),
+    });
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.data.customer.name).toBe(renamed);
+    expect(first.headers.get("idempotency-replayed")).toBeNull();
+
+    const second = await patchCustomer(request(`/api/v1/customers/${id}`, key.token, { method: "PATCH", idem, body }), {
+      params: Promise.resolve({ id }),
+    });
+    expect(second.status).toBe(200);
+    expect(second.headers.get("idempotency-replayed")).toBe("true");
+    const secondBody = await second.json();
+    expect(secondBody.data.customer.id).toBe(firstBody.data.customer.id);
+    expect(secondBody.data.customer.name).toBe(renamed);
+    expect(await db.auditLog.count({ where: { entityType: "Customer", entityId: id, action: "update" } })).toBe(1);
   });
 });
