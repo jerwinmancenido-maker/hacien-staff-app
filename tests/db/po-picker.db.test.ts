@@ -123,7 +123,11 @@ describe.skipIf(!env.hasDb)("PO picker — add from sales order (MySQL)", () => 
     return { po: po!, laptop };
   }
 
-  const poInput = (year: number, po: { supplierId: string; date: Date }, items: PoInput["items"]): PoInput => ({
+  const poInput = (
+    year: number,
+    po: { supplierId: string; date: Date; updatedAt: Date },
+    items: PoInput["items"],
+  ): PoInput => ({
     supplierId: po.supplierId,
     supplierContactId: null,
     date: po.date,
@@ -132,6 +136,7 @@ describe.skipIf(!env.hasDb)("PO picker — add from sales order (MySQL)", () => 
     deliveryAddressText: null,
     supplierAddressText: null,
     notes: null,
+    updatedAt: po.updatedAt.toISOString(),
     items,
   });
 

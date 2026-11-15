@@ -27,6 +27,7 @@ import { TaxCalendarForm } from "./TaxCalendarForm";
 import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
+import { uploadMaxMb } from "@/lib/business-docs/sniff";
 import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
 import { AuditLogTab } from "./AuditLogTab";
 import { ApiKeysTab, type ApiKeyRow } from "./ApiKeysTab";
@@ -362,6 +363,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             print={s.print}
             versionId={snap.versionId}
             action={savePrintCompanyAction}
+            maxMb={uploadMaxMb()}
           />
         )}
 

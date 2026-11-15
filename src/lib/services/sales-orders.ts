@@ -8,7 +8,7 @@ import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
 import { docTotals, fromScaled, toScaled } from "../quotes/calc";
 import { salesOrderMoney } from "../billing/status";
 import { soDeliveryProgress } from "../sales-orders/delivery";
-import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
+import { auditItems, DocRuleError, DOC_TX, money, requireMatchingUpdatedAt, STALE_EDIT_MESSAGE, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave, rateFromDocWithholding } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
@@ -186,6 +186,9 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
     db.$transaction(async (tx) => {
       const before = await lockSalesOrder(tx, id);
       if (before.status !== "OPEN") throw new DocRuleError("Only an open sales order can be edited.");
+      // Stale-edit guard: refuse before any line writes when the page's
+      // loaded updatedAt no longer matches the locked row.
+      const expectedUpdatedAt = requireMatchingUpdatedAt(before.updatedAt, input.updatedAt);
       // Period close: the SO input carries no date and this update never
       // writes `date`, so the old and new period are the same stored date.
       await assertPeriodOpen(tx, before.date);
@@ -507,8 +510,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         if (item.id) await tx.salesOrderItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.salesOrderItem.create({ data: { ...itemData(item), salesOrderId: id } });
       }
-      const after = await tx.salesOrder.update({
-        where: { id },
+      const headerWrite = await tx.salesOrder.updateMany({
+        where: { id, updatedAt: expectedUpdatedAt },
         data: {
           contactId: input.contactId,
           buyerPoNo: input.buyerPoNo,
@@ -528,6 +531,10 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           ...finalTotals,
           updatedById: actor.id,
         },
+      });
+      if (headerWrite.count !== 1) throw new DocRuleError(STALE_EDIT_MESSAGE);
+      const after = await tx.salesOrder.findUniqueOrThrow({
+        where: { id },
         include: { items: { where: { removedAt: null } } },
       });
       await writeAudit(tx, {

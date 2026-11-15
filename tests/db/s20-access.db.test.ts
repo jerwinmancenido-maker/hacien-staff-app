@@ -47,6 +47,10 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     return { year, customer, quote, so };
   }
 
+  async function soUpdatedAt(id: string) {
+    return (await db.salesOrder.findUniqueOrThrow({ where: { id }, select: { updatedAt: true } })).updatedAt.toISOString();
+  }
+
   it("refuses Staff and Viewer voids on all six record types and requires a reason", async () => {
     const { admin, staff, viewer, approver } = await actors();
     const { year, customer, quote, so } = await wonSo(admin);
@@ -199,10 +203,23 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: i.withholdingOverride,
     }));
-    const base = { contactId: so.contactId, buyerPoNo: so.buyerPoNo, deliveryAddress: so.deliveryAddress, terms: so.terms, notes: "Desk note", items };
+    const base = {
+      contactId: so.contactId,
+      buyerPoNo: so.buyerPoNo,
+      deliveryAddress: so.deliveryAddress,
+      terms: so.terms,
+      notes: "Desk note",
+      items,
+      updatedAt: await soUpdatedAt(so.id),
+    };
     const saved = await updateSalesOrder(so.id, base, staff);
     expect(saved.notes).toBe("Desk note");
-    const priced = { ...base, notes: so.notes, items: items.map((i, n) => (n === 0 ? { ...i, unitPrice: "1.00" } : i)) };
+    const priced = {
+      ...base,
+      notes: so.notes,
+      items: items.map((i, n) => (n === 0 ? { ...i, unitPrice: "1.00" } : i)),
+      updatedAt: await soUpdatedAt(so.id),
+    };
     await expect(updateSalesOrder(so.id, priced, staff)).rejects.toThrow(/locked/);
     await expect(updateSalesOrder(so.id, priced, admin)).rejects.toThrow(/reason/);
     await updateSalesOrder(so.id, { ...priced, priceOverrideReason: "Correct the peso" }, admin);
@@ -229,7 +246,15 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       withholdingAtc: i.withholdingAtc,
       withholdingOverride: false,
     }));
-    const base = { contactId: so.contactId, buyerPoNo: so.buyerPoNo, deliveryAddress: so.deliveryAddress, terms: so.terms, notes: so.notes, items };
+    const base = {
+      contactId: so.contactId,
+      buyerPoNo: so.buyerPoNo,
+      deliveryAddress: so.deliveryAddress,
+      terms: so.terms,
+      notes: so.notes,
+      items,
+      updatedAt: await soUpdatedAt(so.id),
+    };
 
     // Staff tries to POST reapplyWithholding: true with a different ATC (e.g. SERVICES_2 / WI640)
     const reapplyPayload = {
@@ -283,7 +308,15 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
     const goods = rows.find((i) => i.kind === "GOODS");
     expect(goods?.withholdingAtc).toBe("WI158");
     const items = soItems(rows);
-    const base = { contactId: so.contactId, buyerPoNo: so.buyerPoNo, deliveryAddress: so.deliveryAddress, terms: so.terms, notes: so.notes, items };
+    const base = {
+      contactId: so.contactId,
+      buyerPoNo: so.buyerPoNo,
+      deliveryAddress: so.deliveryAddress,
+      terms: so.terms,
+      notes: so.notes,
+      items,
+      updatedAt: await soUpdatedAt(so.id),
+    };
     const swap = { ...base, reapplyWithholding: true as const, withholdingCodes: ["GOV_GOODS_1"] };
 
     await expect(updateSalesOrder(so.id, swap, staff)).rejects.toThrow(/locked/);
@@ -308,6 +341,7 @@ describe.skipIf(!hasDb)("S-20 void, billing rights, price lock, password (MySQL)
       terms: legacy.so.terms,
       notes: legacy.so.notes,
       items: nulled,
+      updatedAt: await soUpdatedAt(legacy.so.id),
     };
     const sneak = {
       ...legacyBase,

@@ -73,6 +73,7 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
       buyerPoDate: null,
       deliveryAddressId: delivAddr.id,
       priceOverrideReason: "Customer PO changed the order",
+      updatedAt: so.updatedAt.toISOString(),
       items: soItems.map((i, n) => ({
         id: i.id,
         description: i.description,
@@ -178,6 +179,7 @@ describe.skipIf(!env.hasDb)("SO Changed-vs-quote markers (MySQL)", () => {
         terms: so.terms,
         notes: so.notes,
         priceOverrideReason: "Reorder lines for packing",
+        updatedAt: so.updatedAt.toISOString(),
         items: reversed.map((i) => ({
           id: i.id,
           description: i.description,

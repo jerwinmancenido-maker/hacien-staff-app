@@ -10,6 +10,7 @@ import { CashNav } from "@/components/cash/CashNav";
 import { ExpenseForm } from "@/components/cash/ExpenseForm";
 import { CASH_DISCLAIMER } from "@/components/cash/CashParts";
 import { PageHeader } from "@/components/ui";
+import { uploadMaxMb } from "@/lib/business-docs/sniff";
 import { recordExpenseAction } from "../../actions";
 
 export default async function NewExpensePage() {
@@ -45,6 +46,7 @@ export default async function NewExpensePage() {
         <ExpenseForm
           action={recordExpenseAction}
           canEdit
+          maxMb={uploadMaxMb()}
           accounts={accounts.map((a) => ({
             id: a.id,
             name: a.name,

@@ -610,6 +610,8 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     agencyPoNo: so.agencyPoNo,
     iarDate: ymd(so.iarDate),
     voidReason: so.voidReason,
+    /** ISO token for the SO editor's stale-edit guard. */
+    updatedAt: so.updatedAt.toISOString(),
     customer: so.customer,
     contact: so.contact,
     quote: { id: so.quote.id, number: so.quote.number, status: so.quote.status, date: ymd(so.quote.date), contractPrice: money(so.quote.contractPrice) },

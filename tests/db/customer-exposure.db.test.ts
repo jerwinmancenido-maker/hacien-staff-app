@@ -144,6 +144,7 @@ describe.skipIf(!env.hasDb)("customerExposure (db)", () => {
         terms: storedB.terms,
         notes: "over-limit save",
         deliveryAddress: storedB.deliveryAddress,
+        updatedAt: storedB.updatedAt.toISOString(),
         items: storedB.items.map((i) => ({
           id: i.id,
           description: i.description,

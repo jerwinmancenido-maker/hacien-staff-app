@@ -704,6 +704,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
           deliveryAddress: so.deliveryAddress,
           terms: so.terms,
           notes: so.notes,
+          updatedAt: so.updatedAt.toISOString(),
           items,
         },
         costUser,
@@ -940,7 +941,23 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(after?.status).toBe("VOID");
       expect(after?.number).toBe(order.number);
       expect((await db.quote.findUnique({ where: { id: q.id } }))?.status).toBe("SENT");
-      await expect(updateSalesOrder(order.id, { buyerPoNo: null, contactId: null, terms: null, notes: null, deliveryAddress: null, items: quoteInput(customer.id, 2026).items }, costUser)).rejects.toThrow(/open sales order/);
+      await expect(
+        updateSalesOrder(
+          order.id,
+          {
+            buyerPoNo: null,
+            contactId: null,
+            terms: null,
+            notes: null,
+            deliveryAddress: null,
+            updatedAt: (
+              await db.salesOrder.findUniqueOrThrow({ where: { id: order.id }, select: { updatedAt: true } })
+            ).updatedAt.toISOString(),
+            items: quoteInput(customer.id, 2026).items,
+          },
+          costUser,
+        ),
+      ).rejects.toThrow(/open sales order/);
 
       const voids = await db.documentVoid.findMany({ where: { docId: order.id } });
       expect(voids).toHaveLength(1);
