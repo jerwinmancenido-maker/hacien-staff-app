@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { resetNativeFileInputAfterSizeReject } from "@/lib/business-docs/sniff";
 
 /**
  * File picker that looks like the rest of the app. The browser's native
@@ -26,14 +27,17 @@ export function FileInput({
   multiple?: boolean;
   required?: boolean;
   buttonLabel?: string;
-  onFilesChange?: (files: File[]) => void;
+  /** Return a size-error string to keep the label but clear the native value (same-file re-pick). */
+  onFilesChange?: (files: File[]) => string | null | void | Promise<unknown>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
 
   function update(next: File[]) {
     setFiles(next);
-    onFilesChange?.(next);
+    const result = onFilesChange?.(next);
+    // Keep React label; clear native value so rejecting then re-picking the same file fires change.
+    if (typeof result === "string") resetNativeFileInputAfterSizeReject(inputRef.current, result);
   }
 
   function clear() {

@@ -54,6 +54,7 @@ describe("PrintCompanyForm collapsed sections", () => {
         print,
         versionId: "ver-print",
         action: noopAction,
+        maxMb: 10,
       }),
     );
 
@@ -101,6 +102,7 @@ describe("PrintCompanyForm collapsed sections", () => {
         print,
         versionId: "ver-print",
         action: noopAction,
+        maxMb: 10,
       }),
     );
 

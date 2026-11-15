@@ -8,6 +8,7 @@ import { useState, useTransition } from "react";
 import { FileInput } from "@/components/FileInput";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import { BUSINESS_DOC_LABELS, BUSINESS_DOC_TYPES, type BusinessDocTypeValue } from "@/lib/business-docs/types";
 import type { ExpiryStatus } from "@/lib/business-docs/expiry";
 import { setBusinessDocumentArchivedAction, uploadBusinessDocumentAction } from "@/app/(app)/business-documents/actions";
@@ -250,8 +251,9 @@ function UploadForm({
             name="file"
             accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
             onFilesChange={(files) => {
-              const f = files[0];
-              setFileError(f && f.size > maxMb * 1024 * 1024 ? `The file is too big. The limit is ${maxMb} MB.` : null);
+              const err = clientUploadSizeError(files, maxMb);
+              setFileError(err);
+              return err;
             }}
           />
           <NoIdUploadWarning />
