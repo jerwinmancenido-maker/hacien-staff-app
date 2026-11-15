@@ -388,7 +388,7 @@ export function DeliverySection({
                     <td>{day(d.receivedDate)}</td>
                     <td>
                       {d.idSightChecked ? (
-                        <span className="chip">
+                        <span className="chip small">
                           ID sight-checked (not copied)
                         </span>
                       ) : (

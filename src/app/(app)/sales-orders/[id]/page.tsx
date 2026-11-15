@@ -486,17 +486,22 @@ export default async function SalesOrderPage({
               </p>
             </div>
           )}
-          <p className="small muted" aria-label="Purchasing">
-            Purchasing progress: {purchasing.received} of {purchasing.total} received
-            {so.canSeeCosts && (
-              <>
-                {" · "}
-                <Link className="btn-link small" href={`${base}?tab=cost-margin`}>
-                  Cost &amp; margin →
-                </Link>
-              </>
-            )}
-          </p>
+          <div className="card so-purchasing-progress" aria-label="Purchasing">
+            <div className="card-head">
+              <h2>Purchasing progress</h2>
+              <div className="right small muted">
+                {purchasing.received} of {purchasing.total} received
+                {so.canSeeCosts && (
+                  <>
+                    {" · "}
+                    <Link className="btn-link small" href={`${base}?tab=cost-margin`}>
+                      Cost &amp; margin →
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>
       )}
