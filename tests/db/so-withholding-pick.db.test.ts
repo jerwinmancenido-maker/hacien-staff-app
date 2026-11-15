@@ -121,6 +121,7 @@ describe.skipIf(!env.hasDb)("SO header withholding pick (PR-2b)", () => {
         terms: so.terms,
         notes: so.notes,
         ...(reason ? { priceOverrideReason: reason } : {}),
+        updatedAt: so.updatedAt.toISOString(),
         items: edit(items),
         ...extra,
       } as never;

@@ -43,6 +43,8 @@ export type PoEditorInitial = {
   deliveryAddressText: string;
   supplierAddressText: string;
   notes: string;
+  /** Edit only: ISO `updatedAt` loaded with the PO (stale-edit guard). */
+  updatedAt?: string;
   items: PoEditorItem[];
 };
 
@@ -245,6 +247,7 @@ export function PoEditor({
     deliveryAddressText: h.deliveryAddressText,
     supplierAddressText: h.supplierAddressText,
     notes: h.notes,
+    ...(isNew || !initial.updatedAt ? {} : { updatedAt: initial.updatedAt }),
     items: items.map((i) => ({
       id: i.id,
       description: i.description,

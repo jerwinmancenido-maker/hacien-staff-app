@@ -404,6 +404,8 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     deliveryAddressText: po.deliveryAddressText ?? "",
     supplierAddressText: po.supplierAddressText ?? "",
     notes: po.notes ?? "",
+    /** ISO token for the PO editor's stale-edit guard. */
+    updatedAt: po.updatedAt.toISOString(),
     items: po.items.map((i) => {
       const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
       const bucket =

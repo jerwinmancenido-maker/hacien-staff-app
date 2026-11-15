@@ -369,6 +369,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
         deliveryAddressText: edit.deliveryAddressText,
         supplierAddressText: null,
         notes: null,
+        updatedAt: edit.updatedAt,
         items: edit.items.slice(0, 1).map((i) => ({ id: i.id, description: i.description, kind: i.kind, qty: "8", unit: i.unit, unitCost: "44000" })),
       };
       const after = await updatePurchaseOrder(po!.id, input, admin);

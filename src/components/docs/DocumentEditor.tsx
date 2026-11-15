@@ -155,6 +155,8 @@ export type EditorInitial = {
   internalNotes?: string;
   /** Quote subject / project line. */
   subject?: string;
+  /** Sales order only: ISO `updatedAt` loaded with the order (stale-edit guard). */
+  updatedAt?: string;
   /** Loaded rows carry no editor keys; components likewise (the quote
    * editor assigns both when mapping its initial state). */
   items: (Omit<EditorItem, "key" | "components"> & { components?: Omit<EditorComponent, "key">[] })[];
@@ -587,6 +589,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
           ...(pickChanged ? { withholdingCodes: pick } : {}),
           reapplyWithholding: reapplyWithholding || undefined,
           priceOverrideReason: showPriceReason ? priceOverrideReason : undefined,
+          updatedAt: initial.updatedAt,
           items: items.map(itemPayload),
         };
 

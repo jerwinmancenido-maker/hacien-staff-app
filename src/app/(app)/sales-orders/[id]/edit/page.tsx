@@ -59,6 +59,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
           buyerPoNo: so.buyerPoNo ?? "",
           buyerPoDate: so.buyerPoDate ?? "",
           deliveryAddress: so.deliveryAddress ?? "",
+          updatedAt: so.updatedAt,
           items: editableItems(so.items, canSeeCosts(user)).map((i) => ({
             ...i,
             supplierId: i.supplierId ?? null,

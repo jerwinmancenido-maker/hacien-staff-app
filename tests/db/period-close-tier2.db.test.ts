@@ -135,6 +135,7 @@ describe.skipIf(!env.hasDb)("period close Tier 2 + admin deletes (MySQL)", () =>
       deliveryAddress: so.deliveryAddress,
       terms: so.terms,
       notes,
+      updatedAt: so.updatedAt.toISOString(),
       items: so.items.map((i) => ({
         id: i.id,
         description: i.description,
