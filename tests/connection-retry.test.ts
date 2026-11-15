@@ -3,6 +3,9 @@
 // once; everything else propagates immediately, and a second failure of
 // any kind propagates too (writes are never wrapped — see the module).
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -90,5 +93,41 @@ describe("withConnectionRetry", () => {
       "boom",
     );
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Source pin: (app) layout wraps its read-only settings block the same way
+// Home wraps loadHomeDashboard. requireUser must stay outside the retry.
+describe("(app) layout settings-read retry wiring", () => {
+  const layout = readFileSync(
+    path.join(process.cwd(), "src/app/(app)/layout.tsx"),
+    "utf8",
+  );
+
+  it("imports withConnectionRetry and keeps requireUser outside the retry", () => {
+    expect(layout).toContain('from "@/lib/connection-retry"');
+    expect(layout).toMatch(
+      /const user = await requireUser\(\);\s*[\s\S]*?await withConnectionRetry\(/,
+    );
+    // requireUser must not appear inside the retry callback body.
+    const retryStart = layout.indexOf("await withConnectionRetry(");
+    expect(retryStart).toBeGreaterThan(-1);
+    const afterRetry = layout.slice(retryStart);
+    const callbackEnd = afterRetry.indexOf("});");
+    expect(callbackEnd).toBeGreaterThan(-1);
+    expect(afterRetry.slice(0, callbackEnd)).not.toContain("requireUser");
+  });
+
+  it("retries the settings / feature / non-VAT reads inside withConnectionRetry", () => {
+    const retryStart = layout.indexOf("await withConnectionRetry(");
+    const afterRetry = layout.slice(retryStart);
+    const callbackEnd = afterRetry.indexOf("});");
+    const body = afterRetry.slice(0, callbackEnd);
+    expect(body).toContain("currentSessionLimits()");
+    expect(body).toContain("getSettingsSnapshot()");
+    expect(body).toContain("isCashEnabled()");
+    expect(body).toContain("isPayablesEnabled()");
+    expect(body).toContain("getNonVatMeter(");
+    expect(body).toContain("isBooksEnabled()");
   });
 });
