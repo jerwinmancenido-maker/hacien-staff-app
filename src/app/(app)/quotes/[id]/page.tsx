@@ -25,6 +25,7 @@ import {
   approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
+  createQuoteAddressAction,
   duplicateQuoteAction,
   emailDraftAction,
   markQuoteLostAction,
@@ -91,6 +92,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={q.deliveryAddressText ?? suggestedAddress}
             addressOptions={addressOptions}
+            customerId={q.customer.id}
+            customerName={q.customer.name}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             hasAcceptance={q.hasAcceptance}
@@ -101,6 +104,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
               void: voidQuoteAction,
               delete: deleteQuoteAction,
               convert: convertQuoteAction,
+              addAddress: createQuoteAddressAction,
               email: emailDraftAction,
               refreshCompanyDetails: refreshQuoteCompanyDetailsAction,
               duplicate: duplicateQuoteAction,
