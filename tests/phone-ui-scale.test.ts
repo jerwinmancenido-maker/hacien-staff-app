@@ -13,7 +13,12 @@ describe("phone UI scale", () => {
     const phone = css.match(/@media screen and \(max-width:\s*640px\)\s*\{([\s\S]*?)\n\}/);
     expect(phone?.[1]).toMatch(/--ui-scale:\s*0\.65;/);
     expect(css).not.toMatch(/zoom\s*:/);
-    expect(css).not.toMatch(/transform\s*:\s*scale\(/);
+    // No transform-scaling of the UI itself. The one allowed exception is
+    // per-element :active press feedback (motion spec rule 4: scale 0.97),
+    // which is interaction feedback, not layout scaling — strip those
+    // rules before the blanket check.
+    const withoutPressFeedback = css.replace(/[^{}]*:active\s*\{[^}]*\}/g, "");
+    expect(withoutPressFeedback).not.toMatch(/transform\s*:\s*scale\(/);
   });
 
   it("scales shared lengths with the variable and leaves 1px borders", () => {
