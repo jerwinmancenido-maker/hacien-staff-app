@@ -465,7 +465,7 @@ async function UsersTab() {
       { label: roleLabel(u), tone: "grey" },
       {
         label: u.canSeeCosts ? "Can see costs" : "Cost hidden",
-        tone: u.canSeeCosts ? "dark" : "grey",
+        tone: u.canSeeCosts ? "blue" : "grey",
       },
       ...(u.email === API_BOT_EMAIL
         ? [{ label: "API bot – can't sign in", tone: "grey" as const }]

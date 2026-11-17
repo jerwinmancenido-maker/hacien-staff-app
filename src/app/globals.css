@@ -51,7 +51,8 @@
   --grey-600: #525252;
   --grey-700: #404040;
   --blue: #2563eb;
-  --blue-dark: #1d4ed8;
+  --blue-dark: #1f54c8;
+  --sky: #6692f1;
   --blue-tint: #eff6ff;
   --success: #15803d;
   --success-bg: #f0fdf4;
@@ -86,7 +87,8 @@
   --shadow-overlay: 0 1px calc(2px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06), 0 calc(4px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06);
   --shadow-frame: none;
   --shadow-pill: none;
-  --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #fff, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+  /* Button sheet: keyboard focus = 2px surface ring + 3px Sky. */
+  --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #fff, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
 
   /* Self-hosted @font-face (print-pro) supplies Inter + Archivo Black; these
      names match what Home expects from next/font CSS variables. */
@@ -575,6 +577,20 @@ a.tracker-card:hover {
 .btn:hover {
   background: var(--blue-dark);
 }
+/* Motion spec rule 4: press feedback scales to 0.97 (skipped under
+   reduced motion, which renders the final state). */
+@media (prefers-reduced-motion: no-preference) {
+  .btn,
+  .pill-tab,
+  .filter-chip {
+    transition: transform 0.1s ease-out;
+  }
+  .btn:active,
+  .pill-tab:active,
+  .filter-chip:active {
+    transform: scale(0.97);
+  }
+}
 .btn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -834,8 +850,8 @@ a.tracker-card:hover {
   color: var(--text);
 }
 .filter-chip.active {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--blue);
+  border-color: var(--blue);
   color: #fff;
 }
 .toolbar .right {
@@ -1104,9 +1120,9 @@ tr.inactive .cell-primary .sub {
   color: var(--text);
 }
 .tab.active {
-  color: var(--text);
+  color: var(--blue);
   font-weight: 600;
-  border-bottom-color: var(--text);
+  border-bottom-color: var(--blue);
 }
 
 /* ---------- Forms ---------- */
@@ -4306,11 +4322,11 @@ pre.json {
 .qty-bar span {
   display: block;
   height: 100%;
-  background: var(--amber);
+  background: var(--blue);
   border-radius: calc(999px * var(--ui-scale, 1));
 }
 .qty-bar span.full {
-  background: var(--green);
+  background: var(--blue);
 }
 .attach-list {
   list-style: none;
@@ -4558,7 +4574,7 @@ button.contact-card-add {
 .aging-bar-fill:not(.empty) {
   height: 100%;
   border-radius: inherit;
-  background: #4ade80;
+  background: var(--blue);
 }
 /* Home Non-VAT card: accent below warn %; amber/red win once warn thresholds hit. */
 .home-nonvat .aging-bar-fill:not(.empty) {
@@ -8980,7 +8996,7 @@ button.contact-card-add {
     --danger: #de8f8f;
     --danger-bg: #3a2323;
     --bg: #0b0e14;
-    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
   }
 }
 
