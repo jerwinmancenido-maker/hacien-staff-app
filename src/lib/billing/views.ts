@@ -7,7 +7,7 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
@@ -748,8 +748,22 @@ export async function getBookletView(docType: BookletType = "SI") {
     select: { id: true, number: true, reason: true },
   });
 
+  // The serial claim is the permanent record: it survives document deletes,
+  // so a claimed number whose document was deleted (and which was never
+  // marked spoiled) still counts as used. Without this the grid — and the
+  // next-free suggestion built on it — would offer a number the write path
+  // then rejects as already used.
+  const claims = await db.bookletSerialClaim.findMany({
+    where: { type: docType, number: { gte: range.seriesFrom, lte: range.seriesTo } },
+    select: { number: true },
+  });
+  const covered = new Set<number>([...used.map((u) => u.invoiceNo), ...spoiled.map((s) => s.number)]);
+  const claimedOnly: UsedDocSlot[] = claims
+    .filter((c) => !covered.has(c.number))
+    .map((c) => ({ invoiceNo: c.number, status: "RECORDED" }));
+
   const typeName = BOOKLET_DOC_TYPES[docType]?.label ?? "Sales Invoice";
-  const grid = bookletGrid(range, used, spoiled, typeName);
+  const grid = bookletGrid(range, [...used, ...claimedOnly], spoiled, typeName);
 
   return {
     docType,
