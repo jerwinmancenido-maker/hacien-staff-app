@@ -83,6 +83,8 @@ export const SOURCE_LABELS: Record<RegisterSourceKind, string> = {
 
 export const INVOICED_TOTAL_LABEL = "Invoiced total";
 export const COLLECTED_TOTAL_LABEL = "Collected total";
+/** Sales register collected figure is cash only (EWT is its own column) — label it so it is not read as Home's cash + 2307 total. */
+export const CASH_COLLECTED_TOTAL_LABEL = "Cash collected total";
 
 /** Sum amounts with scaled decimals. */
 export function sumMoney(amounts: readonly string[]): string {
@@ -236,7 +238,7 @@ export function registerToCsv(config: RegisterConfig, register: BookRegister): s
   if (register.salesPeriodTotals) {
     const s = register.salesPeriodTotals;
     lines.push(totalCsvLine(config, INVOICED_TOTAL_LABEL, s.invoicedAmount, s.invoicedEwt));
-    lines.push(totalCsvLine(config, COLLECTED_TOTAL_LABEL, s.collectedAmount, s.collectedEwt));
+    lines.push(totalCsvLine(config, CASH_COLLECTED_TOTAL_LABEL, s.collectedAmount, s.collectedEwt));
   } else if (register.periodAmountTotal != null) {
     lines.push(
       totalCsvLine(config, "Period total", register.periodAmountTotal, register.periodEwtTotal ?? "0.00"),

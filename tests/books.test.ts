@@ -3,7 +3,7 @@ import { dealsNavHrefs } from "@/components/Sidebar";
 import { BOOKS_FORBIDDEN_VAT_KEYS, REGISTER_CONFIGS, REGISTER_KEYS } from "@/lib/books/config";
 import {
   buildRegister,
-  COLLECTED_TOTAL_LABEL,
+  CASH_COLLECTED_TOTAL_LABEL,
   csvCell,
   INVOICED_TOTAL_LABEL,
   registerHasVatColumn,
@@ -180,7 +180,7 @@ describe("sales register — separate Invoiced / Collected totals (no combined)"
     });
     const csv = registerToCsv(sales, reg);
     expect(csv).toContain(INVOICED_TOTAL_LABEL);
-    expect(csv).toContain(COLLECTED_TOTAL_LABEL);
+    expect(csv).toContain(CASH_COLLECTED_TOTAL_LABEL);
     expect(csv).toContain("15000.00");
     expect(csv).toContain("5000.00");
     expect(csv).not.toContain("20000");
@@ -218,7 +218,7 @@ describe("sales register — separate Invoiced / Collected totals (no combined)"
     expect(reg.salesPeriodTotals!.collectedAmount).toBe("50.00");
     const csv = registerToCsv(cfg, reg);
     expect(csv).toContain(INVOICED_TOTAL_LABEL);
-    expect(csv).toContain(COLLECTED_TOTAL_LABEL);
+    expect(csv).toContain(CASH_COLLECTED_TOTAL_LABEL);
     expect(csv).not.toContain("Period total");
     expect(csv.toLowerCase()).not.toMatch(/\bvat\b/);
   });

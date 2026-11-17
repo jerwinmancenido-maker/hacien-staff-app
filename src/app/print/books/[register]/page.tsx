@@ -10,7 +10,7 @@ import {
   REGISTER_CONFIGS,
 } from "@/lib/books/config";
 import { parseBooksPeriod } from "@/lib/books/period";
-import { COLLECTED_TOTAL_LABEL, INVOICED_TOTAL_LABEL, SOURCE_LABELS } from "@/lib/books/registers";
+import { CASH_COLLECTED_TOTAL_LABEL, INVOICED_TOTAL_LABEL, SOURCE_LABELS } from "@/lib/books/registers";
 import { getBookRegister } from "@/lib/services/books";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -180,7 +180,7 @@ export default async function PrintBooksPage({
               )}
             </div>
             <div>
-              <b>{COLLECTED_TOTAL_LABEL}</b>
+              <b>{CASH_COLLECTED_TOTAL_LABEL}</b>
               <span className="num">{formatPeso(register.salesPeriodTotals.collectedAmount)}</span>
               {config.columns.some((c) => c.key === "ewt") && (
                 <span className="num">EWT {formatPeso(register.salesPeriodTotals.collectedEwt)}</span>

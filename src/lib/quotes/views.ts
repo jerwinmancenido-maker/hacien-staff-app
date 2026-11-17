@@ -431,7 +431,10 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
 
   const rows = await db.quote.findMany({
     where,
-    include: { customer: { select: { name: true } } },
+    include: {
+      customer: { select: { name: true } },
+      ...(withCosts ? { items: { select: { supplierTotal: true } } } : {}),
+    },
     orderBy: [{ date: "desc" }, { number: "desc" }],
     take: 500,
   });
@@ -448,7 +451,15 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       date: ymd(r.date)!,
       validUntil: ymd(r.validUntil)!,
     };
-    return withCosts ? { ...row, netMarginPct: money(r.netMarginPct) } : row;
+    return withCosts
+      ? {
+          ...row,
+          netMarginPct: money(r.netMarginPct),
+          supplierCostState: supplierCostStateFromSupplierTotals(
+            (r.items ?? []).map((i) => money(i.supplierTotal)),
+          ),
+        }
+      : row;
   });
 
   return mapped as ({
@@ -462,6 +473,7 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     date: string;
     validUntil: string;
     netMarginPct?: string;
+    supplierCostState?: SupplierCostState;
   })[];
 }
 
