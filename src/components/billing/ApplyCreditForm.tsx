@@ -79,14 +79,16 @@ export function ApplyCreditForm({
     }
   })();
 
+  // A locked billing (detail page) that is already settled shows nothing at
+  // all — the no-credit hint below would be stale there.
+  if (lockedBillingId && balanceScaled <= 0n) {
+    return null;
+  }
   if (creditScaled <= 0n) {
     return <p className="faint small">No customer credit to apply. Record a collection with unallocated cash first.</p>;
   }
   if (billings.length === 0 || (balanceScaled <= 0n && !lockedBillingId)) {
     return <p className="faint small">No open billing balance to apply credit against.</p>;
-  }
-  if (lockedBillingId && balanceScaled <= 0n) {
-    return null;
   }
 
   const confirmBody = `Apply ₱${amount || "0.00"} of customer credit (available ₱${availableCredit}) to this billing’s open balance of ₱${selectedBalance}? This can’t be undone except by voiding the source collection.`;

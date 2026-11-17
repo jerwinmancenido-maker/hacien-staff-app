@@ -154,8 +154,10 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     Approved by {po.approvedBy}
                     {po.approvedAt ? ` · ${formatDateTime(po.approvedAt)}` : ""}
                   </>
-                ) : po.status === "DRAFT" ? (
+                ) : po.status === "DRAFT" && po.approval.needsApproval ? (
                   <Chip tone="blue">Needs approval</Chip>
+                ) : po.status === "DRAFT" ? (
+                  "Not required"
                 ) : (
                   "—"
                 )}

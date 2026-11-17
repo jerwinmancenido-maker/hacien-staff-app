@@ -154,6 +154,7 @@ export default async function ReceivingPoPage({ params, searchParams }: { params
                     itemDescription={x.description}
                     serialNumbers={x.serialNumbers}
                     reportStatus={r.status}
+                    reportNumber={r.number}
                     action={createWarrantyClaimAction.bind(null, po.id, x.id ?? "")}
                   />
                 ))}
