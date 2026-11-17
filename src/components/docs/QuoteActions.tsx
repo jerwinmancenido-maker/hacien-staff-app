@@ -14,7 +14,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
-import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView } from "./Dialogs";
+import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView, type NewAddressFields } from "./Dialogs";
+import type { EditorAddressOption } from "./DocumentEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
 import { quoteMarkSentGate, quoteNotApprovedError } from "@/lib/quotes/approval";
@@ -41,6 +42,9 @@ type Props = {
   /** Suggested delivery address (default delivery, else billing), editable in the dialog. */
   customerAddress: string;
   addressOptions?: AddressOption[];
+  /** Customer identity for the Convert dialog's inline add-address path. */
+  customerId?: string;
+  customerName?: string;
   /** When true, Mark as sent shows the no-withholding confirm first. */
   withholdingNotSet?: boolean;
   /** Cost viewer, and at least one line has a blank or ₱0.00 supplier cost. */
@@ -55,6 +59,8 @@ type Props = {
     void: (id: string, reason: string) => Promise<FormState>;
     delete: (id: string, reason: string) => Promise<FormState>;
     convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
+    /** Convert dialog "+ Add new address": saves a DELIVERY address to the customer. */
+    addAddress?: (customerId: string, input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
     email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
     refreshCompanyDetails?: (id: string) => Promise<FormState>;
@@ -79,6 +85,8 @@ export function QuoteActions({
   openSalesOrderId,
   customerAddress,
   addressOptions,
+  customerId,
+  customerName,
   withholdingNotSet = false,
   costMissing = false,
   hasAcceptance = false,
@@ -223,7 +231,7 @@ export function QuoteActions({
         />
       )}
       {dialog === "convert" && (
-        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
+        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} customerName={customerName} onAddAddress={actions.addAddress && customerId ? (input) => actions.addAddress!(customerId, input) : undefined} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
       )}
       <ConfirmDialog
         open={dialog === "lost"}

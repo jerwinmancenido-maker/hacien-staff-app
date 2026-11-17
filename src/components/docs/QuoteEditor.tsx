@@ -62,7 +62,7 @@ import {
   type EditorItem,
 } from "./DocumentEditor";
 import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
-import { Modal } from "./Dialogs";
+import { AddAddressDialog, Modal } from "./Dialogs";
 import type { CatalogSearchResult } from "@/lib/items/search";
 import { pickerSearchOutcome } from "@/lib/items/picker-search";
 
@@ -2775,79 +2775,3 @@ function hasNonEmptyPicks(picks: WithholdingSnapshot[] | null): boolean {
   return Array.isArray(picks) && picks.length > 0;
 }
 
-type NewAddressFields = { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string };
-
-/**
- * "+ Add new address" in the delivery picker: saves a DELIVERY address to
- * the customer (same fields + validation as the customer profile) and hands
- * it back so the editor can pick it at once.
- */
-function AddAddressDialog({
-  customerName,
-  onClose,
-  onSaved,
-  action,
-}: {
-  customerName: string;
-  onClose: () => void;
-  onSaved: (a: EditorAddressOption) => void;
-  action: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
-}) {
-  const [fields, setFields] = useState<NewAddressFields>({ label: "", street: "", barangay: "", cityMunicipality: "", province: "", zip: "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const set = (k: keyof NewAddressFields) => (ev: { target: { value: string } }) => setFields((f) => ({ ...f, [k]: ev.target.value }));
-
-  async function submit() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await action(fields);
-      if (res.address) {
-        onSaved(res.address);
-        return;
-      }
-      setErrors(res.fieldErrors ?? {});
-      setMessage(res.message ?? "Could not add the address.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const field = (k: keyof NewAddressFields, label: string, required: boolean, maxLength?: number) => (
-    <div className={`field${errors[k] ? " has-error" : ""}`}>
-      <label htmlFor={`qa-${k}`}>
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      <input id={`qa-${k}`} type="text" value={fields[k]} maxLength={maxLength} onChange={set(k)} />
-      {errors[k] && <div className="error">{errors[k]}</div>}
-    </div>
-  );
-
-  return (
-    <Modal title={`Add delivery address — ${customerName}`} onClose={onClose} labelId="qa-title">
-      <p className="small muted">Saved to the customer as a Delivery address and picked on this quote.</p>
-      {message && (
-        <div className="alert error" role="alert">
-          {message}
-        </div>
-      )}
-      {field("label", "Label (e.g. Warehouse)", false, 100)}
-      {field("street", "Unit / building / street", true, 500)}
-      {field("barangay", "Barangay", true, 120)}
-      {field("cityMunicipality", "City / municipality", true, 120)}
-      {field("province", "Province", true, 120)}
-      {field("zip", "ZIP code", true, 4)}
-      <div className="buttons">
-        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
-          Cancel
-        </button>
-        <button type="button" className="btn" onClick={submit} disabled={busy}>
-          {busy ? "Adding…" : "Add address"}
-        </button>
-      </div>
-    </Modal>
-  );
-}
