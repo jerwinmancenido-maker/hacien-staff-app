@@ -20,22 +20,25 @@ export function WarrantyClaimCreateForm({
   itemDescription,
   serialNumbers,
   reportStatus,
+  reportNumber,
   action,
 }: {
   itemDescription: string;
   serialNumbers: string | null;
   reportStatus: string;
+  /** The receiving report this item came in on — shown so repeat forms for the same line stay distinguishable. */
+  reportNumber: string;
   action: ClaimAction;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const serials = splitSerialNumbers(serialNumbers);
   if (reportStatus === "VOID") {
-    return <p className="small faint">Receiving report is void — claims cannot be filed on it.</p>;
+    return <p className="small faint">Receiving report {reportNumber} is void — claims cannot be filed on it.</p>;
   }
   const e = state.fieldErrors ?? {};
   return (
     <form onSubmit={onSubmit} style={{ marginTop: 8 }}>
-      <div className="small strong">File a warranty claim — {itemDescription.split("\n")[0]}</div>
+      <div className="small strong">File a warranty claim — {itemDescription.split("\n")[0]} · {reportNumber}</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
         {serials.length > 1 ? (
           <select name="serialNumber" aria-label="Serial number" defaultValue="">

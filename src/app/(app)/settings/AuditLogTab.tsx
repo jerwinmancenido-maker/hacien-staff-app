@@ -72,8 +72,6 @@ export async function AuditLogTab({ search }: { search: Search }) {
   return (
     <>
       <div className="card">
-        <h2>Audit log</h2>
-        <p className="small muted">Every change, sign-in and settings save. Records are never deleted.</p>
         <form className="toolbar" action="/settings">
           <input type="hidden" name="tab" value="audit" />
           <select name="entity" defaultValue={search.entity ?? ""} className="filter-chip" aria-label="Record type">

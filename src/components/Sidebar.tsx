@@ -183,6 +183,11 @@ const CRUMB_LABELS: Record<string, string> = {
   edit: "Edit",
 };
 
+/** One path segment → its crumb label. Record ids (cuids) read as "Detail". */
+function crumbLabel(segment: string): string {
+  return CRUMB_LABELS[segment] ?? (/^[a-z0-9]{20,}$/i.test(segment) ? "Detail" : "Record");
+}
+
 /** Tax calendar pages → "Books / Tax calendar"; worksheet pages → "Books / Tax worksheets". */
 export function breadcrumbLabelsForPath(path: string): string[] {
   const parts = path.split("/").filter(Boolean);
@@ -190,10 +195,10 @@ export function breadcrumbLabelsForPath(path: string): string[] {
     return ["Books", "Tax calendar"];
   }
   if (parts[0] === "books" && parts[1] === "tax") {
-    const rest = parts.slice(2).map((p) => CRUMB_LABELS[p] ?? "Record");
+    const rest = parts.slice(2).map(crumbLabel);
     return ["Books", "Tax worksheets", ...rest.filter((l, i) => !(l === "Record" && rest[i - 1] === "Record"))];
   }
-  const labels = parts.length ? parts.map((p) => CRUMB_LABELS[p] ?? "Record") : ["Home"];
+  const labels = parts.length ? parts.map(crumbLabel) : ["Home"];
   return labels.filter((l, i) => !(l === "Record" && labels[i - 1] === "Record"));
 }
 

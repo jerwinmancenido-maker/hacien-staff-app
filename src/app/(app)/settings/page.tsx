@@ -21,6 +21,7 @@ import {
 } from "@/lib/tax/income-tax-method";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
+import { readableDiffValue } from "@/components/DiffView";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
 import { TaxCalendarForm } from "./TaxCalendarForm";
@@ -69,9 +70,9 @@ const SECTION_BY_TAB: Record<string, Section> = {
 };
 
 function show(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
-  if (Array.isArray(v)) return v.join(", ");
-  return String(v);
+  // readableDiffValue renders arrays/objects in plain words — a raw join
+  // printed "[object Object]" for the banks / e-wallets lists.
+  return readableDiffValue(v);
 }
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string; entity?: string; action?: string; user?: string; from?: string; to?: string; page?: string }> }) {
