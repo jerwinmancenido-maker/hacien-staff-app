@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { recordBilling, updateBilling, voidBilling } from "@/lib/services/billings";
+import { deleteBilling } from "@/lib/services/document-delete";
 import { markBookletNumberSpoiled } from "@/lib/services/booklet";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { bookletLowStockWarning } from "@/lib/billing/booklet";
@@ -213,6 +214,61 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
     const view = await getBookletView("SI");
     expect(view.nextFree).toBeGreaterThanOrEqual(view.range.seriesFrom);
     expect(view.nextFree).toBeLessThanOrEqual(view.range.seriesTo);
+  });
+
+  it("a deleted billing's SI number stays used in the booklet view (claim survives the delete)", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const d = new Date(`${year}-06-01T00:00:00.000Z`);
+    const invoiceNo = nextInvoice();
+    const b = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: "100.00",
+        invoiceNo,
+        invoiceDate: d,
+        dueDate: d,
+        notes: null,
+      },
+      admin,
+    );
+    await voidBilling(b.id, "Void before delete", admin);
+    await deleteBilling(b.id, "Delete the void billing", admin);
+    expect(await db.billing.findUnique({ where: { id: b.id } })).toBeNull();
+    // The claim is the permanent record — it survives the delete.
+    expect(
+      await db.bookletSerialClaim.findUnique({ where: { type_number: { type: "SI", number: invoiceNo } } }),
+    ).toBeTruthy();
+
+    const view = await getBookletView("SI");
+    expect(view.slots.find((s) => s.invoiceNo === invoiceNo)?.status).toBe("used");
+    expect(view.nextFree).not.toBe(invoiceNo);
+
+    // The write path agrees with the view: the number stays rejected.
+    await expect(
+      recordBilling(
+        {
+          salesOrderId: so.id,
+          amount: "50.00",
+          invoiceNo,
+          invoiceDate: d,
+          dueDate: d,
+          notes: null,
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/already used \/ marked spoiled/);
+  });
+
+  it("a claim with no live document counts as used in the booklet view", async () => {
+    const invoiceNo = nextInvoice();
+    const before = await getBookletView("SI");
+    expect(before.slots.find((s) => s.invoiceNo === invoiceNo)?.status).toBe("free");
+    await db.bookletSerialClaim.create({ data: { type: "SI", number: invoiceNo } });
+    const view = await getBookletView("SI");
+    expect(view.slots.find((s) => s.invoiceNo === invoiceNo)?.status).toBe("used");
+    expect(view.usedCount).toBe(before.usedCount + 1);
+    expect(view.freeCount).toBe(before.freeCount - 1);
   });
 
   it("refuses out-of-range SI numbers with a plain message", async () => {
