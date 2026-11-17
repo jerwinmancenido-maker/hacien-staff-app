@@ -7,7 +7,8 @@ import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
-import { QUOTE_STATUS_LABELS, QuoteStatusChip } from "@/components/docs/DocParts";
+import { QUOTE_STATUS_LABELS, QuoteStatusChip, QuoteWorkflowApprovalChip } from "@/components/docs/DocParts";
+import { QUOTE_APPROVAL_LABELS, quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 
 type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string };
 
@@ -145,8 +146,21 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                 rev: q.revision,
                 customer: <PrimaryCell name={q.customerName} />,
                 total: <span className="strong">{formatPeso(q.contractPrice)}</span>,
-                margin: q.netMarginPct !== undefined ? `${q.netMarginPct}%` : null,
-                status: <QuoteStatusChip status={q.status} />,
+                margin:
+                  q.netMarginPct !== undefined ? (q.supplierCostState === "none" ? "—" : `${q.netMarginPct}%`) : null,
+                status: (
+                  <>
+                    {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && (
+                      <QuoteStatusChip status={q.status} />
+                    )}
+                    {q.status !== "VOID" && q.approvalStatus !== "PENDING" && (
+                      <QuoteWorkflowApprovalChip
+                        status={q.approvalStatus}
+                        label={QUOTE_APPROVAL_LABELS[q.approvalStatus]}
+                      />
+                    )}
+                  </>
+                ),
                 valid: formatDate(day(q.validUntil)),
               },
               sort: {
@@ -154,7 +168,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                 rev: q.revision,
                 customer: q.customerName,
                 total: Number(q.contractPrice),
-                margin: q.netMarginPct !== undefined ? Number(q.netMarginPct) : null,
+                margin: q.netMarginPct !== undefined && q.supplierCostState !== "none" ? Number(q.netMarginPct) : null,
                 status: q.status,
                 valid: q.validUntil,
               },

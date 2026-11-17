@@ -211,7 +211,10 @@ export function TotalsBox({ totals, showCosts }: { totals: TotalsBoxData; showCo
       {showCosts && totals.supplierCost !== undefined && (
         <>
           <div className="totals-sep" />
-          <Row label="Supplier cost" value={`−${formatPeso(totals.supplierCost)}`} />
+          <Row
+            label="Supplier cost"
+            value={Number(totals.supplierCost) ? `−${formatPeso(totals.supplierCost)}` : formatPeso(0)}
+          />
           <MarginRow totals={totals} />
         </>
       )}

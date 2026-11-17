@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDate, formatPeso } from "@/lib/format";
 import type { RegisterConfig } from "@/lib/books/config";
 import {
-  COLLECTED_TOTAL_LABEL,
+  CASH_COLLECTED_TOTAL_LABEL,
   INVOICED_TOTAL_LABEL,
   SOURCE_LABELS,
   type BookRegister,
@@ -130,7 +130,7 @@ export function BooksRegisterTable({
                 />
                 <TotalRow
                   config={config}
-                  label={COLLECTED_TOTAL_LABEL}
+                  label={CASH_COLLECTED_TOTAL_LABEL}
                   amount={sales.collectedAmount}
                   ewt={sales.collectedEwt}
                 />
