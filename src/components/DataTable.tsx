@@ -94,7 +94,7 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
               }}
             >
               {columns.map((c, i) => (
-                <td key={c.key} className={cellClass(c)}>
+                <td key={c.key} className={cellClass(c)} data-col={c.key}>
                   {i === 0 && row.href ? <a href={row.href} className="row-stretched-link" tabIndex={-1} aria-hidden /> : null}
                   {row.cells[c.key]}
                 </td>

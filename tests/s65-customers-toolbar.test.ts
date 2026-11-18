@@ -4,8 +4,12 @@ import { describe, expect, it } from "vitest";
 import { desktopCss } from "./desktop-css";
 
 // S-65: customers list toolbar — search, filter tabs and buttons were
-// different heights and styles. Now: one row, one height (36px), one
+// different heights and styles. Now: one row, one height, one
 // font size (13px), one border radius, in the shared toolbar styles.
+// Design pass step 4 (2026-11-18): the unified height rose 36px -> 44px
+// so list controls meet the >=44px touch-target term (design term 8);
+// the one-height discipline itself is unchanged. The base .search-pill
+// outside toolbars (e.g. the header quick search) stays 36px.
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -18,15 +22,18 @@ describe("S-65 customers toolbar, one height and one style", () => {
     expect(toolbar).toContain('className={`filter-chip');
   });
 
-  it("toolbar controls share height 36px and font size 13px", () => {
+  it("toolbar controls share height 44px and font size 13px", () => {
     const css = desktopCss(read("src/app/globals.css"));
-    // Search box was already 36px; chips and tabs are brought to match it.
+    // All toolbar controls share the one 44px height; the base
+    // .search-pill outside toolbars stays 36px.
     expect(css).toContain(".search-pill {\n  display: flex;");
     expect(css).toMatch(/\.search-pill \{[^}]*height: 36px;/);
-    expect(css).toMatch(/\.toolbar \.filter-chip \{[^}]*height: 36px;/);
+    expect(css).toMatch(/\.toolbar \.search-pill \{[^}]*height: 44px;/);
+    expect(css).toMatch(/\.toolbar \.btn \{[^}]*height: 44px;/);
+    expect(css).toMatch(/\.toolbar \.filter-chip \{[^}]*height: 44px;/);
     expect(css).toMatch(/\.toolbar \.filter-chip \{[^}]*font-size: 13px;/);
-    expect(css).toMatch(/\.toolbar \.pill-tabs-track \{[^}]*height: 36px;/);
-    expect(css).toMatch(/\.toolbar \.pill-tabs-track\.track-sm \.pill-tab \{[^}]*height: 30px;/);
+    expect(css).toMatch(/\.toolbar \.pill-tabs-track \{[^}]*height: 44px;/);
+    expect(css).toMatch(/\.toolbar \.pill-tabs-track\.track-sm \.pill-tab \{[^}]*height: 36px;/);
     expect(css).toMatch(/\.toolbar \.pill-tabs-track\.track-sm \.pill-tab \{[^}]*min-height: 0;/);
   });
 

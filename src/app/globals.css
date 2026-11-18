@@ -860,30 +860,37 @@ a.tracker-card:hover {
   gap: calc(8px * var(--ui-scale, 1));
   align-items: center;
 }
-/* S-65: every control in a list toolbar is one row, one height (36px),
+/* S-65: every control in a list toolbar is one row, one height,
    one font size (13px) and one border radius. Before this, the search
    box was 36px, filter chips 32px, and the small pill tabs were at least
-   40px tall inside a 46px track, with a 16px bottom margin on the tabs. */
+   40px tall inside a 46px track, with a 16px bottom margin on the tabs.
+   Design pass step 4 (2026-11-18): the unified height rises 36px -> 44px
+   so list controls meet the >=44px touch-target term; the one-row,
+   one-height discipline itself is unchanged. */
 .toolbar .search-pill {
+  height: calc(44px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
 .toolbar .search-pill input {
   font-size: calc(13px * var(--ui-scale, 1));
 }
+.toolbar .btn {
+  height: calc(44px * var(--ui-scale, 1));
+}
 .toolbar .filter-chip {
-  height: calc(36px * var(--ui-scale, 1));
+  height: calc(44px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
 .toolbar .pill-tabs-wrap {
   margin-bottom: 0;
 }
 .toolbar .pill-tabs-track {
-  height: calc(36px * var(--ui-scale, 1));
+  height: calc(44px * var(--ui-scale, 1));
   box-sizing: border-box;
 }
 .toolbar .pill-tabs-track.track-sm .pill-tab {
   min-height: 0;
-  height: calc(30px * var(--ui-scale, 1));
+  height: calc(36px * var(--ui-scale, 1));
   padding: 0 calc(12px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
@@ -1008,6 +1015,66 @@ table.list td {
   padding: calc(8px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1));
   border-top: 1px solid var(--divider);
   vertical-align: middle;
+}
+/* Document numbers (QT/SO/PO/BL/CR...) never wrap mid-number on desktop;
+   the phone card layouts keep their overflow-wrap rules below. */
+@media (min-width: 769px) {
+  table.list td[data-col="number"] {
+    white-space: nowrap;
+  }
+}
+/* Design term 14: list rows reveal with a 30ms stagger. Opacity only —
+   no transform on table rows — and reduced motion renders the final
+   state with no movement. */
+@keyframes list-row-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  table.list tbody tr,
+  .record-list-cards > * {
+    animation: list-row-in 0.18s ease-out both;
+  }
+  table.list tbody tr:nth-child(2),
+  .record-list-cards > *:nth-child(2) {
+    animation-delay: 0.03s;
+  }
+  table.list tbody tr:nth-child(3),
+  .record-list-cards > *:nth-child(3) {
+    animation-delay: 0.06s;
+  }
+  table.list tbody tr:nth-child(4),
+  .record-list-cards > *:nth-child(4) {
+    animation-delay: 0.09s;
+  }
+  table.list tbody tr:nth-child(5),
+  .record-list-cards > *:nth-child(5) {
+    animation-delay: 0.12s;
+  }
+  table.list tbody tr:nth-child(6),
+  .record-list-cards > *:nth-child(6) {
+    animation-delay: 0.15s;
+  }
+  table.list tbody tr:nth-child(7),
+  .record-list-cards > *:nth-child(7) {
+    animation-delay: 0.18s;
+  }
+  table.list tbody tr:nth-child(8),
+  .record-list-cards > *:nth-child(8) {
+    animation-delay: 0.21s;
+  }
+  table.list tbody tr:nth-child(9),
+  .record-list-cards > *:nth-child(9) {
+    animation-delay: 0.24s;
+  }
+  table.list tbody tr:nth-child(10),
+  .record-list-cards > *:nth-child(10) {
+    animation-delay: 0.27s;
+  }
 }
 /* 2307 list ATC on narrow phones — wrap instead of blowing the table. */
 @media (max-width: 480px) {
@@ -2516,6 +2583,9 @@ pre.json {
   margin-right: calc(2px * var(--ui-scale, 1));
 }
 .sort-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(36px * var(--ui-scale, 1));
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text-2);
