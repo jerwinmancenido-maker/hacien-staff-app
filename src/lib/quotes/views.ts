@@ -640,6 +640,8 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     voidReason: so.voidReason,
     businessId: so.businessId,
     business: so.business,
+    gapReasonCode: so.gapReasonCode,
+    gapNote: so.gapNote,
     /** ISO token for the SO editor's stale-edit guard. */
     updatedAt: so.updatedAt.toISOString(),
     customer: so.customer,

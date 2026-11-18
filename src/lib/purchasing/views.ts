@@ -240,6 +240,8 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     supplier: po.supplier,
     businessId: po.businessId,
     business: po.business,
+    gapReasonCode: po.gapReasonCode,
+    gapNote: po.gapNote,
     supplierContact: po.supplierContact,
     salesOrder: po.salesOrder,
     approvedBy: po.approvedBy?.name ?? null,

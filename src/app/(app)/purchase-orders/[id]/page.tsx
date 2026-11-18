@@ -20,11 +20,13 @@ import { PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
+import { GapReasonForm } from "@/components/docs/GapReasonForm";
 import {
   approvePurchaseOrderAction,
   closePurchaseOrderAction,
   emailPurchaseOrderAction,
   markPurchaseOrderSentAction,
+  setPurchaseOrderGapReasonAction,
   uploadPurchaseOrderAttachmentsAction,
   voidBillAction,
   voidPurchaseOrderAction,
@@ -95,6 +97,14 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         <div className="alert warn" role="status">
           <b>Short-closed.</b> {po.closeReason}
         </div>
+      )}
+      {canEdit && po.canSeeCosts && po.status !== "VOID" && (
+        <GapReasonForm
+          kind="PO"
+          currentCode={po.gapReasonCode}
+          currentNote={po.gapNote}
+          action={setPurchaseOrderGapReasonAction.bind(null, po.id)}
+        />
       )}
 
       <PillTabs

@@ -7,6 +7,7 @@ import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/pe
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
 import { reclassifySalesOrderBusiness } from "@/lib/services/businesses";
+import { setSalesOrderGapReason } from "@/lib/services/reconciliation";
 import { deleteSalesOrder } from "@/lib/services/document-delete";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { postCustomerReturn, voidCustomerReturn } from "@/lib/services/customer-returns";
@@ -217,5 +218,21 @@ export async function reclassifySalesOrderBusinessAction(id: string, _prev: Form
     revalidatePath(`/sales-orders/${id}`);
     revalidatePath("/sales-orders");
     return { ok: true, message: "Business updated. The order's POs and linked expenses moved with it." };
+  });
+}
+
+/** Reconciliation note (PR-C, 2026-11-19): why this order has no billing yet. */
+export async function setSalesOrderGapReasonAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    await setSalesOrderGapReason(
+      id,
+      { code: str(form, "gapReasonCode") || null, note: str(form, "gapNote") || null },
+      user,
+    );
+    revalidatePath(`/sales-orders/${id}`);
+    revalidatePath("/books/reconciliation");
+    return { ok: true, message: "Reconciliation note saved." };
   });
 }
