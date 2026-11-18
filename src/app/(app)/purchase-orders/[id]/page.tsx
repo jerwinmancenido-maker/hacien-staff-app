@@ -57,6 +57,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         title={
           <>
             {po.number}
+            {po.business && <Chip tone="dark">{po.business.shortLabel}</Chip>}
             {po.revision > 1 && <span className="muted small"> rev. {po.revision}</span>}
             <PoStatusChip status={po.status} />
           </>

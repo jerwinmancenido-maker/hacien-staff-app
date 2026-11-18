@@ -75,6 +75,9 @@ export const expenseInputSchema = z
     // undefined -> null, and parseExpenseForm always supplies "" -> null.
     salesOrderId: optionalOrderId.optional(),
     purchaseOrderId: optionalOrderId.optional(),
+    // Business entity: omitted → inherit the linked order's tag (or own
+    // company when unlinked). parseExpenseForm supplies "" -> null.
+    businessId: optionalOrderId.optional(),
     payeeText: z
       .string()
       .trim()
@@ -170,6 +173,7 @@ export function parseExpenseForm(
     notes: String(form.get("notes") ?? ""),
     salesOrderId: String(form.get("salesOrderId") ?? ""),
     purchaseOrderId: String(form.get("purchaseOrderId") ?? ""),
+    businessId: String(form.get("businessId") ?? ""),
   };
   const parsed = expenseInputSchema.safeParse(values);
   if (!parsed.success) {

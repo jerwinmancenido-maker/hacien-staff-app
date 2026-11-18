@@ -6,6 +6,7 @@ import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user
 import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
+import { reclassifySalesOrderBusiness } from "@/lib/services/businesses";
 import { deleteSalesOrder } from "@/lib/services/document-delete";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { postCustomerReturn, voidCustomerReturn } from "@/lib/services/customer-returns";
@@ -203,5 +204,18 @@ export async function voidCustomerReturnAction(salesOrderId: string, id: string,
     revalidatePath("/sales-orders");
     revalidatePath(`/sales-orders/${salesOrderId}`);
     return { ok: true, message: "Return voided." };
+  });
+}
+
+/** Business entity (2026-11-19): Admin reclassify of an order's business. */
+export async function reclassifySalesOrderBusinessAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    const raw = str(form, "businessId");
+    await reclassifySalesOrderBusiness(id, raw ? raw : null, user);
+    revalidatePath(`/sales-orders/${id}`);
+    revalidatePath("/sales-orders");
+    return { ok: true, message: "Business updated. The order's POs and linked expenses moved with it." };
   });
 }

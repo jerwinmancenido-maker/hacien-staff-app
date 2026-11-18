@@ -4,6 +4,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { writeAudit } from "../audit";
+import { resolveBusinessForWrite } from "./businesses";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
@@ -127,26 +128,35 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
         // is the rule, the picker is convenience.
         const salesOrderId = input.salesOrderId ?? null;
         const purchaseOrderId = input.purchaseOrderId ?? null;
-        let linkedSo: { id: string; number: string } | null = null;
-        let linkedPo: { id: string; number: string; salesOrderId: string | null } | null = null;
+        let linkedSo: { id: string; number: string; businessId: string | null } | null = null;
+        let linkedPo: { id: string; number: string; salesOrderId: string | null; businessId: string | null } | null = null;
         if (salesOrderId) {
           const so = await tx.salesOrder.findUnique({
             where: { id: salesOrderId },
-            select: { id: true, number: true, status: true },
+            select: { id: true, number: true, status: true, businessId: true },
           });
           if (!so) throw new DocRuleError("That sales order was not found. Pick another or leave it unlinked.", "salesOrderId");
           if (so.status === "VOID") throw new DocRuleError("That sales order is void — pick another or leave it unlinked.", "salesOrderId");
-          linkedSo = { id: so.id, number: so.number };
+          linkedSo = { id: so.id, number: so.number, businessId: so.businessId };
         }
         if (purchaseOrderId) {
           const po = await tx.purchaseOrder.findUnique({
             where: { id: purchaseOrderId },
-            select: { id: true, number: true, status: true, salesOrderId: true },
+            select: { id: true, number: true, status: true, salesOrderId: true, businessId: true },
           });
           if (!po) throw new DocRuleError("That purchase order was not found. Pick another or leave it unlinked.", "purchaseOrderId");
           if (po.status === "VOID") throw new DocRuleError("That purchase order is void — pick another or leave it unlinked.", "purchaseOrderId");
-          linkedPo = { id: po.id, number: po.number, salesOrderId: po.salesOrderId };
+          linkedPo = { id: po.id, number: po.number, salesOrderId: po.salesOrderId, businessId: po.businessId };
         }
+        // Business entity: a LINKED expense always follows its order's tag
+        // (the pick is ignored); an UNLINKED expense takes the explicit pick
+        // (validated) or the own company (NULL).
+        const businessId =
+          linkedPo || linkedSo
+            ? (linkedPo?.businessId ?? linkedSo?.businessId ?? null)
+            : input.businessId
+              ? await resolveBusinessForWrite(tx, input.businessId, actor)
+              : null;
         if (linkedSo && linkedPo && linkedPo.salesOrderId && linkedPo.salesOrderId !== linkedSo.id) {
           throw new DocRuleError("That PO belongs to a different sales order.", "purchaseOrderId");
         }
@@ -166,6 +176,7 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
             notes: input.notes,
             salesOrderId,
             purchaseOrderId,
+            businessId,
             createdById: actor.id,
           },
         });

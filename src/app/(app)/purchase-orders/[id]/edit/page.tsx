@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/ui";
 import { PoEditor } from "@/components/purchasing/PoEditor";
 import { poEditorSuppliers } from "../../editor-data";
 import { savePurchaseOrderAction } from "../../actions";
+import { listBusinesses } from "@/lib/services/businesses";
+import { can } from "@/lib/permissions";
 
 export default async function EditPurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireCostPage("edit_data");
@@ -14,7 +16,15 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
   const po = await getPurchaseOrderEditData(id, user);
   if (!po) notFound();
   if (po.status !== "DRAFT" && po.status !== "APPROVED") redirect(`/purchase-orders/${id}`);
-  const [suppliers, snap] = await Promise.all([poEditorSuppliers(po.supplierId), getSettingsSnapshot()]);
+  const [suppliers, snap, businesses, allBusinesses] = await Promise.all([
+    poEditorSuppliers(po.supplierId),
+    getSettingsSnapshot(),
+    listBusinesses({ activeOnly: true }),
+    listBusinesses(),
+  ]);
+  const lockedLabel = po.salesOrderId
+    ? (allBusinesses.find((b) => b.id === po.businessId)?.name ?? snap.settings.company.name)
+    : null;
   return (
     <>
       <PageHeader title={`Edit ${po.number}`} />
@@ -24,6 +34,10 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
         suppliers={suppliers}
         termsOptions={snap.settings.lists.paymentTerms}
         contactRoles={snap.settings.lists.contactRoles}
+        businesses={businesses}
+        ownCompanyName={snap.settings.company.name}
+        canTagBusiness={can(user, "approve")}
+        businessLockedLabel={lockedLabel}
         initial={po}
         soPicker={po.soPicker}
         action={savePurchaseOrderAction.bind(null, id)}

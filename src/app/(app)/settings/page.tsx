@@ -29,7 +29,9 @@ import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { uploadMaxMb } from "@/lib/business-docs/sniff";
-import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
+import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction } from "./actions";
+import { BusinessesForm } from "./BusinessesForm";
+import { listBusinesses } from "@/lib/services/businesses";
 import { AuditLogTab } from "./AuditLogTab";
 import { ApiKeysTab, type ApiKeyRow } from "./ApiKeysTab";
 import { listApiKeys } from "@/lib/api/keys-admin";
@@ -44,6 +46,7 @@ const SECTIONS = [
   { key: "quote-terms", label: "Quote terms", help: "Approval limits, quote validity, and the payment terms offered on quotes." },
   { key: "tax", label: "Tax and BIR", help: "Tax year, BIR calendar, and withholding rates. Check with your accountant when unsure." },
   { key: "booklet", label: "Invoice booklet", help: "Booklet invoice numbers and how collections are recorded." },
+  { key: "businesses", label: "Businesses", help: "Other businesses whose transactions you record in this app. Their orders stay out of this company's sales, Books and tax." },
   { key: "users", label: "Users and roles", help: "Who can sign in, and what each person may do." },
   { key: "api-keys", label: "API keys", help: "Keys for other software using /api/v1. Every key acts as the API / Bot user; the full key is shown once, at creation." },
   { key: "audit", label: "Audit log", help: "Every change, sign-in and settings save, plus past settings versions. Records are never deleted." },
@@ -63,6 +66,7 @@ const SECTION_BY_TAB: Record<string, Section> = {
   withholding: "tax",
   booklet: "booklet",
   billing: "booklet",
+  businesses: "businesses",
   users: "users",
   "api-keys": "api-keys",
   audit: "audit",
@@ -82,6 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const section: Section = SECTION_BY_TAB[raw ?? ""] ?? "company";
   const snap = await getSettingsSnapshot();
   const s = snap.settings;
+  const businesses = section === "businesses" ? await listBusinesses() : [];
   const save = (key: string) => saveSettingsAction.bind(null, key);
 
   return (
@@ -396,6 +401,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 suffix: "days before expiry",
               },
             ]}
+          />
+        )}
+
+        {section === "businesses" && (
+          <BusinessesForm
+            ownCompanyName={s.company.name}
+            businesses={businesses}
+            saveAction={saveBusinessAction}
+            toggleAction={setBusinessActiveAction}
           />
         )}
 

@@ -11,6 +11,7 @@ import { saveSettings } from "@/lib/settings";
 import { settingsValueFromForm } from "@/lib/settings/form";
 import { isSettingsKey } from "@/lib/settings/schema";
 import { saveWithholdingRates } from "@/lib/services/withholding";
+import { saveBusiness, setBusinessActive } from "@/lib/services/businesses";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
 import { createApiKey, revokeApiKey } from "@/lib/api/keys-admin";
 import { ApiError } from "@/lib/api/errors";
@@ -256,4 +257,32 @@ export async function revokeApiKeyAction(id: string): Promise<FormState> {
     revalidatePath("/settings");
     return { ok: true, message: "API key revoked. It stops working immediately." };
   });
+}
+
+/** Businesses catalogue (Reconciliation Plan 2026-11-19): add / rename. */
+export async function saveBusinessAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    const id = str(form, "id");
+    const row = await saveBusiness(
+      { id: id || undefined, name: str(form, "name"), shortLabel: str(form, "shortLabel") },
+      user,
+    );
+    revalidatePath("/settings", "page");
+    return { ok: true, message: id ? `Saved ${row.name}.` : `Added ${row.name}. It can now be picked on new quotes.` };
+  }, values);
+}
+
+/** Businesses catalogue: switch off / on (never a delete). */
+export async function setBusinessActiveAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    const id = str(form, "id");
+    const active = bool(form, "active");
+    await setBusinessActive(id, active, user);
+    revalidatePath("/settings", "page");
+    return { ok: true, message: active ? "Switched on." : "Switched off. Existing records keep the label." };
+  }, values);
 }

@@ -7,6 +7,7 @@
 import type { Prisma, PurchaseOrder, PurchaseOrderItem } from "@prisma/client";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { resolveBusinessForWrite } from "./businesses";
 import { manilaToday } from "../format";
 import { assertCan, assertCanMaintainPurchaseOrder, assertCanVoid, canSeeCosts, ForbiddenError, type Permission, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
@@ -456,6 +457,7 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
           const po = await tx.purchaseOrder.create({
             data: {
               number,
+              businessId: so.businessId,
               supplierId: supplier.id,
               supplierContactId: supplier.contacts.find((c) => c.isMain)?.id ?? null,
               salesOrderId: so.id,
@@ -519,6 +521,7 @@ export async function createStandalonePurchaseOrder(input: PoInput, actor: PoAct
   assertCanMaintainPurchaseOrder(actor);
   assertPoAccess(actor);
   const supplier = await checkSupplier(input.supplierId, input.supplierContactId);
+  const businessId = await resolveBusinessForWrite(db, input.businessId, actor);
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.supplierPo;
   const year = input.date.getUTCFullYear();
@@ -530,6 +533,7 @@ export async function createStandalonePurchaseOrder(input: PoInput, actor: PoAct
       const po = await tx.purchaseOrder.create({
         data: {
           number,
+          businessId,
           supplierId: supplier.id,
           supplierContactId: input.supplierContactId,
           salesOrderId: null,
@@ -565,6 +569,12 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
   if (!current) throw new DocRuleError("Purchase order not found.");
   if (input.supplierId !== current.supplierId) throw new DocRuleError("The supplier of a PO can't be changed. Void it and create a new one.", "supplierId");
   await checkSupplier(input.supplierId, input.supplierContactId, { allowInactiveId: current.supplierId });
+  // Business entity: an SO-born PO always follows its SO (the editor sends
+  // no say in it); a standalone PO's tag can move under the usual rule.
+  const businessData: { businessId?: string | null } = {};
+  if (!current.salesOrderId && input.businessId !== undefined && input.businessId !== current.businessId) {
+    businessData.businessId = await resolveBusinessForWrite(db, input.businessId, actor);
+  }
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
@@ -712,6 +722,7 @@ export async function updatePurchaseOrder(id: string, input: PoInput, actor: PoA
           deliveryAddressText: input.deliveryAddressText,
           supplierAddressText: input.supplierAddressText,
           notes: input.notes,
+          ...businessData,
           subtotal: subtotalOf(input.items),
           status: next.status,
           ...(next.clearsApproval ? { approvedById: null, approvedAt: null, revision: before.revision + 1 } : {}),

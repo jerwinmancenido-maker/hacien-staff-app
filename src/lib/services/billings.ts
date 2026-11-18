@@ -26,8 +26,8 @@ function assertManageBilling(actor: BillingActor) {
 
 async function lockSalesOrder(tx: Tx, id: string) {
   const rows = await tx.$queryRaw<
-    { id: string; number: string; status: string; customerId: string; contractPrice: unknown; withholdingTotal: unknown; terms: string | null; withholding: unknown }[]
-  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\`, \`withholding\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
+    { id: string; number: string; status: string; customerId: string; businessId: string | null; contractPrice: unknown; withholdingTotal: unknown; terms: string | null; withholding: unknown }[]
+  >`SELECT \`id\`, \`number\`, \`status\`, \`customerId\`, \`businessId\`, \`contractPrice\`, \`withholdingTotal\`, \`terms\`, \`withholding\` FROM \`SalesOrder\` WHERE \`id\` = ${id} FOR UPDATE`;
   if (!rows[0]) throw new DocRuleError("Sales order not found.");
   const rawWh = rows[0].withholding;
   const withholding = typeof rawWh === "string" ? (() => { try { return JSON.parse(rawWh); } catch { return rawWh; } })() : rawWh;
@@ -135,6 +135,16 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
       db.$transaction(async (tx) => {
         const so = await lockSalesOrder(tx, input.salesOrderId);
         if (so.status !== "OPEN") throw new DocRuleError("Only open sales orders can be billed.");
+        // Business entity: an order that belongs to another business is
+        // never billed from this app's booklet — that business issues its
+        // own invoice. (Reconciliation Plan 2026-11-19.)
+        if (so.businessId) {
+          const biz = await tx.business.findUnique({ where: { id: so.businessId }, select: { name: true } });
+          const name = biz?.name ?? "another business";
+          throw new DocRuleError(
+            `This order belongs to ${name}. Its billing is issued by ${name}, not from this app's booklet.`,
+          );
+        }
         await assertPeriodOpen(tx, input.invoiceDate);
 
         const existing = await nonVoidBillings(tx, so.id);

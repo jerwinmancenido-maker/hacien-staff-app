@@ -17,6 +17,8 @@ export function ExpenseForm({
   suppliers,
   salesOrders = [],
   purchaseOrders = [],
+  businesses = [],
+  ownCompanyName = "HACIEN",
   canEdit,
   maxMb,
 }: {
@@ -39,6 +41,9 @@ export function ExpenseForm({
   suppliers: { id: string; name: string }[];
   salesOrders?: { id: string; label: string }[];
   purchaseOrders?: { id: string; label: string }[];
+  /** Business entity (2026-11-19): for UNLINKED expenses; linked ones follow their order. */
+  businesses?: { id: string; name: string }[];
+  ownCompanyName?: string;
   canEdit: boolean;
   maxMb: number;
 }) {
@@ -193,6 +198,21 @@ export function ExpenseForm({
           </select>
           {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
         </div>
+        {businesses.length > 0 && (
+          <div className={`field${e.businessId ? " has-error" : ""}`}>
+            <label htmlFor="businessId">Business (unlinked expenses only)</label>
+            <select id="businessId" name="businessId" defaultValue={state.values?.businessId ?? ""}>
+              <option value="">{ownCompanyName} (own company)</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <div className="hint">A linked expense always follows its order&apos;s business — this pick applies only when no order is linked.</div>
+            {e.businessId && <div className="error">{e.businessId}</div>}
+          </div>
+        )}
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>
           <label htmlFor="receiptNo">OR / receipt no.</label>
           <input id="receiptNo" name="receiptNo" defaultValue={state.values?.receiptNo ?? defaults.receiptNo} />

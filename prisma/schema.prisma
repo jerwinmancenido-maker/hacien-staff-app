@@ -779,6 +779,11 @@ model Quote {
   // Rev 1 quote here, so the quote page can link every revision in the
   // chain — and still name a revision number whose quote was deleted.
   revisionChainId   String?
+  // Business entity (Reconciliation Plan 2026-11-19): NULL = the app's own
+  // company (HACIEN). Non-null = the transaction belongs to that Business
+  // (Settings catalogue) and stays out of HACIEN's sales/Books/tax.
+  businessId        String?
+  business          Business?   @relation(fields: [businessId], references: [id])
   customerId        String
   customer          Customer    @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -864,6 +869,7 @@ model Quote {
   salesOrders SalesOrder[]
 
   @@index([customerId])
+  @@index([businessId])
   @@index([status])
   @@index([approvalStatus])
   @@index([date])
@@ -974,6 +980,9 @@ model SalesOrder {
   trackingRef       String?          @unique @db.VarChar(24)
   quoteId           String
   quote             Quote            @relation(fields: [quoteId], references: [id])
+  // Business entity, copied from the quote at conversion. NULL = HACIEN.
+  businessId        String?
+  business          Business?        @relation(fields: [businessId], references: [id])
   customerId        String
   customer          Customer         @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -1020,6 +1029,7 @@ model SalesOrder {
   expenses       Expense[]
 
   @@index([quoteId])
+  @@index([businessId])
   @@index([customerId])
   @@index([status])
   @@index([date])
@@ -1185,6 +1195,10 @@ model PurchaseOrder {
   supplier            Supplier            @relation(fields: [supplierId], references: [id])
   supplierContactId   String?
   supplierContact     Contact?            @relation(fields: [supplierContactId], references: [id])
+  // Business entity: copied from the SO for SO-born POs; picked directly
+  // on standalone POs. NULL = HACIEN.
+  businessId          String?
+  business            Business?           @relation(fields: [businessId], references: [id])
   // Null = standalone PO.
   salesOrderId        String?
   salesOrder          SalesOrder?         @relation(fields: [salesOrderId], references: [id])
@@ -1225,6 +1239,7 @@ model PurchaseOrder {
   expenses         Expense[]
 
   @@index([supplierId])
+  @@index([businessId])
   @@index([salesOrderId])
   @@index([status])
   @@index([date])
@@ -2041,6 +2056,29 @@ model ExpenseCategory {
   expenses Expense[]
 }
 
+// Business-entity catalogue (Reconciliation Plan, 2026-11-19): other
+// businesses whose transactions Jerwin records in this app for operations.
+// Managed in Settings → Businesses; NEVER hard-deleted (deactivate only).
+// The app's own company (HACIEN) is NOT a row here — it is the implicit
+// default, represented by a NULL businessId on documents.
+model Business {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(160)
+  shortLabel String  @db.VarChar(24)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes       Quote[]
+  salesOrders  SalesOrder[]
+  purchaseOrders PurchaseOrder[]
+  expenses     Expense[]
+
+  @@index([active])
+  @@index([name])
+}
+
 // Internal EXP-YYYY-####. Hand-recorded company expense (no VAT input tax).
 // Optional withholdingApplied mirrors Part 6 EWT (cash out of the account is
 // still `amount` only — withholding is not cash leaving the account).
@@ -2069,6 +2107,10 @@ model Expense {
   salesOrder         SalesOrder?    @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
   purchaseOrderId    String?
   purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  // Business entity: inherited from the linked SO/PO when set there;
+  // picked directly on unlinked expenses. NULL = HACIEN.
+  businessId         String?
+  business           Business?      @relation(fields: [businessId], references: [id])
   status             ExpenseStatus  @default(POSTED)
   voidedAt           DateTime?
   voidReason         String?        @db.Text
@@ -2086,6 +2128,7 @@ model Expense {
   @@index([supplierId])
   @@index([salesOrderId])
   @@index([purchaseOrderId])
+  @@index([businessId])
 }
 
 // Internal TRF-YYYY-####. Move money between cash accounts (e.g. cash deposit).

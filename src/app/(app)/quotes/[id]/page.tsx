@@ -68,6 +68,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
         title={
           <>
             {q.number}
+            {q.business && <Chip tone="dark">{q.business.shortLabel}</Chip>}
             <Chip>Rev {q.revision}</Chip>
             {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && <QuoteStatusChip status={q.status} />}
             {q.status !== "VOID" && (

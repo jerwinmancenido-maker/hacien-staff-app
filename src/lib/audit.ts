@@ -16,6 +16,7 @@ export type AuditEntityType =
   | "Quote"
   | "SalesOrder"
   | "Address"
+  | "Business"
   | "BusinessDocument"
   | "PurchaseOrder"
   | "ReceivingReport"
