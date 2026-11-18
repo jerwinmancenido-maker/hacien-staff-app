@@ -50,6 +50,14 @@ export function UserForm({ user, action }: { user: User | null; action: (s: Form
           ) : null}
           <FileInput id="signature" name="signature" accept="image/png,image/jpeg,image/webp" />
           <div className="hint">PNG, JPG or WEBP. Used on printed quotes under Prepared by. Uploading a new one replaces the old.</div>
+          {user?.signatureStorageKey ? (
+            <label className="check" style={{ marginTop: 8 }}>
+              <input type="checkbox" name="removeSignature" value="1" />
+              <span>
+                <b>Remove the saved signature</b> <span className="muted small">— takes effect when you save</span>
+              </span>
+            </label>
+          ) : null}
           {e.signature && <div className="error">{e.signature}</div>}
         </div>
         <div className={`field full${e.roles ? " has-error" : ""}`}>

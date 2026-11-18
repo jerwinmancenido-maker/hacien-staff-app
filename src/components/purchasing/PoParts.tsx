@@ -36,7 +36,7 @@ export function ProgressChip({ state }: { state: ProgressState }) {
   return <Chip tone={PROGRESS_TONES[state]}>{PROGRESS_LABELS[state]}</Chip>;
 }
 
-const MATCH_TONES: Record<LineStatus, ChipTone> = { MATCHED: "green", QTY_MISMATCH: "red", PRICE_MISMATCH: "red" };
+const MATCH_TONES: Record<LineStatus, ChipTone> = { MATCHED: "green", QTY_MISMATCH: "red", PRICE_MISMATCH: "red", NOT_BILLED: "grey" };
 
 export function MatchChip({ status }: { status: LineStatus }) {
   return <Chip tone={MATCH_TONES[status]}>{LINE_STATUS_LABELS[status]}</Chip>;

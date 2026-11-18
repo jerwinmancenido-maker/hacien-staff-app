@@ -221,6 +221,14 @@ describe("3-way match", () => {
     expect(m.receivedTotal).toBe("452500.00");
   });
 
+  it("F11: with no live bills, lines read Not billed — never Matched at ₱0 billed", () => {
+    const m = threeWayMatch(po, []);
+    expect(m.status).toBe("NOT_BILLED");
+    expect(m.lines.map((l) => l.status)).toEqual(["NOT_BILLED", "NOT_BILLED"]);
+    expect(m.lines.map((l) => l.billedAmount)).toEqual(["0.00", "0.00"]);
+    expect(m.billedTotal).toBe("0.00");
+  });
+
   it("flags a unit price difference with the amount", () => {
     const m = threeWayMatch(po, [{ id: "1", billNumber: "SI-1", amount: "455000.00", items: [{ purchaseOrderItemId: "a", qty: "10", unitPrice: "45250" }, { purchaseOrderItemId: "b", qty: "5", unitPrice: "500" }] }]);
     const a = m.lines[0]!;
@@ -325,7 +333,8 @@ describe("3-way match", () => {
     for (const l of m.lines) {
       expect(l.flags).toEqual([]);
       expect(l.issues).toEqual([]);
-      expect(l.status).toBe("MATCHED");
+      // F11: no live bills → the line is Not billed, never "Matched" at ₱0.
+      expect(l.status).toBe("NOT_BILLED");
     }
     // Received < ordered is still shown; it is not a bill flag.
     const partial = threeWayMatch([{ ...po[0]!, receivedQty: "6.00" }], []);

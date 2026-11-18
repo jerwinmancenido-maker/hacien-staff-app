@@ -10,6 +10,7 @@ import {
   homeOwedSplit,
   homeSumAmounts,
   homeTodayPlusDaysYmd,
+  incomeTaxStatusLabel,
 } from "@/lib/home/dashboard";
 import { customersNoWithholdingHref } from "@/lib/home/hrefs";
 import { collectedWholePesos, hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
@@ -288,5 +289,37 @@ describe("home concept A staff / empty wiring", () => {
     expect(page).not.toMatch(/HomeNonVat/);
     // Needs action always renders (short empty line when all counts are 0).
     expect(page).not.toMatch(/hasMid/);
+  });
+});
+
+describe("incomeTaxStatusLabel (F8 — Home card middle state)", () => {
+  it("a staff note-done occurrence reads as the middle state, not 'Not filed yet'", () => {
+    expect(
+      incomeTaxStatusLabel({ isFiled: false, filedDateFormatted: null, referenceNo: null, markedDone: true }),
+    ).toBe("Marked done — no filing reference recorded");
+  });
+
+  it("an untouched occurrence still reads 'Not filed yet'", () => {
+    expect(
+      incomeTaxStatusLabel({ isFiled: false, filedDateFormatted: null, referenceNo: null, markedDone: false }),
+    ).toBe("Not filed yet");
+  });
+
+  it("a filed occurrence keeps its filed labels", () => {
+    expect(
+      incomeTaxStatusLabel({ isFiled: true, filedDateFormatted: "May 15, 2026", referenceNo: "REF-1", markedDone: true }),
+    ).toBe("Filed May 15, 2026, ref REF-1");
+    expect(
+      incomeTaxStatusLabel({ isFiled: true, filedDateFormatted: "May 15, 2026", referenceNo: null, markedDone: false }),
+    ).toBe("Filed May 15, 2026");
+    expect(
+      incomeTaxStatusLabel({ isFiled: true, filedDateFormatted: null, referenceNo: null, markedDone: false }),
+    ).toBe("Filed");
+  });
+
+  it("the calendar note Undo asks for confirmation first (F8 rider)", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/components/books/TaxCalendarMarkDoneForm.tsx"), "utf8");
+    expect(src).toContain("Undo this note?");
+    expect(src).toContain("Yes, undo");
   });
 });
