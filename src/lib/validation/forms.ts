@@ -6,6 +6,8 @@ export type FieldErrors = Record<string, string>;
 export type FormState = {
   ok?: boolean;
   message?: string;
+  /** Soft warning: nothing was saved; the form shows it with a confirm-to-proceed path. */
+  warning?: string;
   fieldErrors?: FieldErrors;
   /** Echo of what the user typed, so the form keeps it after an error. */
   values?: Record<string, string>;

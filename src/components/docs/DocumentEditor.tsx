@@ -155,7 +155,7 @@ export type EditorInitial = {
   internalNotes?: string;
   /** Quote subject / project line. */
   subject?: string;
-  /** Sales order only: ISO `updatedAt` loaded with the order (stale-edit guard). */
+  /** ISO `updatedAt` loaded with the document (stale-edit guard; SO + quote editors). */
   updatedAt?: string;
   /** Loaded rows carry no editor keys; components likewise (the quote
    * editor assigns both when mapping its initial state). */
