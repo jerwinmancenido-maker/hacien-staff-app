@@ -352,7 +352,7 @@ describe("2551Q default on 8% and calendar visibility", () => {
     expect(rows.some((r) => r.obligationKey === "2551q")).toBe(false);
   });
 
-  it("F9: the 2551Q Show toggle is authoritative — OFF hides rows even for a graduated year with showNotApplicable on", () => {
+  it("F9 DOWNGRADED — by design: a graduated year shows 2551Q rows even with its toggle off (the obligation follows the income-tax method, not the toggle)", () => {
     const settings = defaultTaxCalendarSettings();
     settings.obligations["2551q"].enabled = false;
     const rows = buildTaxCalendarRows({
@@ -370,10 +370,10 @@ describe("2551Q default on 8% and calendar visibility", () => {
       view: "all",
     });
 
-    expect(rows.some((r) => r.obligationKey === "2551q")).toBe(false);
+    expect(rows.some((r) => r.obligationKey === "2551q")).toBe(true);
   });
 
-  it("F9: with the toggle ON, a graduated year shows 2551Q rows again", () => {
+  it("with the toggle ON, a graduated year shows 2551Q rows", () => {
     const settings = defaultTaxCalendarSettings();
     settings.obligations["2551q"].enabled = true;
     const rows = buildTaxCalendarRows({
