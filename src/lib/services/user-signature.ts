@@ -11,6 +11,18 @@ import { sniffLogoMime } from "../print/logo-sniff";
 
 export class SignatureError extends Error {}
 
+/** F12: remove a saved signature (the form had no way to clear one). */
+export async function clearUserSignature(userId: string, actorId: string): Promise<void> {
+  const before = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { signatureStorageKey: true } });
+  if (!before.signatureStorageKey) return;
+  await db.user.update({
+    where: { id: userId },
+    data: { signatureStorageKey: null, signatureMimeType: null, signatureFileName: null },
+  });
+  await writeAudit(db, { userId: actorId, entityType: "User", entityId: userId, action: "update", after: { signatureFileName: null } });
+  await discardUnreferencedFile(before.signatureStorageKey);
+}
+
 export async function saveUserSignature(
   userId: string,
   file: { name: string; size: number; bytes: Uint8Array },

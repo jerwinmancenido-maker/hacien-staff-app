@@ -351,6 +351,48 @@ describe("2551Q default on 8% and calendar visibility", () => {
 
     expect(rows.some((r) => r.obligationKey === "2551q")).toBe(false);
   });
+
+  it("F9: the 2551Q Show toggle is authoritative — OFF hides rows even for a graduated year with showNotApplicable on", () => {
+    const settings = defaultTaxCalendarSettings();
+    settings.obligations["2551q"].enabled = false;
+    const rows = buildTaxCalendarRows({
+      settings,
+      holidays: PH_HOLIDAYS_2026,
+      now: new Date("2026-10-30T08:00:00.000Z"),
+      fromYear: 2026,
+      toYear: 2026,
+      incomeTax: {
+        year: 2026,
+        incomeTaxMethod: "GRADUATED",
+        incomeTaxMethodsByYear: { "2026": "GRADUATED" },
+      },
+      showNotApplicable: true,
+      view: "all",
+    });
+
+    expect(rows.some((r) => r.obligationKey === "2551q")).toBe(false);
+  });
+
+  it("F9: with the toggle ON, a graduated year shows 2551Q rows again", () => {
+    const settings = defaultTaxCalendarSettings();
+    settings.obligations["2551q"].enabled = true;
+    const rows = buildTaxCalendarRows({
+      settings,
+      holidays: PH_HOLIDAYS_2026,
+      now: new Date("2026-10-30T08:00:00.000Z"),
+      fromYear: 2026,
+      toYear: 2026,
+      incomeTax: {
+        year: 2026,
+        incomeTaxMethod: "GRADUATED",
+        incomeTaxMethodsByYear: { "2026": "GRADUATED" },
+      },
+      showNotApplicable: true,
+      view: "all",
+    });
+
+    expect(rows.some((r) => r.obligationKey === "2551q")).toBe(true);
+  });
 });
 
 describe("Admin-only permissions for marking and undoing filings", () => {

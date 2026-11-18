@@ -315,16 +315,11 @@ export function buildTaxCalendarRows(input: BuildCalendarInput): TaxCalendarRow[
   const rows: TaxCalendarRow[] = [];
 
   for (const def of TAX_CALENDAR_OBLIGATIONS) {
-    if (def.key === "2551q") {
-      const hasGraduatedYear = Array.from(
-        { length: toYear - fromYear + 1 },
-        (_, idx) => fromYear + idx,
-      ).some((y) => isGraduated(incomeTaxMethodForYear(incomeTax, y)));
-      const enabled = isEnabled(input.settings, def.key) || hasGraduatedYear || input.showNotApplicable;
-      if (!enabled) continue;
-    } else {
-      if (!isEnabled(input.settings, def.key)) continue;
-    }
+    // F9: the obligation's Show toggle is authoritative for every key,
+    // 2551Q included — no graduated-year / show-not-applicable override.
+    // (2551Q applicability under the 8% method is still resolved per row
+    // by resolveApplicability, exactly like 2550Q for a non-VAT company.)
+    if (!isEnabled(input.settings, def.key)) continue;
 
     const occurrences = generateOccurrences(def.key, fromYear, toYear, {
       override: overrideFor(input.settings, def.key),

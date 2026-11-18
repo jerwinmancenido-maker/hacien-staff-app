@@ -10,11 +10,11 @@ export type MatchBillLine = { purchaseOrderItemId: string; qty: string; unitPric
 export type MatchBill = { id: string; billNumber: string; amount: string; items: MatchBillLine[] };
 
 export type LineFlag = "BILLED_MORE_THAN_RECEIVED" | "BILLED_LESS_THAN_RECEIVED" | "RECEIVED_LESS_THAN_ORDERED" | "PRICE_DIFFERS";
-export type LineStatus = "MATCHED" | "QTY_MISMATCH" | "PRICE_MISMATCH";
-export type LineIssue = Exclude<LineStatus, "MATCHED">;
+export type LineStatus = "MATCHED" | "QTY_MISMATCH" | "PRICE_MISMATCH" | "NOT_BILLED";
+export type LineIssue = Exclude<LineStatus, "MATCHED" | "NOT_BILLED">;
 export type HeaderFlag = { code: "BILL_LINES_DIFFER" | "BILLED_DIFFERS_FROM_RECEIVED"; message: string; amount: string };
 
-export const LINE_STATUS_LABELS: Record<LineStatus, string> = { MATCHED: "Matched", QTY_MISMATCH: "Qty mismatch", PRICE_MISMATCH: "Price mismatch" };
+export const LINE_STATUS_LABELS: Record<LineStatus, string> = { MATCHED: "Matched", QTY_MISMATCH: "Qty mismatch", PRICE_MISMATCH: "Price mismatch", NOT_BILLED: "Not billed" };
 export const LINE_FLAG_LABELS: Record<LineFlag, string> = {
   BILLED_MORE_THAN_RECEIVED: "Billed more than received",
   BILLED_LESS_THAN_RECEIVED: "Billed less than received",
@@ -139,7 +139,11 @@ export function threeWayMatch(poLines: readonly MatchPoLine[], bills: readonly M
     const issues: LineIssue[] = [];
     if (flags.some((f) => f !== "PRICE_DIFFERS")) issues.push("QTY_MISMATCH");
     if (flags.includes("PRICE_DIFFERS")) issues.push("PRICE_MISMATCH");
-    const status: LineStatus = issues.includes("PRICE_MISMATCH") ? "PRICE_MISMATCH" : (issues[0] ?? "MATCHED");
+    // F11: with no live bills at all (e.g. the only bill was voided), a line
+    // is not "Matched" — nothing has been billed against it. (A total-only
+    // bill still counts as a bill here; its lines stay as computed above.)
+    const status: LineStatus =
+      bills.length === 0 ? "NOT_BILLED" : issues.includes("PRICE_MISMATCH") ? "PRICE_MISMATCH" : (issues[0] ?? "MATCHED");
     return {
       id: l.id,
       description: l.description,

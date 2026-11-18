@@ -769,6 +769,7 @@ export async function getExpensePrintModel(
       supplier: true,
       category: true,
       cashAccount: { select: { name: true } },
+      salesOrder: { select: { number: true } },
       createdBy: { select: { name: true } },
     },
   });
@@ -806,6 +807,7 @@ export async function getExpensePrintModel(
     meta: [
       { label: "Category", value: e.category.label },
       { label: "Paid from", value: e.cashAccount.name },
+      ...(e.salesOrder ? [{ label: "Sales order", value: e.salesOrder.number }] : []),
       ...(e.receiptNo ? [{ label: "Receipt no.", value: e.receiptNo }] : []),
     ],
     items: [

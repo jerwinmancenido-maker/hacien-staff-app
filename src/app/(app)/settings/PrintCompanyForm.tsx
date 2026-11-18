@@ -186,6 +186,14 @@ export function PrintCompanyForm({
                     }}
                   />
                   <div className="hint">Optional. PNG/JPEG/WebP. Falls back to the business name when empty.</div>
+                  {company.logoStorageKey ? (
+                    <label className="check" style={{ marginTop: 8 }}>
+                      <input type="checkbox" name="removeLogo" value="1" />
+                      <span>
+                        <b>Remove the saved logo</b> <span className="muted small">— takes effect when you save</span>
+                      </span>
+                    </label>
+                  ) : null}
                   {(e.logo || fileError) && <div className="error">{e.logo ?? fileError}</div>}
                 </div>
               </div>
