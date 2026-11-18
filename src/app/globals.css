@@ -319,6 +319,11 @@ a.tracker-card:hover {
   justify-content: space-between;
   gap: calc(8px * var(--ui-scale, 1));
 }
+/* The milestone title ("Sales Milestone") stays on one line next to the
+   percentage instead of wrapping inside the narrow sidebar (F6). */
+.tracker-head > span {
+  white-space: nowrap;
+}
 .tracker-pct {
   color: var(--text);
   font-weight: 600;
@@ -1017,9 +1022,19 @@ table.list td {
   vertical-align: middle;
 }
 /* Document numbers (QT/SO/PO/BL/CR...) never wrap mid-number on desktop;
-   the phone card layouts keep their overflow-wrap rules below. */
+   the phone card layouts keep their overflow-wrap rules below. Dates and
+   short status cells get the same protection (final-check F6): the listed
+   data-col keys are the DataTable lists' date/status columns (quotes
+   "valid"/"status", audit log "when"/"who"/"record", any list's "date"),
+   and the hand-rolled billings table tags its number/date cells to match. */
 @media (min-width: 769px) {
-  table.list td[data-col="number"] {
+  table.list td[data-col="number"],
+  table.list td[data-col="date"],
+  table.list td[data-col="valid"],
+  table.list td[data-col="status"],
+  table.list td[data-col="when"],
+  table.list td[data-col="who"],
+  table.list td[data-col="record"] {
     white-space: nowrap;
   }
 }

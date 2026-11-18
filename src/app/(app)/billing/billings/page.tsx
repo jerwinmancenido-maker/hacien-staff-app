@@ -98,15 +98,21 @@ export default async function BillingsListPage({
                       <a href={`/billing/billings/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/billings/${r.id}`}>{r.invoiceNo}</Link>
                     </td>
-                    <td className="faint">{r.number}</td>
+                    <td className="faint" data-col="number">{r.number}</td>
                     <td>
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td>
+                    <td data-col="number">
                       <Link href={`/sales-orders/${r.salesOrder.id}`}>{r.salesOrder.number}</Link>
                     </td>
-                    <td>{day(r.invoiceDate)}</td>
-                    <td>{r.expectedPaymentLabel ? r.expectedPaymentLabel : day(r.dueDate)}</td>
+                    <td data-col="date">{day(r.invoiceDate)}</td>
+                    {/* The "Expected by … (estimate)" label is prose and may wrap;
+                        a plain due date gets the no-wrap date treatment. */}
+                    {r.expectedPaymentLabel ? (
+                      <td>{r.expectedPaymentLabel}</td>
+                    ) : (
+                      <td data-col="date">{day(r.dueDate)}</td>
+                    )}
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td className="num strong">{formatPeso(r.balance)}</td>
                     <td>
