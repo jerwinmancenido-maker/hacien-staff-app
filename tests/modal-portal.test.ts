@@ -30,7 +30,13 @@ describe("modal portal (F2)", () => {
 
   it("server-rendering a dialog does not throw and renders inline (the portal takes over after mount)", () => {
     const modalHtml = renderToStaticMarkup(
-      createElement(Modal, { title: "Test", onClose: () => undefined, labelId: "t" }, createElement("p", null, "Body")),
+      // eslint-disable-next-line react/no-children-prop -- React 19 types require children inside the props object for createElement; the 3-arg form fails the overload check for components with required children.
+      createElement(Modal, {
+        title: "Test",
+        onClose: () => undefined,
+        labelId: "t",
+        children: createElement("p", null, "Body"),
+      }),
     );
     expect(modalHtml).toContain("modal-backdrop");
     expect(modalHtml).toContain("Body");

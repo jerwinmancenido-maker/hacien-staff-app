@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -14,12 +14,15 @@ import { createPortal } from "react-dom";
  * inline: dialogs only open after a user action, which always happens after
  * mount, so the portal is in place before any dialog can appear — and
  * server-rendered markup (and render tests) still see the dialog content.
+ * useSyncExternalStore gives the mounted flag without an effect: false for
+ * the server snapshot, true on the client.
  */
+const subscribe = () => () => undefined;
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function ModalPortal({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  if (!mounted || typeof document === "undefined") return <>{children}</>;
+  const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
+  if (!mounted) return <>{children}</>;
   return createPortal(children, document.body);
 }
