@@ -59,10 +59,15 @@ describe("quote approval gates", () => {
     expect(quoteNotApprovedError("APPROVED")).toBeNull();
   });
 
+  it("prompt model (F5): NOT_REQUIRED never blocks", () => {
+    expect(quoteNotApprovedError("NOT_REQUIRED")).toBeNull();
+  });
+
   it("labels match staff-facing copy", () => {
     expect(QUOTE_APPROVAL_LABELS.PENDING).toBe("Waiting for approval");
     expect(QUOTE_APPROVAL_LABELS.APPROVED).toBe("Approved");
     expect(QUOTE_APPROVAL_LABELS.REJECTED).toBe("Rejected");
+    expect(QUOTE_APPROVAL_LABELS.NOT_REQUIRED).toBe("Approval not required");
   });
 
   it("Staff and Viewer cannot approve; Admin and Approver can", () => {

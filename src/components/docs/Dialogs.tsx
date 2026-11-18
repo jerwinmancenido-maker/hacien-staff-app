@@ -166,6 +166,7 @@ export function ConvertDialog({
   defaultAddress,
   addressOptions = [],
   hasAcceptance = false,
+  approvalWarning,
   customerName,
   onAddAddress,
   onClose,
@@ -176,12 +177,14 @@ export function ConvertDialog({
   addressOptions?: AddressOption[];
   /** Audit: a conforme file is on file or acceptance is recorded. */
   hasAcceptance?: boolean;
+  /** Prompt model (F5): approval reasons an Approver confirms by converting. */
+  approvalWarning?: string[];
   /** Customer display name for the add-address dialog title. */
   customerName?: string;
   /** Saves a new DELIVERY address to the customer; the dialog picks it at once. */
   onAddAddress?: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
   onClose: () => void;
-  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
+  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string; confirmedWarnings?: boolean }) => Promise<FormState>;
 }) {
   const initialPicked = addressOptions.find((o) => o.text === defaultAddress)?.id ?? addressOptions[0]?.id ?? "";
   const [v, setV] = useState({ buyerPoNo: "", buyerPoDate: "", deliveryAddressId: initialPicked });
@@ -196,6 +199,12 @@ export function ConvertDialog({
   return (
     <Modal title={`Convert ${number} to a sales order?`} onClose={onClose} labelId="convert-title">
       <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding.</p>
+      {approvalWarning && approvalWarning.length > 0 && (
+        <div className="alert warn" role="alert">
+          This quote needs approval: {approvalWarning.join("; ")}. As an Approver you can convert anyway — your
+          confirmation is recorded in the activity log.
+        </div>
+      )}
       {!hasAcceptance && (
         <p className="faint">No customer acceptance on file yet — enter the buyer PO number below, or record acceptance on the Conforme tab first.</p>
       )}
@@ -210,6 +219,7 @@ export function ConvertDialog({
           const res = await onConvert({
             ...v,
             deliveryAddress: selectedOption?.text ?? "",
+            confirmedWarnings: (approvalWarning?.length ?? 0) > 0,
           });
           setPending(false);
           if (!res.ok) setState(res);

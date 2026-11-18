@@ -752,6 +752,7 @@ enum QuoteApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+  NOT_REQUIRED
 }
 
 enum SalesOrderStatus {

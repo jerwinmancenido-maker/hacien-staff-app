@@ -5,7 +5,10 @@
 // Convert to SO and Open sales order are menu items).
 // Viewers only get Print. The server re-checks every action.
 //
-// S-18: Mark as sent / Email / Convert stay hidden until workflow-approved.
+// S-18 + prompt model (F5): Mark as sent / Email / Convert act freely once
+// the quote is APPROVED, NOT_REQUIRED, or trips no threshold. A PENDING
+// quote WITH reasons prompts an Approver/Admin to confirm-and-continue
+// (recorded server-side); Staff-only users keep waiting for a real approver.
 // Approver/Admin get Approve / Reject while PENDING.
 //
 // When withholding is not set on a draft, Mark as sent asks
@@ -18,7 +21,7 @@ import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type Addre
 import type { EditorAddressOption } from "./DocumentEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { COST_NOT_SET_LABEL } from "@/lib/quotes/calc";
-import { quoteMarkSentGate, quoteNotApprovedError } from "@/lib/quotes/approval";
+import { quoteMarkSentGate, quoteNotApprovedError, type QuoteApprovalStatus } from "@/lib/quotes/approval";
 import {
   WITHHOLDING_NONE_CONFIRM_PICK,
   WITHHOLDING_NONE_CONFIRM_TITLE,
@@ -30,7 +33,9 @@ type Props = {
   id: string;
   number: string;
   status: string;
-  approvalStatus: "PENDING" | "APPROVED" | "REJECTED";
+  approvalStatus: QuoteApprovalStatus;
+  /** Prompt model (F5): the threshold reasons this quote trips, if any. */
+  approvalReasons?: string[];
   canEdit: boolean;
   /** Admin or Approver. Staff keep Edit and do not see Void. */
   canVoid: boolean;
@@ -52,16 +57,16 @@ type Props = {
   /** Audit: a conforme file is on file or acceptance is recorded. */
   hasAcceptance?: boolean;
   actions: {
-    markSent: (id: string) => Promise<FormState>;
+    markSent: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
     /** Saves explicit none then marks sent (Yes, none). */
-    confirmNoneAndMarkSent?: (id: string) => Promise<FormState>;
+    confirmNoneAndMarkSent?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
     markLost: (id: string) => Promise<FormState>;
     void: (id: string, reason: string) => Promise<FormState>;
     delete: (id: string, reason: string) => Promise<FormState>;
-    convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
+    convert: (id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string; confirmedWarnings?: boolean }) => Promise<FormState>;
     /** Convert dialog "+ Add new address": saves a DELIVERY address to the customer. */
     addAddress?: (customerId: string, input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
-    email: (id: string) => Promise<FormState & { draft?: EmailDraftView }>;
+    email: (id: string, confirmedWarnings?: boolean) => Promise<FormState & { draft?: EmailDraftView }>;
     /** Draft/unsent only — refresh letterhead from current settings. */
     refreshCompanyDetails?: (id: string) => Promise<FormState>;
     /** S-55: fresh draft copy, Rev 1. */
@@ -78,6 +83,7 @@ export function QuoteActions({
   number,
   status,
   approvalStatus,
+  approvalReasons = [],
   canEdit,
   canVoid,
   canDelete,
@@ -93,7 +99,9 @@ export function QuoteActions({
   actions,
 }: Props) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<"void" | "delete" | "convert" | "lost" | "wh-none" | "cost" | "reject" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "delete" | "convert" | "lost" | "wh-none" | "cost" | "reject" | "approval" | null>(null);
+  /** Which send waits behind the approval prompt (F5). */
+  const [pendingSend, setPendingSend] = useState<"mark" | "none" | "email" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const rejectReasonRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
@@ -122,7 +130,14 @@ export function QuoteActions({
       if (res.draft) setDraft(res.draft);
     });
 
-  const approved = approvalStatus === "APPROVED";
+  // Prompt model (F5): APPROVED / NOT_REQUIRED / clean-PENDING quotes act
+  // freely. A PENDING quote WITH reasons acts only for an Approver, and only
+  // through the confirm prompt; Staff keep waiting. REJECTED never acts.
+  const needsPrompt = approvalStatus === "PENDING" && approvalReasons.length > 0;
+  const approved =
+    approvalStatus === "APPROVED" ||
+    approvalStatus === "NOT_REQUIRED" ||
+    (approvalStatus === "PENDING" && (approvalReasons.length === 0 || canApproveWorkflow));
   const editable = status === "DRAFT" || status === "SENT";
   // S-66: no separate blue main button beside the Actions menu. The
   // workflow actions that used to sit there (Approve, Reject, Mark as
@@ -155,7 +170,19 @@ export function QuoteActions({
       onSelect: () => run(() => actions.refreshCompanyDetails!(id)),
     });
   }
-  if (canEdit && approved && status !== "VOID") items.push({ key: "email", label: "Email", onSelect: () => run(() => actions.email(id)) });
+  if (canEdit && approved && status !== "VOID")
+    items.push({
+      key: "email",
+      label: "Email",
+      onSelect: () => {
+        if (needsPrompt) {
+          setPendingSend("email");
+          setDialog("approval");
+          return;
+        }
+        run(() => actions.email(id));
+      },
+    });
   if (canEdit && approved && editable) items.push({ key: "convert", label: "Convert to SO", onSelect: () => setDialog("convert") });
   if (canEdit && editable) items.push({ key: "lost", label: "Mark lost", danger: true, onSelect: () => setDialog("lost") });
   if (canVoid && status !== "VOID") items.push({ key: "void", label: "Void", danger: true, onSelect: () => setDialog("void") });
@@ -170,16 +197,36 @@ export function QuoteActions({
   }
   if (canEdit && approved && status === "DRAFT") items.push({ key: "mark-sent", label: "Mark as sent", onSelect: onMarkSent });
 
+  /** Runs a send now; `confirmed` carries the Approver's prompt confirmation. */
+  function doSend(kind: "mark" | "none" | "email", confirmed: boolean) {
+    if (kind === "email") {
+      run(() => actions.email(id, confirmed));
+      return;
+    }
+    const fn = kind === "none" ? (actions.confirmNoneAndMarkSent ?? actions.markSent) : actions.markSent;
+    run(() => fn(id, confirmed));
+  }
+
+  /** Last step before a mark-sent: the approval prompt when one is owed. */
+  function finishSend(kind: "mark" | "none") {
+    if (needsPrompt) {
+      setPendingSend(kind);
+      setDialog("approval");
+      return;
+    }
+    doSend(kind, false);
+  }
+
   function onMarkSent() {
-    const gate = quoteMarkSentGate({
-      approved: approvalStatus === "APPROVED",
-      withholdingUnset: withholdingNotSet,
-      supplierCostMissing: costMissing,
-    });
-    if (gate === "need-approval") {
+    if (approvalStatus === "REJECTED" || (needsPrompt && !canApproveWorkflow)) {
       setMessage(quoteNotApprovedError(approvalStatus));
       return;
     }
+    const gate = quoteMarkSentGate({
+      approved: true,
+      withholdingUnset: withholdingNotSet,
+      supplierCostMissing: costMissing,
+    });
     if (gate === "cost-warning") {
       setDialog("cost");
       return;
@@ -188,7 +235,7 @@ export function QuoteActions({
       setDialog("wh-none");
       return;
     }
-    run(() => actions.markSent(id));
+    finishSend("mark");
   }
 
   // S-66: the "Waiting for approval" note is status text, not an action,
@@ -231,7 +278,7 @@ export function QuoteActions({
         />
       )}
       {dialog === "convert" && (
-        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} customerName={customerName} onAddAddress={actions.addAddress && customerId ? (input) => actions.addAddress!(customerId, input) : undefined} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
+        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} approvalWarning={needsPrompt ? approvalReasons : undefined} customerName={customerName} onAddAddress={actions.addAddress && customerId ? (input) => actions.addAddress!(customerId, input) : undefined} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
       )}
       <ConfirmDialog
         open={dialog === "lost"}
@@ -258,7 +305,7 @@ export function QuoteActions({
             setDialog("wh-none");
             return;
           }
-          run(() => actions.markSent(id));
+          finishSend("mark");
         }}
       />
       <ConfirmDialog
@@ -273,8 +320,24 @@ export function QuoteActions({
         }}
         onConfirm={() => {
           setDialog(null);
-          const fn = actions.confirmNoneAndMarkSent ?? actions.markSent;
-          run(() => fn(id));
+          finishSend("none");
+        }}
+      />
+      <ConfirmDialog
+        open={dialog === "approval"}
+        title="This quote needs approval"
+        body={`It trips the approval checks: ${approvalReasons.join("; ")}. As an Approver you can continue anyway — your confirmation is recorded in the activity log.`}
+        confirmLabel="Continue anyway"
+        cancelLabel="Go back"
+        onCancel={() => {
+          setDialog(null);
+          setPendingSend(null);
+        }}
+        onConfirm={() => {
+          const kind = pendingSend ?? "mark";
+          setDialog(null);
+          setPendingSend(null);
+          doSend(kind, true);
         }}
       />
       {dialog === "reject" && (

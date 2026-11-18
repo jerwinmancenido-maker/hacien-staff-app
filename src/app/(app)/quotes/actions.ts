@@ -59,7 +59,9 @@ export async function saveQuoteAction(id: string | null, _prev: FormState, form:
     const quote = id ? await updateQuote(id, parsed.data, user) : await createQuote(parsed.data, user);
     // Mark as sent in this same request. A successful save redirects, so the
     // editor never sees ok and cannot call markQuoteSent afterwards.
-    if (id && str(form, "alsoMarkSent") === "1") await markQuoteSent(quote.id, user);
+    if (id && str(form, "alsoMarkSent") === "1") {
+      await markQuoteSent(quote.id, user, { confirmedWarnings: str(form, "alsoMarkSentConfirmed") === "1" });
+    }
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${quote.id}`);
     goTo = `/quotes/${quote.id}`;
@@ -69,10 +71,10 @@ export async function saveQuoteAction(id: string | null, _prev: FormState, form:
   return result;
 }
 
-export async function markQuoteSentAction(id: string): Promise<FormState> {
+export async function markQuoteSentAction(id: string, confirmedWarnings = false): Promise<FormState> {
   return runAction(async () => {
     const user = await requireActionPermission("edit_data");
-    await markQuoteSent(id, user);
+    await markQuoteSent(id, user, { confirmedWarnings });
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Marked as sent." };
@@ -80,10 +82,10 @@ export async function markQuoteSentAction(id: string): Promise<FormState> {
 }
 
 /** "Yes, none" on the submit confirm: store explicit none, then mark as sent. */
-export async function confirmNoneAndMarkQuoteSentAction(id: string): Promise<FormState> {
+export async function confirmNoneAndMarkQuoteSentAction(id: string, confirmedWarnings = false): Promise<FormState> {
   return runAction(async () => {
     const user = await requireActionPermission("edit_data");
-    await confirmNoneAndMarkQuoteSent(id, user);
+    await confirmNoneAndMarkQuoteSent(id, user, { confirmedWarnings });
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     return { ok: true, message: "Marked as sent with no withholding." };
@@ -173,13 +175,13 @@ export async function deleteQuoteAction(id: string, reason: string): Promise<For
   return result;
 }
 
-export async function convertQuoteAction(id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }): Promise<FormState> {
+export async function convertQuoteAction(id: string, input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string; confirmedWarnings?: boolean }): Promise<FormState> {
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
     const parsed = convertInputSchema.safeParse(input);
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
-    const so = await convertQuoteToSalesOrder(id, parsed.data, user);
+    const so = await convertQuoteToSalesOrder(id, parsed.data, user, { confirmedWarnings: input.confirmedWarnings === true });
     revalidatePath("/quotes");
     revalidatePath(`/quotes/${id}`);
     revalidatePath("/sales-orders");
@@ -213,11 +215,11 @@ export async function createQuoteAddressAction(
 }
 
 /** Builds the email draft and logs it. Never sends anything. */
-export async function emailDraftAction(id: string): Promise<FormState & { draft?: EmailDraft }> {
+export async function emailDraftAction(id: string, confirmedWarnings = false): Promise<FormState & { draft?: EmailDraft }> {
   let draft: EmailDraft | undefined;
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
-    draft = await buildQuoteEmailDraft(id, user);
+    draft = await buildQuoteEmailDraft(id, user, { confirmedWarnings });
     revalidatePath(`/quotes/${id}`);
     return { ok: true };
   });
