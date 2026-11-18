@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
-import { duplicateCustomer, loadCustomerWriteOptions, saveCustomer, setCustomerActive } from "@/lib/services/companies";
+import { duplicateCustomer, findCustomerWithName, loadCustomerWriteOptions, saveCustomer, setCustomerActive } from "@/lib/services/companies";
 import { saveAddress } from "@/lib/services/addresses";
 import { attachStagedBusinessDocument } from "@/lib/services/business-documents";
 import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
@@ -125,6 +125,19 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
         values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
         fieldErrors: zodFieldErrors(parsed.error),
       };
+    }
+
+    // Duplicate-name soft warning (create only): an exact-name customer
+    // already exists — save nothing until the user confirms it is not a
+    // duplicate. The form resubmits with confirmDuplicateName=1 to proceed.
+    if (!id && str(form, "confirmDuplicateName") !== "1") {
+      const existing = await findCustomerWithName(parsed.data.name);
+      if (existing) {
+        return {
+          values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
+          warning: `A customer named "${existing.name}" already exists${existing.active ? "" : " (inactive)"}. If this is a different customer, save anyway.`,
+        };
+      }
     }
 
     let saved;

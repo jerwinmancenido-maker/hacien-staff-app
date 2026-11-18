@@ -1205,6 +1205,8 @@ export function QuoteEditor({
     withholdingCodes: pick,
     withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
     reapplyWithholding: reapplyWithholding || undefined,
+    // Stale-edit guard: edits carry the updatedAt the page loaded (creates don't).
+    ...(isNew ? {} : { updatedAt: initial.updatedAt }),
     items: items.map(itemPayload),
   };
 

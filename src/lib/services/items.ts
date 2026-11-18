@@ -1,8 +1,34 @@
 import { writeAudit } from "../audit";
-import { db } from "../db";
+import { db, type Tx } from "../db";
 import type { ItemInput } from "../validation/items";
 
+export class ItemRuleError extends Error {
+  constructor(
+    message: string,
+    public field?: string,
+  ) {
+    super(message);
+    this.name = "ItemRuleError";
+  }
+}
+
 /** Item catalog, Step 1 (Option A). History rows stay unlinked until Step 2. */
+
+/**
+ * SKUs are unique across the catalog (no DB constraint — enforced here, the
+ * one write path for the catalog form). Blank SKU is fine; a used SKU refuses
+ * and names the item that owns it, mirroring the TIN rule for customers.
+ */
+async function assertSkuFree(tx: Tx, sku: string | null, exceptId: string | null) {
+  if (!sku) return;
+  // Plain equality: MySQL's ci collation matches SKUs case-insensitively
+  // (the same reliance as the CSV import's existing-SKU lookup).
+  const other = await tx.item.findFirst({
+    where: { sku: { equals: sku }, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    select: { name: true },
+  });
+  if (other) throw new ItemRuleError(`SKU ${sku} is already used by ${other.name}.`, "sku");
+}
 
 export async function listItems({
   q,
@@ -44,6 +70,7 @@ export function getItem(id: string) {
 
 export async function saveItem(id: string | null, input: ItemInput, actorId: string) {
   return db.$transaction(async (tx) => {
+    await assertSkuFree(tx, input.sku, id);
     if (!id) {
       const created = await tx.item.create({ data: input });
       await writeAudit(tx, { userId: actorId, entityType: "Item", entityId: created.id, action: "create", after: created });

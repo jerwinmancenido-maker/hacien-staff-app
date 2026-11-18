@@ -60,6 +60,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         initial={{
           customerId: quote.customer.id,
           contactId: quote.contact?.id ?? "",
+          updatedAt: quote.updatedAt.toISOString(),
           date: quote.date,
           validUntil: quote.validUntil,
           validForDays: quote.validityDays,

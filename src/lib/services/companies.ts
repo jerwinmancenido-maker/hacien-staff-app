@@ -107,6 +107,15 @@ async function assertTinFree(find: TinOwnerLookup, tin: string | null, exceptId:
 }
 
 const customerTinOwner: TinOwnerLookup = (args) => db.customer.findFirst(args);
+
+/** Exact-name lookup for the duplicate-name soft warning on customer create
+ * (plain equality — MySQL's ci collation matches the name case-insensitively). */
+export function findCustomerWithName(name: string) {
+  return db.customer.findFirst({
+    where: { name: { equals: name.trim() } },
+    select: { id: true, name: true, active: true },
+  });
+}
 const supplierTinOwner: TinOwnerLookup = (args) => db.supplier.findFirst(args);
 
 /** Prisma JSON columns reject plain `null`; use DbNull for "not set". */

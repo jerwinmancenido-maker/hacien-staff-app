@@ -21,12 +21,20 @@ export class DocRuleError extends Error {
 export const STALE_EDIT_MESSAGE =
   "This order changed while you were editing — reload to see the latest, then re-apply your changes.";
 
+/** Stale-edit guard (quotes): same guard, quote wording. */
+export const STALE_EDIT_MESSAGE_QUOTE =
+  "This quote changed while you were editing — reload to see the latest, then re-apply your changes.";
+
 /** Parse the editor's loaded `updatedAt` ISO and refuse when it no longer matches the locked row. */
-export function requireMatchingUpdatedAt(stored: Date, expectedIso: string | null | undefined): Date {
-  if (!expectedIso) throw new DocRuleError(STALE_EDIT_MESSAGE);
+export function requireMatchingUpdatedAt(
+  stored: Date,
+  expectedIso: string | null | undefined,
+  message: string = STALE_EDIT_MESSAGE,
+): Date {
+  if (!expectedIso) throw new DocRuleError(message);
   const expected = new Date(expectedIso);
   if (Number.isNaN(expected.getTime()) || expected.getTime() !== stored.getTime()) {
-    throw new DocRuleError(STALE_EDIT_MESSAGE);
+    throw new DocRuleError(message);
   }
   return stored;
 }

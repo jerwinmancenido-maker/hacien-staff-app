@@ -215,6 +215,8 @@ const quoteInputObject = z.object({
     withholdingExplicitNone: z.boolean().optional(),
     /** When true, non-override lines are re-snapshotted from the quote pick. */
     reapplyWithholding: z.boolean().optional(),
+    /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved. */
+    updatedAt: z.string().datetime().optional(),
     items,
   })
   .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] })

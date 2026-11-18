@@ -9,7 +9,17 @@ import { addDays, manilaToday } from "../format";
 import { assertCan, assertCanApprove, assertCanVoid, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
-import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
+import {
+  auditItems,
+  DocRuleError,
+  DOC_TX,
+  money,
+  requireMatchingUpdatedAt,
+  STALE_EDIT_MESSAGE_QUOTE,
+  withholdingCodes,
+  withTxRetry,
+  ymd,
+} from "../documents/common";
 import {
   quoteApprovalClearData,
   quoteMoneyFieldsChanged,
@@ -471,6 +481,13 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const before = await lockQuote(tx, id);
       if (!(EDITABLE_QUOTE_STATUSES as readonly string[]).includes(before.status)) {
         throw new DocRuleError("Only draft or sent quotes can be edited.");
+      }
+      // Stale-edit guard: the quote editor always sends the updatedAt it
+      // loaded; when a token is present, refuse before any line writes if
+      // the row moved since (the SO / PO guard). A tokenless save claims no
+      // loaded version — it keeps the old last-writer-wins behaviour.
+      if (input.updatedAt !== undefined) {
+        requireMatchingUpdatedAt(before.updatedAt, input.updatedAt, STALE_EDIT_MESSAGE_QUOTE);
       }
       const stored = before.items.map((i) => ({
         id: i.id,
