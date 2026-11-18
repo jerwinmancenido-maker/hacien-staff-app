@@ -404,8 +404,8 @@ export function PaymentForm({
       </p>
 
       <div
-        className={`card${leftToAllocate !== 0n ? " alert-ish" : ""}`}
-        style={{ marginTop: 16, padding: "12px 16px", background: leftToAllocate === 0n ? "#EEF4EF" : "#F8F3E8" }}
+        className="card"
+        style={{ marginTop: 16, padding: "12px 16px", background: leftToAllocate === 0n ? "var(--green-bg)" : "var(--amber-bg)" }}
         role="status"
         aria-live="polite"
       >
