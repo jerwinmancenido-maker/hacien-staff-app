@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FormState } from "@/lib/validation/forms";
+import { ModalPortal } from "../ModalPortal";
 import type { EditorAddressOption } from "./DocumentEditor";
 
 export function Modal({
@@ -26,18 +27,20 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className={variant === "drawer-right" ? "modal-backdrop drawer" : "modal-backdrop"} onClick={onClose}>
-      <div
-        className={variant === "drawer-right" ? "modal wide drawer-right" : "modal wide"}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id={labelId}>{title}</h3>
-        {children}
+    <ModalPortal>
+      <div className={variant === "drawer-right" ? "modal-backdrop drawer" : "modal-backdrop"} onClick={onClose}>
+        <div
+          className={variant === "drawer-right" ? "modal wide drawer-right" : "modal wide"}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={labelId}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 id={labelId}>{title}</h3>
+          {children}
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 
