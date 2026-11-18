@@ -29,6 +29,8 @@ export function TaxCalendarMarkDoneForm({
   const mark = useFormAction(markTaxCalendarDoneAction);
   const undo = useFormAction(undoTaxCalendarDoneAction);
   const [open, setOpen] = useState(false);
+  // F8 rider: Undo used to apply instantly — ask first.
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const openBtnClass = secondary ? "btn btn-secondary btn-sm" : "btn btn-sm";
   const isFiled = Boolean(referenceNo?.trim());
 
@@ -44,7 +46,7 @@ export function TaxCalendarMarkDoneForm({
           <p className="faint small" style={{ margin: 0 }}>
             Undo from Home (Admin) with a reason — records stay in the audit log.
           </p>
-        ) : (
+        ) : confirmUndo ? (
           <form
             noValidate
             onSubmit={(ev) => {
@@ -53,10 +55,25 @@ export function TaxCalendarMarkDoneForm({
             }}
           >
             <input type="hidden" name="occurrenceKey" value={occurrenceKey} />
-            <button className="btn btn-secondary btn-sm" type="submit" disabled={undo.pending}>
-              {undo.pending ? "Undoing…" : "Undo"}
-            </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="small">Undo this note?</span>
+              <button className="btn btn-secondary btn-sm" type="submit" disabled={undo.pending}>
+                {undo.pending ? "Undoing…" : "Yes, undo"}
+              </button>
+              <button
+                className="btn btn-sm"
+                type="button"
+                onClick={() => setConfirmUndo(false)}
+                disabled={undo.pending}
+              >
+                Cancel
+              </button>
+            </div>
           </form>
+        ) : (
+          <button className="btn btn-secondary btn-sm" type="button" onClick={() => setConfirmUndo(true)}>
+            Undo
+          </button>
         )}
         {undo.state.message ? (
           <div className={undo.state.ok ? "alert ok" : "alert error"} role="status">
