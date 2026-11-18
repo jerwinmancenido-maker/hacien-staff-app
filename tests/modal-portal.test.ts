@@ -28,11 +28,12 @@ describe("modal portal (F2)", () => {
     expect(confirm).toMatch(/<ModalPortal>\s*<div className="modal-backdrop"/);
   });
 
-  it("server-rendering a dialog does not throw (portal defers to the client)", () => {
+  it("server-rendering a dialog does not throw and renders inline (the portal takes over after mount)", () => {
     const modalHtml = renderToStaticMarkup(
       createElement(Modal, { title: "Test", onClose: () => undefined, labelId: "t" }, createElement("p", null, "Body")),
     );
-    expect(modalHtml).toBe("");
+    expect(modalHtml).toContain("modal-backdrop");
+    expect(modalHtml).toContain("Body");
     const confirmHtml = renderToStaticMarkup(
       createElement(ConfirmDialog, {
         open: true,
@@ -42,6 +43,6 @@ describe("modal portal (F2)", () => {
         onCancel: () => undefined,
       }),
     );
-    expect(confirmHtml).toBe("");
+    expect(confirmHtml).toContain("modal-backdrop");
   });
 });

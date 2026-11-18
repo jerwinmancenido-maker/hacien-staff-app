@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -9,10 +9,17 @@ import { createPortal } from "react-dom";
  * cell or an animated list row can end up painted UNDER the page content
  * (final-check finding F2: the Mark 2307 received dialog). Portaling to the
  * body puts the backdrop in the root stacking context, above the page.
- * Modals only open after a user action (post-hydration), so there is no
- * server-rendered content to mismatch; the guard covers SSR just in case.
+ *
+ * Before mount (server render, first client paint) the children render
+ * inline: dialogs only open after a user action, which always happens after
+ * mount, so the portal is in place before any dialog can appear — and
+ * server-rendered markup (and render tests) still see the dialog content.
  */
 export function ModalPortal({ children }: { children: ReactNode }) {
-  if (typeof document === "undefined") return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted || typeof document === "undefined") return <>{children}</>;
   return createPortal(children, document.body);
 }
