@@ -40,7 +40,7 @@ describe.skipIf(!env.hasDb)("reconciliation + operational profit (MySQL)", () =>
   let invoiceSeq = 860_000 + Math.floor(Math.random() * 40_000);
   const nextInvoice = () => ++invoiceSeq;
   let drSeq = 700_000 + Math.floor(Math.random() * 40_000);
-  const nextDr = () => `DR-RC-${++drSeq}`;
+  const nextDr = () => String(++drSeq);
 
   beforeAll(async () => {
     process.env.CASH_ENABLED = "true";
