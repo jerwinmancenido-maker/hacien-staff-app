@@ -20,6 +20,7 @@ import {
   convertQuoteToSalesOrder,
   createQuote,
   markQuoteSent,
+  rejectQuote,
   updateQuote,
   type DocActor,
 } from "@/lib/services/quotes";
@@ -168,11 +169,14 @@ describe.skipIf(!env.hasDb)("quote approval prompt model (MySQL)", () => {
     expect(edited.approvalStatus).toBe("PENDING");
   });
 
-  it("approving a NOT_REQUIRED quote is refused — there is nothing to approve", async () => {
+  it("approving a NOT_REQUIRED quote is a no-op; rejecting one is refused", async () => {
     const year = await freshYear();
     const customer = await makeCustomer();
     const quote = await createQuote(cleanInput(customer.id, year), approver);
-    await expect(approveQuote(quote.id, approver)).rejects.toMatchObject({
+    const approved = await approveQuote(quote.id, approver);
+    expect(approved.approvalStatus).toBe("NOT_REQUIRED");
+    expect(approved.approvedById).toBeNull();
+    await expect(rejectQuote(quote.id, "no reason", approver)).rejects.toMatchObject({
       message: expect.stringMatching(/doesn't need approval/i),
     });
   });

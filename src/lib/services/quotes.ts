@@ -831,14 +831,16 @@ export function markQuoteSent(id: string, actor: DocActor, opts: { confirmedWarn
   return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true, true, opts);
 }
 
-/** Approver/Admin: PENDING → APPROVED. */
+/** Approver/Admin: PENDING → APPROVED. A NOT_REQUIRED quote is a no-op:
+ *  it already satisfies the approver's intent (the UI never offers Approve
+ *  for one — canApproveWorkflow is PENDING-only). */
 export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWithItems> {
   assertCanApprove(actor);
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("A void quote can't be approved.");
     if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved.");
-    if (before.approvalStatus === "NOT_REQUIRED") throw new DocRuleError("This quote doesn't need approval — its numbers are within the approval limits.");
+    if (before.approvalStatus === "NOT_REQUIRED") return before;
     const now = new Date();
     const after = await tx.quote.update({
       where: { id },
