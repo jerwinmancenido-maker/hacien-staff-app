@@ -53,8 +53,15 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
   // Do not link into gated sections when their feature flags are off.
   const [cashOn, payablesOn] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
 
+  // Business-entity wall (PR-B, 2026-11-19): the Books are HACIEN's books.
+  // Documents tagged to another business (businessId non-null on their
+  // SO / PO / the expense itself) never appear here — they are summarised
+  // separately by getHeldForOthers. Collections stay unfiltered on purpose:
+  // allocations can only reach HACIEN billings (a tagged SO cannot be
+  // billed), and an unallocated deposit carries no deal link to attribute.
   const [billings, collections, bills, payments, expenses, deletedBillingAudits] = await Promise.all([
     db.billing.findMany({
+      where: { salesOrder: { businessId: null } },
       include: { customer: { select: { name: true } } },
       orderBy: [{ invoiceDate: "asc" }, { invoiceNo: "asc" }],
     }),
@@ -66,17 +73,24 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),
     db.supplierBill.findMany({
+      where: { OR: [{ purchaseOrderId: null }, { purchaseOrder: { businessId: null } }] },
       include: { supplier: { select: { name: true } } },
       orderBy: [{ billDate: "asc" }, { billNumber: "asc" }],
     }),
     db.supplierPayment.findMany({
       include: {
         supplier: { select: { name: true } },
-        allocations: { select: { withholdingApplied: true, supplierBill: { select: { billNumber: true } } } },
+        allocations: {
+          select: {
+            withholdingApplied: true,
+            supplierBill: { select: { billNumber: true, purchaseOrder: { select: { businessId: true } } } },
+          },
+        },
       },
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),
     db.expense.findMany({
+      where: { businessId: null },
       include: {
         supplier: { select: { name: true } },
         category: { select: { label: true } },
@@ -158,6 +172,11 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
   }
 
   for (const p of payments) {
+    // Entity wall: a payment whose allocated bills ALL belong to another
+    // business is that business's money, not HACIEN's. A mixed payment
+    // (at least one HACIEN or standalone bill) stays — payment amounts
+    // are not split per bill in the registers.
+    if (p.allocations.length > 0 && p.allocations.every((a) => a.supplierBill.purchaseOrder?.businessId)) continue;
     const ewt = sumEwt(p.allocations);
     const method = p.method.replace(/_/g, " ").toLowerCase();
     const bits = [`Payment ${method}`];
@@ -210,4 +229,82 @@ export async function getBookRegister(
   const config = REGISTER_CONFIGS[key];
   const sources = await listBookSourceRows(actor);
   return { config, register: buildRegister(config, sources, fromYmd, toYmd) };
+}
+
+export type HeldForOthers = {
+  billsRecorded: string;
+  billsCount: number;
+  paymentsMade: string;
+  paymentsCount: number;
+  expensesRecorded: string;
+  expensesCount: number;
+  /** All-time unpaid balance on other businesses' supplier bills. */
+  stillOwed: string;
+};
+
+/**
+ * The other side of the entity wall (PR-B): money recorded in this app for
+ * OTHER businesses (tagged documents), summarised so the cash in the bank
+ * still reconciles — bank balance = HACIEN's books + held for others.
+ * Period figures use each document's own date; `stillOwed` is all-time.
+ * Customer-side money is not here: collections carry no deal link (see
+ * listBookSourceRows), so a deposit cannot be attributed to a business.
+ */
+export async function getHeldForOthers(actor: PermissionUser, fromYmd: string, toYmd: string): Promise<HeldForOthers> {
+  assertCan(actor, "view_books");
+  const from = new Date(`${fromYmd}T00:00:00.000Z`);
+  const to = new Date(`${toYmd}T00:00:00.000Z`);
+  const taggedBillWhere = { purchaseOrder: { businessId: { not: null } } } as const;
+
+  const [bills, payments, expenses, owedBills] = await Promise.all([
+    db.supplierBill.findMany({
+      where: { ...taggedBillWhere, status: { not: "VOID" }, billDate: { gte: from, lte: to } },
+      select: { amount: true },
+    }),
+    db.supplierPayment.findMany({
+      where: { status: "POSTED", date: { gte: from, lte: to } },
+      select: {
+        amountPaid: true,
+        allocations: { select: { supplierBill: { select: { purchaseOrder: { select: { businessId: true } } } } } },
+      },
+    }),
+    db.expense.findMany({
+      where: { businessId: { not: null }, status: "POSTED", date: { gte: from, lte: to } },
+      select: { amount: true },
+    }),
+    db.supplierBill.findMany({
+      where: { ...taggedBillWhere, status: { not: "VOID" } },
+      select: {
+        amount: true,
+        allocations: {
+          where: { supplierPayment: { status: "POSTED" } },
+          select: { cashApplied: true, withholdingApplied: true },
+        },
+      },
+    }),
+  ]);
+
+  const sum = (xs: readonly { amount: unknown }[]) => fromScaled(xs.reduce((a, x) => a + toScaled(money(x.amount as never), 2), 0n), 2);
+  const taggedPayments = payments.filter(
+    (p) => p.allocations.length > 0 && p.allocations.every((a) => a.supplierBill.purchaseOrder?.businessId),
+  );
+  let owed = 0n;
+  for (const b of owedBills) {
+    const paid = b.allocations.reduce(
+      (a, x) => a + toScaled(money(x.cashApplied as never), 2) + toScaled(money(x.withholdingApplied as never), 2),
+      0n,
+    );
+    const bal = toScaled(money(b.amount as never), 2) - paid;
+    if (bal > 0n) owed += bal;
+  }
+
+  return {
+    billsRecorded: sum(bills),
+    billsCount: bills.length,
+    paymentsMade: fromScaled(taggedPayments.reduce((a, p) => a + toScaled(money(p.amountPaid as never), 2), 0n), 2),
+    paymentsCount: taggedPayments.length,
+    expensesRecorded: sum(expenses),
+    expensesCount: expenses.length,
+    stillOwed: fromScaled(owed, 2),
+  };
 }

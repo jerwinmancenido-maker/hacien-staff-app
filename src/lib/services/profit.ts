@@ -55,12 +55,20 @@ export function profitMonth(raw: string | null | undefined): string {
 
 export async function getMonthlyProfit(month: string): Promise<MonthlyProfit> {
   const { from, to } = monthBounds(month);
+  // Business-entity wall (PR-B, 2026-11-19): this is HACIEN's monthly
+  // profit — other businesses' bills, expenses and deals are excluded
+  // (they appear in the operational profit view, PR-C, under their own
+  // business). Billings are own-company by construction (a tagged SO
+  // cannot be billed); the SO filter is kept for symmetry and safety.
   const [billings, bills, expenses, orders] = await Promise.all([
-    db.billing.findMany({ where: { status: { not: "VOID" }, invoiceDate: { gte: from, lt: to } }, select: { amount: true } }),
-    db.supplierBill.findMany({ where: { status: { not: "VOID" }, billDate: { gte: from, lt: to } }, select: { amount: true } }),
-    db.expense.findMany({ where: { status: "POSTED", date: { gte: from, lt: to } }, select: { amount: true } }),
+    db.billing.findMany({ where: { status: { not: "VOID" }, invoiceDate: { gte: from, lt: to }, salesOrder: { businessId: null } }, select: { amount: true } }),
+    db.supplierBill.findMany({
+      where: { status: { not: "VOID" }, billDate: { gte: from, lt: to }, OR: [{ purchaseOrderId: null }, { purchaseOrder: { businessId: null } }] },
+      select: { amount: true },
+    }),
+    db.expense.findMany({ where: { status: "POSTED", date: { gte: from, lt: to }, businessId: null }, select: { amount: true } }),
     db.salesOrder.findMany({
-      where: { status: { not: "VOID" }, date: { gte: from, lt: to } },
+      where: { status: { not: "VOID" }, date: { gte: from, lt: to }, businessId: null },
       select: { number: true, date: true, contractPrice: true, supplierCost: true },
       orderBy: [{ date: "asc" }, { number: "asc" }],
     }),

@@ -432,13 +432,15 @@ function headerActions(user: PermissionUser): HomeHeaderActions {
 
 async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | null> {
   const [quoteAgg, openSos] = await Promise.all([
+    // Entity wall (PR-B): Home pipeline figures are HACIEN's — quotes and
+    // orders tagged to another business are excluded from the totals.
     db.quote.aggregate({
-      where: { status: { in: [...OPEN_QUOTE_STATUSES] } },
+      where: { status: { in: [...OPEN_QUOTE_STATUSES] }, businessId: null },
       _count: true,
       _sum: { contractPrice: true },
     }),
     db.salesOrder.findMany({
-      where: { status: "OPEN" },
+      where: { status: "OPEN", businessId: null },
       select: {
         contractPrice: true,
         billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
