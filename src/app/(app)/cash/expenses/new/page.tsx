@@ -12,12 +12,14 @@ import { CASH_DISCLAIMER } from "@/components/cash/CashParts";
 import { PageHeader } from "@/components/ui";
 import { uploadMaxMb } from "@/lib/business-docs/sniff";
 import { recordExpenseAction } from "../../actions";
+import { listBusinesses } from "@/lib/services/businesses";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 export default async function NewExpensePage() {
   const user = await requirePagePermission("view");
   if (!can(user, "manage_cash")) redirect("/no-access");
 
-  const [accounts, categories, suppliers, defaultAccount, defaultCategory, salesOrders, purchaseOrders] = await Promise.all([
+  const [accounts, categories, suppliers, defaultAccount, defaultCategory, salesOrders, purchaseOrders, businesses, snap] = await Promise.all([
     listActiveCashAccounts(),
     listExpenseCategories(true),
     db.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true }, take: 500 }),
@@ -35,6 +37,8 @@ export default async function NewExpensePage() {
       select: { id: true, number: true, supplier: { select: { name: true } } },
       take: 200,
     }),
+    listBusinesses({ activeOnly: true }),
+    getSettingsSnapshot(),
   ]);
   const today = isoDate(manilaToday());
 
@@ -57,6 +61,8 @@ export default async function NewExpensePage() {
           suppliers={suppliers}
           salesOrders={salesOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.customer.name}` }))}
           purchaseOrders={purchaseOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.supplier.name}` }))}
+          businesses={businesses}
+          ownCompanyName={snap.settings.company.name}
           defaults={{
             date: today,
             supplierId: "",

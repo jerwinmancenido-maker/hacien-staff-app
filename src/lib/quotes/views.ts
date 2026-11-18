@@ -285,6 +285,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: quoteItemsInclude,
+      business: { select: { id: true, name: true, shortLabel: true } },
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
@@ -322,6 +323,8 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   return {
     id: q.id,
     number: q.number,
+    businessId: q.businessId,
+    business: q.business,
     revision: q.revision,
     revisionChain,
     status: q.status,
@@ -397,6 +400,8 @@ export type QuoteListFilter = {
   noReplyAfterDays?: number;
   /** DRAFT + SENT only (Home Pipeline / open filter). Overrides single status. */
   open?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
   /** Optional clock for no-reply cutoff (tests). */
   now?: Date;
 };
@@ -422,6 +427,11 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
           ? { status }
           : {}),
     ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+    ...(filter.businessId === "own"
+      ? { businessId: null }
+      : filter.businessId
+        ? { businessId: filter.businessId }
+        : {}),
   };
 
   if (noReplyAfterDays) {
@@ -433,6 +443,7 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     where,
     include: {
       customer: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
       ...(withCosts ? { items: { select: { supplierTotal: true } } } : {}),
     },
     orderBy: [{ date: "desc" }, { number: "desc" }],
@@ -444,6 +455,8 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       id: r.id,
       number: r.number,
       revision: r.revision,
+      businessName: r.business?.name ?? null,
+      businessShortLabel: r.business?.shortLabel ?? null,
       customerName: r.customer.name,
       contractPrice: money(r.contractPrice),
       status: r.status,
@@ -466,6 +479,8 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     id: string;
     number: string;
     revision: number;
+    businessName: string | null;
+    businessShortLabel: string | null;
     customerName: string;
     contractPrice: string;
     status: QuoteStatus;
@@ -487,6 +502,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: soItemsInclude,
+      business: { select: { id: true, name: true, shortLabel: true } },
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true, date: true, contractPrice: true } },
@@ -622,6 +638,8 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     agencyPoNo: so.agencyPoNo,
     iarDate: ymd(so.iarDate),
     voidReason: so.voidReason,
+    businessId: so.businessId,
+    business: so.business,
     /** ISO token for the SO editor's stale-edit guard. */
     updatedAt: so.updatedAt.toISOString(),
     customer: so.customer,
@@ -667,6 +685,8 @@ export type SalesOrderListFilter = {
   open?: boolean;
   /** OPEN SOs with at least one live line still short of delivery. */
   toDeliver?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
 };
 
 export async function listSalesOrdersView(filter: SalesOrderListFilter) {
@@ -677,6 +697,11 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const status = needsPo || openUnbilled || toDeliver ? "OPEN" : filter.status;
   const where: Prisma.SalesOrderWhereInput = {
     ...(status ? { status } : {}),
+    ...(filter.businessId === "own"
+      ? { businessId: null }
+      : filter.businessId
+        ? { businessId: filter.businessId }
+        : {}),
     ...(q
       ? {
           OR: [
@@ -695,6 +720,7 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       where,
       include: {
         customer: { select: { name: true } },
+        business: { select: { name: true, shortLabel: true } },
         ...(openUnbilled
           ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
           : {}),
@@ -726,6 +752,8 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       mapped.push({
         id: raw.id,
         number: raw.number,
+        businessName: raw.business?.name ?? null,
+        businessShortLabel: raw.business?.shortLabel ?? null,
         customerName: raw.customer.name,
         buyerPoNo: raw.buyerPoNo,
         contractPrice,
@@ -740,6 +768,7 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
     where,
     include: {
       customer: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
       items: {
         where: { removedAt: null },
         select: {
@@ -765,6 +794,8 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
     .map((r) => ({
       id: r.id,
       number: r.number,
+      businessName: r.business?.name ?? null,
+      businessShortLabel: r.business?.shortLabel ?? null,
       customerName: r.customer.name,
       buyerPoNo: r.buyerPoNo,
       contractPrice: money(r.contractPrice),

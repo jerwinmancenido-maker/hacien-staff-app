@@ -6,12 +6,14 @@ import { PageHeader } from "@/components/ui";
 import { PoEditor } from "@/components/purchasing/PoEditor";
 import { poEditorSuppliers } from "../editor-data";
 import { savePurchaseOrderAction } from "../actions";
+import { listBusinesses } from "@/lib/services/businesses";
+import { can } from "@/lib/permissions";
 
 export default async function NewPurchaseOrderPage({ searchParams }: { searchParams: Promise<{ supplier?: string }> }) {
   const user = await requireCostPage("edit_data");
   if (!user.isAdmin) redirect("/no-access");
   const { supplier } = await searchParams;
-  const [suppliers, snap] = await Promise.all([poEditorSuppliers(), getSettingsSnapshot()]);
+  const [suppliers, snap, businesses] = await Promise.all([poEditorSuppliers(), getSettingsSnapshot(), listBusinesses({ activeOnly: true })]);
   const s = suppliers.find((x) => x.id === supplier);
   return (
     <>
@@ -21,7 +23,11 @@ export default async function NewPurchaseOrderPage({ searchParams }: { searchPar
         suppliers={suppliers}
         termsOptions={snap.settings.lists.paymentTerms}
         contactRoles={snap.settings.lists.contactRoles}
+        businesses={businesses}
+        ownCompanyName={snap.settings.company.name}
+        canTagBusiness={can(user, "approve")}
         initial={{
+          businessId: "",
           supplierId: s?.id ?? "",
           supplierContactId: s?.contacts.find((c) => c.isMain)?.id ?? "",
           date: isoDate(manilaToday()),

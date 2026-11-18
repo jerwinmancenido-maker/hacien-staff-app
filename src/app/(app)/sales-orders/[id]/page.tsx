@@ -32,7 +32,10 @@ import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
 import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
-import { deleteSalesOrderAction, recordDeliveryAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { listBusinesses } from "@/lib/services/businesses";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { BusinessReclassifyForm } from "./BusinessReclassifyForm";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -75,7 +78,10 @@ export default async function SalesOrderPage({
         },
       ])
     : null;
-  const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
+  const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
+  // Business entity: Admins get the reclassify form; everyone sees the label.
+  const allBusinesses = user.isAdmin ? await listBusinesses() : [];
+  const { settings } = await getSettingsSnapshot();
   // Phase 2 #6: credit-limit warning (never a block). The SO save action
   // redirects to this page, so this banner is what "warn on SO save" shows;
   // the figure comes from the ONE customerExposure helper the billing form
@@ -95,6 +101,7 @@ export default async function SalesOrderPage({
         title={
           <>
             {so.number}
+            {so.business && <Chip tone="dark">{so.business.shortLabel}</Chip>}
             {money?.completed ? <Chip tone="grey">Fully billed &amp; paid</Chip> : <SoStatusChip status={so.status} />}
           </>
         }
@@ -116,6 +123,21 @@ export default async function SalesOrderPage({
         <div className="alert error" role="status">
           <b>Void.</b> {so.voidReason}
         </div>
+      )}
+      {so.business && (
+        <div className="alert warn" role="status">
+          This order belongs to <b>{so.business.name}</b>. It is tracked here for operations and profit, and stays out of{" "}
+          {settings.company.name}&apos;s sales, Books, and tax figures. Billing for it is issued by {so.business.name}, not
+          from this app&apos;s booklet.
+        </div>
+      )}
+      {user.isAdmin && (
+        <BusinessReclassifyForm
+          ownCompanyName={settings.company.name}
+          currentBusinessId={so.businessId}
+          businesses={allBusinesses}
+          action={reclassifySalesOrderBusinessAction.bind(null, so.id)}
+        />
       )}
       <CreditLimitWarning text={creditLimitWarningText(exposure)} />
 

@@ -37,6 +37,8 @@ export type PoEditorItem = {
 export type PoEditorInitial = {
   supplierId: string;
   supplierContactId: string;
+  /** Business entity: "" = own company. Optional — older callers omit it. */
+  businessId?: string;
   date: string;
   expectedDate: string;
   terms: string;
@@ -136,6 +138,10 @@ export function PoEditor({
   action,
   cancelHref,
   soPicker,
+  businesses = [],
+  ownCompanyName = "HACIEN",
+  canTagBusiness = false,
+  businessLockedLabel = null,
 }: {
   isNew: boolean;
   initial: PoEditorInitial;
@@ -148,6 +154,12 @@ export function PoEditor({
   cancelHref: string;
   /** Part B: "Add from sales order" rows (edit page of an SO-born PO only). */
   soPicker?: { soNumber: string; rows: SoPickerRow[] } | null;
+  /** Business entity (2026-11-19): picker data. Hidden for SO-born POs —
+   * their business follows the sales order (lockedLabel says so). */
+  businesses?: { id: string; name: string; shortLabel: string }[];
+  ownCompanyName?: string;
+  canTagBusiness?: boolean;
+  businessLockedLabel?: string | null;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const [h, setH] = useState(() => ({ ...initial }));
@@ -242,6 +254,7 @@ export function PoEditor({
   const payload = {
     supplierId: h.supplierId,
     supplierContactId: h.supplierContactId || null,
+    businessId: h.businessId || null,
     date: h.date,
     expectedDate: h.expectedDate,
     terms: h.terms,
@@ -312,6 +325,35 @@ export function PoEditor({
               </div>
             </div>
           )}
+          {businessLockedLabel ? (
+            <div className="field">
+              <span className="label">Business</span>
+              <div className="strong">{businessLockedLabel}</div>
+              <div className="hint">Follows the sales order — change it there (Admin).</div>
+            </div>
+          ) : businesses.length > 0 || h.businessId ? (
+            <div className={`field${e.businessId ? " has-error" : ""}`}>
+              <label htmlFor="businessId">Business — whose purchase is this?</label>
+              <select
+                id="businessId"
+                value={h.businessId ?? ""}
+                disabled={!canTagBusiness}
+                onChange={(ev) => setH((prev) => ({ ...prev, businessId: ev.target.value }))}
+              >
+                <option value="">{ownCompanyName} (own company)</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+                {h.businessId && !businesses.some((b) => b.id === h.businessId) && (
+                  <option value={h.businessId}>Current business (switched off)</option>
+                )}
+              </select>
+              {!canTagBusiness && <div className="hint">Only an Admin or Approver can tag a PO to another business.</div>}
+              {e.businessId && <div className="error">{e.businessId}</div>}
+            </div>
+          ) : null}
           <div className={`field${e.supplierContactId ? " has-error" : ""}`}>
             <label htmlFor="supplierContactId">Supplier contact</label>
             <SearchPicker

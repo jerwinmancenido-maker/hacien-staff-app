@@ -63,6 +63,8 @@ export type PoListFilter = {
   open?: boolean;
   /** Non-void supplier bill totals higher than the PO subtotal. */
   billedOver?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
 };
 
 export async function listPurchaseOrdersView(filter: PoListFilter, viewer: PermissionUser) {
@@ -77,10 +79,16 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.open ? { status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } : {}),
       ...(billedOver ? { status: { not: "VOID" }, bills: { some: { status: { not: "VOID" } } } } : {}),
+      ...(filter.businessId === "own"
+        ? { businessId: null }
+        : filter.businessId
+          ? { businessId: filter.businessId }
+          : {}),
       ...(q ? { OR: [{ number: { contains: q } }, { supplier: { name: { contains: q } } }, { salesOrder: { number: { contains: q } } }] } : {}),
     },
     include: {
       supplier: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
       salesOrder: { select: { id: true, number: true } },
       ...(billedOver ? { bills: { where: { status: { not: "VOID" } }, select: { amount: true } } } : {}),
     },
@@ -99,6 +107,8 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
   return filtered.map((r) => ({
     id: r.id,
     number: r.number,
+    businessName: r.business?.name ?? null,
+    businessShortLabel: r.business?.shortLabel ?? null,
     revision: r.revision,
     status: r.status,
     supplierName: r.supplier.name,
@@ -118,6 +128,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     where: { id },
     include: {
       supplier: { select: { id: true, name: true, tin: true, active: true } },
+      business: { select: { id: true, name: true, shortLabel: true } },
       supplierContact: { select: { id: true, name: true, email: true, phone: true } },
       salesOrder: { select: { id: true, number: true, customer: { select: { id: true, name: true } } } },
       items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" }, include: { salesOrderItem: { select: { id: true, qty: true } } } },
@@ -227,6 +238,8 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     // Audit F: the page hides money UI when this is false.
     canSeeCosts: withCosts,
     supplier: po.supplier,
+    businessId: po.businessId,
+    business: po.business,
     supplierContact: po.supplierContact,
     salesOrder: po.salesOrder,
     approvedBy: po.approvedBy?.name ?? null,
@@ -396,6 +409,8 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     id: po.id,
     number: po.number,
     status: po.status,
+    businessId: po.businessId ?? "",
+    salesOrderId: po.salesOrderId,
     supplierId: po.supplierId,
     supplierContactId: po.supplierContactId ?? "",
     date: ymd(po.date)!,

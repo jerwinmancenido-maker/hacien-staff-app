@@ -146,6 +146,11 @@ const items = z.array(itemSchema).min(1, "Add at least one item.").max(200, "At 
 const quoteInputObject = z.object({
     customerId: z.string().trim().min(1, "Pick a customer."),
     contactId: optionalId,
+    /** Business entity: empty = the app's own company (HACIEN). */
+    // Business entity (2026-11-19): plain optional (NOT optionalId) so the
+    // property stays optional in the inferred input type — omitted means
+    // "leave unchanged" on update, null/"" means the own company.
+    businessId: z.string().trim().max(64).nullable().optional(),
     date: dateOnly("Date"),
     /** Empty → date + Settings → Quote defaults validity days. */
     validUntil: z

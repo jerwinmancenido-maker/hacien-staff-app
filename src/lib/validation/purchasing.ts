@@ -56,6 +56,11 @@ export const poInputSchema = z
   .object({
     supplierId: z.string().trim().min(1, "Pick a supplier."),
     supplierContactId: optionalId,
+    /** Business entity (standalone POs): empty = the app's own company. */
+    // Business entity (2026-11-19): plain optional (NOT optionalId) so the
+    // property stays optional in the inferred input type — omitted means
+    // "leave unchanged" on update, null/"" means the own company.
+    businessId: z.string().trim().max(64).nullable().optional(),
     date: dateOnly("PO date"),
     expectedDate: optionalDate("Expected date"),
     terms: optionalText(100),

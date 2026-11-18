@@ -111,6 +111,13 @@ export type QuoteEditorProps = {
   /** S-70: approver + approval time. */
   approvedByName?: string | null;
   approvedAt?: string | null;
+  /** Business entity (2026-11-19): active Settings businesses + the own
+   * company name + whether this user may tag another business. The picker
+   * renders only when a business exists or the quote already carries one. */
+  businesses?: { id: string; name: string; shortLabel: string }[];
+  ownCompanyName?: string;
+  canTagBusiness?: boolean;
+  initialBusinessId?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
   markSentAction?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
@@ -299,6 +306,10 @@ export function QuoteEditor({
   approvalStatus = "PENDING",
   canApprove = false,
   approvalLimits,
+  businesses = [],
+  ownCompanyName = "HACIEN",
+  canTagBusiness = false,
+  initialBusinessId = null,
 }: QuoteEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
@@ -324,6 +335,8 @@ export function QuoteEditor({
   /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
   const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
+  /** Business entity: "" = the own company. */
+  const [businessId, setBusinessId] = useState(initialBusinessId ?? "");
   /** Preparer picker: the chosen staff user; the preview below follows it. */
   const [preparedByIdState, setPreparedByIdState] = useState(preparedById);
   const preparer = staffUsers.find((u) => u.id === preparedByIdState) ?? null;
@@ -1198,6 +1211,7 @@ export function QuoteEditor({
   const payload = {
     customerId: h.customerId,
     contactId: h.contactId || null,
+    businessId: businessId || null,
     date: h.date,
     validUntil: h.validUntil,
     validForDays: nDays != null && nDays >= 1 ? nDays : undefined,
@@ -1470,6 +1484,33 @@ export function QuoteEditor({
               )}
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
+            {(businesses.length > 0 || businessId) && (
+              <div className={`quote-f field${e.businessId ? " has-error" : ""}`}>
+                <label htmlFor="businessId">Business — whose sale is this?</label>
+                <select
+                  id="businessId"
+                  value={businessId}
+                  disabled={!canTagBusiness}
+                  onChange={(ev) => setBusinessId(ev.target.value)}
+                >
+                  <option value="">{ownCompanyName} (own company)</option>
+                  {businesses.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                  {businessId && !businesses.some((b) => b.id === businessId) && (
+                    <option value={businessId}>Current business (switched off)</option>
+                  )}
+                </select>
+                <div className="hint">
+                  {canTagBusiness
+                    ? "It decides which business's sales and tax figures this joins. It never prints on the quote."
+                    : "Only an Admin or Approver can tag a quote to another business."}
+                </div>
+                {e.businessId && <div className="error">{e.businessId}</div>}
+              </div>
+            )}
             <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
               <SearchPicker

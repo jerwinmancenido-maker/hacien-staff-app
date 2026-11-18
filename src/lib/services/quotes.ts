@@ -5,6 +5,7 @@
 import { Prisma, type Quote, type QuoteItem, type QuoteItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { resolveBusinessForWrite } from "./businesses";
 import { addDays, manilaToday } from "../format";
 import { assertCan, assertCanApprove, assertCanVoid, can, canSeeCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
@@ -298,6 +299,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
   await checkItems(input.items);
+  // Business entity: NULL = own company. Tagging another business is
+  // Admin/Approver-only and the business must be active (resolveBusinessForWrite).
+  const businessId = await resolveBusinessForWrite(db, input.businessId, actor);
   // Preparer picker: the chosen preparer, else the creator.
   const preparedById = input.preparedById ?? actor.id;
   await checkPreparedBy(preparedById);
@@ -355,6 +359,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
       const quote = await tx.quote.create({
         data: {
           number,
+          businessId,
           customerId: customer.id,
           contactId: input.contactId,
           date: input.date,
@@ -436,6 +441,7 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           // Phase 2 #5: a new revision (revision > 1) joins the original's
           // chain; a plain duplicate (revision 1) starts no chain.
           revisionChainId: revision > 1 ? (original.revisionChainId ?? original.id) : null,
+          businessId: original.businessId,
           customerId: original.customerId,
           contactId: original.contactId,
           date: today,
@@ -522,6 +528,14 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
   await checkItems(input.items);
+  // Business entity: omitted → keep the stored tag; a change re-validates
+  // (Admin/Approver-only, active businesses only). Editable quotes are
+  // never WON, so the tag can still move here; after conversion the SO's
+  // Admin reclassify is the path.
+  const businessData: { businessId?: string | null } = {};
+  if (input.businessId !== undefined && input.businessId !== current.businessId) {
+    businessData.businessId = await resolveBusinessForWrite(db, input.businessId, actor);
+  }
   // Preparer picker: omitted → keep the stored preparer; null → back to the
   // creator; a NEW value must be an active staff user. The stored preparer
   // may have been turned off since — saving without changing it stays valid.
@@ -720,6 +734,7 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           ...approvalData,
           ...preparedByData,
           ...deliveryData,
+          ...businessData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
@@ -1087,6 +1102,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
           number,
           trackingRef,
           quoteId: quote.id,
+          businessId: quote.businessId,
           customerId: quote.customerId,
           contactId: quote.contactId,
           date,
