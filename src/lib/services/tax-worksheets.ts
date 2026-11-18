@@ -39,6 +39,10 @@ export async function cumulativeInvoicedTotal(year: number, quarter: Quarter): P
     where: {
       status: { not: "VOID" },
       invoiceDate: { gte: ymdToDate(b.yearStartYmd), lte: ymdToDate(b.toYmd) },
+      // Entity wall (PR-B): HACIEN's tax reads HACIEN documents only.
+      // Billings are own-company by construction; the filter is explicit
+      // so the wall does not depend on that construction.
+      salesOrder: { businessId: null },
     },
     _sum: { amount: true },
   });
@@ -365,6 +369,9 @@ export async function getSupplierEwtWorksheet(
           withholdingApplied: true,
           withholdingRate: true,
           atcCode: true,
+          // Entity wall (PR-B): withholding on another business's bill is
+          // that business's remittance, never HACIEN's — skipped below.
+          supplierBill: { select: { purchaseOrder: { select: { businessId: true } } } },
         },
       },
     },
@@ -376,6 +383,7 @@ export async function getSupplierEwtWorksheet(
     const payDate = dateYmd(p.date);
     if (!ymdInPeriod(payDate, fromFilter, toYmd)) continue;
     for (const a of p.allocations) {
+      if (a.supplierBill.purchaseOrder?.businessId) continue;
       const tax = money(a.withholdingApplied);
       if (toScaled(tax, 2) <= 0n) continue;
       const rate = Number(a.withholdingRate).toFixed(4);
@@ -473,6 +481,7 @@ export async function getSalesSummaryWorksheet(
     where: {
       status: { not: "VOID" },
       invoiceDate: { gte: ymdToDate(fromYmd), lte: ymdToDate(toYmd) },
+      salesOrder: { businessId: null },
     },
     select: { id: true, amount: true, invoiceDate: true },
     orderBy: [{ invoiceDate: "asc" }],
