@@ -64,6 +64,7 @@ describe.skipIf(!env.hasDb)("reconciliation + operational profit (MySQL)", () =>
     );
     accountId = account.id;
     await ensureWideBooklet();
+    await ensureWideDrBooklet();
   });
 
   afterAll(async () => {
@@ -84,6 +85,40 @@ describe.skipIf(!env.hasDb)("reconciliation + operational profit (MySQL)", () =>
             changedKey: "invoiceBooklet",
             before: snap.settings.invoiceBooklet,
             after: wide,
+            createdById: admin.id,
+          },
+        });
+        return;
+      } catch {
+        // Unique version race with another suite — retry.
+      }
+    }
+  }
+
+  async function ensureWideDrBooklet() {
+    const typeWide = {
+      atpNo: "",
+      atpDate: "",
+      printer: "",
+      seriesFrom: 1,
+      seriesTo: 9_999_999,
+      bookletCount: 10,
+      setsPerBooklet: 50,
+      isNonVat: true,
+    };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snap = await getSettingsSnapshot();
+      const ib = snap.settings.invoiceBooklet;
+      if ((ib.deliveryReceipt?.seriesTo ?? 0) >= 9_999_999) return;
+      const latest = await db.settingsVersion.findFirstOrThrow({ orderBy: { version: "desc" } });
+      try {
+        await db.settingsVersion.create({
+          data: {
+            version: latest.version + 1,
+            data: { ...(latest.data as object), invoiceBooklet: { ...ib, deliveryReceipt: { ...typeWide } } } as never,
+            changedKey: "invoiceBooklet",
+            before: ib,
+            after: { deliveryReceipt: typeWide },
             createdById: admin.id,
           },
         });
