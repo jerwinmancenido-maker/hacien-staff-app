@@ -13,6 +13,7 @@ import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import {
   COST_NOT_SET_LABEL,
+  approvalReasons,
   componentsTotal,
   docTotals,
   fromScaled,
@@ -23,7 +24,7 @@ import {
   type ItemKind,
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
-import { quoteMarkSentGate, quoteSaveGate } from "@/lib/quotes/approval";
+import { quoteMarkSentGate, quoteSaveGate, type QuoteApprovalStatus } from "@/lib/quotes/approval";
 import {
   lineDiffersFromUsualPicks,
   lineWithholdingChipsFromPicks,
@@ -112,11 +113,16 @@ export type QuoteEditorProps = {
   approvedAt?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
-  markSentAction?: (id: string) => Promise<FormState>;
+  markSentAction?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
   /** Sets pick to [] then marks sent. Used when staff confirms "Yes, none". */
-  confirmNoneAndMarkSentAction?: (id: string) => Promise<FormState>;
-  /** S-18: only APPROVED quotes may mark as sent from the editor. */
-  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  confirmNoneAndMarkSentAction?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
+  /** S-18 + prompt model (F5): APPROVED / NOT_REQUIRED quotes mark as sent
+   * freely; a PENDING quote needs an Approver, who confirms the prompt. */
+  approvalStatus?: QuoteApprovalStatus;
+  /** The signed-in user may approve quotes (Approver/Admin). */
+  canApprove?: boolean;
+  /** Approval thresholds, for the live prompt check on edited numbers. */
+  approvalLimits?: { marginBelowPct: number; totalAbove: number };
 };
 
 type TabId = "items" | "withholding" | "terms" | "notes" | "signoff";
@@ -291,6 +297,8 @@ export function QuoteEditor({
   markSentAction,
   confirmNoneAndMarkSentAction,
   approvalStatus = "PENDING",
+  canApprove = false,
+  approvalLimits,
 }: QuoteEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
@@ -298,6 +306,10 @@ export function QuoteEditor({
   /** Set when "Yes, none" is confirmed on a draft save, so the re-submit saves. */
   const skipWhNoneWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
+  const alsoMarkSentConfirmedRef = useRef<HTMLInputElement>(null);
+  /** F5: the Approver confirmed the approval prompt for this send. */
+  const approvalConfirmedRef = useRef(false);
+  const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
   /** Cost warning already shown; Yes, none must save the cleared cost in the same request. */
   const sendAfterCostWarn = useRef(false);
   const [costConfirmOpen, setCostConfirmOpen] = useState(false);
@@ -1221,13 +1233,20 @@ export function QuoteEditor({
     Boolean(printDefaults.warrantyNotes?.trim());
   const notesCount = (h.notes?.trim() ? 1 : 0) + (h.internalNotes?.trim() ? 1 : 0);
 
-  const canMarkSent = quoteId && status === "DRAFT" && approvalStatus === "APPROVED" && markSentAction;
+  const canMarkSent =
+    quoteId &&
+    status === "DRAFT" &&
+    markSentAction &&
+    (approvalStatus === "APPROVED" ||
+      approvalStatus === "NOT_REQUIRED" ||
+      (approvalStatus === "PENDING" && canApprove));
   const busy = pending || sentPending;
 
   function markSentNow() {
     if (!canMarkSent || !quoteId || !markSentAction) return;
+    const confirmed = approvalConfirmedRef.current;
     startSentTransition(async () => {
-      await markSentAction(quoteId);
+      await markSentAction(quoteId, confirmed);
     });
   }
 
@@ -1247,6 +1266,7 @@ export function QuoteEditor({
       }
       skipCostWarn.current = true;
       if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "1";
+      if (alsoMarkSentConfirmedRef.current) alsoMarkSentConfirmedRef.current.value = approvalConfirmedRef.current ? "1" : "";
       formRef.current.requestSubmit();
       return;
     }
@@ -1254,7 +1274,7 @@ export function QuoteEditor({
       // Persist explicit none locally so a concurrent draft save matches.
       applyPickDefaults([], items);
       const fn = confirmNoneAndMarkSentAction ?? markSentAction;
-      if (fn) await fn(quoteId);
+      if (fn) await fn(quoteId, approvalConfirmedRef.current);
     });
   }
 
@@ -1283,6 +1303,7 @@ export function QuoteEditor({
       return;
     }
     if (!skipCostWarn.current && alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
+    if (alsoMarkSentConfirmedRef.current) alsoMarkSentConfirmedRef.current.value = "";
     skipCostWarn.current = false;
     skipWhNoneWarn.current = false;
     onSubmit(e);
@@ -1326,11 +1347,23 @@ export function QuoteEditor({
     sendAfterCostWarn.current = false;
     skipCostWarn.current = true;
     if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = next === "sent" ? "1" : "";
+    if (alsoMarkSentConfirmedRef.current) {
+      alsoMarkSentConfirmedRef.current.value = next === "sent" && approvalConfirmedRef.current ? "1" : "";
+    }
     formRef.current?.requestSubmit();
   }
 
   function submitMarkSent() {
     if (canMarkSent) {
+      // F5 prompt: an Approver sending a PENDING quote whose EDITED numbers
+      // trip a threshold confirms first; the flag then rides every send path.
+      if (approvalStatus === "PENDING" && canApprove && !approvalConfirmedRef.current && approvalLimits) {
+        const liveReasons = approvalReasons(totals, approvalLimits);
+        if (liveReasons.length > 0) {
+          setApprovalConfirmOpen(true);
+          return;
+        }
+      }
       const gate = quoteMarkSentGate({
         approved: true,
         withholdingUnset: pick == null,
@@ -1359,6 +1392,7 @@ export function QuoteEditor({
       <form ref={formRef} className="quote-editor" onSubmit={onSubmitMaybeWarn} noValidate>
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
         <input ref={alsoMarkSentRef} type="hidden" name="alsoMarkSent" value="" />
+        <input ref={alsoMarkSentConfirmedRef} type="hidden" name="alsoMarkSentConfirmed" value="" />
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -2652,6 +2686,21 @@ export function QuoteEditor({
         cancelLabel={WITHHOLDING_NONE_CONFIRM_PICK}
         onCancel={() => setNoneConfirmOpen(false)}
         onConfirm={confirmNoneAndMarkSent}
+      />
+
+      {/* F5: an Approver sending a quote that trips a threshold confirms first. */}
+      <ConfirmDialog
+        open={approvalConfirmOpen}
+        title="This quote needs approval"
+        body={`It trips the approval checks: ${approvalLimits ? approvalReasons(totals, approvalLimits).join("; ") : ""}. As an Approver you can send it anyway — your confirmation is recorded in the activity log.`}
+        confirmLabel="Send anyway"
+        cancelLabel="Go back"
+        onCancel={() => setApprovalConfirmOpen(false)}
+        onConfirm={() => {
+          approvalConfirmedRef.current = true;
+          setApprovalConfirmOpen(false);
+          submitMarkSent();
+        }}
       />
 
       {/* S-79: same prompt, wording and choices as Mark as sent, for Save draft. */}

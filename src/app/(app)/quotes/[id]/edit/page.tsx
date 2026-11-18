@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDateTime } from "@/lib/format";
-import { canSeeCosts } from "@/lib/permissions";
+import { can, canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
@@ -36,6 +36,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         revision={quote.revision}
         status={quote.status}
         approvalStatus={quote.approvalStatus}
+        canApprove={can(user, "approve")}
+        approvalLimits={{ marginBelowPct: settings.approval.marginBelowPct, totalAbove: settings.approval.totalAbove }}
         customers={customers}
         rates={rates}
         suppliers={suppliers}

@@ -39,12 +39,12 @@ export function ApprovalChip({
   );
 }
 
-/** S-18 workflow approval (Waiting / Approved / Rejected). */
+/** S-18 workflow approval (Waiting / Approved / Rejected / Not required). */
 export function QuoteWorkflowApprovalChip({
   status,
   label,
 }: {
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "NOT_REQUIRED";
   label: string;
 }) {
   const tone: ChipTone = status === "APPROVED" ? "green" : status === "REJECTED" ? "red" : "grey";
