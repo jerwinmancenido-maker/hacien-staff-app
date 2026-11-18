@@ -8840,10 +8840,18 @@ button.contact-card-add {
   font-size: 12px;
   cursor: pointer;
 }
-.create-pos .confirm-zero input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--blue);
+/* Design pass step 6 (2026-11-18): every checkbox on this screen takes
+   the app's standard checkbox (18px, blue accent — the .check size).
+   The row selectors previously had no rule at all (browser-default box,
+   no accent colour) and the confirm boxes were a fixed 16px. Scoped to
+   >=641px so the phone block's 32px checkbox hold keeps winning there. */
+@media (min-width: 641px) {
+  .create-pos input[type="checkbox"] {
+    width: calc(18px * var(--ui-scale, 1));
+    height: calc(18px * var(--ui-scale, 1));
+    accent-color: var(--blue);
+    flex: 0 0 auto;
+  }
 }
 .create-pos .already-on {
   font-size: 12px;
