@@ -18,6 +18,7 @@ import {
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill, voidSupplierBill } from "@/lib/services/supplier-bills";
 import { postSupplierReturn, voidSupplierReturn } from "@/lib/services/returns";
+import { setPurchaseOrderGapReason } from "@/lib/services/reconciliation";
 import { formFiles } from "@/lib/form-files";
 import { billInputSchema, closeReasonSchema, createFromSoSchema, poInputSchema, returnInputSchema } from "@/lib/validation/purchasing";
 import { voidReasonSchema } from "@/lib/validation/quotes";
@@ -219,5 +220,20 @@ export async function voidSupplierReturnAction(purchaseOrderId: string, id: stri
     await voidSupplierReturn(id, reason, user);
     refresh(purchaseOrderId);
     return { ok: true, message: "Return voided." };
+  });
+}
+
+/** Reconciliation note (PR-C, 2026-11-19): why this PO has no supplier bill yet. */
+export async function setPurchaseOrderGapReasonAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireCostAction("edit_data");
+    await setPurchaseOrderGapReason(
+      id,
+      { code: str(form, "gapReasonCode") || null, note: str(form, "gapNote") || null },
+      user,
+    );
+    refresh(id);
+    revalidatePath("/books/reconciliation");
+    return { ok: true, message: "Reconciliation note saved." };
   });
 }

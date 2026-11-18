@@ -32,10 +32,11 @@ import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
 import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
-import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, setSalesOrderGapReasonAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 import { listBusinesses } from "@/lib/services/businesses";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { BusinessReclassifyForm } from "./BusinessReclassifyForm";
+import { GapReasonForm } from "@/components/docs/GapReasonForm";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -137,6 +138,14 @@ export default async function SalesOrderPage({
           currentBusinessId={so.businessId}
           businesses={allBusinesses}
           action={reclassifySalesOrderBusinessAction.bind(null, so.id)}
+        />
+      )}
+      {can(user, "edit_data") && so.status !== "VOID" && (
+        <GapReasonForm
+          kind="SO"
+          currentCode={so.gapReasonCode}
+          currentNote={so.gapNote}
+          action={setSalesOrderGapReasonAction.bind(null, so.id)}
         />
       )}
       <CreditLimitWarning text={creditLimitWarningText(exposure)} />

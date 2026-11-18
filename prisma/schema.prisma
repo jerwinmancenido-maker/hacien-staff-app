@@ -983,6 +983,13 @@ model SalesOrder {
   // Business entity, copied from the quote at conversion. NULL = HACIEN.
   businessId        String?
   business          Business?        @relation(fields: [businessId], references: [id])
+  // Reconciliation note (PR-C, 2026-11-19): why this order has no billing
+  // yet — a fact about the document ("Customer did not request an
+  // invoice", "Billing pending details", or a free note). Changes no
+  // total, Book entry or print. gapReasonCode is one of the SO codes in
+  // src/lib/reconciliation-shared.ts; gapNote is the free text.
+  gapReasonCode     String?          @db.VarChar(40)
+  gapNote           String?          @db.Text
   customerId        String
   customer          Customer         @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -1199,6 +1206,11 @@ model PurchaseOrder {
   // on standalone POs. NULL = HACIEN.
   businessId          String?
   business            Business?           @relation(fields: [businessId], references: [id])
+  // Reconciliation note (PR-C, 2026-11-19): why this PO has no supplier
+  // bill yet ("Supplier did not issue an invoice", "Invoice awaited", or
+  // a free note). Facts about the document only — see SalesOrder.
+  gapReasonCode       String?             @db.VarChar(40)
+  gapNote             String?             @db.Text
   // Null = standalone PO.
   salesOrderId        String?
   salesOrder          SalesOrder?         @relation(fields: [salesOrderId], references: [id])
