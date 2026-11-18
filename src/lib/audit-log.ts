@@ -143,7 +143,6 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
       case "PurchaseOrder":
       case "Billing":
       case "Collection":
-      case "SupplierBill":
       case "ReceivingReport":
       case "SupplierReturn":
       case "SupplierPayment":
@@ -155,7 +154,6 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           PurchaseOrder: db.purchaseOrder,
           Billing: db.billing,
           Collection: db.collection,
-          SupplierBill: db.supplierBill,
           ReceivingReport: db.receivingReport,
           SupplierReturn: db.supplierReturn,
           SupplierPayment: db.supplierPayment,
@@ -163,6 +161,14 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           CashTransfer: db.cashTransfer,
         }[type] as { findMany: (a: { where: { id: { in: string[] } }; select: { id: true; number: true } }) => Promise<{ id: string; number: string }[]> };
         put(type, (await model.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })).map((r) => ({ id: r.id, label: r.number })));
+        break;
+      }
+      case "SupplierBill": {
+        // Supplier bills carry their number in billNumber, not number.
+        // Grouping them with the number models above made the whole
+        // audit log crash the moment a bill entry appeared (2026-11-18).
+        const found = await db.supplierBill.findMany({ where: { id: { in: ids } }, select: { id: true, billNumber: true } });
+        put(type, found.map((r) => ({ id: r.id, label: r.billNumber })));
         break;
       }
       case "Customer":
