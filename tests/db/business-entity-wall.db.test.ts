@@ -203,6 +203,15 @@ describe.skipIf(!env.hasDb)("business entity money wall (MySQL)", () => {
     const taggedPay = await payBill(year, tagged.supplier.id, taggedBill.id, "3000.00", "500.00");
     const ownPay = await payBill(year, own.supplier.id, ownBill.id, "6300.00", "700.00");
 
+    // F35: a tagged bill dated OUTSIDE the period (April), left
+    // fully unpaid, must not move March's stillOwed — the figure
+    // is period-scoped like the rest of the held-for-others card.
+    await recordSupplierBill(
+      tagged.po.id,
+      { billNumber: `SB-TAGGED-APR-${t}`, billDate: new Date(Date.UTC(year, 3, 5)), amount: "4000.00", notes: null, lines: [] },
+      admin,
+    );
+
     const taggedExpLinked = await recordExpense(expenseInput(year, { amount: "350.00", salesOrderId: tagged.so.id }), admin);
     const taggedExpPick = await recordExpense(expenseInput(year, { amount: "200.00", businessId: biz.id }), admin);
     const ownExpense = await recordExpense(expenseInput(year, { amount: "900.00" }), admin);
