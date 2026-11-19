@@ -31,7 +31,7 @@ export default async function PrintSalesSummaryPage({
   const company = settings.company;
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/tax/sales-summary?year=${year}`}>
           Back to worksheet

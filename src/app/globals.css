@@ -4509,6 +4509,15 @@ td.has-error input {
     color: #525252;
   }
 }
+/* F25: a named @page only applies when an element selects it with the
+   `page` property — until now nothing did, so the paper-size setting
+   changed only the on-screen sheet width and every print still came
+   out A4. Generic print shells carrying the Letter class (the
+   books/tax print pages set it from the print settings) select the
+   letter page here. */
+.print-shell-letter {
+  page: letter;
+}
 @media print {
   html,
   body,
@@ -5050,6 +5059,42 @@ button.contact-card-add {
   @bottom-left {
     content: none;
   }
+}
+/* F25: the Letter twin of pp-doc — identical margins and margin
+   boxes, Letter size. Selected by .pp-paper-letter below; the
+   identity strip rules for it are emitted per document by
+   printStripCss alongside the pp-doc ones. */
+@page pp-doc-letter {
+  size: letter;
+  margin: 15mm 0.39in 0.63in;
+  @top-left {
+    content: "■ HACIEN";
+    font-size: 7.5pt;
+    letter-spacing: 0.09em;
+    color: #737373;
+  }
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
+}
+@page pp-doc-letter:first {
+  margin-top: 0.25in;
+  @top-left {
+    content: none;
+  }
+  @bottom-left {
+    content: none;
+  }
+}
+.pp-page.pp-paper-letter {
+  page: pp-doc-letter;
 }
 .pp-letterhead {
   min-width: 0;

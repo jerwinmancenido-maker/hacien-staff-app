@@ -23,9 +23,15 @@ export function cssContentString(value: string): string {
  * "QUOTATION · QT-2026-0019"); it prints on page 2+ only.
  */
 export function printStripCss(stripText: string): string {
+  // F25: the strip must land on BOTH named pages — a document whose
+  // paper setting is Letter prints under pp-doc-letter, and without
+  // its own strip rule its page 2+ would lose the identity strip.
   return (
     `@page pp-doc { @top-right { content: ${cssContentString(stripText)}; ` +
     `font-size: 7.5pt; letter-spacing: 0.09em; color: #737373; } }\n` +
-    `@page pp-doc:first { @top-right { content: none; } }`
+    `@page pp-doc:first { @top-right { content: none; } }\n` +
+    `@page pp-doc-letter { @top-right { content: ${cssContentString(stripText)}; ` +
+    `font-size: 7.5pt; letter-spacing: 0.09em; color: #737373; } }\n` +
+    `@page pp-doc-letter:first { @top-right { content: none; } }`
   );
 }
