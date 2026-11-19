@@ -49,7 +49,12 @@ export default async function PayablesHomePage({
         <Link className="card stat stat-link" href="/payables/aging">
           <div className="label">Total payable</div>
           <div className="value num">{formatPeso(summary.totalPayable)}</div>
-          <div className="foot">Open supplier bill balances</div>
+          <div className="foot">
+            Open supplier bill balances
+            {summary.otherBusinessPayable !== "0.00"
+              ? ` · ${formatPeso(summary.otherBusinessPayable)} of it for other businesses`
+              : ""}
+          </div>
         </Link>
         {issue2307Enabled ? (
           <Link className="card stat stat-link" href="/payables/2307?status=TO_ISSUE">

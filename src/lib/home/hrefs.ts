@@ -11,14 +11,16 @@ export const HOME_SO_OPEN = "open";
 export const HOME_PO_BILLED_OVER = "billedOver";
 export const HOME_BILLS_DUE_DAYS = "7";
 
-/** Quotes list: DRAFT + SENT (not WON / LOST / VOID). */
+/** Quotes list: DRAFT + SENT (not WON / LOST / VOID). The pipeline count
+ *  is own-company only (entity wall), so the link filters to match (E6);
+ *  with no other businesses the filter changes nothing. */
 export function openQuotesHref(): string {
-  return `/quotes?${HOME_QUOTE_OPEN}=1`;
+  return `/quotes?${HOME_QUOTE_OPEN}=1&business=own`;
 }
 
 /** Sales orders list: OPEN with remaining-to-bill &gt; 0 (not VOID / fully billed). */
 export function openSalesOrdersHref(): string {
-  return `/sales-orders?${HOME_SO_OPEN}=1`;
+  return `/sales-orders?${HOME_SO_OPEN}=1&business=own`;
 }
 
 export function quotesNeedsApprovalHref(): string {

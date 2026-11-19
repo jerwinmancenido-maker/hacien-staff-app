@@ -4,6 +4,7 @@
 // (Reconciliation Plan 2026-11-19). The service refuses once the order has
 // live billing; the order's POs and linked expenses follow.
 
+import type { FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -21,8 +22,25 @@ export function BusinessReclassifyForm({
   action: Action;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
+  // E13: moving an order between businesses moves its POs and expenses in
+  // or out of the company's Books — confirm before it happens.
+  const confirmSubmit = (ev: FormEvent<HTMLFormElement>) => {
+    const picked = new FormData(ev.currentTarget).get("businessId");
+    const pickedId = typeof picked === "string" ? picked : "";
+    if (pickedId !== (currentBusinessId ?? "")) {
+      const target = pickedId === "" ? ownCompanyName : (businesses.find((b) => b.id === pickedId)?.name ?? "another business");
+      const ok = window.confirm(
+        `Move this order to ${target}? Its purchase orders and linked expenses move with it, and its figures ${pickedId === "" ? "come back into" : "leave"} ${ownCompanyName}'s Books, sales and tax figures.`,
+      );
+      if (!ok) {
+        ev.preventDefault();
+        return;
+      }
+    }
+    onSubmit(ev);
+  };
   return (
-    <form onSubmit={onSubmit} className="card" style={{ marginTop: 10 }}>
+    <form onSubmit={confirmSubmit} className="card" style={{ marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <label className="small" style={{ flex: "1 1 240px" }}>
           Business this order belongs to (Admin only)

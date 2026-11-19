@@ -19,6 +19,9 @@ export default async function PayablesAgingPage() {
         <div className="card stat">
           <div className="label">Total payable</div>
           <div className="value num">{formatPeso(summary.totalPayable)}</div>
+          {summary.otherBusinessPayable !== "0.00" && (
+            <div className="foot">{formatPeso(summary.otherBusinessPayable)} for other businesses</div>
+          )}
         </div>
         {AGING_BUCKETS.map((b) => (
           <div key={b} className="card stat">

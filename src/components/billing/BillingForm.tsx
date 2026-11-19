@@ -5,6 +5,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { FileInput } from "@/components/FileInput";
+import { formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 
 export function BillingForm({
@@ -89,7 +90,7 @@ export function BillingForm({
         <div className="field full">
           <label>Sales order</label>
           <div>{salesOrderLabel}</div>
-          <div className="hint">Remaining to bill: ₱{remaining}</div>
+          <div className="hint">Remaining to bill: {formatPeso(remaining)}</div>
         </div>
         <div className={`field${e.amount ? " has-error" : ""}`}>
           <label htmlFor="amount">Amount</label>

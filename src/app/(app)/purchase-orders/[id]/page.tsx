@@ -21,6 +21,7 @@ import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
 import { GapReasonForm } from "@/components/docs/GapReasonForm";
+import { purchaseOrderGapState } from "@/lib/services/reconciliation";
 import {
   approvePurchaseOrderAction,
   closePurchaseOrderAction,
@@ -48,6 +49,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
   const tab: Tab = (rawTab === "bills" || rawTab === "match") && !po.canSeeCosts ? "overview" : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const returns = await listSupplierReturns(id);
   const canEdit = can(user, "edit_data");
+  // E7: the gap-reason editor shows only while a supplier-bill gap exists.
+  const gapState = canEdit && po.canSeeCosts && po.status !== "VOID" ? await purchaseOrderGapState(id) : null;
   const canApprove = can(user, "approve") && po.approval.canApprove;
   const base = `/purchase-orders/${id}`;
   const liveBills = po.bills.filter((b) => b.status !== "VOID");
@@ -98,12 +101,13 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           <b>Short-closed.</b> {po.closeReason}
         </div>
       )}
-      {canEdit && po.canSeeCosts && po.status !== "VOID" && (
+      {gapState?.show && (
         <GapReasonForm
           kind="PO"
           currentCode={po.gapReasonCode}
           currentNote={po.gapNote}
           action={setPurchaseOrderGapReasonAction.bind(null, po.id)}
+          partial={gapState.partial}
         />
       )}
 

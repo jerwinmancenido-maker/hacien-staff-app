@@ -52,6 +52,11 @@ export function ExpenseForm({
   const [useSupplier, setUseSupplier] = useState(!!defaults.supplierId);
   const [showWh, setShowWh] = useState(!!defaults.withholdingApplied && defaults.withholdingApplied !== "0" && defaults.withholdingApplied !== "0.00");
   const [fileError, setFileError] = useState<string | null>(null);
+  // E4: the Business pick applies only to UNLINKED expenses — track the
+  // link picks so the picker can hide while an order is linked.
+  const [linkedSoId, setLinkedSoId] = useState(state.values?.salesOrderId ?? defaults.salesOrderId ?? "");
+  const [linkedPoId, setLinkedPoId] = useState(state.values?.purchaseOrderId ?? defaults.purchaseOrderId ?? "");
+  const isLinked = linkedSoId !== "" || linkedPoId !== "";
 
   if (!canEdit) {
     return (
@@ -170,7 +175,8 @@ export function ExpenseForm({
           <select
             id="salesOrderId"
             name="salesOrderId"
-            defaultValue={state.values?.salesOrderId ?? defaults.salesOrderId ?? ""}
+            value={linkedSoId}
+            onChange={(ev) => setLinkedSoId(ev.target.value)}
           >
             <option value="">No linked order</option>
             {salesOrders.map((o) => (
@@ -187,7 +193,8 @@ export function ExpenseForm({
           <select
             id="purchaseOrderId"
             name="purchaseOrderId"
-            defaultValue={state.values?.purchaseOrderId ?? defaults.purchaseOrderId ?? ""}
+            value={linkedPoId}
+            onChange={(ev) => setLinkedPoId(ev.target.value)}
           >
             <option value="">No linked order</option>
             {purchaseOrders.map((o) => (
@@ -198,7 +205,7 @@ export function ExpenseForm({
           </select>
           {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
         </div>
-        {businesses.length > 0 && (
+        {businesses.length > 0 && !isLinked && (
           <div className={`field${e.businessId ? " has-error" : ""}`}>
             <label htmlFor="businessId">Business (unlinked expenses only)</label>
             <select id="businessId" name="businessId" defaultValue={state.values?.businessId ?? ""}>
@@ -209,8 +216,14 @@ export function ExpenseForm({
                 </option>
               ))}
             </select>
-            <div className="hint">A linked expense always follows its order&apos;s business — this pick applies only when no order is linked.</div>
+            <div className="hint">This pick applies only when no order is linked.</div>
             {e.businessId && <div className="error">{e.businessId}</div>}
+          </div>
+        )}
+        {businesses.length > 0 && isLinked && (
+          <div className="field">
+            <label>Business</label>
+            <div className="hint">Follows the linked order&apos;s business — a linked expense can&apos;t be tagged separately.</div>
           </div>
         )}
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>

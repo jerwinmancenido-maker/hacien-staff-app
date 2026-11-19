@@ -113,7 +113,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           <Link className={`filter-chip${business === "own" ? " active" : ""}`} href={href(s, { business: "own" })}>
             Own company
           </Link>
-          {businesses.map((b) => (
+          {businesses.filter((b) => b.active || b.id === business).map((b) => (
             <Link key={b.id} className={`filter-chip${business === b.id ? " active" : ""}`} href={href(s, { business: b.id })}>
               {b.shortLabel}
             </Link>

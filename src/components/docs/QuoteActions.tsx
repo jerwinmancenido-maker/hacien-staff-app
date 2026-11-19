@@ -56,6 +56,8 @@ type Props = {
   costMissing?: boolean;
   /** Audit: a conforme file is on file or acceptance is recorded. */
   hasAcceptance?: boolean;
+  /** E15: the business this quote is tagged to, if any (Convert dialog note). */
+  businessName?: string;
   actions: {
     markSent: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
     /** Saves explicit none then marks sent (Yes, none). */
@@ -96,6 +98,7 @@ export function QuoteActions({
   withholdingNotSet = false,
   costMissing = false,
   hasAcceptance = false,
+  businessName,
   actions,
 }: Props) {
   const router = useRouter();
@@ -278,7 +281,7 @@ export function QuoteActions({
         />
       )}
       {dialog === "convert" && (
-        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} approvalWarning={needsPrompt ? approvalReasons : undefined} customerName={customerName} onAddAddress={actions.addAddress && customerId ? (input) => actions.addAddress!(customerId, input) : undefined} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
+        <ConvertDialog number={number} defaultAddress={customerAddress} addressOptions={addressOptions} hasAcceptance={hasAcceptance} approvalWarning={needsPrompt ? approvalReasons : undefined} businessName={businessName} customerName={customerName} onAddAddress={actions.addAddress && customerId ? (input) => actions.addAddress!(customerId, input) : undefined} onClose={() => setDialog(null)} onConvert={(input) => actions.convert(id, input)} />
       )}
       <ConfirmDialog
         open={dialog === "lost"}

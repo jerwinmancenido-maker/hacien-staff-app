@@ -9,7 +9,7 @@ import { dueDateFromTerms, billingToday } from "@/lib/billing/dates";
 import { remainingToBill } from "@/lib/billing/status";
 import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
 import { getBookletView } from "@/lib/billing/views";
-import { isoDate } from "@/lib/format";
+import { formatPeso, isoDate } from "@/lib/format";
 import { toScaled, type WithholdingSnapshot } from "@/lib/quotes/calc";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingForm } from "@/components/billing/BillingForm";
@@ -21,9 +21,11 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
   if (!can(user, "record_billing")) redirect("/no-access");
   const { salesOrderId } = await searchParams;
   if (!salesOrderId) {
-    // Pick list of open SOs with remaining to bill.
+    // Pick list of open SOs with remaining to bill. Orders tagged to
+    // another business are excluded — their billing is never recorded
+    // from this app's booklet (recordBilling refuses them; E2).
     const sos = await db.salesOrder.findMany({
-      where: { status: "OPEN" },
+      where: { status: "OPEN", businessId: null },
       include: { customer: { select: { name: true } }, billings: { where: { status: { not: "VOID" } }, select: { amount: true } } },
       orderBy: { date: "desc" },
       take: 100,
@@ -54,7 +56,7 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
                   <Link href={`/billing/billings/new?salesOrderId=${s.id}`}>
                     {s.number} · {s.customer}
                   </Link>{" "}
-                  <span className="faint">— ₱{s.remaining} left</span>
+                  <span className="faint">— {formatPeso(s.remaining)} left</span>
                 </li>
               ))}
             </ul>
@@ -68,10 +70,26 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
     where: { id: salesOrderId },
     include: {
       customer: { select: { id: true, name: true } },
+      business: { select: { name: true } },
       billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
     },
   });
   if (!so || so.status !== "OPEN") notFound();
+
+  if (so.businessId) {
+    // E2: a tagged order reached by a direct link gets the reason up
+    // front instead of a form that only refuses on submit.
+    return (
+      <>
+        <PageHeader title="Record billing" subtitle={`${so.number} belongs to another business.`} />
+        <BillingNav active="billings" />
+        <div className="alert warn" role="status">
+          This order belongs to <b>{so.business?.name ?? "another business"}</b>. Its billing is issued by that
+          business, not from this app&apos;s booklet, so no billing can be recorded for it here.
+        </div>
+      </>
+    );
+  }
 
   const remaining = remainingToBill(
     money(so.contractPrice),
@@ -103,7 +121,7 @@ export default async function NewBillingPage({ searchParams }: { searchParams: P
     <>
       <PageHeader
         title="Record billing"
-        subtitle={`${so.number} · ${so.customer.name} · remaining ₱${remaining}`}
+        subtitle={`${so.number} · ${so.customer.name} · remaining ${formatPeso(remaining)}`}
       />
       <BillingNav active="billings" />
       <div className="card">
