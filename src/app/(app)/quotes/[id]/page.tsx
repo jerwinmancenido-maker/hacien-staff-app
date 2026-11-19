@@ -99,6 +99,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             hasAcceptance={q.hasAcceptance}
+            businessName={q.business?.name}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,

@@ -17,20 +17,31 @@ export function GapReasonForm({
   currentCode,
   currentNote,
   action,
+  partial = false,
 }: {
   kind: "SO" | "PO";
   currentCode: string | null;
   currentNote: string | null;
   action: Action;
+  /** E7: some billing/bill already exists — ask about the remainder, not "none yet". */
+  partial?: boolean;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const reasons = kind === "SO" ? SO_GAP_REASONS : PO_GAP_REASONS;
   const e = state.fieldErrors ?? {};
+  const question =
+    kind === "SO"
+      ? partial
+        ? "Why isn't the rest billed yet? (reconciliation note)"
+        : "Why is there no billing yet? (reconciliation note)"
+      : partial
+        ? "Why isn't the rest billed by the supplier yet? (reconciliation note)"
+        : "Why is there no supplier bill yet? (reconciliation note)";
   return (
     <form onSubmit={onSubmit} className="card" style={{ marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <label className="small" style={{ flex: "1 1 240px" }}>
-          {kind === "SO" ? "Why is there no billing yet? (reconciliation note)" : "Why is there no supplier bill yet? (reconciliation note)"}
+          {question}
           <select name="gapReasonCode" defaultValue={currentCode ?? ""}>
             <option value="">— No reason recorded —</option>
             {reasons.map((r) => (

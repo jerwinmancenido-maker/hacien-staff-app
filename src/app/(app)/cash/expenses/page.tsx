@@ -6,7 +6,7 @@ import { money } from "@/lib/documents/common";
 import { listExpenses } from "@/lib/services/expenses";
 import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER, ExpenseStatusChip } from "@/components/cash/CashParts";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
 const day = (d: Date) => formatDate(d);
@@ -74,6 +74,12 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                   <tr key={e.id}>
                     <td>
                       <Link href={`/cash/expenses/${e.id}`}>{e.number}</Link>
+                      {e.business && (
+                        <>
+                          {" "}
+                          <Chip tone="dark">{e.business.shortLabel}</Chip>
+                        </>
+                      )}
                     </td>
                     <td>{day(e.date)}</td>
                     <td>{e.supplier?.name ?? e.payeeText ?? "—"}</td>

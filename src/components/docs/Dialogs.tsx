@@ -167,6 +167,7 @@ export function ConvertDialog({
   addressOptions = [],
   hasAcceptance = false,
   approvalWarning,
+  businessName,
   customerName,
   onAddAddress,
   onClose,
@@ -179,6 +180,8 @@ export function ConvertDialog({
   hasAcceptance?: boolean;
   /** Prompt model (F5): approval reasons an Approver confirms by converting. */
   approvalWarning?: string[];
+  /** E15: when the quote is tagged to another business, say the order will carry the tag. */
+  businessName?: string;
   /** Customer display name for the add-address dialog title. */
   customerName?: string;
   /** Saves a new DELIVERY address to the customer; the dialog picks it at once. */
@@ -199,6 +202,11 @@ export function ConvertDialog({
   return (
     <Modal title={`Convert ${number} to a sales order?`} onClose={onClose} labelId="convert-title">
       <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding.</p>
+      {businessName && (
+        <p>
+          The sales order will belong to <b>{businessName}</b>, like this quote.
+        </p>
+      )}
       {approvalWarning && approvalWarning.length > 0 && (
         <div className="alert warn" role="alert">
           This quote needs approval: {approvalWarning.join("; ")}. As an Approver you can convert anyway — your

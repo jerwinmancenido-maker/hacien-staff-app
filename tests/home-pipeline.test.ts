@@ -39,7 +39,7 @@ describe("home pipeline open-quote filter", () => {
     const src = readFileSync(path.join(process.cwd(), "src/lib/quotes/views.ts"), "utf8");
     expect(src).toMatch(/open\?:\s*boolean/);
     expect(src).toMatch(/status:\s*\{\s*in:\s*\["DRAFT",\s*"SENT"\]\s*\}/);
-    expect(openQuotesHref()).toBe("/quotes?open=1");
+    expect(openQuotesHref()).toBe("/quotes?open=1&business=own");
   });
 });
 
@@ -58,7 +58,7 @@ describe("home pipeline open-SO filter", () => {
     const src = readFileSync(path.join(process.cwd(), "src/lib/quotes/views.ts"), "utf8");
     expect(src).toMatch(/openUnbilled/);
     expect(src).toMatch(/remainingToBill/);
-    expect(openSalesOrdersHref()).toBe("/sales-orders?open=1");
+    expect(openSalesOrdersHref()).toBe("/sales-orders?open=1&business=own");
   });
 });
 

@@ -37,6 +37,7 @@ import { listBusinesses } from "@/lib/services/businesses";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { BusinessReclassifyForm } from "./BusinessReclassifyForm";
 import { GapReasonForm } from "@/components/docs/GapReasonForm";
+import { salesOrderGapState } from "@/lib/services/reconciliation";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -61,13 +62,15 @@ export default async function SalesOrderPage({
   // Show Create POs while any line still has unordered qty. A partial PO
   // (or a voided one) must not hide the menu.
   const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.needsMorePo;
-  const [billingSummary, billings, costMargin, deliveries, collections, returns] = await Promise.all([
+  const [billingSummary, billings, costMargin, deliveries, collections, returns, gapState] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
     listSalesOrderDeliveries(so.id),
     listSalesOrderCollections(so.id),
     listCustomerReturns(so.id),
+    // E7: the gap-reason editor shows only while a billing gap exists.
+    can(user, "edit_data") && so.status !== "VOID" ? salesOrderGapState(so.id) : Promise.resolve(null),
   ]);
   const money = billingSummary
     ? salesOrderMoney(so.status, billingSummary.contractPrice, [
@@ -140,12 +143,13 @@ export default async function SalesOrderPage({
           action={reclassifySalesOrderBusinessAction.bind(null, so.id)}
         />
       )}
-      {can(user, "edit_data") && so.status !== "VOID" && (
+      {gapState?.show && (
         <GapReasonForm
           kind="SO"
           currentCode={so.gapReasonCode}
           currentNote={so.gapNote}
           action={setSalesOrderGapReasonAction.bind(null, so.id)}
+          partial={gapState.partial}
         />
       )}
       <CreditLimitWarning text={creditLimitWarningText(exposure)} />

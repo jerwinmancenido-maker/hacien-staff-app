@@ -41,15 +41,16 @@ function BusinessRowForm({ row, saveAction, toggleAction }: { row: BusinessRow; 
       </form>
       <form onSubmit={toggle.onSubmit} style={{ marginTop: 6 }}>
         <input type="hidden" name="id" value={row.id} />
-        <input type="hidden" name="active" value={row.active ? "0" : "1"} />
-        <span className="small faint" style={{ marginRight: 8 }}>
+        {/* The shared bool() form parser accepts on/true/yes only — send "true"/"false" (E1: "1" made Switch on a no-op). */}
+        <input type="hidden" name="active" value={row.active ? "false" : "true"} />
+        <div className="small faint" style={{ marginBottom: 4 }}>
           {row.active ? "Active — can be picked on new quotes." : "Switched off — existing records keep the label; no new quotes."}
-        </span>
+        </div>
         <button className="btn ghost" type="submit" disabled={toggle.pending}>
           {row.active ? "Switch off" : "Switch on"}
         </button>
-        {toggle.state.message && (
-          <div className={`alert ${toggle.state.ok ? "ok" : "error"}`} role="status">
+        {toggle.state.message && !toggle.state.ok && (
+          <div className="alert error" role="status">
             {toggle.state.message}
           </div>
         )}
@@ -73,7 +74,7 @@ export function BusinessesForm({
   const e = add.state.fieldErrors ?? {};
   return (
     <div className="card settings-section">
-      <h2 className="settings-section-title">Businesses</h2>
+      {/* No own title here — the settings page intro card already titles the section (E9). */}
       <p className="small muted">
         <strong>{ownCompanyName}</strong> is this app&apos;s own company — it is always the default and is not in this
         list. Add another business here only when you record that business&apos;s transactions in this app: its quotes

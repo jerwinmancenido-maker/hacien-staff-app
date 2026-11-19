@@ -10,7 +10,7 @@ import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER, ExpenseStatusChip } from "@/components/cash/CashParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
-import { PageHeader } from "@/components/ui";
+import { Chip, PageHeader } from "@/components/ui";
 import { voidExpenseAction } from "../../actions";
 
 const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—");
@@ -38,6 +38,7 @@ export default async function ExpenseDetailPage({
         title={
           <>
             {e.number}
+            {e.business && <Chip tone="dark">{e.business.shortLabel}</Chip>}
             <ExpenseStatusChip status={e.status} />
           </>
         }

@@ -260,6 +260,50 @@ export function reconciliationToCsv(title: string, list: ReconList): string {
 
 export type GapReasonInput = { code: string | null; note: string | null };
 
+/** E7: whether the gap-reason editor belongs on the document at all, and
+ *  whether some billing already exists (the question wording follows).
+ *  SO: a billing gap exists while billed < contract price. PO: a bill gap
+ *  exists while posted receipts are worth more than the bills recorded —
+ *  the same predicates as the reconciliation lists above. A document with
+ *  no gap hides the editor instead of asking a stale question. */
+export async function salesOrderGapState(id: string): Promise<{ show: boolean; partial: boolean }> {
+  const so = await db.salesOrder.findUnique({
+    where: { id },
+    select: {
+      contractPrice: true,
+      billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
+    },
+  });
+  if (!so) return { show: false, partial: false };
+  const billed = sumMoney(so.billings.map((b) => b.amount));
+  return { show: billed < toScaled(money(so.contractPrice), 2), partial: billed > 0n };
+}
+
+export async function purchaseOrderGapState(id: string): Promise<{ show: boolean; partial: boolean }> {
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    select: {
+      items: { select: { id: true, unitCost: true } },
+      receivingReports: {
+        where: { status: "POSTED" },
+        select: { items: { select: { purchaseOrderItemId: true, qtyReceived: true } } },
+      },
+      bills: { where: { status: { not: "VOID" } }, select: { amount: true } },
+    },
+  });
+  if (!po) return { show: false, partial: false };
+  const costByItem = new Map(po.items.map((i) => [i.id, toScaled(money(i.unitCost), 2)]));
+  let receivedValue = 0n;
+  for (const rr of po.receivingReports) {
+    for (const item of rr.items) {
+      const cost = costByItem.get(item.purchaseOrderItemId);
+      if (cost !== undefined) receivedValue += (toScaled(money(item.qtyReceived), 2) * cost) / 100n;
+    }
+  }
+  const billedTotal = sumMoney(po.bills.map((b) => b.amount));
+  return { show: receivedValue > 0n && billedTotal < receivedValue, partial: billedTotal > 0n };
+}
+
 function validateGapReason(input: GapReasonInput, kind: "SO" | "PO"): { code: string | null; note: string | null } {
   const note = input.note?.trim() ? input.note.trim().slice(0, 2000) : null;
   if (!input.code) return { code: null, note: null };
