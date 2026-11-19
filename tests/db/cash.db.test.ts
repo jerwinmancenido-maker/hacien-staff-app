@@ -464,6 +464,59 @@ describe.skipIf(!env.hasDb)("cash accounts / expenses / transfers (MySQL)", () =
     expect(numbers.size).toBe(3);
   });
 
+  it("F30: deactivating an account with a balance refuses; moving the money frees it", async () => {
+    const year = await freshYear();
+    const openingDate = new Date(Date.UTC(year, 0, 1));
+    const acct = await mkAccount("Deact", "15000.00", openingDate);
+    const other = await mkAccount("DeactDest", "0.00", openingDate);
+    const input = (a: { name: string }, opening: string, active: boolean) => ({
+      name: a.name,
+      type: "BANK" as const,
+      bankName: "Test Bank",
+      accountHintLast4: "1234",
+      openingBalance: opening,
+      openingDate,
+      active,
+    });
+
+    // The X8 case: ₱15,000 sitting in the account, deactivate refused.
+    await expect(updateCashAccount(acct.id, input(acct, "15000.00", false), admin)).rejects.toThrow(
+      /still has a balance of ₱15,000\.00/,
+    );
+    expect((await db.cashAccount.findUniqueOrThrow({ where: { id: acct.id } })).active).toBe(true);
+
+    // Spend part of it — the refusal tracks the live balance.
+    await recordExpense(
+      {
+        date: new Date(Date.UTC(year, 2, 11)),
+        supplierId: null,
+        payeeText: "Deact spend",
+        categoryId,
+        amount: "5000.00",
+        withholdingApplied: "0",
+        cashAccountId: acct.id,
+        receiptNo: null,
+        notes: null,
+      },
+      admin,
+    );
+    await expect(updateCashAccount(acct.id, input(acct, "15000.00", false), admin)).rejects.toThrow(/₱10,000\.00/);
+
+    // Move the rest out — deactivation now succeeds.
+    await recordCashTransfer(
+      { date: new Date(Date.UTC(year, 2, 12)), fromAccountId: acct.id, toAccountId: other.id, amount: "10000.00", notes: null },
+      admin,
+    );
+    expect(await cashAccountBalance(acct.id)).toBe("0.00");
+    const after = await updateCashAccount(acct.id, input(acct, "15000.00", false), admin);
+    expect(after.active).toBe(false);
+
+    // A zero-balance account deactivates with no fuss.
+    const zero = await mkAccount("DeactZero", "0.00", openingDate);
+    const zAfter = await updateCashAccount(zero.id, input(zero, "0.00", false), admin);
+    expect(zAfter.active).toBe(false);
+  });
+
   it("concurrent expenses get unique EXP numbers and all debit the account", async () => {
     const year = await freshYear();
     const account = await mkAccount("ConcExp", "1000.00", new Date(Date.UTC(year, 0, 1)));
