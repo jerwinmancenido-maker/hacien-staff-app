@@ -26,7 +26,7 @@ import {
   proveNestedDifferentModelDeleteBlocked,
   type DeleteActor,
 } from "@/lib/services/document-delete";
-import { createPurchaseOrdersFromSalesOrder } from "@/lib/services/purchase-orders";
+import { createPurchaseOrdersFromSalesOrder, voidPurchaseOrder } from "@/lib/services/purchase-orders";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, voidQuote, type DocActor } from "@/lib/services/quotes";
 import { voidSalesOrder } from "@/lib/services/sales-orders";
 import { getSettingsSnapshot } from "@/lib/settings";
@@ -314,11 +314,15 @@ describe("S-104 sales order / billing / collection deletes", () => {
     const year = await freshYear();
     const { so } = await openSo(year);
     await expect(deleteSalesOrder(so.id, REASON, admin)).rejects.toBeInstanceOf(DocRuleError);
-    await createPurchaseOrdersFromSalesOrder(
+    const pos = await createPurchaseOrdersFromSalesOrder(
       so.id,
       { date: new Date(Date.UTC(year, 2, 3)), expectedDate: null, deliveryAddressText: "Test address", supplierPicks: {}, lineIds: undefined, excludeComponentIds: undefined },
       admin,
     );
+    // F29: the SO can't be voided while its POs are live, so void
+    // them first — the delete refusal below keys on the PO links,
+    // which stay in place (void POs included).
+    for (const po of pos) await voidPurchaseOrder(po.id, "Order cancelled", admin);
     await voidSalesOrder(so.id, "Order cancelled", admin);
     await expect(deleteSalesOrder(so.id, REASON, admin)).rejects.toBeInstanceOf(DocRuleError);
     expect(await db.salesOrder.findUnique({ where: { id: so.id } })).not.toBeNull();
@@ -328,10 +332,13 @@ describe("S-104 sales order / billing / collection deletes", () => {
     await actors();
     const year = await freshYear();
     const { so } = await openSo(year);
-    await recordBilling(
+    const billing = await recordBilling(
       { salesOrderId: so.id, amount: "10000.00", invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null, invoiceNo: nextInvoice() },
       admin,
     );
+    // F29: void the billing before the SO — the delete refusal
+    // below keys on the billing link, which stays in place.
+    await voidBilling(billing.id, "Wrong amount", admin);
     await voidSalesOrder(so.id, "Order cancelled", admin);
     await expect(deleteSalesOrder(so.id, REASON, admin)).rejects.toThrow(/Delete the billing first/);
   });
