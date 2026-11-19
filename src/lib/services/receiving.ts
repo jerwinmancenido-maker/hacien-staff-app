@@ -11,6 +11,7 @@ import { assertCan, assertCanVoid, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
+import { toScaled } from "../quotes/calc";
 import { applyReceipt, checkReceipt, type OpenLine } from "../purchasing/receipt";
 import { poActionError, receiptStatus, type PoStatus } from "../purchasing/status";
 import type { ReceiptInput } from "../validation/purchasing";
@@ -78,6 +79,21 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
         await assertPeriodOpen(tx, input.receivedDate);
         const check = checkReceipt(po.lines as OpenLine[], input.lines);
         if (!check.ok) throw new ReceiptError(check.message, check.errors);
+        // F31: one serial per unit — more serials than pieces received
+        // on a line is a typo that used to post silently (X9:
+        // RR-2026-0004 took 2 serials for 1 piece). Refuse, marking
+        // the line, like the quantity checks above.
+        const serialErrors: Record<string, string> = {};
+        for (const e of check.entries) {
+          const serials = normalizeSerialNumbers(input.lines.find((l) => l.lineId === e.lineId)?.serialNumbers);
+          if (!serials) continue;
+          const count = serials.split(", ").length;
+          if (BigInt(count) * 100n > toScaled(e.qty, 2)) {
+            serialErrors[e.lineId] =
+              `${count} serial numbers but only ${e.qty.replace(/\.00$/, "")} received on this line — one serial per unit.`;
+          }
+        }
+        if (Object.keys(serialErrors).length) throw new ReceiptError("Check the serial numbers marked below.", serialErrors);
         const number = await allocateDocNumber(tx, "RECEIVING_REPORT", year, format);
         const rr = await tx.receivingReport.create({
           data: {

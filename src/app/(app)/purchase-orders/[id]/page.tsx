@@ -512,15 +512,14 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         ))}
                       </td>
                       <td>
-                        {l.issues.length === 0 ? (
-                          <MatchChip status="MATCHED" />
-                        ) : (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                            {l.issues.map((i) => (
-                              <MatchChip key={i} status={i} />
-                            ))}
-                          </div>
-                        )}
+                        {/* F24: the STATUS cell shows the line status
+                            (which is NOT_BILLED when no live bills
+                            exist), not one chip per issue — after
+                            voiding the only bill this cell used to
+                            keep saying "Qty mismatch" while the
+                            header said "Not billed yet". The flags
+                            column beside it lists every issue. */}
+                        <MatchChip status={l.status} />
                       </td>
                     </tr>
                   );
