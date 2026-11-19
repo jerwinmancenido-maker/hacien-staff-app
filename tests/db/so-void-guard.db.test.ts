@@ -36,9 +36,13 @@ const REASON = "Entered in error";
 
 describe.skipIf(!env.hasDb)("F29 SO void guard", () => {
   let admin: DocActor;
-  let invoiceSeq = 870_000 + Math.floor(Math.random() * 20_000);
+  // SI / DR ranges deliberately far above the crowded 700k–990k
+  // bands the older suites draw from — SI numbers are globally
+  // unique in the shared test DB and overlapping random ranges
+  // collide across suites (seen in gate262: SI 815818).
+  let invoiceSeq = 1_500_000 + Math.floor(Math.random() * 20_000);
   const nextInvoice = () => ++invoiceSeq;
-  let drSeq = 700_000 + Math.floor(Math.random() * 20_000);
+  let drSeq = 1_600_000 + Math.floor(Math.random() * 20_000);
   const nextDr = () => String(++drSeq);
 
   beforeAll(async () => {
