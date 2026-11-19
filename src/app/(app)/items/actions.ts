@@ -16,6 +16,10 @@ export async function saveItemAction(id: string | null, _prev: FormState, form: 
   const result = await runAction(async () => {
     const user = await requireActionPermission("edit_data");
     const input: Record<string, unknown> = Object.fromEntries(FIELDS.map((f) => [f, str(form, f)]));
+    // F36: the stale-edit token is sent only on edits. On create it must be
+    // undefined — "" fails the schema's datetime check, which silently
+    // blocked every item creation (mirrors the customers action).
+    if (!input.updatedAt) input.updatedAt = undefined;
     const parsed = itemSchema().safeParse(input);
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
     const saved = await saveItem(id, parsed.data, user.id);
