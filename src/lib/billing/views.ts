@@ -567,6 +567,11 @@ export async function arAgingSummary(): Promise<{
     include: {
       customer: { select: { id: true, name: true, withholdingType: true } },
       allocations: { where: { collection: { status: "POSTED" } } },
+      // F14: return-credit applications reduce the balance too — the
+      // global summary missed the merge the list/detail loaders already
+      // had (Audit D), so a billing settled by a credit memo still
+      // counted as fully owed here, on Home, and on the billing hub.
+      creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
     },
   });
   const byCustomer = new Map<string, { name: string; rows: { dueDate: Date; balance: string; isGovernment?: boolean }[]; overdue: bigint }>();
@@ -576,7 +581,7 @@ export async function arAgingSummary(): Promise<{
   let openCount = 0;
   for (const b of billings) {
     const isGov = b.customer.withholdingType === "GOVERNMENT";
-    const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
+    const balance = billingBalance(money(b.amount), appliedOf([...b.allocations, ...b.creditApplications]));
     const bal = toScaled(balance, 2);
     if (bal <= 0n) continue;
     openCount += 1;
