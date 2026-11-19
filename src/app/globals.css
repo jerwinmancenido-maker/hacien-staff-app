@@ -384,7 +384,7 @@ a.tracker-card:hover {
   font-size: calc(11px * var(--ui-scale, 1));
 }
 .avatar.dark {
-  background: var(--text);
+  background: #0a0a0a;
   color: #fff;
 }
 
@@ -530,8 +530,12 @@ a.tracker-card:hover {
 .page-header {
   display: flex;
   align-items: flex-end;
+  flex-wrap: wrap;
   gap: calc(16px * var(--ui-scale, 1));
   margin-bottom: calc(20px * var(--ui-scale, 1));
+}
+.page-header > div:first-child {
+  min-width: 0;
 }
 .page-header .greeting {
   font-size: calc(13px * var(--ui-scale, 1));
@@ -557,6 +561,7 @@ a.tracker-card:hover {
 .page-header .actions {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: calc(8px * var(--ui-scale, 1));
   align-items: center;
 }
@@ -803,7 +808,7 @@ a.tracker-card:hover {
   color: var(--red);
 }
 .chip.dark {
-  background: var(--ink);
+  background: #0a0a0a;
   color: #fff;
 }
 .chip.blue {
@@ -1034,9 +1039,19 @@ table.list td {
   table.list td[data-col="status"],
   table.list td[data-col="when"],
   table.list td[data-col="who"],
-  table.list td[data-col="record"] {
+  table.list td[data-col="method"],
+  table.list td[data-col="action"] {
     white-space: nowrap;
   }
+  /* Audit log record (F16): the record TYPE stays on one line, but the
+     record label under it wraps — a long label must not push "What
+     happened" off screen the way the F6 blanket nowrap did. */
+  table.list td[data-col="record"] > div:first-child {
+    white-space: nowrap;
+  }
+}
+table.list td[data-col="record"] > div + div {
+  overflow-wrap: break-word;
 }
 /* Design term 14: list rows reveal with a 30ms stagger. Opacity only —
    no transform on table rows — and reduced motion renders the final
@@ -1568,8 +1583,8 @@ tr.inactive .cell-primary .sub {
   display: flex;
   flex-direction: column;
   gap: calc(2px * var(--ui-scale, 1));
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--white);
+  border: 1px solid var(--border);
   border-radius: calc(10px * var(--ui-scale, 1));
   padding: calc(8px * var(--ui-scale, 1));
 }
@@ -3780,6 +3795,24 @@ pre.json {
   max-height: none;
   padding: 0;
   border: none;
+}
+/* Collections is the widest hand-rolled list (9 columns): slightly
+   tighter cells + the stacked Deposit chip keep STATUS on screen at
+   1280px now that its values no longer wrap mid-number (F16). */
+table.list.collections-table th,
+table.list.collections-table td {
+  padding-left: calc(8px * var(--ui-scale, 1));
+  padding-right: calc(8px * var(--ui-scale, 1));
+}
+/* Big-amount headroom (F16): ten columns of peso values at 1280px —
+   tighter cells and wrapping headers keep MARGIN on screen. */
+.items-table table.list th {
+  white-space: normal;
+}
+.items-table table.list th,
+.items-table table.list td {
+  padding-left: calc(8px * var(--ui-scale, 1));
+  padding-right: calc(8px * var(--ui-scale, 1));
 }
 .totals-wrap {
   display: flex;
@@ -6410,7 +6443,7 @@ button.contact-card-add {
   font-weight: 600;
 }
 .home-dashboard .card {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--home-card-border);
   border-radius: var(--home-card-radius);
   box-shadow: 0 1px calc(2px * var(--ui-scale, 1)) rgba(15, 23, 42, 0.04);
@@ -6902,7 +6935,7 @@ button.contact-card-add {
   overflow: hidden;
 }
 .home-tax:hover {
-  background: #fff;
+  background: var(--white);
 }
 .home-tax-full {
   display: flex;
@@ -7638,7 +7671,7 @@ button.contact-card-add {
   position: sticky;
   top: 0;
   z-index: 4;
-  background: #fff;
+  background: var(--white);
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: calc(8px * var(--ui-scale, 1));
@@ -7976,7 +8009,7 @@ button.contact-card-add {
 }
 .quote-product-dl dt {
   font-weight: 700;
-  color: var(--muted);
+  color: var(--text-2);
 }
 .quote-product-dl dd {
   margin: 0;
@@ -8366,8 +8399,8 @@ button.contact-card-add {
   margin: calc(3px * var(--ui-scale, 1)) 0 0;
   padding: 0;
 }
-.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: calc(12px * var(--ui-scale, 1)); margin-top: calc(12px * var(--ui-scale, 1)); background: var(--bg-muted, #f7f7f5); }
-.wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: calc(8px * var(--ui-scale, 1)); font-weight: 600; }
+.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: calc(12px * var(--ui-scale, 1)); margin-top: calc(12px * var(--ui-scale, 1)); background: var(--fill); }
+.wh-internal-panel-label { font-size: 0.8rem; color: var(--text-2); margin-bottom: calc(8px * var(--ui-scale, 1)); font-weight: 600; }
 
 /* Phone scale (REQ-STAFF-PHONE-SCALE-001).
    --ui-scale is 1 above 640px, so desktop and tablet keep today's pixels.
@@ -9105,6 +9138,7 @@ button.contact-card-add {
     --grey-600: #99a3b8;
     --grey-700: #c3cbdb;
     --blue-tint: #1d3a7a;
+    --blue-dark: #9db9f5;
     --success: #7fb69a;
     --success-bg: #1e2f28;
     --warning: #d9b36c;
@@ -9113,6 +9147,74 @@ button.contact-card-add {
     --danger-bg: #3a2323;
     --bg: #0b0e14;
     --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   F16 visual batch 2 (final check, Mac Block 1): dark-mode surfaces that
+   stayed light, phone-width settings, the audit table's min width, the
+   sidebar logo in dark mode, and the phone print preview's money columns.
+   --------------------------------------------------------------------------- */
+/* The logo SVGs are black + HACIEN blue; in dark mode swap to the light
+   variants (same blue, light wordmark). Screen only — paper keeps the
+   original black logo. */
+@media screen and (prefers-color-scheme: dark) {
+  .brand-logo-wordmark {
+    content: url("/brand/logo-wordmark-dark.svg");
+  }
+  .brand-logo-full {
+    content: url("/brand/logo-full-dark.svg");
+  }
+}
+/* Phone content band is white in light mode; in dark mode it follows the
+   theme like every other surface. */
+@media screen and (max-width: 640px) and (prefers-color-scheme: dark) {
+  .content,
+  .content:has(.home-dashboard),
+  .content:has(.home-getting-started) {
+    background: var(--bg);
+  }
+}
+/* Settings on narrow screens: the single column must be allowed to shrink
+   below its widest child's min-content, or one wide table stretches the
+   whole page (nav included) past the screen. The tax calendar table then
+   scrolls inside its own wrap instead of pushing the page. */
+@media (max-width: 768px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-page {
+    min-width: 0;
+  }
+  .tax-cal-settings-wrap {
+    overflow-x: auto;
+  }
+  .tax-cal-settings-table {
+    min-width: calc(480px * var(--ui-scale, 1));
+  }
+}
+/* Audit log: every column can wrap except the short when/who cells, so the
+   table needs no 640px floor — it fits the settings column at any width. */
+.table-wrap.audit-log-table table.list {
+  min-width: 0;
+}
+/* Phone print preview: the wide sheet's 18px "air" padding and 4.6rem
+   money columns squeeze ₱ amounts until they overlap the next column.
+   On a phone the money columns get real width and normal padding; the
+   printed sheet (media print) is untouched. */
+@media (max-width: 640px) {
+  .pp-items td.num,
+  .pp-items th.num {
+    padding-left: calc(3px * var(--ui-scale, 1));
+  }
+  .pp-items .num {
+    width: 8rem;
+    font-size: 6.8pt;
+  }
+  .pp-items td.num:last-child,
+  .pp-items th.num:last-child,
+  .pp-items tfoot th.num {
+    width: 8rem;
   }
 }
 

@@ -71,7 +71,7 @@ export default async function Withholding2307Page({
                     <td>
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td>
+                    <td data-col="number">
                       {r.billing ? (
                         <Link href={`/billing/billings/${r.billing.id}`}>
                           #{r.billing.invoiceNo} · {r.billing.number}
@@ -80,17 +80,17 @@ export default async function Withholding2307Page({
                         "—"
                       )}
                     </td>
-                    <td>
+                    <td data-col="number">
                       {r.collection ? <Link href={`/billing/collections/${r.collection.id}`}>{r.collection.number}</Link> : "—"}
                     </td>
                     <td className="col-atc">{r.atcCode ?? "—"}</td>
                     <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
-                    <td>
+                    <td data-col="status">
                       <Chip tone={r.status === "RECEIVED" ? "green" : "blue"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
                     </td>
-                    <td>{day(r.receivedAt)}</td>
-                    <td>
+                    <td data-col="date">{day(r.receivedAt)}</td>
+                    <td data-col="action">
                       {r.status === "PENDING" && canManage && r.markId && <Mark2307Form id={r.markId} />}
                       {r.markId &&
                         r.attachments.map((a) => (

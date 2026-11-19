@@ -23,7 +23,7 @@ function cellClass(c: Column) {
   return parts.length ? parts.join(" ") : undefined;
 }
 
-export function DataTable({ columns, rows, label }: { columns: Column[]; rows: Row[]; label: string }) {
+export function DataTable({ columns, rows, label, wrapClassName }: { columns: Column[]; rows: Row[]; label: string; wrapClassName?: string }) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -55,7 +55,7 @@ export function DataTable({ columns, rows, label }: { columns: Column[]; rows: R
   }
 
   return (
-    <div className="table-wrap">
+    <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ""}`}>
       <table className="list" aria-label={label}>
         <thead>
           <tr>
