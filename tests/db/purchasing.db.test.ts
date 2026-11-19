@@ -127,7 +127,7 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
     return { ...ctx, po: poA!, lines: items };
   }
 
-  const receipt = (year: number, lines: { lineId: string; qty: string }[], by: string) => ({
+  const receipt = (year: number, lines: { lineId: string; qty: string; serialNumbers?: string }[], by: string) => ({
     receivedDate: new Date(Date.UTC(year, 3, 1)),
     receivedById: by,
     deliveryRef: "DR-77",
@@ -411,6 +411,32 @@ describe.skipIf(!env.hasDb)("supplier POs, receiving and bills (MySQL)", () => {
       // not money. Only the total stays cost-only.
       expect(progress.lines[0]!.purchaseOrders[0]).toEqual({ id: po.id, number: po.number, status: "RECEIVED" });
       expect((await getSoPurchasing(so.id, admin)).lines[0]!.purchaseOrders[0]!.id).toBe(po.id);
+    });
+
+    it("F31: more serial numbers than pieces received is refused, marking the line", async () => {
+      const year = await freshYear();
+      const { po, lines } = await sentPo(year);
+      const [laptop] = lines;
+      // The X9 case: 2 serials typed for 1 piece.
+      const bad = postReceivingReport(
+        po.id,
+        receipt(year, [{ lineId: laptop!.id, qty: "1", serialNumbers: "SN-001, SN-002" }], staff.id),
+        staff,
+      );
+      await expect(bad).rejects.toBeInstanceOf(ReceiptError);
+      await expect(bad).rejects.toThrow(/serial numbers/);
+      const err: unknown = await bad.catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ReceiptError);
+      expect((err as ReceiptError).lineErrors[laptop!.id]).toMatch(/2 serial numbers but only 1 received/);
+      // Nothing posted: the line is still untouched.
+      expect((await db.purchaseOrderItem.findUniqueOrThrow({ where: { id: laptop!.id } })).receivedQty.toFixed(2)).toBe("0.00");
+      // One serial per piece posts and stores the serials.
+      const rr = await postReceivingReport(
+        po.id,
+        receipt(year, [{ lineId: laptop!.id, qty: "2", serialNumbers: "SN-001\nSN-002" }], staff.id),
+        staff,
+      );
+      expect(rr.items[0]!.serialNumbers).toBe("SN-001, SN-002");
     });
 
     it("two receipts posted at the same time for the last units: exactly one succeeds", async () => {

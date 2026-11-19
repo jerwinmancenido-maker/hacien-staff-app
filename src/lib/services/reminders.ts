@@ -70,6 +70,8 @@ export type ReminderRow = {
   id: string;
   entityType: string;
   entityId: string;
+  /** F33: the record's own number (QT-/SO-/PO-…), null when the record is gone. */
+  entityNumber: string | null;
   note: string;
   remindAt: string;
   doneAt: string | null;
@@ -80,10 +82,24 @@ export async function listMyReminders(userId: string): Promise<ReminderRow[]> {
     where: { createdById: userId },
     orderBy: [{ remindAt: "asc" }, { createdAt: "asc" }],
   });
+  // F33: a row that says only "Supplier PO" doesn't say WHICH PO —
+  // resolve each target's document number in one query per type.
+  const idsOf = (t: string) => [...new Set(rows.filter((r) => r.entityType === t).map((r) => r.entityId))];
+  const numbers = new Map<string, string>();
+  const collect = (list: { id: string; number: string }[]) => list.forEach((x) => numbers.set(x.id, x.number));
+  const [quotes, sos, pos] = await Promise.all([
+    idsOf("QUOTE").length ? db.quote.findMany({ where: { id: { in: idsOf("QUOTE") } }, select: { id: true, number: true } }) : [],
+    idsOf("SALES_ORDER").length ? db.salesOrder.findMany({ where: { id: { in: idsOf("SALES_ORDER") } }, select: { id: true, number: true } }) : [],
+    idsOf("PURCHASE_ORDER").length ? db.purchaseOrder.findMany({ where: { id: { in: idsOf("PURCHASE_ORDER") } }, select: { id: true, number: true } }) : [],
+  ]);
+  collect(quotes);
+  collect(sos);
+  collect(pos);
   return rows.map((r) => ({
     id: r.id,
     entityType: r.entityType,
     entityId: r.entityId,
+    entityNumber: numbers.get(r.entityId) ?? null,
     note: r.note,
     remindAt: ymd(r.remindAt) ?? "",
     doneAt: r.doneAt ? r.doneAt.toISOString() : null,
