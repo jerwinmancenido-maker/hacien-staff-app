@@ -78,6 +78,8 @@ export const supplierPaymentInputSchema = z
       .pipe(z.union([ymd, z.null()]))
       .optional(),
     amountPaid: moneyStr,
+    /** F37: set only when the user confirmed the over-balance warning. */
+    allowOverBalance: z.boolean().optional(),
     // Optional cash account (Part 7a). Blank = not assigned.
     cashAccountId: z
       .string()
@@ -151,7 +153,11 @@ export function parseSupplierPaymentForm(
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
-  const parsed = supplierPaymentInputSchema.safeParse({ ...values, allocations });
+  const parsed = supplierPaymentInputSchema.safeParse({
+    ...values,
+    allocations,
+    allowOverBalance: form.get("confirmOverBalance") === "1",
+  });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;

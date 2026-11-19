@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import { assertCashEnabled } from "@/lib/cash/features";
+import { fundsWarning } from "@/lib/cash/funds";
 import { createCashAccount, updateCashAccount } from "@/lib/services/cash-accounts";
 import { recordExpense, voidExpense } from "@/lib/services/expenses";
 import { recordCashTransfer, voidCashTransfer } from "@/lib/services/cash-transfers";
@@ -83,6 +84,12 @@ export async function recordExpenseAction(_prev: FormState, form: FormData): Pro
     receiptNo: parsed.data.receiptNo ?? "",
     notes: parsed.data.notes ?? "",
   };
+  // F37: soft over-balance warning — nothing is saved until the user
+  // confirms (the form resubmits with confirmOverBalance=1).
+  if (!parsed.data.allowOverBalance) {
+    const warning = await fundsWarning(parsed.data.cashAccountId, parsed.data.amount, "expense");
+    if (warning) return { values: echo, warning };
+  }
   let goTo: string | null = null;
   const result = await runAction(async () => {
     await assertFeatureOn();
@@ -120,6 +127,11 @@ export async function recordCashTransferAction(_prev: FormState, form: FormData)
     amount: parsed.data.amount,
     notes: parsed.data.notes ?? "",
   };
+  // F37: soft over-balance warning (see recordExpenseAction).
+  if (!parsed.data.allowOverBalance) {
+    const warning = await fundsWarning(parsed.data.fromAccountId, parsed.data.amount, "transfer");
+    if (warning) return { values: echo, warning };
+  }
   let goTo: string | null = null;
   const result = await runAction(async () => {
     await assertFeatureOn();

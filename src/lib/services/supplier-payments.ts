@@ -11,6 +11,7 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { assertPayables2307Enabled } from "../payables/issue2307";
 import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationInput } from "../payables/allocations";
 import { deriveSupplierBillStatus } from "../payables/status";
@@ -216,6 +217,8 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
           if (!acct || !acct.active) {
             throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");
           }
+          // F37: warn/refuse when the payment takes the account negative.
+          await assertFundsInTx(tx, acct, input.amountPaid, "payment", "amountPaid", input.allowOverBalance);
         }
 
         const number = await allocateDocNumber(tx, "SUPPLIER_PAYMENT", year, format);

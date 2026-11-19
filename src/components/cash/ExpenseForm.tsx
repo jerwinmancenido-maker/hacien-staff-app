@@ -48,6 +48,7 @@ export function ExpenseForm({
   maxMb: number;
 }) {
   const { state, pending, submit } = useFormAction(action);
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const e = state.fieldErrors ?? {};
   const [useSupplier, setUseSupplier] = useState(!!defaults.supplierId);
   const [showWh, setShowWh] = useState(!!defaults.withholdingApplied && defaults.withholdingApplied !== "0" && defaults.withholdingApplied !== "0.00");
@@ -90,6 +91,20 @@ export function ExpenseForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input type="hidden" name="confirmOverBalance" value="1" />
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={pending}>
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <div className="form-grid">

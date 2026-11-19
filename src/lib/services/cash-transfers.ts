@@ -7,6 +7,7 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { CashTransferInput } from "../validation/cash";
@@ -65,6 +66,9 @@ export async function recordCashTransfer(input: CashTransferInput, actor: Transf
       if (!to || !to.active) {
         throw new DocRuleError("Pick an active 'to' account.", "toAccountId");
       }
+      // F37: warn (via the form) / refuse (here) when the transfer takes
+      // the 'from' account negative and the user has not confirmed.
+      await assertFundsInTx(tx, from, input.amount, "transfer", "amount", input.allowOverBalance);
 
       const number = await allocateDocNumber(tx, "CASH_TRANSFER", year, format);
       const transfer = await tx.cashTransfer.create({
