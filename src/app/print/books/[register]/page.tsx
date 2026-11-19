@@ -61,12 +61,12 @@ export default async function PrintBooksPage({
   const pageIndexes = [...pages.keys()].sort((a, b) => a - b);
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/${config.path}?from=${period.fromYmd}&to=${period.toYmd}`}>
           Back to Books
         </Link>
-        <span className="small muted">A4 · {config.title} — draft format for accountant/RDO review.</span>
+        <span className="small muted">{settings.print.paperSize} · {config.title} — draft format for accountant/RDO review.</span>
         <PrintButton />
       </div>
       <div className="alert warn print-toolbar-alert no-print" role="status">

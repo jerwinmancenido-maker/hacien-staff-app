@@ -31,7 +31,7 @@ export default async function PrintCustomer2307Page({
   const q = `year=${period.year}&quarter=${period.quarter}`;
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/tax/2307-received?${q}`}>
           Back to worksheet
