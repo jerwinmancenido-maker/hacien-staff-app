@@ -154,7 +154,7 @@ export function fromScaled(n: bigint, scale: number): string {
 }
 
 /** Divide and round half away from zero. */
-function divRound(num: bigint, den: bigint): bigint {
+export function divRound(num: bigint, den: bigint): bigint {
   if (den === 0n) return 0n;
   const negative = num < 0n !== den < 0n;
   const a = num < 0n ? -num : num;

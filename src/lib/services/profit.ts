@@ -8,7 +8,7 @@
 //   minus supplier cost; margin % is blank when the contract price is ₱0.
 import { db } from "../db";
 import { money, ymd } from "../documents/common";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { divRound, fromScaled, toScaled } from "../quotes/calc";
 import { manilaToday, isoDate } from "../format";
 
 export type ProfitDeal = {
@@ -34,7 +34,10 @@ export function dealMargin(contractPrice: string, supplierCost: string): { margi
   const margin = toScaled(contractPrice, 2) - toScaled(supplierCost, 2);
   const price = toScaled(contractPrice, 2);
   if (price === 0n) return { margin: fromScaled(margin, 2), marginPct: null };
-  const pct = Number((margin * 10000n) / price) / 100;
+  // F23: round like the quotes side (divRound, half away from zero) —
+  // plain BigInt division truncated, so 24.3077% showed as 24.30 on the
+  // Monthly profit page while the quotes list showed 24.31.
+  const pct = Number(divRound(margin * 10000n, price)) / 100;
   return { margin: fromScaled(margin, 2), marginPct: pct.toFixed(2) };
 }
 
