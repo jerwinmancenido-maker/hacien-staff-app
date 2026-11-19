@@ -131,7 +131,14 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
       business: { select: { id: true, name: true, shortLabel: true } },
       supplierContact: { select: { id: true, name: true, email: true, phone: true } },
       salesOrder: { select: { id: true, number: true, customer: { select: { id: true, name: true } } } },
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" }, include: { salesOrderItem: { select: { id: true, qty: true } } } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          salesOrderItem: { select: { id: true, qty: true } },
+          salesOrderItemComponent: { select: { id: true, qty: true } },
+        },
+      },
       approvedBy: userName,
       createdBy: userName,
       updatedBy: userName,
@@ -174,17 +181,31 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
   const siblings = soLineIds.length
     ? await db.purchaseOrderItem.findMany({
         where: { salesOrderItemId: { in: soLineIds }, removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
-        select: { salesOrderItemId: true, qty: true },
+        select: { salesOrderItemId: true, salesOrderItemComponentId: true, qty: true },
       })
     : [];
 
   const items = po.items.map((i) => {
     const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : null;
+    // F17: a lot-component line orders component qty × lot qty (e.g. 4
+    // per bundle × 1 bundle = 4), so comparing it to the SO line's qty
+    // (1 lot) warned falsely. Component lines compare against the
+    // component's expected total and only sum siblings of the SAME
+    // component.
+    const componentQty = i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
+    const expectedQty =
+      soQty && componentQty ? fromScaled((toScaled(componentQty, 2) * toScaled(soQty, 2)) / 100n, 2) : soQty;
     const warning =
-      soQty && po.status !== "VOID"
+      expectedQty && po.status !== "VOID"
         ? qtyMismatch(
-            soQty,
-            siblings.filter((s) => s.salesOrderItemId === i.salesOrderItemId).map((s) => money(s.qty)),
+            expectedQty,
+            siblings
+              .filter(
+                (s) =>
+                  s.salesOrderItemId === i.salesOrderItemId &&
+                  (s.salesOrderItemComponentId ?? null) === (i.salesOrderItemComponentId ?? null),
+              )
+              .map((s) => money(s.qty)),
           )
         : null;
     return {

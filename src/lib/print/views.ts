@@ -2,7 +2,7 @@
 // Customer docs omit supplier/cost/margin; supplier docs omit customer sell prices.
 
 import { db } from "@/lib/db";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, isoDate, manilaToday } from "@/lib/format";
 import { money, ymd } from "@/lib/documents/common";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -96,6 +96,14 @@ export function customerMoneyTotals(opts: {
 
 const day = (ymdStr: string | null | undefined) =>
   ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—";
+
+/** F19: a statement's header date is TODAY in Manila — ymd(new Date()) is the UTC day, so early-morning prints showed yesterday's date. */
+const manilaDay = () => day(isoDate(manilaToday()));
+
+/** F19: words for a statement balance. A credit balance reads as the amount in the party's favour, not "Negative … Pesos". */
+function statementWords(balance: string): string {
+  return balance.startsWith("-") ? `${amountInWords(balance.slice(1))} (credit balance)` : amountInWords(balance);
+}
 
 /**
  * Letterhead for professional prints.
@@ -920,7 +928,7 @@ export async function getCustomerStatementPrintModel(
     kind: "customer_statement",
     title: "Statement of Account",
     number: stmt.customer.name,
-    date: day(ymd(new Date())),
+    date: manilaDay(),
     status: "OPEN",
     watermark: null,
     company: letter.company,
@@ -945,7 +953,7 @@ export async function getCustomerStatementPrintModel(
       aging,
       lines: statementLedgerLines(stmt.lines),
     },
-    totalInWords: amountInWords(stmt.closingBalance),
+    totalInWords: statementWords(stmt.closingBalance),
     signatories: [
       { role: "Prepared by", name: null },
       { role: "Approved by", name: null },
@@ -1062,7 +1070,7 @@ export async function getSupplierStatementPrintModel(
     kind: "supplier_statement",
     title: "Supplier Statement of Account",
     number: supplier.name,
-    date: day(ymd(new Date())),
+    date: manilaDay(),
     status: "OPEN",
     watermark: null,
     company: letter.company,
@@ -1086,7 +1094,7 @@ export async function getSupplierStatementPrintModel(
       closingBalance: closing,
       lines: ledgerLines,
     },
-    totalInWords: amountInWords(closing),
+    totalInWords: statementWords(closing),
     signatories: [
       { role: "Prepared by", name: null },
       { role: "Approved by", name: null },
