@@ -48,6 +48,8 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       isIndividual: str(form, "customerKind") === "individual",
       // Checkbox: absent = unchecked = off. Present (checked) = on.
       orderTextUpdates: bool(form, "orderTextUpdates"),
+      // F21 stale-edit guard token (edits only; blank on create).
+      updatedAt: str(form, "updatedAt") || undefined,
     });
 
     const street = str(form, "street");

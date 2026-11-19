@@ -35,6 +35,8 @@ export function itemSchema() {
     kind: z.enum(ITEM_KINDS, { error: "Pick Goods or Services." }),
     details: optionalText(5000),
     defaultUnitPrice: priceField,
+    /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved (F21). */
+    updatedAt: z.string().datetime().optional(),
   });
 }
 export type ItemInput = z.infer<ReturnType<typeof itemSchema>>;

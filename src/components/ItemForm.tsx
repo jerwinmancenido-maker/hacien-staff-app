@@ -24,6 +24,7 @@ export function ItemForm({
 
   return (
     <form onSubmit={onSubmit} noValidate>
+      {item?.updatedAt && <input type="hidden" name="updatedAt" value={new Date(item.updatedAt).toISOString()} />}
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}

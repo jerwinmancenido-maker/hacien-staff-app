@@ -119,6 +119,8 @@ export function customerSchema(
       // Optional on input; saveCustomer defaults it to true (and the DB
       // column defaults to true), so older callers omitting it still pass.
       orderTextUpdates: z.boolean().optional(),
+      /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved (F21). */
+      updatedAt: z.string().datetime().optional(),
     })
     .superRefine((v, ctx) => {
       if (v.defaultWithholding == null) {

@@ -1066,6 +1066,26 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       if (quote.status !== "DRAFT" && quote.status !== "SENT") {
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
+      // F13 (Mac run Block 4, S13): revisions are separate rows in one
+      // chain, and converting sets only THIS row to WON — a sibling
+      // revision stayed convertible, so one deal could produce two SOs.
+      // Refuse when any other revision of the same deal already won
+      // (WON is set only by conversion; voiding the SO reverts it, so a
+      // legitimate re-convert after a void still works).
+      const chainRootId = quote.revisionChainId ?? quote.id;
+      const chainWon = await tx.quote.findFirst({
+        where: {
+          id: { not: quote.id },
+          OR: [{ id: chainRootId }, { revisionChainId: chainRootId }],
+          status: "WON",
+        },
+        select: { number: true },
+      });
+      if (chainWon) {
+        throw new DocRuleError(
+          `This deal was already converted from ${chainWon.number}. Only one revision of a quote can become a sales order.`,
+        );
+      }
       const override = await assertQuoteSendable(quote, actor, opts);
       await assertPeriodOpen(tx, date);
       await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });

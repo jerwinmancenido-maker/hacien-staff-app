@@ -1,5 +1,6 @@
 import { writeAudit } from "../audit";
 import { db, type Tx } from "../db";
+import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_ITEM } from "../documents/common";
 import type { ItemInput } from "../validation/items";
 
 export class ItemRuleError extends Error {
@@ -71,13 +72,16 @@ export function getItem(id: string) {
 export async function saveItem(id: string | null, input: ItemInput, actorId: string) {
   return db.$transaction(async (tx) => {
     await assertSkuFree(tx, input.sku, id);
+    const { updatedAt: expectedUpdatedAt, ...data } = input;
     if (!id) {
-      const created = await tx.item.create({ data: input });
+      const created = await tx.item.create({ data });
       await writeAudit(tx, { userId: actorId, entityType: "Item", entityId: created.id, action: "create", after: created });
       return created;
     }
     const before = await tx.item.findUniqueOrThrow({ where: { id } });
-    const after = await tx.item.update({ where: { id }, data: input });
+    // F21: stale-edit guard — only when the editor sent its loaded token.
+    if (expectedUpdatedAt) requireMatchingUpdatedAt(before.updatedAt, expectedUpdatedAt, STALE_EDIT_MESSAGE_ITEM);
+    const after = await tx.item.update({ where: { id }, data });
     await writeAudit(tx, { userId: actorId, entityType: "Item", entityId: id, action: "update", before, after });
     return after;
   });
