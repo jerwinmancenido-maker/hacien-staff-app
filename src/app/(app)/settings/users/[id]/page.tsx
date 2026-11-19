@@ -8,6 +8,7 @@ import { Chip, PageHeader } from "@/components/ui";
 import { UserForm } from "../../UserForm";
 import { resendInviteAction, setUserActiveAction, updateUserAction } from "../../actions";
 import { API_BOT_EMAIL } from "@/lib/api/bot-user";
+import { emailConfigured } from "@/lib/services/statement-reminder";
 
 export default async function UserPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invited?: string }> }) {
   const me = await requirePagePermission("manage_users");
@@ -46,7 +47,14 @@ export default async function UserPage({ params, searchParams }: { params: Promi
           </>
         }
       />
-      {invited && <div className="alert ok">User added. We emailed them a link to set their password.</div>}
+      {invited &&
+        (emailConfigured() ? (
+          <div className="alert ok">User added. We emailed them a link to set their password.</div>
+        ) : (
+          <div className="alert warn">
+            User added, but no email was sent — email is not configured on this server, so the invite email could not go out.
+          </div>
+        ))}
       <div className="detail-grid">
         <div className="card">
           {isBot ? (

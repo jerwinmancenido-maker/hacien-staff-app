@@ -38,10 +38,13 @@ function PartyBoxes({ party, kind, hideCounterpartyTin = false }: { party: Profe
           {party.billingAddress && <div className="pp-pre">{party.billingAddress}</div>}
           {!hideCounterpartyTin && party.tin && <div>TIN {party.tin}</div>}
         </div>
-        <div className="pp-party-box">
-          <div className="pp-label">Deliver to</div>
-          {party.deliveryAddress ? <div className="pp-pre">{party.deliveryAddress}</div> : <div className="pp-faint">—</div>}
-        </div>
+        {/* F19: a supplier statement has no delivery address — don't print an empty Deliver to box. */}
+        {(party.deliveryAddress || kind !== "supplier_statement") && (
+          <div className="pp-party-box">
+            <div className="pp-label">Deliver to</div>
+            {party.deliveryAddress ? <div className="pp-pre">{party.deliveryAddress}</div> : <div className="pp-faint">—</div>}
+          </div>
+        )}
       </section>
     );
   }
@@ -63,20 +66,23 @@ function PartyBoxes({ party, kind, hideCounterpartyTin = false }: { party: Profe
         {party.billingAddress && <div className="pp-pre">{party.billingAddress}</div>}
         {!hideCounterpartyTin && party.tin && <div>TIN {party.tin}</div>}
       </div>
-      <div className="pp-party-box">
-        <div className="pp-label">Deliver to</div>
-        {party.deliveryAddress ? (
-          <>
-            {/* Customer name heads the delivery block too (owner-approved
-                print redesign 2026-11-09) — a bare address read as
-                unfinished next to the full Bill to block. */}
-            <div className="pp-strong">{party.name}</div>
-            <div className="pp-pre">{party.deliveryAddress}</div>
-          </>
-        ) : (
-          <div className="pp-faint">—</div>
-        )}
-      </div>
+      {/* F19: a customer statement spans many orders — no single delivery address, so no empty Deliver to box. */}
+      {(party.deliveryAddress || kind !== "customer_statement") && (
+        <div className="pp-party-box">
+          <div className="pp-label">Deliver to</div>
+          {party.deliveryAddress ? (
+            <>
+              {/* Customer name heads the delivery block too (owner-approved
+                  print redesign 2026-11-09) — a bare address read as
+                  unfinished next to the full Bill to block. */}
+              <div className="pp-strong">{party.name}</div>
+              <div className="pp-pre">{party.deliveryAddress}</div>
+            </>
+          ) : (
+            <div className="pp-faint">—</div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

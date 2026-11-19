@@ -342,7 +342,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
                   No acceptance recorded yet. Converting to a sales order needs one of: a signed conforme above, a buyer PO
                   number, or the record below.
                 </p>
-                {editable && <AcceptanceForm action={recordQuoteAcceptanceAction.bind(null, q.id)} />}
+                {editable && <AcceptanceForm action={recordQuoteAcceptanceAction.bind(null, q.id)} hasConforme={q.conformeFiles.length > 0} />}
               </>
             )}
           </div>
