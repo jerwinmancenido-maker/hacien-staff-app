@@ -55,6 +55,8 @@ export default async function PrintSalesSummaryPage({
             <tr>
               <th>Month</th>
               <th className="num">Gross sales</th>
+              <th className="num">Less returns</th>
+              <th className="num">Net sales</th>
               <th className="num">Billings</th>
             </tr>
           </thead>
@@ -63,6 +65,8 @@ export default async function PrintSalesSummaryPage({
               <tr key={m.month}>
                 <td>{m.label}</td>
                 <td className="num">{formatPeso(m.grossSales)}</td>
+                <td className="num">{formatPeso(m.returns)}</td>
+                <td className="num">{formatPeso(m.netSales)}</td>
                 <td className="num">{m.billingCount}</td>
               </tr>
             ))}
@@ -71,6 +75,12 @@ export default async function PrintSalesSummaryPage({
             <tr>
               <td>
                 <b>Year total</b>
+              </td>
+              <td className="num">
+                <b>{formatPeso(sheet.yearGross)}</b>
+              </td>
+              <td className="num">
+                <b>{formatPeso(sheet.yearReturns)}</b>
               </td>
               <td className="num">
                 <b>{formatPeso(sheet.yearTotal)}</b>

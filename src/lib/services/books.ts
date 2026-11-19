@@ -4,7 +4,7 @@
 
 import { assertCan, type PermissionUser } from "../permissions";
 import { money } from "../documents/common";
-import { fromScaled, toScaled } from "../quotes/calc";
+import { fromScaled, lineAmounts, toScaled } from "../quotes/calc";
 import { db } from "../db";
 import { isCashEnabled } from "../cash/features";
 import { isPayablesEnabled } from "../payables/features";
@@ -47,6 +47,33 @@ function sumEwt(allocs: { withholdingApplied: { toFixed(n: number): string } | s
   return fromScaled(total, 2);
 }
 
+/** Register rows carry returns as negative amounts (F15). */
+function negative(amount: string): string {
+  return amount === "0.00" ? amount : `-${amount}`;
+}
+
+/** Value of a supplier return: qty returned x the PO line's unit cost, per line. */
+export function supplierReturnAmount(items: { qtyReturned: unknown; purchaseOrderItem: { unitCost: unknown } }[]): string {
+  return fromScaled(
+    items.reduce(
+      (a, i) =>
+        a +
+        toScaled(
+          // lineAmounts' total is qty x unitPrice regardless of kind.
+          lineAmounts({
+            kind: "GOODS",
+            qty: money(String(i.qtyReturned)),
+            unitPrice: money(String(i.purchaseOrderItem.unitCost)),
+            supplierUnitCost: "0",
+          }).total,
+          2,
+        ),
+      0n,
+    ),
+    2,
+  );
+}
+
 /** All source rows that can feed any register (caller filters by kind/period). */
 export async function listBookSourceRows(actor: PermissionUser): Promise<BookSourceRow[]> {
   assertCan(actor, "view_books");
@@ -59,7 +86,7 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
   // separately by getHeldForOthers. Collections stay unfiltered on purpose:
   // allocations can only reach HACIEN billings (a tagged SO cannot be
   // billed), and an unallocated deposit carries no deal link to attribute.
-  const [billings, collections, bills, payments, expenses, deletedBillingAudits] = await Promise.all([
+  const [billings, collections, bills, payments, expenses, deletedBillingAudits, customerReturns, supplierReturns] = await Promise.all([
     db.billing.findMany({
       where: { salesOrder: { businessId: null } },
       include: { customer: { select: { name: true } } },
@@ -101,6 +128,26 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       where: { entityType: "Billing", action: "delete" },
       select: { id: true, entityId: true, before: true, after: true },
       orderBy: { at: "asc" },
+    }),
+    // F15: returns are negative sales / negative purchases in the books.
+    // The entity wall applies through the parent order, same as billings
+    // and supplier bills: another business's returns never appear here.
+    db.customerReturn.findMany({
+      where: { salesOrder: { businessId: null } },
+      include: {
+        credit: { select: { amount: true } },
+        items: { select: { amount: true } },
+        salesOrder: { select: { customer: { select: { name: true } } } },
+      },
+      orderBy: [{ returnDate: "asc" }, { number: "asc" }],
+    }),
+    db.supplierReturn.findMany({
+      where: { purchaseOrder: { businessId: null } },
+      include: {
+        items: { select: { qtyReturned: true, purchaseOrderItem: { select: { unitCost: true } } } },
+        purchaseOrder: { select: { supplier: { select: { name: true } } } },
+      },
+      orderBy: [{ returnDate: "asc" }, { number: "asc" }],
     }),
   ]);
 
@@ -213,6 +260,44 @@ export async function listBookSourceRows(actor: PermissionUser): Promise<BookSou
       ewt: money(e.withholdingApplied),
       href: cashOn ? `/cash/expenses/${e.id}` : null,
       voided: e.status === "VOID",
+    });
+  }
+
+  for (const r of customerReturns) {
+    const amount = r.credit
+      ? money(r.credit.amount)
+      : fromScaled(r.items.reduce((a, i) => a + toScaled(money(i.amount), 2), 0n), 2);
+    const bits = ["Customer return — credit memo"];
+    if (r.reason?.trim()) bits.push(r.reason.trim());
+    rows.push({
+      id: r.id,
+      kind: "CUSTOMER_RETURN",
+      date: dateYmd(r.returnDate),
+      documentNumber: r.number,
+      party: r.salesOrder.customer.name,
+      particulars: bits.join(" · "),
+      amount: negative(amount),
+      ewt: null,
+      href: `/sales-orders/${r.salesOrderId}`,
+      voided: r.status === "VOID",
+    });
+  }
+
+  for (const r of supplierReturns) {
+    const bits = ["Supplier return"];
+    if (r.creditNoteNumber) bits.push(`Credit note ${r.creditNoteNumber}`);
+    if (r.reason?.trim()) bits.push(r.reason.trim());
+    rows.push({
+      id: r.id,
+      kind: "SUPPLIER_RETURN",
+      date: dateYmd(r.returnDate),
+      documentNumber: r.number,
+      party: r.purchaseOrder.supplier.name,
+      particulars: bits.join(" · "),
+      amount: negative(supplierReturnAmount(r.items)),
+      ewt: null,
+      href: `/purchase-orders/${r.purchaseOrderId}`,
+      voided: r.status === "VOID",
     });
   }
 

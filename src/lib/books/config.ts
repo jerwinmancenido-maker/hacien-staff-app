@@ -19,7 +19,14 @@ export type RegisterColumn = {
   optional?: boolean;
 };
 
-export type RegisterSourceKind = "BILLING" | "COLLECTION" | "SUPPLIER_PAYMENT" | "EXPENSE" | "SUPPLIER_BILL";
+export type RegisterSourceKind =
+  | "BILLING"
+  | "COLLECTION"
+  | "SUPPLIER_PAYMENT"
+  | "EXPENSE"
+  | "SUPPLIER_BILL"
+  | "CUSTOMER_RETURN"
+  | "SUPPLIER_RETURN";
 
 export type RegisterConfig = {
   key: RegisterKey;
@@ -59,11 +66,11 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
     label: "Sales",
     title: "Sales register",
     subtitle:
-      "Billings and collections listed together; period totals stay separate (Invoiced vs Collected). Draft — not a tax basis.",
+      "Billings and collections listed together; period totals stay separate (Invoiced vs Collected). Customer returns appear as negative lines inside the Invoiced total. Draft — not a tax basis.",
     emptyFeeds:
       "This register is built from non-void billings (sales invoices) and collections (cash receipts). Record those under Billing & Collections first.",
     columns: BASE_COLUMNS,
-    sources: ["BILLING", "COLLECTION"],
+    sources: ["BILLING", "COLLECTION", "CUSTOMER_RETURN"],
     rowsPerPage: 25,
     path: "sales",
   },
@@ -83,7 +90,7 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
     key: "purchases",
     label: "Purchases",
     title: "Purchases register",
-    subtitle: "Supplier bills recorded in Purchasing / Payables.",
+    subtitle: "Supplier bills recorded in Purchasing / Payables. Supplier returns appear as negative lines, so the period total is net.",
     emptyFeeds:
       "This register is built from non-void supplier bills. Record a supplier bill on a purchase order (or under the supplier) first.",
     // Purchases book usually has no EWT column (EWT is at payment). Easy to add back here.
@@ -94,7 +101,7 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
       { key: "particulars", label: "Particulars" },
       { key: "amount", label: "Amount", align: "right", money: true },
     ],
-    sources: ["SUPPLIER_BILL"],
+    sources: ["SUPPLIER_BILL", "SUPPLIER_RETURN"],
     rowsPerPage: 25,
     path: "purchases",
   },
@@ -104,7 +111,7 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
     title: "General journal",
     subtitle: "All book rows in date order — sales, purchases, and cash out.",
     emptyFeeds:
-      "This list combines non-void billings, collections, supplier bills, supplier payments, and expenses for the period.",
+      "This list combines non-void billings, collections, supplier bills, supplier payments, expenses, and returns for the period.",
     columns: [
       { key: "date", label: "Date" },
       { key: "source", label: "Source" },
@@ -114,7 +121,7 @@ export const REGISTER_CONFIGS: Record<RegisterKey, RegisterConfig> = {
       { key: "amount", label: "Amount", align: "right", money: true },
       { key: "ewt", label: "EWT", align: "right", money: true, optional: true },
     ],
-    sources: ["BILLING", "COLLECTION", "SUPPLIER_BILL", "SUPPLIER_PAYMENT", "EXPENSE"],
+    sources: ["BILLING", "COLLECTION", "SUPPLIER_BILL", "SUPPLIER_PAYMENT", "EXPENSE", "CUSTOMER_RETURN", "SUPPLIER_RETURN"],
     rowsPerPage: 25,
     path: "journal",
   },

@@ -128,6 +128,12 @@ export default async function IncomeTaxWorksheetPage({
           <EmptyState title="No figures yet" line={TAX_WORKSHEET_PAGES.income.empty} />
         ) : null}
 
+        <p className="small" style={{ marginBottom: 12 }}>
+          Invoiced basis (line a): gross billings {formatPeso(sheet.invoicedGrossTotal)}, less customer returns{" "}
+          {formatPeso(sheet.invoicedReturnsTotal)}, net {formatPeso(sheet.invoicedTotal)}. Returns count in the
+          period they were posted; the collected column is not reduced by returns.
+        </p>
+
         <table className="data-table tax-income-worksheet" style={{ marginTop: empty ? 16 : 0 }}>
           <thead>
             <tr>

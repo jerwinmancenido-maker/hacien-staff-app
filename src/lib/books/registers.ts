@@ -25,7 +25,10 @@ export type BookSourceRow = {
   documentNumber: string;
   party: string;
   particulars: string;
-  /** Absolute amount, 2-decimal string. */
+  /**
+   * Signed amount, 2-decimal string. Return rows (F15) carry a negative
+   * amount so register totals come out net of returns.
+   */
   amount: string;
   /** EWT amount when present; null when not applicable for the row. */
   ewt: string | null;
@@ -79,6 +82,8 @@ export const SOURCE_LABELS: Record<RegisterSourceKind, string> = {
   SUPPLIER_BILL: "Supplier bill",
   SUPPLIER_PAYMENT: "Supplier payment",
   EXPENSE: "Expense",
+  CUSTOMER_RETURN: "Customer return",
+  SUPPLIER_RETURN: "Supplier return",
 };
 
 export const INVOICED_TOTAL_LABEL = "Invoiced total";
@@ -158,7 +163,10 @@ export function buildRegister(
     pageEwt += ewt;
     periodAmt += amt;
     periodEwt += ewt;
-    if (src.kind === "BILLING") {
+    if (src.kind === "BILLING" || src.kind === "CUSTOMER_RETURN") {
+      // F15: a customer return is negative sales — its (negative) amount
+      // nets against the invoiced total, never the collected total
+      // (return credit is not a collection).
       invoicedAmt += amt;
       invoicedEwt += ewt;
     } else if (src.kind === "COLLECTION") {

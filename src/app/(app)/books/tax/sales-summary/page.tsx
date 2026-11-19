@@ -38,9 +38,10 @@ export default async function SalesSummaryWorksheetPage({
           printHref={`/print/books/tax/sales-summary?year=${year}`}
         />
         <p className="faint small">
-          Non-void billings by invoice date (Manila). Year total{" "}
-          <Link href={`/books/sales?from=${year}-01-01&to=${year}-12-31`}>{formatPeso(sheet.yearTotal)}</Link> ·{" "}
-          {sheet.billingCount} billing{sheet.billingCount === 1 ? "" : "s"}. Never includes VAT.
+          Non-void billings by invoice date (Manila), less customer returns posted in each month. Year net total{" "}
+          <Link href={`/books/sales?from=${year}-01-01&to=${year}-12-31`}>{formatPeso(sheet.yearTotal)}</Link> (gross{" "}
+          {formatPeso(sheet.yearGross)}, less returns {formatPeso(sheet.yearReturns)}) · {sheet.billingCount} billing
+          {sheet.billingCount === 1 ? "" : "s"}. Never includes VAT.
         </p>
 
         {sheet.billingCount === 0 ? (
@@ -51,6 +52,8 @@ export default async function SalesSummaryWorksheetPage({
               <tr>
                 <th>Month</th>
                 <th className="num">Gross sales</th>
+                <th className="num">Less returns</th>
+                <th className="num">Net sales</th>
                 <th className="num">Billings</th>
                 <th>Source</th>
               </tr>
@@ -62,6 +65,8 @@ export default async function SalesSummaryWorksheetPage({
                   <td className="num">
                     <Link href={m.href}>{formatPeso(m.grossSales)}</Link>
                   </td>
+                  <td className="num">{formatPeso(m.returns)}</td>
+                  <td className="num">{formatPeso(m.netSales)}</td>
                   <td className="num">{m.billingCount}</td>
                   <td className="small">
                     <Link href={m.href}>Sales register</Link>
@@ -73,6 +78,12 @@ export default async function SalesSummaryWorksheetPage({
               <tr>
                 <td>
                   <b>Year total</b>
+                </td>
+                <td className="num">
+                  <b>{formatPeso(sheet.yearGross)}</b>
+                </td>
+                <td className="num">
+                  <b>{formatPeso(sheet.yearReturns)}</b>
                 </td>
                 <td className="num">
                   <b>{formatPeso(sheet.yearTotal)}</b>
