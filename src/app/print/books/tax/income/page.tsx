@@ -107,6 +107,11 @@ export default async function PrintIncomeTaxPage({
           <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
         </p>
 
+        <p className="small">
+          Invoiced basis (line a): gross billings {formatPeso(sheet.invoicedGrossTotal)}, less customer returns{" "}
+          {formatPeso(sheet.invoicedReturnsTotal)}, net {formatPeso(sheet.invoicedTotal)}.
+        </p>
+
         {sheet.overThreshold ? (
           <p className="error">
             <b>{OVER_THRESHOLD_WARNING}</b>

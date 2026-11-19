@@ -224,6 +224,47 @@ describe("sales register — separate Invoiced / Collected totals (no combined)"
   });
 });
 
+describe("F15 — returns are negative lines in the registers", () => {
+  it("a customer return nets against the Invoiced total, never Collected", () => {
+    const sources: BookSourceRow[] = [
+      row({ id: "inv", kind: "BILLING", date: "2026-03-10", amount: "15000.00", ewt: "150.00" }),
+      row({ id: "col", kind: "COLLECTION", date: "2026-03-15", amount: "5000.00", ewt: "0.00" }),
+      row({ id: "ret", kind: "CUSTOMER_RETURN", date: "2026-03-20", amount: "-3000.00" }),
+    ];
+    const reg = buildRegister(REGISTER_CONFIGS.sales, sources, "2026-03-01", "2026-03-31");
+    expect(reg.rowCount).toBe(3);
+    expect(reg.salesPeriodTotals!.invoicedAmount).toBe("12000.00");
+    expect(reg.salesPeriodTotals!.collectedAmount).toBe("5000.00");
+    const csv = registerToCsv(REGISTER_CONFIGS.sales, reg);
+    expect(csv).toContain("-3000.00");
+    expect(csv).toContain("12000.00");
+  });
+
+  it("a voided customer return drops out like a voided billing", () => {
+    const sources: BookSourceRow[] = [
+      row({ id: "inv", kind: "BILLING", date: "2026-03-10", amount: "15000.00" }),
+      row({ id: "ret", kind: "CUSTOMER_RETURN", date: "2026-03-20", amount: "-3000.00", voided: true }),
+    ];
+    const reg = buildRegister(REGISTER_CONFIGS.sales, sources, "2026-03-01", "2026-03-31");
+    expect(reg.rowCount).toBe(1);
+    expect(reg.salesPeriodTotals!.invoicedAmount).toBe("15000.00");
+  });
+
+  it("a supplier return nets the purchases period total; journal carries both return kinds", () => {
+    const sources: BookSourceRow[] = [
+      row({ id: "sb", kind: "SUPPLIER_BILL", date: "2026-06-03", amount: "8000.00" }),
+      row({ id: "sr", kind: "SUPPLIER_RETURN", date: "2026-06-10", amount: "-2000.00" }),
+      row({ id: "cr", kind: "CUSTOMER_RETURN", date: "2026-06-11", amount: "-500.00" }),
+    ];
+    expect(buildRegister(REGISTER_CONFIGS.purchases, sources, "2026-06-01", "2026-06-30").periodAmountTotal).toBe("6000.00");
+    const journal = buildRegister(REGISTER_CONFIGS.journal, sources, "2026-06-01", "2026-06-30");
+    expect(journal.rowCount).toBe(3);
+    expect(journal.periodAmountTotal).toBe("5500.00");
+    // Returns never leak into registers that do not list them as sources.
+    expect(buildRegister(REGISTER_CONFIGS.disbursements, sources, "2026-06-01", "2026-06-30").rowCount).toBe(0);
+  });
+});
+
 describe("non-sales registers keep a single period total", () => {
   it("disbursements and purchases and journal wire the right sources", () => {
     const sources: BookSourceRow[] = [

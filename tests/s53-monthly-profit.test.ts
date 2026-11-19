@@ -28,15 +28,29 @@ describe("S-53 profit CSV", () => {
   it("lists the summary then one row per deal", () => {
     const report: MonthlyProfit = {
       month: "2026-11",
-      revenue: "100000.00",
-      supplierBills: "60000.00",
+      revenue: "95000.00",
+      customerReturns: "5000.00",
+      supplierBills: "57000.00",
+      supplierReturns: "3000.00",
       expenses: "10000.00",
-      net: "30000.00",
-      deals: [{ number: "SO-2026-0001", date: "2026-11-04", contractPrice: "100000.00", supplierCost: "70000.00", margin: "30000.00", marginPct: "30.00" }],
+      net: "28000.00",
+      deals: [
+        {
+          number: "SO-2026-0001",
+          date: "2026-11-04",
+          contractPrice: "95000.00",
+          returns: "5000.00",
+          supplierCost: "70000.00",
+          margin: "25000.00",
+          marginPct: "26.32",
+        },
+      ],
     };
     const csv = profitToCsv(report);
-    expect(csv).toContain("Net profit,30000.00");
-    expect(csv).toContain("SO-2026-0001,2026-11-04,100000.00,70000.00,30000.00,30.00");
+    expect(csv).toContain("Net profit,28000.00");
+    expect(csv).toContain("Customer returns posted,5000.00");
+    expect(csv).toContain("Supplier returns posted,3000.00");
+    expect(csv).toContain("SO-2026-0001,2026-11-04,95000.00,5000.00,70000.00,25000.00,26.32");
   });
 });
 

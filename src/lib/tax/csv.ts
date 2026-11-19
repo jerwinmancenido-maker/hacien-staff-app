@@ -93,6 +93,10 @@ export type SalesMonthRow = {
   month: string;
   label: string;
   grossSales: string;
+  /** POSTED customer returns posted in the month (F15). */
+  returns: string;
+  /** grossSales less returns (F15). */
+  netSales: string;
   billingCount: number;
 };
 
@@ -101,10 +105,10 @@ export function salesSummaryToCsv(rows: readonly SalesMonthRow[], year: number):
   const lines: string[] = [
     `# ${TAX_WORKSHEET_BANNER}`,
     `# Sales summary by month · ${year}`,
-    csvRow(["Month", "Label", "Gross Sales", "Billing Count"]),
+    csvRow(["Month", "Label", "Gross Sales", "Less Returns", "Net Sales", "Billing Count"]),
   ];
   for (const r of rows) {
-    lines.push(csvRow([r.month, r.label, r.grossSales, r.billingCount]));
+    lines.push(csvRow([r.month, r.label, r.grossSales, r.returns, r.netSales, r.billingCount]));
   }
   return lines.join("\n") + "\n";
 }
@@ -112,6 +116,8 @@ export function salesSummaryToCsv(rows: readonly SalesMonthRow[], year: number):
 /** 1701Q worksheet — both invoiced and collected columns; no single basis chosen. */
 export function incomeTaxWorksheetToCsv(
   sheet: {
+    invoicedGrossTotal?: string;
+    invoicedReturnsTotal?: string;
     invoicedTotal: string;
     collectedTotal: string;
     invoiced: { a: string; b: string; c: string; d: string; e: string; f: string; g: string };
@@ -125,7 +131,13 @@ export function incomeTaxWorksheetToCsv(
       `# ${meta.label}`,
       `# ${TAX_BASIS_UNVERIFIED_NOTE}`,
       csvRow(["Line", "Description", "If invoiced", "If collected"]),
-      csvRow(["a", "Invoiced total / Collected total (Jan 1 to quarter end)", sheet.invoicedTotal, sheet.collectedTotal]),
+      ...(sheet.invoicedGrossTotal != null
+        ? [
+            csvRow(["", "Gross billings (Jan 1 to quarter end)", sheet.invoicedGrossTotal, ""]),
+            csvRow(["", "Less customer returns posted", sheet.invoicedReturnsTotal ?? "0.00", ""]),
+          ]
+        : []),
+      csvRow(["a", "Invoiced total (net of returns) / Collected total (Jan 1 to quarter end)", sheet.invoicedTotal, sheet.collectedTotal]),
       csvRow(["b", "Less allowance (8% option, sole proprietor — confirm)", sheet.invoiced.b, sheet.collected.b]),
       csvRow(["c", "Taxable (max 0, a−b)", sheet.invoiced.c, sheet.collected.c]),
       csvRow(["d", "Tax (c × 8%)", sheet.invoiced.d, sheet.collected.d]),
