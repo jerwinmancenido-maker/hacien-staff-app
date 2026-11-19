@@ -21,6 +21,7 @@ import { approvePurchaseOrder, createPurchaseOrdersFromSalesOrder, markPurchaseO
 import { postReceivingReport, voidReceivingReport } from "@/lib/services/receiving";
 import { changeWarrantyClaimStatus, createWarrantyClaim } from "@/lib/services/warranty-claims";
 import { listWarrantyClaims } from "@/lib/purchasing/views";
+import { formatDate } from "@/lib/format";
 import { freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
 
 describe.skipIf(!env.hasDb)("Phase 3 #8b warranty claims (MySQL)", () => {
@@ -109,11 +110,17 @@ describe.skipIf(!env.hasDb)("Phase 3 #8b warranty claims (MySQL)", () => {
   });
 
   it("W3: blocks a second active claim on the same line + serial, naming the open one; other serial / after close allowed", async () => {
-    const { itemId } = await receivedLine("SN-8B-A, SN-8B-B");
+    const { itemId, rr } = await receivedLine("SN-8B-A, SN-8B-B");
     const first = await createWarrantyClaim(itemId, { serialNumber: "SN-8B-A", fault: "No power", supplierRef: null }, staff);
-    await expect(
-      createWarrantyClaim(itemId, { serialNumber: "sn-8b-a", fault: "Also no power", supplierRef: null }, staff),
-    ).rejects.toThrow(new RegExp(first.id));
+    // F32: the refusal names the claim by its receiving report number
+    // and Manila filed date — never the internal claim id.
+    const blocked: unknown = await createWarrantyClaim(itemId, { serialNumber: "sn-8b-a", fault: "Also no power", supplierRef: null }, staff).catch(
+      (e: unknown) => e,
+    );
+    expect(blocked).toBeInstanceOf(Error);
+    expect((blocked as Error).message).toContain(rr.number);
+    expect((blocked as Error).message).toContain(formatDate(first.createdAt));
+    expect((blocked as Error).message).not.toContain(first.id);
     // A different serial on the same line is a different claim.
     const other = await createWarrantyClaim(itemId, { serialNumber: "SN-8B-B", fault: "Cracked case", supplierRef: null }, staff);
     expect(other.status).toBe("OPEN");

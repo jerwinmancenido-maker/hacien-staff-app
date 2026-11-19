@@ -87,6 +87,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             status={q.status}
             approvalStatus={q.approvalStatus}
             approvalReasons={q.approval.reasons ?? []}
+            approvalReasonsHidden={q.approval.hiddenReasons ?? false}
             canEdit={canEdit}
             canVoid={canVoid(user)}
             canDelete={canDeleteDocument(user)}

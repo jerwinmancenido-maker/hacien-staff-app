@@ -52,9 +52,9 @@ describe("period key + labels", () => {
 
   it("labels months in plain words and names the month in the refusal", () => {
     expect(monthLabel("2026-11")).toBe("November 2026");
-    expect(closedPeriodMessage("2026-11")).toBe(
-      "November 2026 is closed. An Admin can reopen it under Books → Period close.",
-    );
+    // F34: no pointer to the Period close card — it is hidden while
+    // the period-close feature is off, yet the lock still applies.
+    expect(closedPeriodMessage("2026-11")).toBe("November 2026 is closed. Ask an Admin to reopen it.");
   });
 });
 

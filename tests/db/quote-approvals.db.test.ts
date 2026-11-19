@@ -294,6 +294,13 @@ describe.skipIf(!hasDb)("quote approvals S-18 (MySQL)", () => {
     const view = await getQuoteView(q.id, admin);
     expect(view?.approval.needed).toBe(true);
     expect(view?.approval.reasons).toEqual([COST_NOT_SET_LABEL]);
+    expect(view?.approval.hiddenReasons).toBe(false);
+    // F26: Staff see no cost-based reason, but the view must say
+    // reasons are hidden — otherwise the quote reads as clean and
+    // the actions menu offers sends the server then refuses.
+    const staffView = await getQuoteView(q.id, staff);
+    expect(staffView?.approval.reasons).toEqual([]);
+    expect(staffView?.approval.hiddenReasons).toBe(true);
     expect(view?.totals.supplierCostState).toBe("partial");
     const costed = view?.items.find((i) => i.description === "Costed");
     const blank = view?.items.find((i) => i.description === "Blank");

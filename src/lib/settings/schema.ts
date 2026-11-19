@@ -62,8 +62,10 @@ const accountNumberFull = z
   .or(z.literal(""));
 
 const paymentAccountBank = z.object({
-  bankName: z.string().trim().min(1).max(100),
-  accountName: z.string().trim().min(1).max(100),
+  // F27: friendly messages — a bare .min(1) surfaced raw Zod text
+  // ("Too small: expected string to have >=1 characters").
+  bankName: z.string().trim().min(1, "Enter the bank name.").max(100),
+  accountName: z.string().trim().min(1, "Enter the account name.").max(100),
   accountLast4,
   /** OFF by default — print ****last4. ON — print full number when entered. */
   printFullAccountNumber: z.boolean().default(false),
@@ -71,8 +73,8 @@ const paymentAccountBank = z.object({
 });
 
 const paymentAccountEwallet = z.object({
-  provider: z.string().trim().min(1).max(100),
-  accountName: z.string().trim().min(1).max(100),
+  provider: z.string().trim().min(1, "Enter the provider.").max(100),
+  accountName: z.string().trim().min(1, "Enter the account name.").max(100),
   accountLast4,
   printFullAccountNumber: z.boolean().default(false),
   accountNumberFull,
