@@ -610,6 +610,24 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
     const before = await lockSalesOrder(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This sales order is already void.");
     await assertPeriodOpen(tx, before.date);
+    // F29: an SO with live downstream documents can't be voided —
+    // the children are voided first, mirroring voidPurchaseOrder's
+    // receiving-report guard. Without this, an SO whose billing is
+    // fully Paid could be voided, leaving the Paid billing pointing
+    // at a void order and the quote reverting to Sent under it
+    // (Mac run X6). Collections and applied return credits hang off
+    // billings, so the billing count covers them.
+    const liveBillings = await tx.billing.count({ where: { salesOrderId: id, status: { not: "VOID" } } });
+    if (liveBillings > 0) throw new DocRuleError("Void the billings first.");
+    // Returns before deliveries: a return reduces deliveredQty, so
+    // voiding its delivery first would drive the quantity negative
+    // — the return must be undone before its delivery can be.
+    const liveReturns = await tx.customerReturn.count({ where: { salesOrderId: id, status: "POSTED" } });
+    if (liveReturns > 0) throw new DocRuleError("Void the customer returns first.");
+    const liveDeliveries = await tx.delivery.count({ where: { salesOrderId: id, voidedAt: null } });
+    if (liveDeliveries > 0) throw new DocRuleError("Void the deliveries first.");
+    const livePos = await tx.purchaseOrder.count({ where: { salesOrderId: id, status: { not: "VOID" } } });
+    if (livePos > 0) throw new DocRuleError("Void the purchase orders first.");
     await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
     const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
