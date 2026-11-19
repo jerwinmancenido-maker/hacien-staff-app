@@ -955,7 +955,7 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
           fault: c.fault,
           supplierRef: c.supplierRef,
           status: c.status,
-          createdAt: ymd(c.createdAt)!,
+          createdAt: ymd(manilaToday(c.createdAt))!, // F32: Manila calendar day, not UTC
           createdBy: c.createdBy.name,
         })),
       ),
@@ -1171,7 +1171,7 @@ export async function listWarrantyClaims(opts: { q?: string } = {}): Promise<War
     fault: c.fault,
     serialNumber: c.serialNumber,
     supplierRef: c.supplierRef,
-    createdAt: ymd(c.createdAt)!,
+    createdAt: ymd(manilaToday(c.createdAt))!, // F32: Manila calendar day, not UTC
     purchaseOrderId: c.receivingReportItem.receivingReport.purchaseOrder.id,
     purchaseOrderNumber: c.receivingReportItem.receivingReport.purchaseOrder.number,
     supplierName: c.receivingReportItem.receivingReport.purchaseOrder.supplier.name,

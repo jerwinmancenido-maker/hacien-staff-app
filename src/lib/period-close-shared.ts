@@ -43,7 +43,10 @@ export function previousYearMonth(yearMonth: string): string {
 
 /** The refusal every guarded posting path surfaces for a closed month. */
 export function closedPeriodMessage(yearMonth: string): string {
-  return `${monthLabel(yearMonth)} is closed. An Admin can reopen it under Books → Period close.`;
+  // F34: no pointer to Books → Period close — that card is hidden
+  // while the period-close feature is off, yet the lock still
+  // applies, so the old wording sent staff to a card they can't see.
+  return `${monthLabel(yearMonth)} is closed. Ask an Admin to reopen it.`;
 }
 
 /** Sync check from env only (useful in unit tests without DB). */

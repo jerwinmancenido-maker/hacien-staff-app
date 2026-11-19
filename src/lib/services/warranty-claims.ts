@@ -14,7 +14,8 @@
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, type PermissionUser } from "../permissions";
-import { DocRuleError, withTxRetry, ymd } from "../documents/common";
+import { DocRuleError, withTxRetry } from "../documents/common";
+import { formatDate } from "../format";
 import {
   canTransitionWarrantyClaim,
   isWarrantyClaimActive,
@@ -74,8 +75,12 @@ export async function createWarrantyClaim(receivingReportItemId: string, input: 
       });
       const blocker = existing.find((c) => isWarrantyClaimActive(c.status) && sameClaimSerial(c.serialNumber, serial));
       if (blocker) {
+        // F32: Manila date in words and the receiving report's
+        // number — the old text showed the UTC date (a claim filed
+        // early in the Manila morning read as yesterday) and the
+        // claim's internal id, which means nothing to staff.
         throw new DocRuleError(
-          `A warranty claim for this item${serial ? ` (serial ${serial})` : ""} is already ${WARRANTY_CLAIM_STATUS_LABELS[blocker.status]} — filed ${ymd(blocker.createdAt) ?? ""} (claim ${blocker.id}). Close or finish that claim first.`,
+          `A warranty claim for this item${serial ? ` (serial ${serial})` : ""} is already ${WARRANTY_CLAIM_STATUS_LABELS[blocker.status]} — filed ${formatDate(blocker.createdAt)} on ${item.reportNumber}. Close or finish that claim first.`,
         );
       }
       const claim = await tx.warrantyClaim.create({

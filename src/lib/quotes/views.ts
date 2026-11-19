@@ -223,7 +223,12 @@ function approvalFromSnap(
   const reasons = approvalReasons({ contractPrice, netMarginPct, supplierCostState }, snap.settings.approval);
   // Staff who cannot see costs must not get a "low margin" chip for a missing cost.
   const visible = withCosts ? reasons : reasons.filter((r) => r !== COST_NOT_SET_LABEL);
-  return { needed: visible.length > 0, reasons: visible };
+  // F26: a quote blocked ONLY by a hidden reason (cost not set) used
+  // to look fully approved to Staff — the actions menu offered Mark
+  // as sent / Email / Convert, which then errored at the server.
+  // hiddenReasons lets the page hold those actions back without
+  // leaking the cost-based reason itself.
+  return { needed: visible.length > 0, reasons: visible, hiddenReasons: reasons.length > visible.length };
 }
 
 async function approvalFor(

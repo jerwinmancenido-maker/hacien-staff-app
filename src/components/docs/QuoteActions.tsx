@@ -36,6 +36,10 @@ type Props = {
   approvalStatus: QuoteApprovalStatus;
   /** Prompt model (F5): the threshold reasons this quote trips, if any. */
   approvalReasons?: string[];
+  /** F26: true when the quote trips reasons this viewer may not see
+   * (cost-based, hidden from Staff). A PENDING quote with hidden
+   * reasons must not offer Staff actions the server will refuse. */
+  approvalReasonsHidden?: boolean;
   canEdit: boolean;
   /** Admin or Approver. Staff keep Edit and do not see Void. */
   canVoid: boolean;
@@ -86,6 +90,7 @@ export function QuoteActions({
   status,
   approvalStatus,
   approvalReasons = [],
+  approvalReasonsHidden = false,
   canEdit,
   canVoid,
   canDelete,
@@ -136,11 +141,14 @@ export function QuoteActions({
   // Prompt model (F5): APPROVED / NOT_REQUIRED / clean-PENDING quotes act
   // freely. A PENDING quote WITH reasons acts only for an Approver, and only
   // through the confirm prompt; Staff keep waiting. REJECTED never acts.
+  // F26: reasons hidden from this viewer (cost-based, Staff) block just
+  // the same — an empty visible list must not read as a clean quote.
+  const blockedHidden = approvalStatus === "PENDING" && approvalReasonsHidden && !canApproveWorkflow;
   const needsPrompt = approvalStatus === "PENDING" && approvalReasons.length > 0;
   const approved =
     approvalStatus === "APPROVED" ||
     approvalStatus === "NOT_REQUIRED" ||
-    (approvalStatus === "PENDING" && (approvalReasons.length === 0 || canApproveWorkflow));
+    (approvalStatus === "PENDING" && !blockedHidden && (approvalReasons.length === 0 || canApproveWorkflow));
   const editable = status === "DRAFT" || status === "SENT";
   // S-66: no separate blue main button beside the Actions menu. The
   // workflow actions that used to sit there (Approve, Reject, Mark as
@@ -246,7 +254,9 @@ export function QuoteActions({
   const waitingNote =
     !approved && status !== "VOID" && status !== "WON" && status !== "LOST" && !canApproveWorkflow ? (
       <span className="small muted" role="status" style={{ alignSelf: "center" }}>
-        Waiting for approval
+        {/* F26: say WHY in generic words — the real reason may be
+            cost-based and hidden from Staff. */}
+        Waiting for approval — an Approver or Admin must approve it before it can be sent or converted
       </span>
     ) : null;
 
