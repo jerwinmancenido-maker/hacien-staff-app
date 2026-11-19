@@ -117,6 +117,7 @@ export async function AuditLogTab({ search }: { search: Search }) {
       ) : (
         <>
           <DataTable
+            wrapClassName="audit-log-table"
             label="Audit log"
             columns={[
               { key: "when", label: "When" },

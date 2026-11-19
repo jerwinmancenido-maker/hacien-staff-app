@@ -43,7 +43,7 @@ function IncomeTaxFilingRow({
       className="income-tax-filing-row"
       style={{
         padding: "10px 14px",
-        borderBottom: "1px solid #f1f5f9",
+        borderBottom: "1px solid var(--divider)",
         display: "flex",
         flexDirection: "column",
         gap: 6,
@@ -335,8 +335,8 @@ export function IncomeTaxFilingsCard({
           justifyContent: "space-between",
           alignItems: "center",
           padding: "10px 14px",
-          borderBottom: "1px solid #f1f5f9",
-          backgroundColor: "#ffffff",
+          borderBottom: "1px solid var(--divider)",
+          backgroundColor: "var(--card)",
         }}
       >
         <div>
