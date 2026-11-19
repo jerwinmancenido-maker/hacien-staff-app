@@ -273,7 +273,13 @@ export async function getHeldForOthers(actor: PermissionUser, fromYmd: string, t
       select: { amount: true },
     }),
     db.supplierBill.findMany({
-      where: { ...taggedBillWhere, status: { not: "VOID" } },
+      // F35: stillOwed is scoped to the same period as the rest of
+      // the card (bills / payments / expenses above). Without the
+      // date range it counted every tagged bill ever recorded —
+      // the figure moved with unrelated months, and the entity
+      // wall test flaked whenever another suite's tagged bill was
+      // unpaid at read time.
+      where: { ...taggedBillWhere, status: { not: "VOID" }, billDate: { gte: from, lte: to } },
       select: {
         amount: true,
         allocations: {
