@@ -85,6 +85,8 @@ export const expenseInputSchema = z
       .transform((v) => v || null),
     categoryId: z.string().min(1, "Pick a category."),
     amount: moneyStr,
+    /** F37: set only when the user confirmed the over-balance warning. */
+    allowOverBalance: z.boolean().optional(),
     withholdingApplied: optionalMoney,
     cashAccountId: z.string().min(1, "Pick which account paid this."),
     receiptNo: z
@@ -116,6 +118,8 @@ export const cashTransferInputSchema = z
     fromAccountId: z.string().min(1, "Pick the account money left."),
     toAccountId: z.string().min(1, "Pick the account money went to."),
     amount: moneyStr,
+    /** F37: set only when the user confirmed the over-balance warning. */
+    allowOverBalance: z.boolean().optional(),
     notes: z
       .string()
       .trim()
@@ -175,7 +179,7 @@ export function parseExpenseForm(
     purchaseOrderId: String(form.get("purchaseOrderId") ?? ""),
     businessId: String(form.get("businessId") ?? ""),
   };
-  const parsed = expenseInputSchema.safeParse(values);
+  const parsed = expenseInputSchema.safeParse({ ...values, allowOverBalance: form.get("confirmOverBalance") === "1" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;
@@ -194,7 +198,7 @@ export function parseCashTransferForm(
     amount: String(form.get("amount") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
-  const parsed = cashTransferInputSchema.safeParse(values);
+  const parsed = cashTransferInputSchema.safeParse({ ...values, allowOverBalance: form.get("confirmOverBalance") === "1" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;

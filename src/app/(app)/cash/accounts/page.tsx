@@ -77,7 +77,7 @@ export default async function CashAccountsPage() {
                       {formatPeso(a.openingBalance)}
                       <div className="faint small">{a.openingDate}</div>
                     </td>
-                    <td className="num strong">{formatPeso(a.balance)}</td>
+                    <td className={`num strong${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</td>
                     <td>
                       <AccountActiveChip active={a.active} />
                     </td>

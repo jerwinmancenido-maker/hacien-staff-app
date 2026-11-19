@@ -151,6 +151,10 @@ textarea {
   text-align: right;
   white-space: nowrap;
 }
+/* F37: a negative cash balance is flagged, never a silent minus figure. */
+.num.neg {
+  color: var(--danger);
+}
 .strong {
   font-weight: 600;
 }

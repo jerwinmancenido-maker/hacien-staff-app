@@ -13,6 +13,7 @@ import { formFiles } from "@/lib/form-files";
 import { isPayablesEnabled } from "@/lib/payables/features";
 import { assertPayables2307Enabled } from "@/lib/payables/issue2307";
 import { DocRuleError } from "@/lib/documents/common";
+import { fundsWarning } from "@/lib/cash/funds";
 
 async function assertFeatureOn() {
   if (!(await isPayablesEnabled())) throw new DocRuleError("Payables is turned off. Enable it in Settings → Features (or PAYABLES_ENABLED=true).");
@@ -38,6 +39,12 @@ export async function recordSupplierPaymentAction(_prev: FormState, form: FormDa
     cashAccountId: parsed.data.cashAccountId ?? "",
     notes: parsed.data.notes ?? "",
   };
+  // F37: soft over-balance warning when a cash account is assigned —
+  // nothing is saved until the user confirms (confirmOverBalance=1).
+  if (!parsed.data.allowOverBalance && parsed.data.cashAccountId) {
+    const warning = await fundsWarning(parsed.data.cashAccountId, parsed.data.amountPaid, "payment");
+    if (warning) return { values: echo, warning };
+  }
   let goTo: string | null = null;
   const result = await runAction(async () => {
     await assertFeatureOn();

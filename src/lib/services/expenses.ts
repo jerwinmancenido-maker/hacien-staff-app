@@ -9,6 +9,7 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { ExpenseInput } from "../validation/cash";
@@ -116,6 +117,9 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
         if (!account || !account.active) {
           throw new DocRuleError("Pick an active cash account. Add one under Cash → Accounts first.", "cashAccountId");
         }
+        // F37: the ledger debits the full expense amount from the account
+        // (same math as the F30 guard) — warn/refuse when it goes negative.
+        await assertFundsInTx(tx, account, input.amount, "expense", "amount", input.allowOverBalance);
         const category = await tx.expenseCategory.findUnique({ where: { id: input.categoryId } });
         if (!category || !category.active) {
           throw new DocRuleError("Pick an active expense category.", "categoryId");

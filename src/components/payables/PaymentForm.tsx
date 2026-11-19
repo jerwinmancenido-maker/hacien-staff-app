@@ -84,6 +84,7 @@ export function PaymentForm({
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const e = state.fieldErrors ?? {};
   const [method, setMethod] = useState(defaults.method || "BANK_TRANSFER");
   const [showEwt, setShowEwt] = useState(false);
@@ -152,6 +153,20 @@ export function PaymentForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input type="hidden" name="confirmOverBalance" value="1" />
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={pending}>
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <input type="hidden" name="supplierId" value={supplierId} />

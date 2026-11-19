@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
@@ -17,6 +18,7 @@ export function TransferForm({
   canEdit: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const e = state.fieldErrors ?? {};
 
   if (!canEdit) {
@@ -52,6 +54,20 @@ export function TransferForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input type="hidden" name="confirmOverBalance" value="1" />
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={pending}>
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <div className="form-grid">
