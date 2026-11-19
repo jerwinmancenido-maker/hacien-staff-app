@@ -8,7 +8,7 @@ import { itemSchema } from "@/lib/validation/items";
 import { saveItem, setItemActive } from "@/lib/services/items";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 
-const FIELDS = ["name", "brand", "model", "category", "sku", "unit", "kind", "details", "defaultUnitPrice"] as const;
+const FIELDS = ["name", "brand", "model", "category", "sku", "unit", "kind", "details", "defaultUnitPrice", "updatedAt"] as const;
 
 export async function saveItemAction(id: string | null, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);

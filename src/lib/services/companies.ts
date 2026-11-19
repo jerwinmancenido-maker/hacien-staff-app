@@ -5,6 +5,7 @@ import { settleApiWrite } from "../api/context";
 import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
 import { extractLast4, isMaskedBankAccountNumber, maskBankAccountNumber, resolveBankAccountNumber } from "../bank-mask";
+import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_CUSTOMER } from "../documents/common";
 import { ForbiddenError } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
@@ -163,6 +164,9 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
+      // F21: stale-edit guard — only when the editor sent its loaded
+      // token (API/test callers without one keep last-writer-wins).
+      if (input.updatedAt) requireMatchingUpdatedAt(before.updatedAt, input.updatedAt, STALE_EDIT_MESSAGE_CUSTOMER);
       const typeChanged = before.withholdingType !== input.withholdingType;
       const pickChanged = !withholdingPickEqual(before.defaultWithholding, input.defaultWithholding);
       // S-19: changing an existing customer's withholding is Admin only (fail closed).

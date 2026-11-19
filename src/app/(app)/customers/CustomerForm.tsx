@@ -131,6 +131,7 @@ export function CustomerForm({
 
   return (
     <form onSubmit={onSubmit} noValidate id="customer-form">
+      {customer?.updatedAt && <input type="hidden" name="updatedAt" value={new Date(customer.updatedAt).toISOString()} />}
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
