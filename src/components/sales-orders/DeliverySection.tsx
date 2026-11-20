@@ -8,6 +8,7 @@ import { VoidButton } from "@/components/purchasing/DocButtons";
 import { useFormAction } from "@/components/useFormAction";
 import { FileInput } from "@/components/FileInput";
 import { soDeliveryProgress } from "@/lib/sales-orders/delivery";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import type { FormState } from "@/lib/validation/forms";
 
 const day = (d: Date | string | null | undefined) => {
@@ -47,6 +48,9 @@ type DeliveryRecord = {
 };
 
 export function DeliverySection({
+  nextDrNo,
+  drSeriesFrom,
+  drSeriesTo,
   status,
   items,
   deliveries,
@@ -55,6 +59,9 @@ export function DeliverySection({
   action,
   voidAction,
 }: {
+  nextDrNo?: number | null;
+  drSeriesFrom?: number | null;
+  drSeriesTo?: number | null;
   status: string;
   items: DeliveryItemRow[];
   deliveries: DeliveryRecord[];
@@ -184,9 +191,17 @@ export function DeliverySection({
                 type="text"
                 className="input"
                 placeholder="e.g. 10452"
+                defaultValue={nextDrNo != null ? String(nextDrNo) : ""}
                 required
               />
-              {e.drNumber && <div className="error">{e.drNumber}</div>}
+              {e.drNumber ? (
+                <div className="error">{e.drNumber}</div>
+              ) : drSeriesFrom != null && drSeriesTo != null ? (
+                <div className="hint">
+                  Booklet {formatBookletNumber(drSeriesFrom)}–{formatBookletNumber(drSeriesTo)}
+                  {nextDrNo != null ? ` · next free: ${formatBookletNumber(nextDrNo)}` : ""}. Voided and spoiled numbers are never reused.
+                </div>
+              ) : null}
             </div>
 
             <div className={`field${e.deliveryDate ? " has-error" : ""}`}>
