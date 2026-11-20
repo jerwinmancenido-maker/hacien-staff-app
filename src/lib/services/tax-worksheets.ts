@@ -93,11 +93,17 @@ export async function cumulativeCollectedTotal(year: number, quarter: Quarter): 
   return money(agg._sum.amountReceived ?? 0);
 }
 
-/** Creditable customer EWT (POSTED collections, amount > 0) from Jan 1 through quarter end. */
+/**
+ * Creditable customer EWT (POSTED collections, amount > 0) from Jan 1 through
+ * quarter end. Only certificates actually RECEIVED count — a 2307 the customer
+ * has not yet handed over is not yet a credit against the payable (Round 1
+ * tax finding: pending certificates were credited in full).
+ */
 export async function creditableWithholdingYtd(year: number, quarter: Quarter): Promise<string> {
   const b = quarterBounds(year, quarter);
   const rows = await db.withholding2307.findMany({
     where: {
+      status: "RECEIVED",
       amount: { gt: 0 },
       collection: {
         status: "POSTED",
