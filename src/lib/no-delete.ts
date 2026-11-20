@@ -11,7 +11,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Prisma } from "@prisma/client";
-import { DELETE_ALLOWANCE_KEY } from "./delete-allowance-key";
+import { DELETE_ALLOWANCE_KEY } from "./delete-allowance-key.ts";
 
 export class HardDeleteError extends Error {
   constructor(model: string | undefined, operation: string) {
