@@ -242,7 +242,14 @@ export function HomeNeedsAction({
               <li key={r.kind}>
                 <Link className="home-na-row" href={r.href}>
                   <span className={`home-na-i${overdue ? " is-overdue" : ""}`}>{actionIcon(r.kind)}</span>
-                  <span className="home-na-t">{r.label}</span>
+                  <span className="home-na-t">
+                    {r.label}
+                    {r.hint && (
+                      <span className="muted small" style={{ display: "block", fontWeight: 400 }}>
+                        {r.hint}
+                      </span>
+                    )}
+                  </span>
                   <span className={`home-na-c num${overdue ? " is-overdue" : ""}`}>
                     {formatHomeActionCount(r.count)}
                   </span>

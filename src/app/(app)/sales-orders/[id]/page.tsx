@@ -83,6 +83,7 @@ export default async function SalesOrderPage({
       ])
     : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
+  const canCollect = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.unpaidBilled, 2) > 0n;
   // Business entity: Admins get the reclassify form; everyone sees the label.
   const allBusinesses = user.isAdmin ? await listBusinesses() : [];
   const { settings } = await getSettingsSnapshot();
@@ -118,7 +119,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} />
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} />
         }
       />
       {created && (

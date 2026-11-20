@@ -14,6 +14,15 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const month = profitMonth(sp.month);
   const report = await getMonthlyProfit(month);
+  const dealTotals = report.deals.reduce(
+    (a, d) => ({
+      contractPrice: a.contractPrice + Number(d.contractPrice),
+      returns: a.returns + Number(d.returns),
+      supplierCost: a.supplierCost + Number(d.supplierCost),
+      margin: a.margin + Number(d.margin),
+    }),
+    { contractPrice: 0, returns: 0, supplierCost: 0, margin: 0 },
+  );
   return (
     <>
       <PageHeader title="Monthly profit" subtitle={`Management view, not a BIR book. · ${BOOKS_DISCLAIMER}`} />
@@ -91,9 +100,26 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td className="strong" colSpan={2}>
+                    Total — deals dated in {month}
+                  </td>
+                  <td className="num strong">{formatPeso(dealTotals.contractPrice)}</td>
+                  <td className="num strong">{formatPeso(dealTotals.returns)}</td>
+                  <td className="num strong">{formatPeso(dealTotals.supplierCost)}</td>
+                  <td className="num strong">{formatPeso(dealTotals.margin)}</td>
+                  <td className="num" />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
+        <p className="faint small" style={{ marginTop: 12 }}>
+          Margin by deal follows orders dated in {month} at their recorded supplier costs — the same basis as the Operations view, which also takes
+          expenses off its total. Net profit above follows billings invoiced and supplier bills recorded in {month} instead. The two profit figures
+          differ because one follows orders and the other follows invoices and bills; neither is wrong.
+        </p>
         <p className="faint small" style={{ marginTop: 16 }}>
           Who owes us: <Link href="/billing/aging">Billing aging →</Link> · Who we owe: <Link href="/payables/aging">Payables aging →</Link>
         </p>

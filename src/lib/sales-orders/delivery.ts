@@ -112,6 +112,19 @@ export function soDeliveryProgress(
   return { total, delivered, fullyDelivered, label };
 }
 
+/**
+ * POD gap on a fully delivered order: quantities are complete, but at
+ * least one live (non-void) delivery has no receiver name on record —
+ * the proof of delivery is incomplete even though the order reads done.
+ */
+export function soPodIncomplete(
+  progress: Pick<SoDeliveryProgress, "fullyDelivered">,
+  deliveries: readonly { receivedBy: string | null; voidedAt?: Date | string | null }[],
+): boolean {
+  if (!progress.fullyDelivered) return false;
+  return deliveries.some((d) => !d.voidedAt && !(d.receivedBy ?? "").trim());
+}
+
 /** True when at least one live line still has ordered qty left to deliver. */
 export function soHasRemainingToDeliver(
   items: readonly Pick<OpenDeliveryLine, "qty" | "deliveredQty">[],

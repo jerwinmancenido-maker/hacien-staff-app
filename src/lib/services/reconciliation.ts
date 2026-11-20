@@ -351,8 +351,8 @@ export async function setPurchaseOrderGapReason(id: string, input: GapReasonInpu
 // Operational profit — ALL recorded orders (billed or not), per business.
 // This is a management view over the single set of records; it never feeds
 // HACIEN's Books or tax figures (those stay billing-based — see
-// getMonthlyProfit). The official billed revenue for the same month is
-// returned alongside so the two are never confused.
+// getMonthlyProfit). The official billed revenue and net profit for the
+// same month are returned alongside so the two are never confused.
 
 export type OperationalProfitRow = {
   businessId: string | null;
@@ -369,6 +369,7 @@ export type OperationalProfit = {
   rows: OperationalProfitRow[];
   combined: OperationalProfitRow;
   officialBilledRevenue: string;
+  officialNet: string;
 };
 
 export async function getOperationalProfit(actor: PermissionUser, month: string): Promise<OperationalProfit> {
@@ -433,7 +434,7 @@ export async function getOperationalProfit(actor: PermissionUser, month: string)
     total.expenses += acc.expenses;
     total.count += acc.count;
   }
-  return { month, rows, combined: toRow(null, "All businesses", total), officialBilledRevenue: official.revenue };
+  return { month, rows, combined: toRow(null, "All businesses", total), officialBilledRevenue: official.revenue, officialNet: official.net };
 }
 
 export function operationalProfitToCsv(report: OperationalProfit): string {
@@ -446,5 +447,6 @@ export function operationalProfitToCsv(report: OperationalProfit): string {
   }
   out += row([]);
   out += row(["Official billed revenue (Books, HACIEN only)", report.officialBilledRevenue]);
+  out += row(["Official net profit (Books, HACIEN only)", report.officialNet]);
   return out;
 }

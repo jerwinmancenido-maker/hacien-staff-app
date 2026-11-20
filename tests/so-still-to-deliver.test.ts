@@ -5,6 +5,7 @@ import {
   soDeliveryOverviewLabel,
   soDeliveryProgress,
   soHasRemainingToDeliver,
+  soPodIncomplete,
 } from "@/lib/sales-orders/delivery";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
@@ -44,6 +45,18 @@ describe("SL-02 still to deliver helpers", () => {
       { qty: "5.00", deliveredQty: "5.00" },
     ]);
     expect(soDeliveryOverviewLabel(done)).toBe("Fully delivered");
+  });
+
+  it("soPodIncomplete: fully delivered with a live delivery missing receivedBy flags; void or partial does not", () => {
+    const done = soDeliveryProgress([{ qty: "10.00", deliveredQty: "10.00" }]);
+    expect(soPodIncomplete(done, [{ receivedBy: "Maria Cruz", voidedAt: null }])).toBe(false);
+    expect(soPodIncomplete(done, [{ receivedBy: null, voidedAt: null }])).toBe(true);
+    expect(soPodIncomplete(done, [{ receivedBy: "  ", voidedAt: null }])).toBe(true);
+    // A voided delivery's missing receiver does not count.
+    expect(soPodIncomplete(done, [{ receivedBy: null, voidedAt: new Date() }])).toBe(false);
+    // Not fully delivered: quantities still rule, no POD flag yet.
+    const partial = soDeliveryProgress([{ qty: "10.00", deliveredQty: "4.00" }]);
+    expect(soPodIncomplete(partial, [{ receivedBy: null, voidedAt: null }])).toBe(false);
   });
 
   it("list page exposes Still to deliver between Still to bill and status chips", () => {
