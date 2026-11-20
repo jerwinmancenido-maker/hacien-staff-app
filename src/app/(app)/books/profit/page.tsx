@@ -72,8 +72,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                   <th>Deal</th>
                   <th>Date</th>
                   <th className="num">Contract price (net)</th>
-                  <th className="num">Returns</th>
-                  <th className="num">Supplier cost</th>
+                  <th className="num col-phone-hide">Returns</th>
+                  <th className="num col-phone-hide">Supplier cost</th>
                   <th className="num">Margin</th>
                   <th className="num">Margin %</th>
                 </tr>
@@ -84,8 +84,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                     <td className="strong">{d.number}</td>
                     <td>{d.date}</td>
                     <td className="num">{formatPeso(d.contractPrice)}</td>
-                    <td className="num">{formatPeso(d.returns)}</td>
-                    <td className="num">{formatPeso(d.supplierCost)}</td>
+                    <td className="num col-phone-hide">{formatPeso(d.returns)}</td>
+                    <td className="num col-phone-hide">{formatPeso(d.supplierCost)}</td>
                     <td className="num">{formatPeso(d.margin)}</td>
                     <td className="num">{d.marginPct === null ? "—" : `${d.marginPct}%`}</td>
                   </tr>

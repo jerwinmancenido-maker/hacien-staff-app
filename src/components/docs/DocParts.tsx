@@ -86,8 +86,8 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
             <th>Description</th>
             <th className="num">Qty</th>
             <th>Unit</th>
-            {showCosts && <th>Supplier</th>}
-            {showCosts && <th className="num">Supplier unit</th>}
+            {showCosts && <th className="col-phone-hide">Supplier</th>}
+            {showCosts && <th className="num col-phone-hide">Supplier unit</th>}
             {showCosts && <th className="num">Supplier total</th>}
             <th className="num">HACIEN price</th>
             <th className="num">Total</th>
@@ -118,8 +118,8 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
               </td>
               <td className="num">{qtyText(i.qty)}</td>
               <td>{i.unit}</td>
-              {showCosts && <td>{i.isLot ? <span className="faint">Lot</span> : (i.supplierName ?? <span className="faint">—</span>)}</td>}
-              {showCosts && <td className="num">{i.isLot ? <span className="faint">—</span> : formatPeso(i.supplierUnitCost ?? 0)}</td>}
+              {showCosts && <td className="col-phone-hide">{i.isLot ? <span className="faint">Lot</span> : (i.supplierName ?? <span className="faint">—</span>)}</td>}
+              {showCosts && <td className="num col-phone-hide">{i.isLot ? <span className="faint">—</span> : formatPeso(i.supplierUnitCost ?? 0)}</td>}
               {showCosts && <td className="num">{formatPeso(i.supplierTotal ?? 0)}</td>}
               <td className="num">{formatPeso(i.unitPrice)}</td>
               <td className="num strong">{formatPeso(i.total)}</td>

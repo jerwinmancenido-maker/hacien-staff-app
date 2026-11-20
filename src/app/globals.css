@@ -933,6 +933,54 @@ a.tracker-card:hover {
 .table-wrap table.list {
   min-width: calc(640px * var(--ui-scale, 1)); /* wider than 360px phone so .table-wrap scrolls sideways */
 }
+/* D12 phone tables (≤640px): a sideways-scrolling table must LOOK scrollable
+   instead of clipped — scroll shadows on the wrap, a sticky first column so a
+   half-scrolled table keeps its row identity, and column-priority classes:
+   .col-phone-hide drops a demoted column, .col-phone-cap caps a long-text
+   column so the money/status columns after it land on screen. */
+@media (max-width: 640px) {
+  .table-wrap {
+    /* Scroll shadows: the two cover layers scroll away with the content
+       (background-attachment: local) while the shadow layers stay put, so a
+       soft shadow shows exactly while more columns wait off that edge. */
+    background-image:
+      linear-gradient(to right, var(--card) 30%, transparent),
+      linear-gradient(to left, var(--card) 30%, transparent),
+      radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.22), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.22), transparent);
+    background-position:
+      0 0,
+      100% 0,
+      0 0,
+      100% 0;
+    background-repeat: no-repeat;
+    background-size:
+      40px 100%,
+      40px 100%,
+      14px 100%,
+      14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .table-wrap table.list th:first-child,
+  .table-wrap table.list td:first-child {
+    position: sticky;
+    left: 0;
+  }
+  .table-wrap table.list td:first-child {
+    background: var(--card);
+    z-index: 1;
+  }
+  .table-wrap table.list th:first-child {
+    z-index: 3; /* above its own top-sticky (2) and the sticky body cells (1) */
+  }
+  table.list .col-phone-hide {
+    display: none;
+  }
+  table.list .col-phone-cap {
+    max-width: 10rem;
+    overflow-wrap: break-word;
+  }
+}
 .so-bill-phone {
   display: none;
   list-style: none;
