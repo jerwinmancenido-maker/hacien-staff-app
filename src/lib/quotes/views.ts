@@ -27,6 +27,9 @@ import { validityDaysFromDates } from "./validity";
 import { snapshotList } from "../services/withholding";
 import { customerBlockAddress } from "../services/addresses";
 import { mergeCompanyLetterhead } from "../print/company";
+import { soHasRemainingToDeliver } from "../sales-orders/delivery";
+import { attachmentKindLabel } from "../attachment-kinds";
+import { buildRevisionChain } from "./revision-chain";
 
 type StoredMoney = {
   contractPrice: string;
@@ -220,7 +223,12 @@ function approvalFromSnap(
   const reasons = approvalReasons({ contractPrice, netMarginPct, supplierCostState }, snap.settings.approval);
   // Staff who cannot see costs must not get a "low margin" chip for a missing cost.
   const visible = withCosts ? reasons : reasons.filter((r) => r !== COST_NOT_SET_LABEL);
-  return { needed: visible.length > 0, reasons: visible };
+  // F26: a quote blocked ONLY by a hidden reason (cost not set) used
+  // to look fully approved to Staff — the actions menu offered Mark
+  // as sent / Email / Convert, which then errored at the server.
+  // hiddenReasons lets the page hold those actions back without
+  // leaking the cost-based reason itself.
+  return { needed: visible.length > 0, reasons: visible, hiddenReasons: reasons.length > visible.length };
 }
 
 async function approvalFor(
@@ -282,6 +290,7 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: quoteItemsInclude,
+      business: { select: { id: true, name: true, shortLabel: true } },
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       // Every SO made from this quote, voided ones included.
@@ -295,6 +304,15 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
     },
   });
   if (!q) return null;
+  // Phase 2 #5: revision chain (display-only). The chain id is the Rev 1
+  // quote's id, stamped on every later revision at copy time; quotes from
+  // before the stamp existed have no chain and show nothing extra.
+  const chainRootId = q.revisionChainId ?? q.id;
+  const chainMembers = await db.quote.findMany({
+    where: { OR: [{ id: chainRootId }, { revisionChainId: chainRootId }] },
+    select: { id: true, number: true, revision: true, createdAt: true },
+  });
+  const revisionChain = buildRevisionChain(q.id, chainMembers);
   const withholding = snapshotList(q.withholding);
   const withholdingPick = parseWithholdingPick(q.withholdingPick);
   const stored = {
@@ -310,7 +328,10 @@ export async function getQuoteView(id: string, viewer: PermissionUser) {
   return {
     id: q.id,
     number: q.number,
+    businessId: q.businessId,
+    business: q.business,
     revision: q.revision,
+    revisionChain,
     status: q.status,
     approvalStatus,
     approvalLabel: QUOTE_APPROVAL_LABELS[approvalStatus],
@@ -384,6 +405,8 @@ export type QuoteListFilter = {
   noReplyAfterDays?: number;
   /** DRAFT + SENT only (Home Pipeline / open filter). Overrides single status. */
   open?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
   /** Optional clock for no-reply cutoff (tests). */
   now?: Date;
 };
@@ -409,6 +432,11 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
           ? { status }
           : {}),
     ...(q ? { OR: [{ number: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+    ...(filter.businessId === "own"
+      ? { businessId: null }
+      : filter.businessId
+        ? { businessId: filter.businessId }
+        : {}),
   };
 
   if (noReplyAfterDays) {
@@ -418,7 +446,11 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
 
   const rows = await db.quote.findMany({
     where,
-    include: { customer: { select: { name: true } } },
+    include: {
+      customer: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
+      ...(withCosts ? { items: { select: { supplierTotal: true } } } : {}),
+    },
     orderBy: [{ date: "desc" }, { number: "desc" }],
     take: 500,
   });
@@ -428,6 +460,8 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       id: r.id,
       number: r.number,
       revision: r.revision,
+      businessName: r.business?.name ?? null,
+      businessShortLabel: r.business?.shortLabel ?? null,
       customerName: r.customer.name,
       contractPrice: money(r.contractPrice),
       status: r.status,
@@ -435,13 +469,23 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       date: ymd(r.date)!,
       validUntil: ymd(r.validUntil)!,
     };
-    return withCosts ? { ...row, netMarginPct: money(r.netMarginPct) } : row;
+    return withCosts
+      ? {
+          ...row,
+          netMarginPct: money(r.netMarginPct),
+          supplierCostState: supplierCostStateFromSupplierTotals(
+            (r.items ?? []).map((i) => money(i.supplierTotal)),
+          ),
+        }
+      : row;
   });
 
   return mapped as ({
     id: string;
     number: string;
     revision: number;
+    businessName: string | null;
+    businessShortLabel: string | null;
     customerName: string;
     contractPrice: string;
     status: QuoteStatus;
@@ -449,6 +493,7 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     date: string;
     validUntil: string;
     netMarginPct?: string;
+    supplierCostState?: SupplierCostState;
   })[];
 }
 
@@ -462,6 +507,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     where: { id },
     include: {
       items: soItemsInclude,
+      business: { select: { id: true, name: true, shortLabel: true } },
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true, date: true, contractPrice: true } },
@@ -470,6 +516,19 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     },
   });
   if (!so) return null;
+  // REQ-ATTACH-001: the order's OWN files (customer PO etc.), live ones only.
+  const ownAttachments = await db.documentAttachment.findMany({
+    where: { salesOrderId: id, archivedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      fileName: true,
+      sizeBytes: true,
+      kind: true,
+      createdAt: true,
+      uploadedBy: { select: { name: true } },
+    },
+  });
   const withholding = snapshotList(so.withholding);
   const stored = {
     contractPrice: money(so.contractPrice),
@@ -584,6 +643,12 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     agencyPoNo: so.agencyPoNo,
     iarDate: ymd(so.iarDate),
     voidReason: so.voidReason,
+    businessId: so.businessId,
+    business: so.business,
+    gapReasonCode: so.gapReasonCode,
+    gapNote: so.gapNote,
+    /** ISO token for the SO editor's stale-edit guard. */
+    updatedAt: so.updatedAt.toISOString(),
     customer: so.customer,
     contact: so.contact,
     quote: { id: so.quote.id, number: so.quote.number, status: so.quote.status, date: ymd(so.quote.date), contractPrice: money(so.quote.contractPrice) },
@@ -603,6 +668,15 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     updatedBy: so.updatedBy.name,
     settingsVersionId: so.settingsVersionId,
     canSeeCosts: withCosts,
+    attachments: ownAttachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      sizeBytes: a.sizeBytes,
+      kind: a.kind,
+      kindLabel: attachmentKindLabel(a.kind),
+      uploadedBy: a.uploadedBy.name,
+      createdAt: a.createdAt,
+    })),
   };
 }
 export type SalesOrderView = NonNullable<Awaited<ReturnType<typeof getSalesOrderView>>>;
@@ -616,15 +690,25 @@ export type SalesOrderListFilter = {
   needsPo?: boolean;
   /** OPEN SOs with remaining-to-bill &gt; 0 (Home Pipeline / open filter). */
   open?: boolean;
+  /** OPEN SOs with at least one live line still short of delivery. */
+  toDeliver?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
 };
 
 export async function listSalesOrdersView(filter: SalesOrderListFilter) {
   const q = filter.q?.trim();
   const needsPo = filter.needsPo === true;
   const openUnbilled = filter.open === true;
-  const status = needsPo || openUnbilled ? "OPEN" : filter.status;
+  const toDeliver = filter.toDeliver === true;
+  const status = needsPo || openUnbilled || toDeliver ? "OPEN" : filter.status;
   const where: Prisma.SalesOrderWhereInput = {
     ...(status ? { status } : {}),
+    ...(filter.businessId === "own"
+      ? { businessId: null }
+      : filter.businessId
+        ? { businessId: filter.businessId }
+        : {}),
     ...(q
       ? {
           OR: [
@@ -643,14 +727,21 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       where,
       include: {
         customer: { select: { name: true } },
+        business: { select: { name: true, shortLabel: true } },
         ...(openUnbilled
           ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
+          : {}),
+        ...(toDeliver
+          ? { items: { where: { removedAt: null }, select: { qty: true, deliveredQty: true } } }
           : {}),
       },
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 500,
     });
-    type Row = (typeof rows)[number] & { billings?: { amount: unknown }[] };
+    type Row = (typeof rows)[number] & {
+      billings?: { amount: unknown }[];
+      items?: { qty: unknown; deliveredQty: unknown }[];
+    };
     const mapped = [];
     for (const raw of rows as Row[]) {
       const contractPrice = money(raw.contractPrice);
@@ -658,9 +749,18 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
         const billed = (raw.billings ?? []).map((b) => money(b.amount));
         if (toScaled(remainingToBill(contractPrice, billed), 2) <= 0n) continue;
       }
+      if (toDeliver) {
+        const live = (raw.items ?? []).map((i) => ({
+          qty: money(i.qty),
+          deliveredQty: money(i.deliveredQty),
+        }));
+        if (!soHasRemainingToDeliver(live)) continue;
+      }
       mapped.push({
         id: raw.id,
         number: raw.number,
+        businessName: raw.business?.name ?? null,
+        businessShortLabel: raw.business?.shortLabel ?? null,
         customerName: raw.customer.name,
         buyerPoNo: raw.buyerPoNo,
         contractPrice,
@@ -675,6 +775,7 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
     where,
     include: {
       customer: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
       items: {
         where: { removedAt: null },
         select: {
@@ -700,6 +801,8 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
     .map((r) => ({
       id: r.id,
       number: r.number,
+      businessName: r.business?.name ?? null,
+      businessShortLabel: r.business?.shortLabel ?? null,
       customerName: r.customer.name,
       buyerPoNo: r.buyerPoNo,
       contractPrice: money(r.contractPrice),

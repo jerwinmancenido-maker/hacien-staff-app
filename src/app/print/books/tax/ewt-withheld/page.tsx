@@ -37,7 +37,7 @@ export default async function PrintSupplierEwtPage({
   const q = `year=${period.year}&quarter=${period.quarter}`;
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/tax/ewt-withheld?${q}`}>
           Back to worksheet

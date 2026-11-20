@@ -228,13 +228,17 @@ export async function apAgingSummary(today = billingToday()) {
     include: {
       supplier: { select: { id: true, name: true } },
       allocations: { where: { supplierPayment: { status: "POSTED" } } },
+      // Entity split (E3): a bill follows its PO's business tag.
+      purchaseOrder: { select: { businessId: true } },
     },
   });
   const bySupplier = new Map<string, { name: string; rows: { dueDate: Date; balance: string }[] }>();
+  let otherBusinessScaled = 0n;
   for (const b of bills) {
     const applied = appliedOf(b.allocations);
     const balance = supplierBillBalance(money(b.amount), applied);
     if (toScaled(balance, 2) <= 0n) continue;
+    if (b.purchaseOrder?.businessId) otherBusinessScaled += toScaled(balance, 2);
     const entry = bySupplier.get(b.supplierId) ?? { name: b.supplier.name, rows: [] };
     entry.rows.push({ dueDate: b.dueDate, balance });
     bySupplier.set(b.supplierId, entry);
@@ -273,6 +277,9 @@ export async function apAgingSummary(today = billingToday()) {
     bySupplier: bySupplierRows,
     totals,
     totalPayable: totals.total,
+    // Open balance on bills whose PO belongs to another business (E3) —
+    // shown as a split under the total so the card never reads as all ours.
+    otherBusinessPayable: fromScaled(otherBusinessScaled, 2),
     pending2307ToIssue: money(toIssue._sum.amount ?? 0),
   };
 }

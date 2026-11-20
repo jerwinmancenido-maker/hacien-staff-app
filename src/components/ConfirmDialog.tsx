@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ModalPortal } from "./ModalPortal";
 
 export function ConfirmDialog({
   open,
@@ -31,19 +32,21 @@ export function ConfirmDialog({
   }, [open, onCancel]);
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
-        <h3 id="confirm-title">{title}</h3>
-        {body && <p>{body}</p>}
-        <div className="buttons">
-          <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel}>
-            {cancelLabel}
-          </button>
-          <button type="button" className={danger ? "btn btn-danger solid" : "btn"} onClick={onConfirm}>
-            {confirmLabel}
-          </button>
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onCancel}>
+        <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
+          <h3 id="confirm-title">{title}</h3>
+          {body && <p>{body}</p>}
+          <div className="buttons">
+            <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel}>
+              {cancelLabel}
+            </button>
+            <button type="button" className={danger ? "btn btn-danger solid" : "btn"} onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

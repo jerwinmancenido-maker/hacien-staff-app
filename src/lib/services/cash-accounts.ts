@@ -6,6 +6,7 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { assertCashEnabled } from "../cash/features";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
+import { formatPeso } from "../format";
 import { accountBalanceAsOf, type LedgerSourceRow } from "../cash/balance";
 import type { CashAccountInput } from "../validation/cash";
 
@@ -113,6 +114,38 @@ export async function updateCashAccount(id: string, input: CashAccountInput, act
           throw new DocRuleError(
             "Opening balance can't change after collections, payments, expenses or transfers are linked. Void those first, or record a transfer to adjust.",
             "openingBalance",
+          );
+        }
+      }
+
+      // F30: deactivating an account that still holds money strands
+      // the balance — the cash position counts active accounts
+      // only, so the total silently drops by the account's balance
+      // (Mac run X8: ₱15,000 vanished from the position this way).
+      // Refuse until the balance is zero; a transfer moves it.
+      // Same math as cashAccountBalance (opening + POSTED ledger),
+      // computed on this transaction so the figures can't move
+      // between the check and the update.
+      if (before.active && !input.active) {
+        const [colIn, payOut, expOut, trOut, trIn] = await Promise.all([
+          tx.collection.aggregate({ where: { cashAccountId: id, status: "POSTED" }, _sum: { amountReceived: true } }),
+          tx.supplierPayment.aggregate({ where: { cashAccountId: id, status: "POSTED" }, _sum: { amountPaid: true } }),
+          tx.expense.aggregate({ where: { cashAccountId: id, status: "POSTED" }, _sum: { amount: true } }),
+          tx.cashTransfer.aggregate({ where: { fromAccountId: id, status: "POSTED" }, _sum: { amount: true } }),
+          tx.cashTransfer.aggregate({ where: { toAccountId: id, status: "POSTED" }, _sum: { amount: true } }),
+        ]);
+        const agg = (sum: Record<string, unknown> | null, key: string) => toScaled(money((sum?.[key] ?? "0") as never), 2);
+        const balance =
+          toScaled(money(before.openingBalance), 2) +
+          agg(colIn._sum as Record<string, unknown> | null, "amountReceived") -
+          agg(payOut._sum as Record<string, unknown> | null, "amountPaid") -
+          agg(expOut._sum as Record<string, unknown> | null, "amount") -
+          agg(trOut._sum as Record<string, unknown> | null, "amount") +
+          agg(trIn._sum as Record<string, unknown> | null, "amount");
+        if (balance !== 0n) {
+          throw new DocRuleError(
+            `This account still has a balance of ${formatPeso(fromScaled(balance, 2))}. Move the money to another account first (Cash → Transfers), then deactivate it.`,
+            "active",
           );
         }
       }

@@ -7,6 +7,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FileInput } from "@/components/FileInput";
+import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import type { Settings } from "@/lib/settings/schema";
 import { NON_VAT_LABEL } from "@/lib/print/tax-wording";
@@ -22,14 +23,17 @@ export function PrintCompanyForm({
   print,
   versionId,
   action,
+  maxMb,
 }: {
   company: Company;
   print: Print;
   versionId: string;
   action: (state: FormState, form: FormData) => Promise<FormState>;
+  maxMb: number;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const [confirming, setConfirming] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const e = state.fieldErrors ?? {};
   const [open, setOpen] = useState<Record<SectionId, boolean>>({
@@ -125,7 +129,7 @@ export function PrintCompanyForm({
       >
         <div className="edit-topbar">
           <span className="small faint">Changes apply to new documents; current letterhead also feeds PO/statement prints.</span>
-          <button className="btn" type="submit" disabled={pending}>
+          <button className="btn" type="submit" disabled={pending || !!fileError}>
             {pending ? "Saving…" : "Save changes"}
           </button>
         </div>
@@ -169,10 +173,28 @@ export function PrintCompanyForm({
                 <Field err={e.phone} label="Phone" name="phone" value={val("phone", live.phone)} full />
                 <Field err={e.email} label="Email" name="email" value={val("email", live.email)} />
                 <Field err={e.website} label="Website" name="website" value={val("website", live.website)} />
-                <div className="field full">
+                <div className={`field full${e.logo || fileError ? " has-error" : ""}`}>
                   <label htmlFor="logo">Company logo</label>
-                  <FileInput id="logo" name="logo" accept="image/png,image/jpeg,image/webp" />
+                  <FileInput
+                    id="logo"
+                    name="logo"
+                    accept="image/png,image/jpeg,image/webp"
+                    onFilesChange={(files) => {
+                      const err = clientUploadSizeError(files, maxMb);
+                      setFileError(err);
+                      return err;
+                    }}
+                  />
                   <div className="hint">Optional. PNG/JPEG/WebP. Falls back to the business name when empty.</div>
+                  {company.logoStorageKey ? (
+                    <label className="check" style={{ marginTop: 8 }}>
+                      <input type="checkbox" name="removeLogo" value="1" />
+                      <span>
+                        <b>Remove the saved logo</b> <span className="muted small">— takes effect when you save</span>
+                      </span>
+                    </label>
+                  ) : null}
+                  {(e.logo || fileError) && <div className="error">{e.logo ?? fileError}</div>}
                 </div>
               </div>
             </CollapsibleSection>

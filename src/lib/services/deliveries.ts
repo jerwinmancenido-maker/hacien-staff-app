@@ -17,6 +17,7 @@ import { createAttachments, discardUploads, prepareUploads, type UploadFile } fr
 import { notifyOrderDelivered } from "../messaging/order-text-triggers";
 import { refreshSalesOrderCloseState } from "./sales-orders";
 import { claimBookletSerial } from "./booklet";
+import { assertPeriodOpen } from "./period-close";
 
 export type DeliveryActor = PermissionUser & { id: string };
 
@@ -100,6 +101,7 @@ export async function recordDelivery(
     const delivery = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const so = await lockForDelivery(tx, salesOrderId);
+        await assertPeriodOpen(tx, input.deliveryDate);
         const check = checkDelivery(so.lines as OpenDeliveryLine[], input.items);
         if (!check.ok) {
           const firstId = Object.keys(check.errors)[0];
@@ -216,6 +218,7 @@ export async function voidDelivery(id: string, reason: string, actor: DeliveryAc
       });
       if (!delivery) throw new DocRuleError("Delivery record not found.");
       if (delivery.voidedAt) throw new DocRuleError("This delivery is already void.");
+      await assertPeriodOpen(tx, delivery.deliveryDate);
 
       const itemIds = delivery.items.map((i) => i.salesOrderItemId);
       const so = await lockLinesForVoidDelivery(tx, delivery.salesOrderId, itemIds);

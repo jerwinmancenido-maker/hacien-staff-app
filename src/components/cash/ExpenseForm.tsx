@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { FileInput } from "@/components/FileInput";
+import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
 
@@ -14,7 +15,12 @@ export function ExpenseForm({
   accounts,
   categories,
   suppliers,
+  salesOrders = [],
+  purchaseOrders = [],
+  businesses = [],
+  ownCompanyName = "HACIEN",
   canEdit,
+  maxMb,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   defaults: {
@@ -27,16 +33,31 @@ export function ExpenseForm({
     cashAccountId: string;
     receiptNo: string;
     notes: string;
+    salesOrderId?: string;
+    purchaseOrderId?: string;
   };
   accounts: CashAccountOption[];
   categories: { id: string; label: string }[];
   suppliers: { id: string; name: string }[];
+  salesOrders?: { id: string; label: string }[];
+  purchaseOrders?: { id: string; label: string }[];
+  /** Business entity (2026-11-19): for UNLINKED expenses; linked ones follow their order. */
+  businesses?: { id: string; name: string }[];
+  ownCompanyName?: string;
   canEdit: boolean;
+  maxMb: number;
 }) {
   const { state, pending, submit } = useFormAction(action);
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const e = state.fieldErrors ?? {};
   const [useSupplier, setUseSupplier] = useState(!!defaults.supplierId);
   const [showWh, setShowWh] = useState(!!defaults.withholdingApplied && defaults.withholdingApplied !== "0" && defaults.withholdingApplied !== "0.00");
+  const [fileError, setFileError] = useState<string | null>(null);
+  // E4: the Business pick applies only to UNLINKED expenses — track the
+  // link picks so the picker can hide while an order is linked.
+  const [linkedSoId, setLinkedSoId] = useState(state.values?.salesOrderId ?? defaults.salesOrderId ?? "");
+  const [linkedPoId, setLinkedPoId] = useState(state.values?.purchaseOrderId ?? defaults.purchaseOrderId ?? "");
+  const isLinked = linkedSoId !== "" || linkedPoId !== "";
 
   if (!canEdit) {
     return (
@@ -70,6 +91,20 @@ export function ExpenseForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input type="hidden" name="confirmOverBalance" value="1" />
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={pending}>
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <div className="form-grid">
@@ -150,6 +185,62 @@ export function ExpenseForm({
             </div>
           )}
         </div>
+        <div className={`field${e.salesOrderId ? " has-error" : ""}`}>
+          <label htmlFor="salesOrderId">Linked sales order (optional)</label>
+          <select
+            id="salesOrderId"
+            name="salesOrderId"
+            value={linkedSoId}
+            onChange={(ev) => setLinkedSoId(ev.target.value)}
+          >
+            <option value="">No linked order</option>
+            {salesOrders.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <div className="hint">Delivery fee for this order (e.g. Lalamove)? Pick Transport and link the order.</div>
+          {e.salesOrderId && <div className="error">{e.salesOrderId}</div>}
+        </div>
+        <div className={`field${e.purchaseOrderId ? " has-error" : ""}`}>
+          <label htmlFor="purchaseOrderId">Linked purchase order (optional)</label>
+          <select
+            id="purchaseOrderId"
+            name="purchaseOrderId"
+            value={linkedPoId}
+            onChange={(ev) => setLinkedPoId(ev.target.value)}
+          >
+            <option value="">No linked order</option>
+            {purchaseOrders.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
+        </div>
+        {businesses.length > 0 && !isLinked && (
+          <div className={`field${e.businessId ? " has-error" : ""}`}>
+            <label htmlFor="businessId">Business (unlinked expenses only)</label>
+            <select id="businessId" name="businessId" defaultValue={state.values?.businessId ?? ""}>
+              <option value="">{ownCompanyName} (own company)</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <div className="hint">This pick applies only when no order is linked.</div>
+            {e.businessId && <div className="error">{e.businessId}</div>}
+          </div>
+        )}
+        {businesses.length > 0 && isLinked && (
+          <div className="field">
+            <label>Business</label>
+            <div className="hint">Follows the linked order&apos;s business — a linked expense can&apos;t be tagged separately.</div>
+          </div>
+        )}
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>
           <label htmlFor="receiptNo">OR / receipt no.</label>
           <input id="receiptNo" name="receiptNo" defaultValue={state.values?.receiptNo ?? defaults.receiptNo} />
@@ -179,15 +270,25 @@ export function ExpenseForm({
           <label htmlFor="notes">Notes</label>
           <textarea id="notes" name="notes" rows={2} defaultValue={state.values?.notes ?? defaults.notes} />
         </div>
-        <div className={`field full${e.files ? " has-error" : ""}`}>
+        <div className={`field full${e.files || fileError ? " has-error" : ""}`}>
           <label htmlFor="files">Receipt photo / PDF (optional)</label>
-          <FileInput id="files" name="files" accept=".pdf,.png,.jpg,.jpeg" multiple />
+          <FileInput
+            id="files"
+            name="files"
+            accept=".pdf,.png,.jpg,.jpeg"
+            multiple
+            onFilesChange={(files) => {
+              const err = clientUploadSizeError(files, maxMb);
+              setFileError(err);
+              return err;
+            }}
+          />
           <NoIdUploadWarning />
-          {e.files && <div className="error">{e.files}</div>}
+          {(e.files || fileError) && <div className="error">{e.files ?? fileError}</div>}
         </div>
       </div>
       <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending}>
+        <button className="btn" type="submit" disabled={pending || !!fileError}>
           {pending ? "Saving…" : "Record expense"}
         </button>
         <Link className="btn btn-secondary" href="/cash/expenses">

@@ -5,11 +5,12 @@ import { listPurchaseOrdersView, PO_STATUSES } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS, type PoStatus } from "@/lib/purchasing/status";
 import { formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
-import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
+import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { day, PoStatusChip } from "@/components/purchasing/PoParts";
+import { listBusinesses } from "@/lib/services/businesses";
 
-type Search = { q?: string; status?: string; billedOver?: string };
+type Search = { q?: string; status?: string; billedOver?: string; business?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -25,8 +26,11 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
   const s = await searchParams;
   const billedOver = s.billedOver === "1" && withCosts;
   const status = PO_STATUSES.includes(s.status as PoStatus) ? (s.status as PoStatus) : undefined;
-  const pos = await listPurchaseOrdersView({ q: s.q, status, billedOver: billedOver || undefined }, user);
-  const filtered = !!(s.q || status || billedOver);
+  const businesses = await listBusinesses();
+  const business =
+    s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
+  const pos = await listPurchaseOrdersView({ q: s.q, status, billedOver: billedOver || undefined, businessId: business }, user);
+  const filtered = !!(s.q || status || billedOver || business);
 
   return (
     <>
@@ -74,6 +78,22 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           </Link>
         )}
       </div>
+      {businesses.length > 0 && (
+        <div className="toolbar" style={{ marginTop: 6 }}>
+          <span className="small faint">Business:</span>
+          <Link className={`filter-chip${!business ? " active" : ""}`} href={href(s, { business: undefined })}>
+            All
+          </Link>
+          <Link className={`filter-chip${business === "own" ? " active" : ""}`} href={href(s, { business: "own" })}>
+            Own company
+          </Link>
+          {businesses.filter((b) => b.active || b.id === business).map((b) => (
+            <Link key={b.id} className={`filter-chip${business === b.id ? " active" : ""}`} href={href(s, { business: b.id })}>
+              {b.shortLabel}
+            </Link>
+          ))}
+        </div>
+      )}
       {pos.length === 0 ? (
         <div className="card">
           {filtered ? (
@@ -108,7 +128,11 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             href: `/purchase-orders/${o.id}`,
             inactive: o.status === "VOID",
             cells: {
-              number: <span className="strong">{o.number}</span>,
+              number: (
+                <span className="strong">
+                  {o.number} {o.businessShortLabel && <Chip tone="dark">{o.businessShortLabel}</Chip>}
+                </span>
+              ),
               supplier: <PrimaryCell name={o.supplierName} />,
               so: o.salesOrder?.number ?? <span className="faint">Standalone</span>,
               total: o.subtotal == null ? "" : <span className="strong">{formatPeso(o.subtotal)}</span>,

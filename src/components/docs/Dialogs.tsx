@@ -4,6 +4,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FormState } from "@/lib/validation/forms";
+import { ModalPortal } from "../ModalPortal";
+import type { EditorAddressOption } from "./DocumentEditor";
 
 export function Modal({
   title,
@@ -25,18 +27,20 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className={variant === "drawer-right" ? "modal-backdrop drawer" : "modal-backdrop"} onClick={onClose}>
-      <div
-        className={variant === "drawer-right" ? "modal wide drawer-right" : "modal wide"}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id={labelId}>{title}</h3>
-        {children}
+    <ModalPortal>
+      <div className={variant === "drawer-right" ? "modal-backdrop drawer" : "modal-backdrop"} onClick={onClose}>
+        <div
+          className={variant === "drawer-right" ? "modal wide drawer-right" : "modal wide"}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={labelId}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 id={labelId}>{title}</h3>
+          {children}
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -162,6 +166,10 @@ export function ConvertDialog({
   defaultAddress,
   addressOptions = [],
   hasAcceptance = false,
+  approvalWarning,
+  businessName,
+  customerName,
+  onAddAddress,
   onClose,
   onConvert,
 }: {
@@ -170,20 +178,41 @@ export function ConvertDialog({
   addressOptions?: AddressOption[];
   /** Audit: a conforme file is on file or acceptance is recorded. */
   hasAcceptance?: boolean;
+  /** Prompt model (F5): approval reasons an Approver confirms by converting. */
+  approvalWarning?: string[];
+  /** E15: when the quote is tagged to another business, say the order will carry the tag. */
+  businessName?: string;
+  /** Customer display name for the add-address dialog title. */
+  customerName?: string;
+  /** Saves a new DELIVERY address to the customer; the dialog picks it at once. */
+  onAddAddress?: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
   onClose: () => void;
-  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string }) => Promise<FormState>;
+  onConvert: (input: { buyerPoNo: string; buyerPoDate: string; deliveryAddressId: string; deliveryAddress?: string; confirmedWarnings?: boolean }) => Promise<FormState>;
 }) {
   const initialPicked = addressOptions.find((o) => o.text === defaultAddress)?.id ?? addressOptions[0]?.id ?? "";
   const [v, setV] = useState({ buyerPoNo: "", buyerPoDate: "", deliveryAddressId: initialPicked });
   const [state, setState] = useState<FormState>({});
   const [pending, setPending] = useState(false);
+  const [options, setOptions] = useState<AddressOption[]>(addressOptions);
+  const [addOpen, setAddOpen] = useState(false);
   const e = state.fieldErrors ?? {};
-  const selectedOption = addressOptions.find((o) => o.id === v.deliveryAddressId);
-  const hasOptions = addressOptions.length > 0;
+  const selectedOption = options.find((o) => o.id === v.deliveryAddressId);
+  const hasOptions = options.length > 0;
 
   return (
     <Modal title={`Convert ${number} to a sales order?`} onClose={onClose} labelId="convert-title">
       <p>The quote becomes Won and a new sales order is created with the same items, costs and withholding.</p>
+      {businessName && (
+        <p>
+          The sales order will belong to <b>{businessName}</b>, like this quote.
+        </p>
+      )}
+      {approvalWarning && approvalWarning.length > 0 && (
+        <div className="alert warn" role="alert">
+          This quote needs approval: {approvalWarning.join("; ")}. As an Approver you can convert anyway — your
+          confirmation is recorded in the activity log.
+        </div>
+      )}
       {!hasAcceptance && (
         <p className="faint">No customer acceptance on file yet — enter the buyer PO number below, or record acceptance on the Conforme tab first.</p>
       )}
@@ -198,6 +227,7 @@ export function ConvertDialog({
           const res = await onConvert({
             ...v,
             deliveryAddress: selectedOption?.text ?? "",
+            confirmedWarnings: (approvalWarning?.length ?? 0) > 0,
           });
           setPending(false);
           if (!res.ok) setState(res);
@@ -208,10 +238,13 @@ export function ConvertDialog({
             {state.message}
           </div>
         )}
-        {!hasOptions && (
+        {!hasOptions && !onAddAddress && (
           <div className="alert error" role="alert">
             This customer has no saved addresses. Add an address to the customer before converting to a sales order.
           </div>
+        )}
+        {!hasOptions && onAddAddress && (
+          <p className="faint">This customer has no saved addresses yet. Add one below — it is saved to the customer and used for this sales order.</p>
         )}
         <div className="form-grid">
           <div className={`field${e.buyerPoNo ? " has-error" : ""}`}>
@@ -236,7 +269,7 @@ export function ConvertDialog({
               disabled={!hasOptions}
             >
               <option value="">Pick a delivery address…</option>
-              {addressOptions.map((o) => (
+              {options.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
@@ -249,6 +282,13 @@ export function ConvertDialog({
               </div>
             )}
             <div className="hint">Saved on the sales order from the customer&apos;s address. Editing the customer&apos;s addresses later won&apos;t change it.</div>
+            {onAddAddress && (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setAddOpen(true)}>
+                  + Add new address
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div className="buttons">
@@ -260,6 +300,20 @@ export function ConvertDialog({
           </button>
         </div>
       </form>
+      {addOpen && onAddAddress && (
+        <AddAddressDialog
+          customerName={customerName ?? "Customer"}
+          onClose={() => setAddOpen(false)}
+          onSaved={(a) => {
+            setOptions((prev) => [...prev, { id: a.id, label: a.label, text: a.text }]);
+            setV((s) => ({ ...s, deliveryAddressId: a.id }));
+            setState({});
+            setAddOpen(false);
+          }}
+          action={onAddAddress}
+          note="Saved to the customer as a Delivery address and picked for this sales order."
+        />
+      )}
     </Modal>
   );
 }
@@ -296,6 +350,85 @@ export function EmailDialog({ draft, onClose }: { draft: EmailDraftView; onClose
         <a className="btn" href={mailto}>
           Open in mail app
         </a>
+      </div>
+    </Modal>
+  );
+}
+export type NewAddressFields = { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string };
+
+/**
+ * "+ Add new address" in the delivery picker: saves a DELIVERY address to
+ * the customer (same fields + validation as the customer profile) and hands
+ * it back so the editor can pick it at once.
+ */
+export function AddAddressDialog({
+  customerName,
+  onClose,
+  onSaved,
+  action,
+  note = "Saved to the customer as a Delivery address and picked on this quote.",
+}: {
+  customerName: string;
+  onClose: () => void;
+  onSaved: (a: EditorAddressOption) => void;
+  action: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
+  /** What happens to the address after saving; defaults to the quote-editor wording. */
+  note?: string;
+}) {
+  const [fields, setFields] = useState<NewAddressFields>({ label: "", street: "", barangay: "", cityMunicipality: "", province: "", zip: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof NewAddressFields) => (ev: { target: { value: string } }) => setFields((f) => ({ ...f, [k]: ev.target.value }));
+
+  async function submit() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await action(fields);
+      if (res.address) {
+        onSaved(res.address);
+        return;
+      }
+      setErrors(res.fieldErrors ?? {});
+      setMessage(res.message ?? "Could not add the address.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field = (k: keyof NewAddressFields, label: string, required: boolean, maxLength?: number) => (
+    <div className={`field${errors[k] ? " has-error" : ""}`}>
+      <label htmlFor={`qa-${k}`}>
+        {label}
+        {required && <span className="req"> *</span>}
+      </label>
+      <input id={`qa-${k}`} type="text" value={fields[k]} maxLength={maxLength} onChange={set(k)} />
+      {errors[k] && <div className="error">{errors[k]}</div>}
+    </div>
+  );
+
+  return (
+    <Modal title={`Add delivery address — ${customerName}`} onClose={onClose} labelId="qa-title">
+      <p className="small muted">{note}</p>
+      {message && (
+        <div className="alert error" role="alert">
+          {message}
+        </div>
+      )}
+      {field("label", "Label (e.g. Warehouse)", false, 100)}
+      {field("street", "Unit / building / street", true, 500)}
+      {field("barangay", "Barangay", true, 120)}
+      {field("cityMunicipality", "City / municipality", true, 120)}
+      {field("province", "Province", true, 120)}
+      {field("zip", "ZIP code", true, 4)}
+      <div className="buttons">
+        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className="btn" onClick={submit} disabled={busy}>
+          {busy ? "Adding…" : "Add address"}
+        </button>
       </div>
     </Modal>
   );

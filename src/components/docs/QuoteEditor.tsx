@@ -13,6 +13,7 @@ import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import {
   COST_NOT_SET_LABEL,
+  approvalReasons,
   componentsTotal,
   docTotals,
   fromScaled,
@@ -23,7 +24,7 @@ import {
   type ItemKind,
   type WithholdingSnapshot,
 } from "@/lib/quotes/calc";
-import { quoteMarkSentGate, quoteSaveGate } from "@/lib/quotes/approval";
+import { quoteMarkSentGate, quoteSaveGate, type QuoteApprovalStatus } from "@/lib/quotes/approval";
 import {
   lineDiffersFromUsualPicks,
   lineWithholdingChipsFromPicks,
@@ -62,7 +63,7 @@ import {
   type EditorItem,
 } from "./DocumentEditor";
 import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } from "@/lib/quotes/validity";
-import { Modal } from "./Dialogs";
+import { AddAddressDialog, Modal } from "./Dialogs";
 import type { CatalogSearchResult } from "@/lib/items/search";
 import { pickerSearchOutcome } from "@/lib/items/picker-search";
 
@@ -110,13 +111,25 @@ export type QuoteEditorProps = {
   /** S-70: approver + approval time. */
   approvedByName?: string | null;
   approvedAt?: string | null;
+  /** Business entity (2026-11-19): active Settings businesses + the own
+   * company name + whether this user may tag another business. The picker
+   * renders only when a business exists or the quote already carries one. */
+  businesses?: { id: string; name: string; shortLabel: string }[];
+  ownCompanyName?: string;
+  canTagBusiness?: boolean;
+  initialBusinessId?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   cancelHref: string;
-  markSentAction?: (id: string) => Promise<FormState>;
+  markSentAction?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
   /** Sets pick to [] then marks sent. Used when staff confirms "Yes, none". */
-  confirmNoneAndMarkSentAction?: (id: string) => Promise<FormState>;
-  /** S-18: only APPROVED quotes may mark as sent from the editor. */
-  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  confirmNoneAndMarkSentAction?: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
+  /** S-18 + prompt model (F5): APPROVED / NOT_REQUIRED quotes mark as sent
+   * freely; a PENDING quote needs an Approver, who confirms the prompt. */
+  approvalStatus?: QuoteApprovalStatus;
+  /** The signed-in user may approve quotes (Approver/Admin). */
+  canApprove?: boolean;
+  /** Approval thresholds, for the live prompt check on edited numbers. */
+  approvalLimits?: { marginBelowPct: number; totalAbove: number };
 };
 
 type TabId = "items" | "withholding" | "terms" | "notes" | "signoff";
@@ -291,6 +304,12 @@ export function QuoteEditor({
   markSentAction,
   confirmNoneAndMarkSentAction,
   approvalStatus = "PENDING",
+  canApprove = false,
+  approvalLimits,
+  businesses = [],
+  ownCompanyName = "HACIEN",
+  canTagBusiness = false,
+  initialBusinessId = null,
 }: QuoteEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const { state, pending, onSubmit } = useFormAction(action);
@@ -298,6 +317,10 @@ export function QuoteEditor({
   /** Set when "Yes, none" is confirmed on a draft save, so the re-submit saves. */
   const skipWhNoneWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
+  const alsoMarkSentConfirmedRef = useRef<HTMLInputElement>(null);
+  /** F5: the Approver confirmed the approval prompt for this send. */
+  const approvalConfirmedRef = useRef(false);
+  const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
   /** Cost warning already shown; Yes, none must save the cleared cost in the same request. */
   const sendAfterCostWarn = useRef(false);
   const [costConfirmOpen, setCostConfirmOpen] = useState(false);
@@ -312,6 +335,8 @@ export function QuoteEditor({
   /** S-79: same "No withholding on this quote?" confirm, for a draft save. */
   const [saveNoneConfirmOpen, setSaveNoneConfirmOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("items");
+  /** Business entity: "" = the own company. */
+  const [businessId, setBusinessId] = useState(initialBusinessId ?? "");
   /** Preparer picker: the chosen staff user; the preview below follows it. */
   const [preparedByIdState, setPreparedByIdState] = useState(preparedById);
   const preparer = staffUsers.find((u) => u.id === preparedByIdState) ?? null;
@@ -512,7 +537,7 @@ export function QuoteEditor({
   const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
   const [costHints, setCostHints] = useState<Record<string, string>>({});
   const costCacheRef = useRef<Map<string, SupplierCostRow[]>>(new Map());
-  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[] } | null>(null);
+  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[]; failed: boolean; attempt: number } | null>(null);
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
@@ -551,7 +576,10 @@ export function QuoteEditor({
     return () => clearTimeout(t);
   }, [pickerFor, pickerQuery]);
 
-  // Component catalog search: same endpoint + debounce as the line picker.
+  // Component catalog search: same endpoint + debounce as the line picker,
+  // and the same failure handling (L1): a failed search routes through
+  // pickerSearchOutcome and shows "Search failed, try again." with a retry
+  // (attempt bump re-runs this effect) instead of failing silently.
   useEffect(() => {
     if (!compPicker) return;
     const q = compPicker.query.trim();
@@ -560,16 +588,22 @@ export function QuoteEditor({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`/api/items/search?q=${encodeURIComponent(q)}`);
-        const data = (await res.json()) as { ok?: boolean; items?: CatalogSearchResult[] };
+        let body: unknown = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = null;
+        }
         if (pickerSeq.current !== seq) return;
-        setCompPicker((p) => (p ? { ...p, results: data.ok && Array.isArray(data.items) ? data.items : [] } : p));
+        const outcome = pickerSearchOutcome<CatalogSearchResult>(res.ok, body);
+        setCompPicker((p) => (p ? { ...p, results: outcome.items, failed: outcome.failed } : p));
       } catch {
-        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [] } : p));
+        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [], failed: true } : p));
       }
     }, 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compPicker?.query, compPicker?.lineKey, compPicker?.compKey]);
+  }, [compPicker?.query, compPicker?.lineKey, compPicker?.compKey, compPicker?.attempt]);
 
   /** Typing a description searches the catalog (unlinked lines only).
    * Lot lines skip it: their description is the printed spec text. */
@@ -1177,6 +1211,7 @@ export function QuoteEditor({
   const payload = {
     customerId: h.customerId,
     contactId: h.contactId || null,
+    businessId: businessId || null,
     date: h.date,
     validUntil: h.validUntil,
     validForDays: nDays != null && nDays >= 1 ? nDays : undefined,
@@ -1196,6 +1231,8 @@ export function QuoteEditor({
     withholdingCodes: pick,
     withholdingExplicitNone: pick != null && pick.length === 0 ? true : undefined,
     reapplyWithholding: reapplyWithholding || undefined,
+    // Stale-edit guard: edits carry the updatedAt the page loaded (creates don't).
+    ...(isNew ? {} : { updatedAt: initial.updatedAt }),
     items: items.map(itemPayload),
   };
 
@@ -1210,13 +1247,20 @@ export function QuoteEditor({
     Boolean(printDefaults.warrantyNotes?.trim());
   const notesCount = (h.notes?.trim() ? 1 : 0) + (h.internalNotes?.trim() ? 1 : 0);
 
-  const canMarkSent = quoteId && status === "DRAFT" && approvalStatus === "APPROVED" && markSentAction;
+  const canMarkSent =
+    quoteId &&
+    status === "DRAFT" &&
+    markSentAction &&
+    (approvalStatus === "APPROVED" ||
+      approvalStatus === "NOT_REQUIRED" ||
+      (approvalStatus === "PENDING" && canApprove));
   const busy = pending || sentPending;
 
   function markSentNow() {
     if (!canMarkSent || !quoteId || !markSentAction) return;
+    const confirmed = approvalConfirmedRef.current;
     startSentTransition(async () => {
-      await markSentAction(quoteId);
+      await markSentAction(quoteId, confirmed);
     });
   }
 
@@ -1236,6 +1280,7 @@ export function QuoteEditor({
       }
       skipCostWarn.current = true;
       if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = "1";
+      if (alsoMarkSentConfirmedRef.current) alsoMarkSentConfirmedRef.current.value = approvalConfirmedRef.current ? "1" : "";
       formRef.current.requestSubmit();
       return;
     }
@@ -1243,7 +1288,7 @@ export function QuoteEditor({
       // Persist explicit none locally so a concurrent draft save matches.
       applyPickDefaults([], items);
       const fn = confirmNoneAndMarkSentAction ?? markSentAction;
-      if (fn) await fn(quoteId);
+      if (fn) await fn(quoteId, approvalConfirmedRef.current);
     });
   }
 
@@ -1272,6 +1317,7 @@ export function QuoteEditor({
       return;
     }
     if (!skipCostWarn.current && alsoMarkSentRef.current) alsoMarkSentRef.current.value = "";
+    if (alsoMarkSentConfirmedRef.current) alsoMarkSentConfirmedRef.current.value = "";
     skipCostWarn.current = false;
     skipWhNoneWarn.current = false;
     onSubmit(e);
@@ -1315,11 +1361,23 @@ export function QuoteEditor({
     sendAfterCostWarn.current = false;
     skipCostWarn.current = true;
     if (alsoMarkSentRef.current) alsoMarkSentRef.current.value = next === "sent" ? "1" : "";
+    if (alsoMarkSentConfirmedRef.current) {
+      alsoMarkSentConfirmedRef.current.value = next === "sent" && approvalConfirmedRef.current ? "1" : "";
+    }
     formRef.current?.requestSubmit();
   }
 
   function submitMarkSent() {
     if (canMarkSent) {
+      // F5 prompt: an Approver sending a PENDING quote whose EDITED numbers
+      // trip a threshold confirms first; the flag then rides every send path.
+      if (approvalStatus === "PENDING" && canApprove && !approvalConfirmedRef.current && approvalLimits) {
+        const liveReasons = approvalReasons(totals, approvalLimits);
+        if (liveReasons.length > 0) {
+          setApprovalConfirmOpen(true);
+          return;
+        }
+      }
       const gate = quoteMarkSentGate({
         approved: true,
         withholdingUnset: pick == null,
@@ -1348,6 +1406,7 @@ export function QuoteEditor({
       <form ref={formRef} className="quote-editor" onSubmit={onSubmitMaybeWarn} noValidate>
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
         <input ref={alsoMarkSentRef} type="hidden" name="alsoMarkSent" value="" />
+        <input ref={alsoMarkSentConfirmedRef} type="hidden" name="alsoMarkSentConfirmed" value="" />
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
@@ -1425,6 +1484,33 @@ export function QuoteEditor({
               )}
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
+            {(businesses.length > 0 || businessId) && (
+              <div className={`quote-f field${e.businessId ? " has-error" : ""}`}>
+                <label htmlFor="businessId">Business — whose sale is this?</label>
+                <select
+                  id="businessId"
+                  value={businessId}
+                  disabled={!canTagBusiness}
+                  onChange={(ev) => setBusinessId(ev.target.value)}
+                >
+                  <option value="">{ownCompanyName} (own company)</option>
+                  {businesses.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                  {businessId && !businesses.some((b) => b.id === businessId) && (
+                    <option value={businessId}>Current business (switched off)</option>
+                  )}
+                </select>
+                <div className="hint">
+                  {canTagBusiness
+                    ? "It decides which business's sales and tax figures this joins. It never prints on the quote."
+                    : "Only an Admin or Approver can tag a quote to another business."}
+                </div>
+                {e.businessId && <div className="error">{e.businessId}</div>}
+              </div>
+            )}
             <div className={`quote-f field${e.contactId ? " has-error" : ""}`}>
               <label htmlFor="contactId">Contact</label>
               <SearchPicker
@@ -1785,15 +1871,28 @@ export function QuoteEditor({
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
                                     ></textarea>
-                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        {compPicker.failed ? (
+                                          <div className="small muted">
+                                            Search failed, try again.{" "}
+                                            <button
+                                              type="button"
+                                              className="btn-link small"
+                                              aria-label={`Retry search for component ${cIdx + 1} of line ${idx + 1}`}
+                                              onClick={() => setCompPicker((p) => (p ? { ...p, failed: false, attempt: p.attempt + 1 } : p))}
+                                            >
+                                              Retry search
+                                            </button>
+                                          </div>
+                                        ) : (
                                         <ul className="plain-list">
                                           {compPicker.results.map((r) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
@@ -1809,6 +1908,7 @@ export function QuoteEditor({
                                             );
                                           })}
                                         </ul>
+                                        )}
                                       </div>
                                     ) : null}
                                   </div>
@@ -2169,15 +2269,28 @@ export function QuoteEditor({
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [] });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
                                     ></textarea>
-                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? (
+                                    {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                        {compPicker.failed ? (
+                                          <div className="small muted">
+                                            Search failed, try again.{" "}
+                                            <button
+                                              type="button"
+                                              className="btn-link small"
+                                              aria-label={`Retry search for component ${cIdx + 1} of line ${idx + 1}`}
+                                              onClick={() => setCompPicker((p) => (p ? { ...p, failed: false, attempt: p.attempt + 1 } : p))}
+                                            >
+                                              Retry search
+                                            </button>
+                                          </div>
+                                        ) : (
                                         <ul className="plain-list">
                                           {compPicker.results.map((r) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
@@ -2193,6 +2306,7 @@ export function QuoteEditor({
                                             );
                                           })}
                                         </ul>
+                                        )}
                                       </div>
                                     ) : null}
                                   </div>
@@ -2615,6 +2729,21 @@ export function QuoteEditor({
         onConfirm={confirmNoneAndMarkSent}
       />
 
+      {/* F5: an Approver sending a quote that trips a threshold confirms first. */}
+      <ConfirmDialog
+        open={approvalConfirmOpen}
+        title="This quote needs approval"
+        body={`It trips the approval checks: ${approvalLimits ? approvalReasons(totals, approvalLimits).join("; ") : ""}. As an Approver you can send it anyway — your confirmation is recorded in the activity log.`}
+        confirmLabel="Send anyway"
+        cancelLabel="Go back"
+        onCancel={() => setApprovalConfirmOpen(false)}
+        onConfirm={() => {
+          approvalConfirmedRef.current = true;
+          setApprovalConfirmOpen(false);
+          submitMarkSent();
+        }}
+      />
+
       {/* S-79: same prompt, wording and choices as Mark as sent, for Save draft. */}
       <ConfirmDialog
         open={saveNoneConfirmOpen}
@@ -2738,79 +2867,3 @@ function hasNonEmptyPicks(picks: WithholdingSnapshot[] | null): boolean {
   return Array.isArray(picks) && picks.length > 0;
 }
 
-type NewAddressFields = { label: string; street: string; barangay: string; cityMunicipality: string; province: string; zip: string };
-
-/**
- * "+ Add new address" in the delivery picker: saves a DELIVERY address to
- * the customer (same fields + validation as the customer profile) and hands
- * it back so the editor can pick it at once.
- */
-function AddAddressDialog({
-  customerName,
-  onClose,
-  onSaved,
-  action,
-}: {
-  customerName: string;
-  onClose: () => void;
-  onSaved: (a: EditorAddressOption) => void;
-  action: (input: NewAddressFields) => Promise<FormState & { address?: EditorAddressOption }>;
-}) {
-  const [fields, setFields] = useState<NewAddressFields>({ label: "", street: "", barangay: "", cityMunicipality: "", province: "", zip: "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const set = (k: keyof NewAddressFields) => (ev: { target: { value: string } }) => setFields((f) => ({ ...f, [k]: ev.target.value }));
-
-  async function submit() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await action(fields);
-      if (res.address) {
-        onSaved(res.address);
-        return;
-      }
-      setErrors(res.fieldErrors ?? {});
-      setMessage(res.message ?? "Could not add the address.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const field = (k: keyof NewAddressFields, label: string, required: boolean, maxLength?: number) => (
-    <div className={`field${errors[k] ? " has-error" : ""}`}>
-      <label htmlFor={`qa-${k}`}>
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      <input id={`qa-${k}`} type="text" value={fields[k]} maxLength={maxLength} onChange={set(k)} />
-      {errors[k] && <div className="error">{errors[k]}</div>}
-    </div>
-  );
-
-  return (
-    <Modal title={`Add delivery address — ${customerName}`} onClose={onClose} labelId="qa-title">
-      <p className="small muted">Saved to the customer as a Delivery address and picked on this quote.</p>
-      {message && (
-        <div className="alert error" role="alert">
-          {message}
-        </div>
-      )}
-      {field("label", "Label (e.g. Warehouse)", false, 100)}
-      {field("street", "Unit / building / street", true, 500)}
-      {field("barangay", "Barangay", true, 120)}
-      {field("cityMunicipality", "City / municipality", true, 120)}
-      {field("province", "Province", true, 120)}
-      {field("zip", "ZIP code", true, 4)}
-      <div className="buttons">
-        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
-          Cancel
-        </button>
-        <button type="button" className="btn" onClick={submit} disabled={busy}>
-          {busy ? "Adding…" : "Add address"}
-        </button>
-      </div>
-    </Modal>
-  );
-}

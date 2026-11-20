@@ -81,7 +81,6 @@ export default async function BillingsListPage({
               <thead>
                 <tr>
                   <th>Booklet no.</th>
-                  <th>Internal</th>
                   <th>Customer</th>
                   <th>SO</th>
                   <th>Invoice date</th>
@@ -94,22 +93,28 @@ export default async function BillingsListPage({
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="clickable row-has-link">
-                    <td>
+                    <td data-col="number">
                       <a href={`/billing/billings/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/billings/${r.id}`}>{r.invoiceNo}</Link>
+                      <div className="small faint">{r.number}</div>
                     </td>
-                    <td className="faint">{r.number}</td>
                     <td>
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td>
+                    <td data-col="number">
                       <Link href={`/sales-orders/${r.salesOrder.id}`}>{r.salesOrder.number}</Link>
                     </td>
-                    <td>{day(r.invoiceDate)}</td>
-                    <td>{r.expectedPaymentLabel ? r.expectedPaymentLabel : day(r.dueDate)}</td>
+                    <td data-col="date">{day(r.invoiceDate)}</td>
+                    {/* The "Expected by … (estimate)" label is prose and may wrap;
+                        a plain due date gets the no-wrap date treatment. */}
+                    {r.expectedPaymentLabel ? (
+                      <td>{r.expectedPaymentLabel}</td>
+                    ) : (
+                      <td data-col="date">{day(r.dueDate)}</td>
+                    )}
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td className="num strong">{formatPeso(r.balance)}</td>
-                    <td>
+                    <td data-col="status">
                       <BillingStatusChip status={r.status} /> {!r.isGovernment && <OverdueBadge label={r.overdue.label} />}
                     </td>
                   </tr>

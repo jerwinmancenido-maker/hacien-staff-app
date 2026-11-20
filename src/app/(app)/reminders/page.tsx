@@ -21,6 +21,7 @@ export default async function RemindersPage() {
       <td>
         <Link href={reminderHref(r.entityType, r.entityId)}>
           {REMINDER_TARGET_LABELS[r.entityType as keyof typeof REMINDER_TARGET_LABELS] ?? r.entityType}
+          {r.entityNumber ? ` ${r.entityNumber}` : ""}
         </Link>
         <div className="small faint">{r.note}</div>
       </td>

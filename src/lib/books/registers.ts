@@ -25,7 +25,10 @@ export type BookSourceRow = {
   documentNumber: string;
   party: string;
   particulars: string;
-  /** Absolute amount, 2-decimal string. */
+  /**
+   * Signed amount, 2-decimal string. Return rows (F15) carry a negative
+   * amount so register totals come out net of returns.
+   */
   amount: string;
   /** EWT amount when present; null when not applicable for the row. */
   ewt: string | null;
@@ -79,10 +82,14 @@ export const SOURCE_LABELS: Record<RegisterSourceKind, string> = {
   SUPPLIER_BILL: "Supplier bill",
   SUPPLIER_PAYMENT: "Supplier payment",
   EXPENSE: "Expense",
+  CUSTOMER_RETURN: "Customer return",
+  SUPPLIER_RETURN: "Supplier return",
 };
 
 export const INVOICED_TOTAL_LABEL = "Invoiced total";
 export const COLLECTED_TOTAL_LABEL = "Collected total";
+/** Sales register collected figure is cash only (EWT is its own column) — label it so it is not read as Home's cash + 2307 total. */
+export const CASH_COLLECTED_TOTAL_LABEL = "Cash collected total";
 
 /** Sum amounts with scaled decimals. */
 export function sumMoney(amounts: readonly string[]): string {
@@ -156,7 +163,10 @@ export function buildRegister(
     pageEwt += ewt;
     periodAmt += amt;
     periodEwt += ewt;
-    if (src.kind === "BILLING") {
+    if (src.kind === "BILLING" || src.kind === "CUSTOMER_RETURN") {
+      // F15: a customer return is negative sales — its (negative) amount
+      // nets against the invoiced total, never the collected total
+      // (return credit is not a collection).
       invoicedAmt += amt;
       invoicedEwt += ewt;
     } else if (src.kind === "COLLECTION") {
@@ -236,7 +246,7 @@ export function registerToCsv(config: RegisterConfig, register: BookRegister): s
   if (register.salesPeriodTotals) {
     const s = register.salesPeriodTotals;
     lines.push(totalCsvLine(config, INVOICED_TOTAL_LABEL, s.invoicedAmount, s.invoicedEwt));
-    lines.push(totalCsvLine(config, COLLECTED_TOTAL_LABEL, s.collectedAmount, s.collectedEwt));
+    lines.push(totalCsvLine(config, CASH_COLLECTED_TOTAL_LABEL, s.collectedAmount, s.collectedEwt));
   } else if (register.periodAmountTotal != null) {
     lines.push(
       totalCsvLine(config, "Period total", register.periodAmountTotal, register.periodEwtTotal ?? "0.00"),

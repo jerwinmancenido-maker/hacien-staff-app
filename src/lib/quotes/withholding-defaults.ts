@@ -253,7 +253,20 @@ export function parseWithholdingPick(raw: unknown): string[] | null {
   return codes;
 }
 
-function rateAppliesToKind(lineKind: WithholdingLineKind, kind: ItemKind): boolean {
+/**
+ * True when two withholding picks differ as SETS, treating null ("not
+ * set") and [] ("explicit none") as different states. PR-2b: the SO editor
+ * sends withholdingCodes only when this is true, so an untouched pick can
+ * never rewrite — or trip the billed freeze on — the stored snapshot.
+ */
+export function pickCodesChanged(a: string[] | null, b: string[] | null): boolean {
+  if ((a === null) !== (b === null)) return true;
+  const sa = new Set(a ?? []);
+  const sb = new Set(b ?? []);
+  return sa.size !== sb.size || [...sa].some((c) => !sb.has(c));
+}
+
+export function rateAppliesToKind(lineKind: WithholdingLineKind, kind: ItemKind): boolean {
   if (lineKind === "GOODS") return kind === "GOODS";
   if (lineKind === "SERVICES") return kind === "SERVICES";
   // GOV_PT / GOV_VAT apply to the whole total → every line.

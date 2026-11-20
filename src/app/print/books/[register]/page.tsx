@@ -10,7 +10,7 @@ import {
   REGISTER_CONFIGS,
 } from "@/lib/books/config";
 import { parseBooksPeriod } from "@/lib/books/period";
-import { COLLECTED_TOTAL_LABEL, INVOICED_TOTAL_LABEL, SOURCE_LABELS } from "@/lib/books/registers";
+import { CASH_COLLECTED_TOTAL_LABEL, INVOICED_TOTAL_LABEL, SOURCE_LABELS } from "@/lib/books/registers";
 import { getBookRegister } from "@/lib/services/books";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -61,12 +61,12 @@ export default async function PrintBooksPage({
   const pageIndexes = [...pages.keys()].sort((a, b) => a - b);
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/${config.path}?from=${period.fromYmd}&to=${period.toYmd}`}>
           Back to Books
         </Link>
-        <span className="small muted">A4 · {config.title} — draft format for accountant/RDO review.</span>
+        <span className="small muted">{settings.print.paperSize} · {config.title} — draft format for accountant/RDO review.</span>
         <PrintButton />
       </div>
       <div className="alert warn print-toolbar-alert no-print" role="status">
@@ -180,7 +180,7 @@ export default async function PrintBooksPage({
               )}
             </div>
             <div>
-              <b>{COLLECTED_TOTAL_LABEL}</b>
+              <b>{CASH_COLLECTED_TOTAL_LABEL}</b>
               <span className="num">{formatPeso(register.salesPeriodTotals.collectedAmount)}</span>
               {config.columns.some((c) => c.key === "ewt") && (
                 <span className="num">EWT {formatPeso(register.salesPeriodTotals.collectedEwt)}</span>

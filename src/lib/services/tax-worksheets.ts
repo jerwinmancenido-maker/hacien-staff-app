@@ -39,6 +39,10 @@ export async function cumulativeInvoicedTotal(year: number, quarter: Quarter): P
     where: {
       status: { not: "VOID" },
       invoiceDate: { gte: ymdToDate(b.yearStartYmd), lte: ymdToDate(b.toYmd) },
+      // Entity wall (PR-B): HACIEN's tax reads HACIEN documents only.
+      // Billings are own-company by construction; the filter is explicit
+      // so the wall does not depend on that construction.
+      salesOrder: { businessId: null },
     },
     _sum: { amount: true },
   });
@@ -47,6 +51,31 @@ export async function cumulativeInvoicedTotal(year: number, quarter: Quarter): P
 
 /** @deprecated Use cumulativeInvoicedTotal — kept as alias for call sites/tests. */
 export const cumulativeGrossSales = cumulativeInvoicedTotal;
+
+/**
+ * Cumulative POSTED customer returns from Jan 1 through quarter end
+ * (returnDate), own-company sales orders only (F15). A return is
+ * negative sales in the period it was posted (credit-memo dating),
+ * so the invoiced basis is gross billings less these returns.
+ */
+export async function cumulativeCustomerReturnsTotal(year: number, quarter: Quarter): Promise<string> {
+  const b = quarterBounds(year, quarter);
+  const rows = await db.customerReturn.findMany({
+    where: {
+      status: "POSTED",
+      returnDate: { gte: ymdToDate(b.yearStartYmd), lte: ymdToDate(b.toYmd) },
+      salesOrder: { businessId: null },
+    },
+    select: { credit: { select: { amount: true } }, items: { select: { amount: true } } },
+  });
+  return sumPesos(
+    rows.map((r) =>
+      r.credit
+        ? money(r.credit.amount)
+        : fromScaled(r.items.reduce((a, i) => a + toScaled(money(i.amount), 2), 0n), 2),
+    ),
+  );
+}
 
 /**
  * Cumulative non-void POSTED collections (collected) from Jan 1 through quarter end.
@@ -98,7 +127,11 @@ export async function taxPaidEarlierQuarters(year: number, quarter: Quarter): Pr
 
 export type IncomeTaxWorksheet = {
   bounds: QuarterBounds;
-  /** Non-void billings Jan 1 → quarter end (invoiceDate). Not a chosen basis. */
+  /** Non-void billings Jan 1 → quarter end (invoiceDate), before returns. */
+  invoicedGrossTotal: string;
+  /** POSTED customer returns Jan 1 → quarter end (returnDate) (F15). */
+  invoicedReturnsTotal: string;
+  /** Invoiced basis the tax is figured on: gross billings less returns (F15). Not a chosen basis. */
   invoicedTotal: string;
   /** Non-void POSTED collections Jan 1 → quarter end (date). Not a chosen basis. */
   collectedTotal: string;
@@ -123,18 +156,25 @@ export async function getIncomeTaxWorksheet(
 ): Promise<IncomeTaxWorksheet> {
   assertCan(actor, "view_books");
   const bounds = quarterBounds(year, quarter);
-  const [invoicedTotal, collectedTotal, e, f, taxPaidByQuarter] = await Promise.all([
+  const [invoicedGrossTotal, invoicedReturnsTotal, collectedTotal, e, f, taxPaidByQuarter] = await Promise.all([
     cumulativeInvoicedTotal(year, quarter),
+    cumulativeCustomerReturnsTotal(year, quarter),
     cumulativeCollectedTotal(year, quarter),
     taxPaidEarlierQuarters(year, quarter),
     creditableWithholdingYtd(year, quarter),
     listTaxPaidForYear(year),
   ]);
+  // F15: the invoiced basis is net — gross billings less returns posted
+  // in the same cumulative window. The collected basis is untouched
+  // (return credit is not a collection).
+  const invoicedTotal = fromScaled(toScaled(invoicedGrossTotal, 2) - toScaled(invoicedReturnsTotal, 2), 2);
   const shared = { taxPaidEarlierQuarters: e, creditableWithholding: f };
   const invoiced = build1701qWorksheet({ cumulativeGrossSales: invoicedTotal, ...shared });
   const collected = build1701qWorksheet({ cumulativeGrossSales: collectedTotal, ...shared });
   return {
     bounds,
+    invoicedGrossTotal,
+    invoicedReturnsTotal,
     invoicedTotal,
     collectedTotal,
     invoiced,
@@ -365,6 +405,9 @@ export async function getSupplierEwtWorksheet(
           withholdingApplied: true,
           withholdingRate: true,
           atcCode: true,
+          // Entity wall (PR-B): withholding on another business's bill is
+          // that business's remittance, never HACIEN's — skipped below.
+          supplierBill: { select: { purchaseOrder: { select: { businessId: true } } } },
         },
       },
     },
@@ -376,6 +419,7 @@ export async function getSupplierEwtWorksheet(
     const payDate = dateYmd(p.date);
     if (!ymdInPeriod(payDate, fromFilter, toYmd)) continue;
     for (const a of p.allocations) {
+      if (a.supplierBill.purchaseOrder?.businessId) continue;
       const tax = money(a.withholdingApplied);
       if (toScaled(tax, 2) <= 0n) continue;
       const rate = Number(a.withholdingRate).toFixed(4);
@@ -457,11 +501,16 @@ const MONTH_NAMES = [
 export type SalesSummaryWorksheet = {
   year: number;
   months: (SalesMonthRow & { href: string; fromYmd: string; toYmd: string })[];
+  /** Gross billings for the year, before returns. */
+  yearGross: string;
+  /** POSTED customer returns posted in the year (F15). */
+  yearReturns: string;
+  /** Net sales for the year: gross less returns (F15). */
   yearTotal: string;
   billingCount: number;
 };
 
-/** Non-void billings by invoiceDate, grouped by Manila month. */
+/** Non-void billings by invoiceDate, grouped by Manila month; returns netted by return month (F15). */
 export async function getSalesSummaryWorksheet(
   actor: PermissionUser,
   year: number,
@@ -469,24 +518,49 @@ export async function getSalesSummaryWorksheet(
   assertCan(actor, "view_books");
   const fromYmd = `${year}-01-01`;
   const toYmd = `${year}-12-31`;
-  const billings = await db.billing.findMany({
-    where: {
-      status: { not: "VOID" },
-      invoiceDate: { gte: ymdToDate(fromYmd), lte: ymdToDate(toYmd) },
-    },
-    select: { id: true, amount: true, invoiceDate: true },
-    orderBy: [{ invoiceDate: "asc" }],
-  });
+  const [billings, returns] = await Promise.all([
+    db.billing.findMany({
+      where: {
+        status: { not: "VOID" },
+        invoiceDate: { gte: ymdToDate(fromYmd), lte: ymdToDate(toYmd) },
+        salesOrder: { businessId: null },
+      },
+      select: { id: true, amount: true, invoiceDate: true },
+      orderBy: [{ invoiceDate: "asc" }],
+    }),
+    db.customerReturn.findMany({
+      where: {
+        status: "POSTED",
+        returnDate: { gte: ymdToDate(fromYmd), lte: ymdToDate(toYmd) },
+        salesOrder: { businessId: null },
+      },
+      select: {
+        returnDate: true,
+        credit: { select: { amount: true } },
+        items: { select: { amount: true } },
+      },
+      orderBy: [{ returnDate: "asc" }],
+    }),
+  ]);
+  const returnAmount = (r: (typeof returns)[number]) =>
+    r.credit
+      ? money(r.credit.amount)
+      : fromScaled(r.items.reduce((a, i) => a + toScaled(money(i.amount), 2), 0n), 2);
 
   const months = [];
   for (let m = 1; m <= 12; m++) {
     const mb = monthBounds(year, m);
     const inMonth = billings.filter((b) => ymdInPeriod(dateYmd(b.invoiceDate), mb.fromYmd, mb.toYmd));
     const gross = sumPesos(inMonth.map((b) => money(b.amount)));
+    const monthReturns = sumPesos(
+      returns.filter((r) => ymdInPeriod(dateYmd(r.returnDate), mb.fromYmd, mb.toYmd)).map(returnAmount),
+    );
     months.push({
       month: mb.fromYmd.slice(0, 7),
       label: MONTH_NAMES[m - 1]!,
       grossSales: gross,
+      returns: monthReturns,
+      netSales: fromScaled(toScaled(gross, 2) - toScaled(monthReturns, 2), 2),
       billingCount: inMonth.length,
       fromYmd: mb.fromYmd,
       toYmd: mb.toYmd,
@@ -494,10 +568,14 @@ export async function getSalesSummaryWorksheet(
     });
   }
 
+  const yearGross = sumPesos(months.map((m) => m.grossSales));
+  const yearReturns = sumPesos(months.map((m) => m.returns));
   return {
     year,
     months,
-    yearTotal: sumPesos(months.map((m) => m.grossSales)),
+    yearGross,
+    yearReturns,
+    yearTotal: fromScaled(toScaled(yearGross, 2) - toScaled(yearReturns, 2), 2),
     billingCount: billings.length,
   };
 }

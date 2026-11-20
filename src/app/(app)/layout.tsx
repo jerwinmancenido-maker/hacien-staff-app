@@ -9,6 +9,7 @@ import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { currentSessionLimits } from "@/lib/auth/session";
+import { withConnectionRetry } from "@/lib/connection-retry";
 import { IdleSignOut } from "@/components/IdleSignOut";
 import { idleRemainingMs, signOut } from "../auth-actions";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -24,13 +25,26 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const sessionLimits = await currentSessionLimits();
-  const { settings } = await getSettingsSnapshot();
-  const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
-  // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
-  const meter = await getNonVatMeter(settings.taxYear);
+  // Read-only load: one retry rides out a transient database connection
+  // failure (P1001 on a cold pool is the proven B-1 trigger) instead of
+  // failing the whole first page load. requireUser stays outside — it can
+  // touch the session write path; a retried write could land twice.
+  const {
+    sessionLimits,
+    cashEnabled,
+    payablesEnabled,
+    meter,
+    booksEnabled,
+  } = await withConnectionRetry(async () => {
+    const sessionLimits = await currentSessionLimits();
+    const { settings } = await getSettingsSnapshot();
+    const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
+    // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
+    const meter = await getNonVatMeter(settings.taxYear);
+    const booksEnabled = await isBooksEnabled();
+    return { sessionLimits, cashEnabled, payablesEnabled, meter, booksEnabled };
+  });
   const milestoneMessage = NON_VAT_MESSAGES[meter.level];
-  const booksEnabled = await isBooksEnabled();
   const milestoneTitle = homeNonVatTitle();
   const canOpenSettings = can(user, "manage_settings");
 

@@ -113,11 +113,15 @@ export async function claimIdempotency(input: {
         // row must still hold the key. The snapshot above can cross the
         // original write's settle — an unqualified release would steal the
         // key from a completed write and let this retry duplicate it.
+        // Stale = pending per judgeIdempotency (status 0 or null body). A 5xx
+        // finish records status without a body; that row must still release.
         const released = await tx.apiCallLog.updateMany({
           where: {
             id: existing.id,
             idempotencyKey: input.idempotencyKey,
-            ...(decision.type === "stale" ? { status: 0 } : {}),
+            ...(decision.type === "stale"
+              ? { OR: [{ status: 0 }, { responseJson: { equals: Prisma.DbNull } }] }
+              : {}),
           },
           data: { idempotencyKey: null },
         });

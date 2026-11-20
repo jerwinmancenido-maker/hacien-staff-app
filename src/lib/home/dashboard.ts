@@ -115,6 +115,23 @@ export type HomeTaxDeadline = {
   incomeTaxFilings?: HomeIncomeTaxFilings | null;
 };
 
+/** The Home card's words for one income-tax occurrence (F8). A staff note
+ *  ("Marked done") is not a filing — but it is not "Not filed yet" either. */
+export function incomeTaxStatusLabel(input: {
+  isFiled: boolean;
+  filedDateFormatted: string | null;
+  referenceNo: string | null;
+  markedDone: boolean;
+}): string {
+  if (input.isFiled) {
+    if (input.filedDateFormatted && input.referenceNo) return `Filed ${input.filedDateFormatted}, ref ${input.referenceNo}`;
+    if (input.filedDateFormatted) return `Filed ${input.filedDateFormatted}`;
+    return "Filed";
+  }
+  if (input.markedDone) return "Marked done — no filing reference recorded";
+  return "Not filed yet";
+}
+
 export type HomeIncomeTaxItem = {
   form: "1701Q" | "1701A";
   obligationKey: "1701q" | "1701a";
@@ -124,6 +141,8 @@ export type HomeIncomeTaxItem = {
   dueYmd: string | null;
   dueFormatted: string;
   isFiled: boolean;
+  /** F8: a staff "Mark as done" note exists but no BIR filing is recorded. */
+  markedDone: boolean;
   filedDateYmd: string | null;
   filedDateFormatted: string | null;
   referenceNo: string | null;
@@ -413,13 +432,15 @@ function headerActions(user: PermissionUser): HomeHeaderActions {
 
 async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | null> {
   const [quoteAgg, openSos] = await Promise.all([
+    // Entity wall (PR-B): Home pipeline figures are HACIEN's — quotes and
+    // orders tagged to another business are excluded from the totals.
     db.quote.aggregate({
-      where: { status: { in: [...OPEN_QUOTE_STATUSES] } },
+      where: { status: { in: [...OPEN_QUOTE_STATUSES] }, businessId: null },
       _count: true,
       _sum: { contractPrice: true },
     }),
     db.salesOrder.findMany({
-      where: { status: "OPEN" },
+      where: { status: "OPEN", businessId: null },
       select: {
         contractPrice: true,
         billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
@@ -676,16 +697,10 @@ export async function loadHomeDashboard(
       const filedDateYmd = isFiled ? (r.doneDateYmd ?? null) : null;
       const filedDateFormatted = filedDateYmd ? formatDate(new Date(`${filedDateYmd}T00:00:00.000Z`)) : null;
       const referenceNo = isFiled ? (r.referenceNo ?? null) : null;
-      let statusLabel = "Not filed yet";
-      if (isFiled) {
-        if (filedDateFormatted && referenceNo) {
-          statusLabel = `Filed ${filedDateFormatted}, ref ${referenceNo}`;
-        } else if (filedDateFormatted) {
-          statusLabel = `Filed ${filedDateFormatted}`;
-        } else {
-          statusLabel = "Filed";
-        }
-      }
+      // F8: a note-done occurrence is NOT filed, but the card must not claim
+      // "Not filed yet" either — the calendar says Done. Middle state.
+      const markedDone = !isFiled && Boolean(r.markedDone);
+      const statusLabel = incomeTaxStatusLabel({ isFiled, filedDateFormatted, referenceNo, markedDone });
       return {
         form,
         obligationKey: key,
@@ -695,6 +710,7 @@ export async function loadHomeDashboard(
         dueYmd: r.dueYmd,
         dueFormatted: r.dueYmd ? formatDate(new Date(`${r.dueYmd}T00:00:00.000Z`)) : "Date to confirm",
         isFiled,
+        markedDone,
         filedDateYmd,
         filedDateFormatted,
         referenceNo,

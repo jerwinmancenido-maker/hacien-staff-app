@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can, canVoid } from "@/lib/permissions";
+import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
 import { listSupplierReturns } from "@/lib/services/returns";
 import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
@@ -14,14 +14,21 @@ import { VoidButton } from "@/components/purchasing/DocButtons";
 import { AttachmentLinks, BillStatusChip, day, MatchChip, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { RrTable } from "@/components/purchasing/RrTable";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
+import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
+import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
+import { PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
+import { GapReasonForm } from "@/components/docs/GapReasonForm";
+import { purchaseOrderGapState } from "@/lib/services/reconciliation";
 import {
   approvePurchaseOrderAction,
   closePurchaseOrderAction,
   emailPurchaseOrderAction,
   markPurchaseOrderSentAction,
+  setPurchaseOrderGapReasonAction,
+  uploadPurchaseOrderAttachmentsAction,
   voidBillAction,
   voidPurchaseOrderAction,
   voidSupplierReturnAction,
@@ -42,6 +49,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
   const tab: Tab = (rawTab === "bills" || rawTab === "match") && !po.canSeeCosts ? "overview" : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const returns = await listSupplierReturns(id);
   const canEdit = can(user, "edit_data");
+  // E7: the gap-reason editor shows only while a supplier-bill gap exists.
+  const gapState = canEdit && po.canSeeCosts && po.status !== "VOID" ? await purchaseOrderGapState(id) : null;
   const canApprove = can(user, "approve") && po.approval.canApprove;
   const base = `/purchase-orders/${id}`;
   const liveBills = po.bills.filter((b) => b.status !== "VOID");
@@ -53,6 +62,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
         title={
           <>
             {po.number}
+            {po.business && <Chip tone="dark">{po.business.shortLabel}</Chip>}
             {po.revision > 1 && <span className="muted small"> rev. {po.revision}</span>}
             <PoStatusChip status={po.status} />
           </>
@@ -91,6 +101,15 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           <b>Short-closed.</b> {po.closeReason}
         </div>
       )}
+      {gapState?.show && (
+        <GapReasonForm
+          kind="PO"
+          currentCode={po.gapReasonCode}
+          currentNote={po.gapNote}
+          action={setPurchaseOrderGapReasonAction.bind(null, po.id)}
+          partial={gapState.partial}
+        />
+      )}
 
       <PillTabs
         active={tab}
@@ -114,7 +133,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
           {
             key: "attachments",
             label: "Attachments",
-            count: po.receivingReports.flatMap((r) => r.attachments).length + liveBills.flatMap((b) => b.attachments).length,
+            count: po.attachments.length + po.receivingReports.flatMap((r) => r.attachments).length + liveBills.flatMap((b) => b.attachments).length,
             href: `${base}?tab=attachments`,
           },
         ]}
@@ -150,8 +169,10 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     Approved by {po.approvedBy}
                     {po.approvedAt ? ` · ${formatDateTime(po.approvedAt)}` : ""}
                   </>
-                ) : po.status === "DRAFT" ? (
+                ) : po.status === "DRAFT" && po.approval.needsApproval ? (
                   <Chip tone="blue">Needs approval</Chip>
+                ) : po.status === "DRAFT" ? (
+                  "Not required"
                 ) : (
                   "—"
                 )}
@@ -238,12 +259,30 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
       )}
 
       {tab === "attachments" && (
-        <AttachmentsTab
-          sections={[
-            { label: "Receiving reports", files: po.receivingReports.flatMap((r) => r.attachments) },
-            { label: "Supplier bills", files: liveBills.flatMap((b) => b.attachments) },
-          ]}
-        />
+        <div className="details-stack">
+          {po.canSeeCosts && (
+            <OwnAttachmentsCard
+              title="Purchase order files"
+              emptyText="No files attached to this purchase order yet. Attach the supplier's quote here."
+              files={po.attachments}
+              canArchive={canDeleteDocument(user)}
+              archiveAction={archiveAttachmentAction}
+              upload={
+                canEdit && po.status !== "VOID"
+                  ? { action: uploadPurchaseOrderAttachmentsAction.bind(null, po.id), kinds: PURCHASE_ORDER_ATTACHMENT_KINDS, idPrefix: "po-attach" }
+                  : null
+              }
+            />
+          )}
+          {(po.receivingReports.some((r) => r.attachments.length > 0) || liveBills.some((b) => b.attachments.length > 0) || !po.canSeeCosts) && (
+            <AttachmentsTab
+              sections={[
+                { label: "Receiving reports", files: po.receivingReports.flatMap((r) => r.attachments) },
+                { label: "Supplier bills", files: liveBills.flatMap((b) => b.attachments) },
+              ]}
+            />
+          )}
+        </div>
       )}
 
       {tab === "receiving" && (
@@ -473,15 +512,14 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         ))}
                       </td>
                       <td>
-                        {l.issues.length === 0 ? (
-                          <MatchChip status="MATCHED" />
-                        ) : (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                            {l.issues.map((i) => (
-                              <MatchChip key={i} status={i} />
-                            ))}
-                          </div>
-                        )}
+                        {/* F24: the STATUS cell shows the line status
+                            (which is NOT_BILLED when no live bills
+                            exist), not one chip per issue — after
+                            voiding the only bill this cell used to
+                            keep saying "Qty mismatch" while the
+                            header said "Not billed yet". The flags
+                            column beside it lists every issue. */}
+                        <MatchChip status={l.status} />
                       </td>
                     </tr>
                   );

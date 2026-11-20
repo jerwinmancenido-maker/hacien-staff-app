@@ -31,8 +31,9 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
           </Link>
         </form>
         <p className="faint small">
-          Revenue is billings invoiced in {month}. Supplier bills are bills recorded in {month}. Expenses are posted expenses dated in {month}.
-          Net is revenue minus supplier bills minus expenses. Margin by deal is contract price minus supplier cost for sales orders dated in {month}.
+          Revenue is billings invoiced in {month}, less customer returns posted in {month}. Supplier bills are bills recorded in {month}, less supplier
+          returns posted in {month}. Expenses are posted expenses dated in {month}. Net is revenue minus supplier bills minus expenses. Margin by deal is
+          contract price (less the deal&apos;s returns) minus supplier cost for sales orders dated in {month}.
         </p>
         <div className="stat-grid" style={{ marginBottom: 20 }}>
           <div className="card stat">
@@ -40,8 +41,16 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
             <div className="value num">{formatPeso(report.revenue)}</div>
           </div>
           <div className="card stat">
+            <div className="label">Customer returns</div>
+            <div className="value num">{formatPeso(report.customerReturns)}</div>
+          </div>
+          <div className="card stat">
             <div className="label">Supplier bills</div>
             <div className="value num">{formatPeso(report.supplierBills)}</div>
+          </div>
+          <div className="card stat">
+            <div className="label">Supplier returns</div>
+            <div className="value num">{formatPeso(report.supplierReturns)}</div>
           </div>
           <div className="card stat">
             <div className="label">Expenses</div>
@@ -62,7 +71,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                 <tr>
                   <th>Deal</th>
                   <th>Date</th>
-                  <th className="num">Contract price</th>
+                  <th className="num">Contract price (net)</th>
+                  <th className="num">Returns</th>
                   <th className="num">Supplier cost</th>
                   <th className="num">Margin</th>
                   <th className="num">Margin %</th>
@@ -74,6 +84,7 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                     <td className="strong">{d.number}</td>
                     <td>{d.date}</td>
                     <td className="num">{formatPeso(d.contractPrice)}</td>
+                    <td className="num">{formatPeso(d.returns)}</td>
                     <td className="num">{formatPeso(d.supplierCost)}</td>
                     <td className="num">{formatPeso(d.margin)}</td>
                     <td className="num">{d.marginPct === null ? "—" : `${d.marginPct}%`}</td>

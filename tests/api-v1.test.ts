@@ -112,6 +112,12 @@ describe("Idempotency-Key", () => {
     expect(judgeIdempotency({ ...stored, status: 0, responseJson: null, at: new Date(now - IDEMPOTENCY_PENDING_MS - 1000) }, same, now).type).toBe(
       "stale",
     );
+    // 5xx finish without a body: null responseJson stays pending / stale, never replay.
+    expect(judgeIdempotency({ ...stored, status: 500, responseJson: null }, same, now).type).toBe("in_progress");
+    expect(
+      judgeIdempotency({ ...stored, status: 500, responseJson: null, at: new Date(now - IDEMPOTENCY_PENDING_MS - 1000) }, same, now).type,
+    ).toBe("stale");
+    expect(judgeIdempotency(stored, same, now).type).not.toBe("stale");
     expect(judgeIdempotency({ ...stored, at: new Date(now - IDEMPOTENCY_TTL_MS - 1000) }, same, now).type).toBe("expired");
   });
 });

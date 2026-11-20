@@ -5,17 +5,28 @@
 import { Prisma, type Quote, type QuoteItem, type QuoteItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { resolveBusinessForWrite } from "./businesses";
 import { addDays, manilaToday } from "../format";
-import { assertCan, assertCanApprove, assertCanVoid, canSeeCosts, type PermissionUser } from "../permissions";
-import { getSettingsSnapshot } from "../settings";
+import { assertCan, assertCanApprove, assertCanVoid, can, canSeeCosts, type PermissionUser } from "../permissions";
+import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
-import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
+import {
+  auditItems,
+  DocRuleError,
+  DOC_TX,
+  money,
+  requireMatchingUpdatedAt,
+  STALE_EDIT_MESSAGE_QUOTE,
+  withholdingCodes,
+  withTxRetry,
+  ymd,
+} from "../documents/common";
 import {
   quoteApprovalClearData,
   quoteMoneyFieldsChanged,
   quoteNotApprovedError,
 } from "../quotes/approval";
-import { docTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
+import { approvalReasons, docTotals, supplierCostStateFromSupplierTotals, withholdingSnapshotFromLines, type WithholdingSnapshot } from "../quotes/calc";
 import { componentData, itemData, planItems, type PlannedItem } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
@@ -32,6 +43,7 @@ import {
 } from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
+import { assertPeriodOpen } from "./period-close";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -76,9 +88,56 @@ export function quoteAudit(q: QuoteWithItems) {
   };
 }
 
-function assertQuoteApproved(quote: Pick<Quote, "approvalStatus">) {
-  const err = quoteNotApprovedError(quote.approvalStatus);
-  if (err) throw new DocRuleError(err);
+/** Approval reasons for a quote's stored totals under its PINNED settings. */
+async function storedApprovalReasons(
+  quote: Pick<Quote, "contractPrice" | "netMarginPct" | "settingsVersionId"> & {
+    items: readonly Pick<QuoteItem, "supplierTotal">[];
+  },
+): Promise<string[]> {
+  const snap = (await getSettingsVersion(quote.settingsVersionId)) ?? (await getSettingsSnapshot());
+  return approvalReasons(
+    {
+      contractPrice: money(quote.contractPrice),
+      netMarginPct: money(quote.netMarginPct),
+      supplierCostState: supplierCostStateFromSupplierTotals(quote.items.map((i) => money(i.supplierTotal))),
+    },
+    snap.settings.approval,
+  );
+}
+
+/**
+ * Prompt model (finding F5, Jerwin's decision 2026-11-18): APPROVED and
+ * NOT_REQUIRED quotes send freely, and so does a PENDING quote whose numbers
+ * trip no threshold (its state catches up on the next money edit). A PENDING
+ * quote WITH reasons: an Approver/Admin who confirmed the prompt may proceed
+ * — the caller records the approval and the returned reasons in its audit
+ * entry; an Approver who has not confirmed gets an error naming the reasons;
+ * a Staff-only user keeps waiting for a real approver. REJECTED never sends.
+ * Returns the confirmed-override reasons, or null when no override happened.
+ */
+async function assertQuoteSendable(
+  quote: Pick<Quote, "approvalStatus" | "contractPrice" | "netMarginPct" | "settingsVersionId"> & {
+    items: readonly Pick<QuoteItem, "supplierTotal">[];
+  },
+  actor: DocActor,
+  opts: { confirmedWarnings?: boolean } = {},
+): Promise<string[] | null> {
+  if (quote.approvalStatus === "APPROVED" || quote.approvalStatus === "NOT_REQUIRED") return null;
+  if (quote.approvalStatus === "REJECTED") throw new DocRuleError(quoteNotApprovedError("REJECTED")!);
+  const reasons = await storedApprovalReasons(quote);
+  if (reasons.length === 0) return null;
+  if (can(actor, "approve")) {
+    if (opts.confirmedWarnings) return reasons;
+    throw new DocRuleError(
+      `This quote needs approval: ${reasons.join("; ")}. Confirm the warning to send it anyway, or approve the quote first.`,
+    );
+  }
+  throw new DocRuleError(quoteNotApprovedError("PENDING")!);
+}
+
+/** Approval fields written when an approver confirms the prompt at send/convert time. */
+function overrideApprovalData(actor: DocActor) {
+  return { approvalStatus: "APPROVED" as const, approvedById: actor.id, approvedAt: new Date() };
 }
 
 /**
@@ -240,6 +299,9 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   const customer = await checkCustomerAndContact(input.customerId, input.contactId);
   if (withCosts) await checkSuppliers(input.items);
   await checkItems(input.items);
+  // Business entity: NULL = own company. Tagging another business is
+  // Admin/Approver-only and the business must be active (resolveBusinessForWrite).
+  const businessId = await resolveBusinessForWrite(db, input.businessId, actor);
   // Preparer picker: the chosen preparer, else the creator.
   const preparedById = input.preparedById ?? actor.id;
   await checkPreparedBy(preparedById);
@@ -269,6 +331,16 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
   // S-78: no API path may save a ₱0 quote — the schema blocks it first, this
   // guards any caller that bypasses validation.
   if (!quoteTotalIsPositive(moneyTotals.contractPrice)) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
+  // Prompt model (F5): a quote that trips no approval threshold needs no
+  // approval; anything else starts out waiting for it.
+  const createReasons = approvalReasons(
+    {
+      contractPrice: moneyTotals.contractPrice,
+      netMarginPct: moneyTotals.netMarginPct,
+      supplierCostState: supplierCostStateFromSupplierTotals(items.map((i) => i.supplierTotal)),
+    },
+    snap.settings.approval,
+  );
   const validUntil =
     input.validUntil ??
     (input.validForDays != null
@@ -287,6 +359,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
       const quote = await tx.quote.create({
         data: {
           number,
+          businessId,
           customerId: customer.id,
           contactId: input.contactId,
           date: input.date,
@@ -305,6 +378,7 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
+          approvalStatus: createReasons.length === 0 ? "NOT_REQUIRED" : "PENDING",
           createdById: actor.id,
           preparedById,
           updatedById: actor.id,
@@ -331,8 +405,12 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
  * S-55: Duplicate / New revision. Copies a quote into a fresh DRAFT with a
  * new number, verbatim lines (prices, costs, withholding), totals and notes.
  * Approval, sent state and the buyer PO number are NOT carried over — the
- * copy is a new document that needs its own approval and buyer PO ref.
+ * copy is a new document. Under the prompt model (F5) its approval state is
+ * computed fresh from the copied numbers: NOT_REQUIRED when nothing trips a
+ * threshold, PENDING otherwise.
  * `revision` is 1 for a duplicate, original + 1 for a new revision.
+ * A new revision also stamps `revisionChainId` (the chain's Rev 1 quote
+ * id) so the quote page can link the whole revision chain (Phase 2 #5).
  */
 export async function copyQuote(id: string, actor: DocActor, revision: number): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
@@ -360,6 +438,10 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
         data: {
           number,
           revision,
+          // Phase 2 #5: a new revision (revision > 1) joins the original's
+          // chain; a plain duplicate (revision 1) starts no chain.
+          revisionChainId: revision > 1 ? (original.revisionChainId ?? original.id) : null,
+          businessId: original.businessId,
           customerId: original.customerId,
           contactId: original.contactId,
           date: today,
@@ -382,6 +464,17 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
           supplierCost: original.supplierCost,
           netMargin: original.netMargin,
           netMarginPct: original.netMarginPct,
+          approvalStatus:
+            approvalReasons(
+              {
+                contractPrice: money(original.contractPrice),
+                netMarginPct: money(original.netMarginPct),
+                supplierCostState: supplierCostStateFromSupplierTotals(original.items.map((i) => money(i.supplierTotal))),
+              },
+              snap.settings.approval,
+            ).length === 0
+              ? "NOT_REQUIRED"
+              : "PENDING",
           createdById: actor.id,
           preparedById: actor.id,
           updatedById: actor.id,
@@ -435,6 +528,14 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
   await checkCustomerAndContact(input.customerId, input.contactId, { allowInactiveCustomerId: current.customerId });
   if (withCosts) await checkSuppliers(input.items);
   await checkItems(input.items);
+  // Business entity: omitted → keep the stored tag; a change re-validates
+  // (Admin/Approver-only, active businesses only). Editable quotes are
+  // never WON, so the tag can still move here; after conversion the SO's
+  // Admin reclassify is the path.
+  const businessData: { businessId?: string | null } = {};
+  if (input.businessId !== undefined && input.businessId !== current.businessId) {
+    businessData.businessId = await resolveBusinessForWrite(db, input.businessId, actor);
+  }
   // Preparer picker: omitted → keep the stored preparer; null → back to the
   // creator; a NEW value must be an active staff user. The stored preparer
   // may have been turned off since — saving without changing it stays valid.
@@ -465,6 +566,13 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
       const before = await lockQuote(tx, id);
       if (!(EDITABLE_QUOTE_STATUSES as readonly string[]).includes(before.status)) {
         throw new DocRuleError("Only draft or sent quotes can be edited.");
+      }
+      // Stale-edit guard: the quote editor always sends the updatedAt it
+      // loaded; when a token is present, refuse before any line writes if
+      // the row moved since (the SO / PO guard). A tokenless save claims no
+      // loaded version — it keeps the old last-writer-wins behaviour.
+      if (input.updatedAt !== undefined) {
+        requireMatchingUpdatedAt(before.updatedAt, input.updatedAt, STALE_EDIT_MESSAGE_QUOTE);
       }
       const stored = before.items.map((i) => ({
         id: i.id,
@@ -577,8 +685,31 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           items: afterItems,
         },
       );
-      const resetApproval =
-        moneyChanged && (before.approvalStatus === "APPROVED" || before.approvalStatus === "REJECTED");
+      // Prompt model (F5): on a money change, re-evaluate the thresholds
+      // under the quote's pinned settings. No reasons → NOT_REQUIRED;
+      // reasons → any decided state falls back to PENDING (the old reset);
+      // a quote already waiting keeps waiting. No money change → untouched.
+      const pinnedSnap = (await getSettingsVersion(before.settingsVersionId)) ?? (await getSettingsSnapshot());
+      const editReasons = approvalReasons(
+        {
+          contractPrice: moneyTotals.contractPrice,
+          netMarginPct: moneyTotals.netMarginPct,
+          supplierCostState: supplierCostStateFromSupplierTotals(items.map((i) => i.supplierTotal)),
+        },
+        pinnedSnap.settings.approval,
+      );
+      let approvalData: Partial<{
+        approvalStatus: "PENDING" | "NOT_REQUIRED";
+        approvedById: null;
+        approvedAt: null;
+        rejectedById: null;
+        rejectedAt: null;
+      }> = {};
+      if (moneyChanged) {
+        if (editReasons.length === 0) approvalData = { ...quoteApprovalClearData(), approvalStatus: "NOT_REQUIRED" as const };
+        else if (before.approvalStatus !== "PENDING") approvalData = quoteApprovalClearData();
+      }
+      const approvalChanged = Object.keys(approvalData).length > 0;
 
       const after = await tx.quote.update({
         where: { id },
@@ -600,9 +731,10 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
           withholding: withholding as unknown as Prisma.InputJsonValue,
           withholdingPick: pick === null ? Prisma.DbNull : (pick as unknown as Prisma.InputJsonValue),
           ...moneyTotals,
-          ...(resetApproval ? quoteApprovalClearData() : {}),
+          ...approvalData,
           ...preparedByData,
           ...deliveryData,
+          ...businessData,
           updatedById: actor.id,
         },
         include: { items: { where: { removedAt: null } } },
@@ -614,11 +746,24 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         action: "update",
         before: {
           ...quoteAudit(before),
-          ...(resetApproval ? { approval: before.approvalStatus === "REJECTED" ? "rejected" : "approved" } : {}),
+          ...(approvalChanged
+            ? {
+                approval:
+                  before.approvalStatus === "REJECTED"
+                    ? "rejected"
+                    : before.approvalStatus === "APPROVED"
+                      ? "approved"
+                      : before.approvalStatus === "NOT_REQUIRED"
+                        ? "not required"
+                        : "pending",
+              }
+            : {}),
         },
         after: {
           ...quoteAudit(after),
-          ...(resetApproval ? { approval: "cleared (edited after approval)" } : {}),
+          ...(approvalChanged
+            ? { approval: approvalData.approvalStatus === "NOT_REQUIRED" ? "not required" : "cleared (edited after approval)" }
+            : {}),
         },
       });
       return after;
@@ -631,19 +776,24 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
 // ---------------------------------------------------------------------------
 
 /** Save explicit none ([]), then mark the draft as sent. Used by the submit confirm. */
-export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): Promise<QuoteWithItems> {
+export async function confirmNoneAndMarkQuoteSent(
+  id: string,
+  actor: DocActor,
+  opts: { confirmedWarnings?: boolean } = {},
+): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     // S-78: a ₱0 quote (e.g. one saved before this block existed) can't be sent.
     if (!quoteTotalIsPositive(money(before.contractPrice))) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
     if (before.status !== "DRAFT") throw new DocRuleError("Only a draft quote can be marked as sent.");
-    assertQuoteApproved(before);
+    const override = await assertQuoteSendable(before, actor, opts);
     const after = await tx.quote.update({
       where: { id },
       data: {
         withholdingPick: [] as unknown as Prisma.InputJsonValue,
         status: "SENT",
+        ...(override ? overrideApprovalData(actor) : {}),
         updatedById: actor.id,
       },
       include: { items: { where: { removedAt: null } } },
@@ -654,37 +804,58 @@ export async function confirmNoneAndMarkQuoteSent(id: string, actor: DocActor): 
       entityId: id,
       action: "update",
       before: { status: before.status, withholdingPick: parseWithholdingPick(before.withholdingPick) },
-      after: { status: after.status, withholdingPick: [] },
+      after: {
+        status: after.status,
+        withholdingPick: [],
+        ...(override ? { approvalOverride: override.join("; "), approval: "approved (confirmed at send)" } : {}),
+      },
     });
     return after;
   }, DOC_TX);
 }
 
-async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string, requireApproved = false, requirePositiveTotal = false) {
+async function setStatus(id: string, actor: DocActor, from: readonly Quote["status"][], to: Quote["status"], message: string, requireApproved = false, requirePositiveTotal = false, opts: { confirmedWarnings?: boolean } = {}) {
   assertCan(actor, "edit_data");
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     // S-78: sending a ₱0 quote is blocked; other status moves (e.g. mark lost) are not.
     if (requirePositiveTotal && !quoteTotalIsPositive(money(before.contractPrice))) throw new DocRuleError(QUOTE_ZERO_TOTAL_ERROR);
     if (!from.includes(before.status)) throw new DocRuleError(message);
-    if (requireApproved) assertQuoteApproved(before);
-    const after = await tx.quote.update({ where: { id }, data: { status: to, updatedById: actor.id }, include: { items: { where: { removedAt: null } } } });
-    await writeAudit(tx, { userId: actor.id, entityType: "Quote", entityId: id, action: "update", before: { status: before.status }, after: { status: after.status } });
+    const override = requireApproved ? await assertQuoteSendable(before, actor, opts) : null;
+    const after = await tx.quote.update({
+      where: { id },
+      data: { status: to, ...(override ? overrideApprovalData(actor) : {}), updatedById: actor.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    await writeAudit(tx, {
+      userId: actor.id,
+      entityType: "Quote",
+      entityId: id,
+      action: "update",
+      before: { status: before.status },
+      after: {
+        status: after.status,
+        ...(override ? { approvalOverride: override.join("; "), approval: "approved (confirmed at send)" } : {}),
+      },
+    });
     return after;
   });
 }
 
-export function markQuoteSent(id: string, actor: DocActor) {
-  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true, true);
+export function markQuoteSent(id: string, actor: DocActor, opts: { confirmedWarnings?: boolean } = {}) {
+  return setStatus(id, actor, ["DRAFT"], "SENT", "Only a draft quote can be marked as sent.", true, true, opts);
 }
 
-/** Approver/Admin: PENDING → APPROVED. */
+/** Approver/Admin: PENDING → APPROVED. A NOT_REQUIRED quote is a no-op:
+ *  it already satisfies the approver's intent (the UI never offers Approve
+ *  for one — canApproveWorkflow is PENDING-only). */
 export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWithItems> {
   assertCanApprove(actor);
   return db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("A void quote can't be approved.");
     if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved.");
+    if (before.approvalStatus === "NOT_REQUIRED") return before;
     const now = new Date();
     const after = await tx.quote.update({
       where: { id },
@@ -725,6 +896,7 @@ export async function rejectQuote(id: string, reason: string, actor: DocActor): 
     if (before.status === "VOID") throw new DocRuleError("A void quote can't be rejected.");
     if (before.approvalStatus === "REJECTED") throw new DocRuleError("This quote is already rejected.");
     if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved. Edit prices to send it back for approval first.");
+    if (before.approvalStatus === "NOT_REQUIRED") throw new DocRuleError("This quote doesn't need approval — there is nothing to reject.");
     const now = new Date();
     const after = await tx.quote.update({
       where: { id },
@@ -877,7 +1049,7 @@ export async function recordQuoteAcceptance(id: string, input: AcceptanceInput, 
   });
 }
 
-export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, actor: DocActor, opts: { date?: Date } = {}) {
+export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, actor: DocActor, opts: { date?: Date; confirmedWarnings?: boolean } = {}) {
   assertCan(actor, "edit_data");
   const snap = await getSettingsSnapshot();
   const date = opts.date ?? manilaToday();
@@ -894,7 +1066,28 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       if (quote.status !== "DRAFT" && quote.status !== "SENT") {
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
-      assertQuoteApproved(quote);
+      // F13 (Mac run Block 4, S13): revisions are separate rows in one
+      // chain, and converting sets only THIS row to WON — a sibling
+      // revision stayed convertible, so one deal could produce two SOs.
+      // Refuse when any other revision of the same deal already won
+      // (WON is set only by conversion; voiding the SO reverts it, so a
+      // legitimate re-convert after a void still works).
+      const chainRootId = quote.revisionChainId ?? quote.id;
+      const chainWon = await tx.quote.findFirst({
+        where: {
+          id: { not: quote.id },
+          OR: [{ id: chainRootId }, { revisionChainId: chainRootId }],
+          status: "WON",
+        },
+        select: { number: true },
+      });
+      if (chainWon) {
+        throw new DocRuleError(
+          `This deal was already converted from ${chainWon.number}. Only one revision of a quote can become a sales order.`,
+        );
+      }
+      const override = await assertQuoteSendable(quote, actor, opts);
+      await assertPeriodOpen(tx, date);
       await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } });
       if (!input.deliveryAddressId) {
         throw new DocRuleError("Pick a delivery address from the customer's saved addresses.", "deliveryAddressId");
@@ -929,6 +1122,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
           number,
           trackingRef,
           quoteId: quote.id,
+          businessId: quote.businessId,
           customerId: quote.customerId,
           contactId: quote.contactId,
           date,
@@ -993,8 +1187,22 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         },
         include: { items: true },
       });
-      await tx.quote.update({ where: { id }, data: { status: "WON", updatedById: actor.id } });
-      await writeAudit(tx, { userId: actor.id, entityType: "Quote", entityId: id, action: "update", before: { status: quote.status }, after: { status: "WON", salesOrder: so.number } });
+      await tx.quote.update({
+        where: { id },
+        data: { status: "WON", ...(override ? overrideApprovalData(actor) : {}), updatedById: actor.id },
+      });
+      await writeAudit(tx, {
+        userId: actor.id,
+        entityType: "Quote",
+        entityId: id,
+        action: "update",
+        before: { status: quote.status },
+        after: {
+          status: "WON",
+          salesOrder: so.number,
+          ...(override ? { approvalOverride: override.join("; "), approval: "approved (confirmed at convert)" } : {}),
+        },
+      });
       await writeAudit(tx, {
         userId: actor.id,
         entityType: "SalesOrder",
@@ -1015,12 +1223,17 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
 
 export type EmailDraft = { to: string | null; toName: string | null; subject: string; body: string };
 
-export async function buildQuoteEmailDraft(id: string, actor: DocActor): Promise<EmailDraft> {
+export async function buildQuoteEmailDraft(id: string, actor: DocActor, opts: { confirmedWarnings?: boolean } = {}): Promise<EmailDraft> {
   assertCan(actor, "edit_data");
-  const quote = await db.quote.findUnique({ where: { id }, include: { customer: { include: { contacts: true } }, contact: true } });
+  const quote = await db.quote.findUnique({
+    where: { id },
+    include: { customer: { include: { contacts: true } }, contact: true, items: { where: { removedAt: null } } },
+  });
   if (!quote) throw new DocRuleError("Quote not found.");
   if (quote.status === "VOID") throw new DocRuleError("A void quote can't be emailed.");
-  assertQuoteApproved(quote);
+  // A draft is only a draft — the gate still applies, but a confirmed
+  // override here writes nothing (no approval state changes until send).
+  await assertQuoteSendable(quote, actor, opts);
   const snap = await getSettingsSnapshot();
   const main = quote.customer.contacts.find((c) => c.isMain && c.active);
   const contact = quote.contact?.email ? quote.contact : main;

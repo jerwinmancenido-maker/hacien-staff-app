@@ -6,6 +6,7 @@ import type { Supplier } from "@prisma/client";
 import { Field } from "@/components/Field";
 import { SupplierBankAccount } from "@/components/SupplierBankAccount";
 import { bankNumberDraft } from "@/lib/bank-mask";
+import { isKnownBank, OTHER_BANK, PH_BANKS, resolveSupplierBank } from "@/lib/banks";
 import { SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -28,7 +29,20 @@ export function SupplierForm({
   const { state, pending, onSubmit } = useFormAction(action);
   const v = (k: keyof Supplier) => state.values?.[k] ?? (supplier?.[k] as string | null) ?? "";
   const [name, setName] = useState(v("name"));
-  const [bankName, setBankName] = useState(v("bankAccountName"));
+  const [accountName, setAccountName] = useState(v("bankAccountName"));
+  // The supplier's OWN bank: an explicit bankName wins; legacy rows resolve
+  // from the combined bankBranch text ("UnionBank – Ortigas").
+  const resolvedBank = resolveSupplierBank({
+    bankName: (typeof state.values?.bankName === "string" ? state.values.bankName : null) ?? supplier?.bankName ?? null,
+    bankBranch: (typeof state.values?.bankBranch === "string" ? state.values.bankBranch : null) ?? supplier?.bankBranch ?? null,
+  });
+  const [bankPick, setBankPick] = useState(
+    resolvedBank.bankName ? (isKnownBank(resolvedBank.bankName) ? resolvedBank.bankName : OTHER_BANK) : "",
+  );
+  const [bankOther, setBankOther] = useState(
+    resolvedBank.bankName && !isKnownBank(resolvedBank.bankName) ? resolvedBank.bankName : "",
+  );
+  const chosenBank = bankPick === OTHER_BANK ? bankOther.trim() : bankPick;
   // Stored number stays masked on the record. The input starts empty so a save
   // keeps the current number unless an Admin types a replacement.
   const [bankNumber, setBankNumber] = useState(bankNumberDraft(typeof state.values?.bankAccountNumber === "string" ? state.values.bankAccountNumber : ""));
@@ -36,7 +50,7 @@ export function SupplierForm({
   const termOptions = supplier?.defaultTerms && !terms.includes(supplier.defaultTerms) ? [...terms, supplier.defaultTerms] : terms;
   const maskedNumber = (supplier?.bankAccountNumber ?? "").trim();
   const hasNumber = maskedNumber.length > 0;
-  const noBank = !bankName.trim() || (!hasNumber && !bankNumber.trim());
+  const noBank = !chosenBank || !accountName.trim() || (!hasNumber && !bankNumber.trim());
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -77,7 +91,7 @@ export function SupplierForm({
               ))}
             </select>
           </Field>
-          {isAdmin && <h3 className="section-title">UnionBank details</h3>}
+          {isAdmin && <h3 className="section-title">Bank details</h3>}
           {supplier && (
             <div className="field full">
               <div className="label">Account number</div>
@@ -88,8 +102,32 @@ export function SupplierForm({
           )}
           {isAdmin && (
             <>
+              <Field label="Bank" name="bankName" error={e.bankName} hint="The supplier's own bank — where payments to them go.">
+                <select id="bankName" name="bankPick" value={bankPick} onChange={(ev) => setBankPick(ev.target.value)}>
+                  <option value="">Pick a bank</option>
+                  {PH_BANKS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                  <option value={OTHER_BANK}>Other — type the name</option>
+                </select>
+                <input type="hidden" name="bankName" value={chosenBank} />
+              </Field>
+              {bankPick === OTHER_BANK && (
+                <Field label="Bank name (Other)" name="bankNameOther">
+                  <input
+                    id="bankNameOther"
+                    name="bankNameOther"
+                    type="text"
+                    value={bankOther}
+                    onChange={(ev) => setBankOther(ev.target.value)}
+                    placeholder="e.g. Wise, Bank of China"
+                  />
+                </Field>
+              )}
               <Field label="Account name" name="bankAccountName" error={e.bankAccountName}>
-                <input id="bankAccountName" name="bankAccountName" type="text" value={bankName} onChange={(ev) => setBankName(ev.target.value)} />
+                <input id="bankAccountName" name="bankAccountName" type="text" value={accountName} onChange={(ev) => setAccountName(ev.target.value)} />
               </Field>
               <Field
                 label={hasNumber ? "New account number" : "Account number"}
@@ -108,8 +146,8 @@ export function SupplierForm({
                   placeholder={hasNumber ? "Type a new number" : ""}
                 />
               </Field>
-              <Field label="Bank / branch" name="bankBranch" error={e.bankBranch}>
-                <input id="bankBranch" name="bankBranch" type="text" defaultValue={v("bankBranch")} placeholder="UnionBank – Ortigas" />
+              <Field label="Branch" name="bankBranch" error={e.bankBranch}>
+                <input id="bankBranch" name="bankBranch" type="text" defaultValue={resolvedBank.branch ?? ""} placeholder="Branch name" />
               </Field>
               <Field label="Bank notes" name="bankNotes" error={e.bankNotes}>
                 <input id="bankNotes" name="bankNotes" type="text" defaultValue={v("bankNotes")} />

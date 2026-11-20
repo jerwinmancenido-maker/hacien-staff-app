@@ -4,14 +4,17 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { writeAudit } from "../audit";
+import { resolveBusinessForWrite } from "./businesses";
 import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { ExpenseInput } from "../validation/cash";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type ExpenseActor = PermissionUser & { id: string };
 
@@ -67,6 +70,9 @@ export async function listExpenses(filters: { status?: "POSTED" | "VOID" | "ALL"
       category: { select: { id: true, label: true, code: true } },
       cashAccount: { select: { id: true, name: true } },
       supplier: { select: { id: true, name: true } },
+      salesOrder: { select: { id: true, number: true } },
+      purchaseOrder: { select: { id: true, number: true } },
+      business: { select: { id: true, name: true, shortLabel: true } },
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     take: 200,
@@ -80,6 +86,9 @@ export async function getExpense(id: string) {
       category: true,
       cashAccount: true,
       supplier: { select: { id: true, name: true } },
+      salesOrder: { select: { id: true, number: true } },
+      purchaseOrder: { select: { id: true, number: true } },
+      business: { select: { id: true, name: true, shortLabel: true } },
       attachments: { where: { archivedAt: null }, orderBy: { createdAt: "asc" } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -103,10 +112,14 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
   try {
     return await withTxRetry(() =>
       db.$transaction(async (tx) => {
+        await assertPeriodOpen(tx, input.date);
         const account = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } });
         if (!account || !account.active) {
           throw new DocRuleError("Pick an active cash account. Add one under Cash → Accounts first.", "cashAccountId");
         }
+        // F37: the ledger debits the full expense amount from the account
+        // (same math as the F30 guard) — warn/refuse when it goes negative.
+        await assertFundsInTx(tx, account, input.amount, "expense", "amount", input.allowOverBalance);
         const category = await tx.expenseCategory.findUnique({ where: { id: input.categoryId } });
         if (!category || !category.active) {
           throw new DocRuleError("Pick an active expense category.", "categoryId");
@@ -114,6 +127,44 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
         if (input.supplierId) {
           const supplier = await tx.supplier.findUnique({ where: { id: input.supplierId } });
           if (!supplier) throw new DocRuleError("That supplier was not found. Pick another or type a payee name.", "supplierId");
+        }
+        // Phase 4 #7 (re-planned) L3: a linked order must exist and not be
+        // VOID; when both links are set and the PO belongs to an SO, it must
+        // be that SO. The pickers only offer non-VOID orders — the service
+        // is the rule, the picker is convenience.
+        const salesOrderId = input.salesOrderId ?? null;
+        const purchaseOrderId = input.purchaseOrderId ?? null;
+        let linkedSo: { id: string; number: string; businessId: string | null } | null = null;
+        let linkedPo: { id: string; number: string; salesOrderId: string | null; businessId: string | null } | null = null;
+        if (salesOrderId) {
+          const so = await tx.salesOrder.findUnique({
+            where: { id: salesOrderId },
+            select: { id: true, number: true, status: true, businessId: true },
+          });
+          if (!so) throw new DocRuleError("That sales order was not found. Pick another or leave it unlinked.", "salesOrderId");
+          if (so.status === "VOID") throw new DocRuleError("That sales order is void — pick another or leave it unlinked.", "salesOrderId");
+          linkedSo = { id: so.id, number: so.number, businessId: so.businessId };
+        }
+        if (purchaseOrderId) {
+          const po = await tx.purchaseOrder.findUnique({
+            where: { id: purchaseOrderId },
+            select: { id: true, number: true, status: true, salesOrderId: true, businessId: true },
+          });
+          if (!po) throw new DocRuleError("That purchase order was not found. Pick another or leave it unlinked.", "purchaseOrderId");
+          if (po.status === "VOID") throw new DocRuleError("That purchase order is void — pick another or leave it unlinked.", "purchaseOrderId");
+          linkedPo = { id: po.id, number: po.number, salesOrderId: po.salesOrderId, businessId: po.businessId };
+        }
+        // Business entity: a LINKED expense always follows its order's tag
+        // (the pick is ignored); an UNLINKED expense takes the explicit pick
+        // (validated) or the own company (NULL).
+        const businessId =
+          linkedPo || linkedSo
+            ? (linkedPo?.businessId ?? linkedSo?.businessId ?? null)
+            : input.businessId
+              ? await resolveBusinessForWrite(tx, input.businessId, actor)
+              : null;
+        if (linkedSo && linkedPo && linkedPo.salesOrderId && linkedPo.salesOrderId !== linkedSo.id) {
+          throw new DocRuleError("That PO belongs to a different sales order.", "purchaseOrderId");
         }
 
         const number = await allocateDocNumber(tx, "EXPENSE", year, format);
@@ -129,6 +180,9 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
             cashAccountId: input.cashAccountId,
             receiptNo: input.receiptNo,
             notes: input.notes,
+            salesOrderId,
+            purchaseOrderId,
+            businessId,
             createdById: actor.id,
           },
         });
@@ -147,6 +201,8 @@ export async function recordExpense(input: ExpenseInput, actor: ExpenseActor, fi
             withholdingApplied: input.withholdingApplied,
             cashAccount: account.name,
             receiptNo: input.receiptNo,
+            ...(linkedSo ? { salesOrder: linkedSo.number } : {}),
+            ...(linkedPo ? { purchaseOrder: linkedPo.number } : {}),
             attachments: uploads.length,
           },
         });
@@ -171,6 +227,7 @@ export async function voidExpense(id: string, reason: string, actor: ExpenseActo
       const before = await tx.expense.findUnique({ where: { id } });
       if (!before) throw new DocRuleError("Expense not found.");
       if (before.status === "VOID") throw new DocRuleError("This expense is already void.");
+      await assertPeriodOpen(tx, before.date);
 
       const now = new Date();
       const after = await tx.expense.update({

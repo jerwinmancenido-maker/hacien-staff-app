@@ -7,7 +7,14 @@ import { useFormAction } from "@/components/useFormAction";
 import { ACCEPTANCE_VIA_OPTIONS } from "@/lib/quotes/acceptance";
 import type { FormState } from "@/lib/validation/forms";
 
-export function AcceptanceForm({ action }: { action: (s: FormState, f: FormData) => Promise<FormState> }) {
+export function AcceptanceForm({
+  action,
+  hasConforme = false,
+}: {
+  action: (s: FormState, f: FormData) => Promise<FormState>;
+  /** F18: a signed conforme file is already on the quote — the intro must not claim otherwise. */
+  hasConforme?: boolean;
+}) {
   const { state, pending, onSubmit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
   return (
@@ -17,7 +24,11 @@ export function AcceptanceForm({ action }: { action: (s: FormState, f: FormData)
           {state.message}
         </div>
       )}
-      <p className="faint">No signed conforme and no buyer PO yet. Record how the customer accepted so this quote can convert to a sales order.</p>
+      {hasConforme ? (
+        <p className="faint">A signed conforme is on file above, so this quote can already convert. Recording acceptance here is optional.</p>
+      ) : (
+        <p className="faint">No signed conforme and no buyer PO yet. Record how the customer accepted so this quote can convert to a sales order.</p>
+      )}
       <div className="field">
         <label htmlFor="accepted-at">Date accepted</label>
         <input id="accepted-at" name="acceptedAt" type="date" required />

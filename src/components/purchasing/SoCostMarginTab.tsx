@@ -106,6 +106,12 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
           <dd className="num strong">{formatPeso(summary.contractPrice)}</dd>
           <dt>Cost so far</dt>
           <dd className="num strong">{formatPeso(summary.incurredCost)}</dd>
+          {summary.linkedExpenses != null && toScaled(summary.linkedExpenses, 2) !== 0n && (
+            <>
+              <dt>Delivery &amp; linked expenses</dt>
+              <dd className="num">{formatPeso(summary.linkedExpenses)}</dd>
+            </>
+          )}
           <dt>
             {summary.marginLabel} (before withholding)
           </dt>

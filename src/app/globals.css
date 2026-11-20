@@ -51,7 +51,8 @@
   --grey-600: #525252;
   --grey-700: #404040;
   --blue: #2563eb;
-  --blue-dark: #1d4ed8;
+  --blue-dark: #1f54c8;
+  --sky: #6692f1;
   --blue-tint: #eff6ff;
   --success: #15803d;
   --success-bg: #f0fdf4;
@@ -86,7 +87,8 @@
   --shadow-overlay: 0 1px calc(2px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06), 0 calc(4px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1)) rgba(0, 0, 0, 0.06);
   --shadow-frame: none;
   --shadow-pill: none;
-  --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #fff, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+  /* Button sheet: keyboard focus = 2px surface ring + 3px Sky. */
+  --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #fff, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
 
   /* Self-hosted @font-face (print-pro) supplies Inter + Archivo Black; these
      names match what Home expects from next/font CSS variables. */
@@ -148,6 +150,10 @@ textarea {
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
+}
+/* F37: a negative cash balance is flagged, never a silent minus figure. */
+.num.neg {
+  color: var(--danger);
 }
 .strong {
   font-weight: 600;
@@ -317,6 +323,11 @@ a.tracker-card:hover {
   justify-content: space-between;
   gap: calc(8px * var(--ui-scale, 1));
 }
+/* The milestone title ("Sales Milestone") stays on one line next to the
+   percentage instead of wrapping inside the narrow sidebar (F6). */
+.tracker-head > span {
+  white-space: nowrap;
+}
 .tracker-pct {
   color: var(--text);
   font-weight: 600;
@@ -377,7 +388,7 @@ a.tracker-card:hover {
   font-size: calc(11px * var(--ui-scale, 1));
 }
 .avatar.dark {
-  background: var(--text);
+  background: #0a0a0a;
   color: #fff;
 }
 
@@ -523,8 +534,12 @@ a.tracker-card:hover {
 .page-header {
   display: flex;
   align-items: flex-end;
+  flex-wrap: wrap;
   gap: calc(16px * var(--ui-scale, 1));
   margin-bottom: calc(20px * var(--ui-scale, 1));
+}
+.page-header > div:first-child {
+  min-width: 0;
 }
 .page-header .greeting {
   font-size: calc(13px * var(--ui-scale, 1));
@@ -550,6 +565,7 @@ a.tracker-card:hover {
 .page-header .actions {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: calc(8px * var(--ui-scale, 1));
   align-items: center;
 }
@@ -574,6 +590,20 @@ a.tracker-card:hover {
 }
 .btn:hover {
   background: var(--blue-dark);
+}
+/* Motion spec rule 4: press feedback scales to 0.97 (skipped under
+   reduced motion, which renders the final state). */
+@media (prefers-reduced-motion: no-preference) {
+  .btn,
+  .pill-tab,
+  .filter-chip {
+    transition: transform 0.1s ease-out;
+  }
+  .btn:active,
+  .pill-tab:active,
+  .filter-chip:active {
+    transform: scale(0.97);
+  }
 }
 .btn:focus-visible {
   outline: none;
@@ -613,6 +643,53 @@ a.tracker-card:hover {
   height: 1px;
   opacity: 0;
   overflow: hidden;
+}
+
+/* Phase 4 #4: CSV import preview — stacked rows on phone widths (390px),
+   a grid on desktop. Never a wide table (master plan H10). */
+.import-rows {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.import-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.import-row-head {
+  display: none;
+}
+.import-row-removed {
+  opacity: 0.55;
+}
+.import-cell-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+@media (min-width: 769px) {
+  .import-row {
+    display: grid;
+    grid-template-columns: 48px 2fr 1fr 64px 1fr 2fr 96px;
+    gap: 12px;
+    align-items: start;
+  }
+  .import-row-head {
+    display: grid;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .import-cell-label {
+    display: none;
+  }
 }
 .btn-danger {
   background: var(--card);
@@ -735,7 +812,7 @@ a.tracker-card:hover {
   color: var(--red);
 }
 .chip.dark {
-  background: var(--ink);
+  background: #0a0a0a;
   color: #fff;
 }
 .chip.blue {
@@ -787,8 +864,8 @@ a.tracker-card:hover {
   color: var(--text);
 }
 .filter-chip.active {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--blue);
+  border-color: var(--blue);
   color: #fff;
 }
 .toolbar .right {
@@ -797,30 +874,37 @@ a.tracker-card:hover {
   gap: calc(8px * var(--ui-scale, 1));
   align-items: center;
 }
-/* S-65: every control in a list toolbar is one row, one height (36px),
+/* S-65: every control in a list toolbar is one row, one height,
    one font size (13px) and one border radius. Before this, the search
    box was 36px, filter chips 32px, and the small pill tabs were at least
-   40px tall inside a 46px track, with a 16px bottom margin on the tabs. */
+   40px tall inside a 46px track, with a 16px bottom margin on the tabs.
+   Design pass step 4 (2026-11-18): the unified height rises 36px -> 44px
+   so list controls meet the >=44px touch-target term; the one-row,
+   one-height discipline itself is unchanged. */
 .toolbar .search-pill {
+  height: calc(44px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
 .toolbar .search-pill input {
   font-size: calc(13px * var(--ui-scale, 1));
 }
+.toolbar .btn {
+  height: calc(44px * var(--ui-scale, 1));
+}
 .toolbar .filter-chip {
-  height: calc(36px * var(--ui-scale, 1));
+  height: calc(44px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
 .toolbar .pill-tabs-wrap {
   margin-bottom: 0;
 }
 .toolbar .pill-tabs-track {
-  height: calc(36px * var(--ui-scale, 1));
+  height: calc(44px * var(--ui-scale, 1));
   box-sizing: border-box;
 }
 .toolbar .pill-tabs-track.track-sm .pill-tab {
   min-height: 0;
-  height: calc(30px * var(--ui-scale, 1));
+  height: calc(36px * var(--ui-scale, 1));
   padding: 0 calc(12px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
 }
@@ -946,6 +1030,86 @@ table.list td {
   border-top: 1px solid var(--divider);
   vertical-align: middle;
 }
+/* Document numbers (QT/SO/PO/BL/CR...) never wrap mid-number on desktop;
+   the phone card layouts keep their overflow-wrap rules below. Dates and
+   short status cells get the same protection (final-check F6): the listed
+   data-col keys are the DataTable lists' date/status columns (quotes
+   "valid"/"status", audit log "when"/"who"/"record", any list's "date"),
+   and the hand-rolled billings table tags its number/date cells to match. */
+@media (min-width: 769px) {
+  table.list td[data-col="number"],
+  table.list td[data-col="date"],
+  table.list td[data-col="valid"],
+  table.list td[data-col="status"],
+  table.list td[data-col="when"],
+  table.list td[data-col="who"],
+  table.list td[data-col="method"],
+  table.list td[data-col="action"] {
+    white-space: nowrap;
+  }
+  /* Audit log record (F16): the record TYPE stays on one line, but the
+     record label under it wraps — a long label must not push "What
+     happened" off screen the way the F6 blanket nowrap did. */
+  table.list td[data-col="record"] > div:first-child {
+    white-space: nowrap;
+  }
+}
+table.list td[data-col="record"] > div + div {
+  overflow-wrap: break-word;
+}
+/* Design term 14: list rows reveal with a 30ms stagger. Opacity only —
+   no transform on table rows — and reduced motion renders the final
+   state with no movement. */
+@keyframes list-row-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  table.list tbody tr,
+  .record-list-cards > * {
+    animation: list-row-in 0.18s ease-out both;
+  }
+  table.list tbody tr:nth-child(2),
+  .record-list-cards > *:nth-child(2) {
+    animation-delay: 0.03s;
+  }
+  table.list tbody tr:nth-child(3),
+  .record-list-cards > *:nth-child(3) {
+    animation-delay: 0.06s;
+  }
+  table.list tbody tr:nth-child(4),
+  .record-list-cards > *:nth-child(4) {
+    animation-delay: 0.09s;
+  }
+  table.list tbody tr:nth-child(5),
+  .record-list-cards > *:nth-child(5) {
+    animation-delay: 0.12s;
+  }
+  table.list tbody tr:nth-child(6),
+  .record-list-cards > *:nth-child(6) {
+    animation-delay: 0.15s;
+  }
+  table.list tbody tr:nth-child(7),
+  .record-list-cards > *:nth-child(7) {
+    animation-delay: 0.18s;
+  }
+  table.list tbody tr:nth-child(8),
+  .record-list-cards > *:nth-child(8) {
+    animation-delay: 0.21s;
+  }
+  table.list tbody tr:nth-child(9),
+  .record-list-cards > *:nth-child(9) {
+    animation-delay: 0.24s;
+  }
+  table.list tbody tr:nth-child(10),
+  .record-list-cards > *:nth-child(10) {
+    animation-delay: 0.27s;
+  }
+}
 /* 2307 list ATC on narrow phones — wrap instead of blowing the table. */
 @media (max-width: 480px) {
   table.list td.col-atc {
@@ -1057,9 +1221,9 @@ tr.inactive .cell-primary .sub {
   color: var(--text);
 }
 .tab.active {
-  color: var(--text);
+  color: var(--blue);
   font-weight: 600;
-  border-bottom-color: var(--text);
+  border-bottom-color: var(--blue);
 }
 
 /* ---------- Forms ---------- */
@@ -1101,10 +1265,13 @@ tr.inactive .cell-primary .sub {
 .field select,
 .field textarea {
   width: 100%;
-  height: calc(40px * var(--ui-scale, 1));
+  /* Design pass step 5 (2026-11-18): inputs meet the component spec —
+     42px editor-input height and the 11px control radius (inputs are
+     controls on the soft radius scale, not "small" 8px elements). */
+  height: calc(42px * var(--ui-scale, 1));
   padding: 0 calc(12px * var(--ui-scale, 1));
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--card);
   outline: none;
 }
@@ -1420,8 +1587,8 @@ tr.inactive .cell-primary .sub {
   display: flex;
   flex-direction: column;
   gap: calc(2px * var(--ui-scale, 1));
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--white);
+  border: 1px solid var(--border);
   border-radius: calc(10px * var(--ui-scale, 1));
   padding: calc(8px * var(--ui-scale, 1));
 }
@@ -2453,6 +2620,9 @@ pre.json {
   margin-right: calc(2px * var(--ui-scale, 1));
 }
 .sort-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(36px * var(--ui-scale, 1));
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text-2);
@@ -3630,6 +3800,24 @@ pre.json {
   padding: 0;
   border: none;
 }
+/* Collections is the widest hand-rolled list (9 columns): slightly
+   tighter cells + the stacked Deposit chip keep STATUS on screen at
+   1280px now that its values no longer wrap mid-number (F16). */
+table.list.collections-table th,
+table.list.collections-table td {
+  padding-left: calc(8px * var(--ui-scale, 1));
+  padding-right: calc(8px * var(--ui-scale, 1));
+}
+/* Big-amount headroom (F16): ten columns of peso values at 1280px —
+   tighter cells and wrapping headers keep MARGIN on screen. */
+.items-table table.list th {
+  white-space: normal;
+}
+.items-table table.list th,
+.items-table table.list td {
+  padding-left: calc(8px * var(--ui-scale, 1));
+  padding-right: calc(8px * var(--ui-scale, 1));
+}
 .totals-wrap {
   display: flex;
   justify-content: flex-end;
@@ -3833,6 +4021,11 @@ pre.json {
   gap: calc(6px * var(--ui-scale, 1));
   align-items: center;
   min-height: calc(32px * var(--ui-scale, 1));
+}
+/* SO detail: Purchasing progress is a head-only card (no body rows). Drop the
+   empty-head bottom margin so the card stays calm without changing copy. */
+.so-purchasing-progress .card-head {
+  margin-bottom: 0;
 }
 /* Sales order header chip: wrap inside the column instead of running off the edge. */
 .so-wh {
@@ -4254,11 +4447,11 @@ pre.json {
 .qty-bar span {
   display: block;
   height: 100%;
-  background: var(--amber);
+  background: var(--blue);
   border-radius: calc(999px * var(--ui-scale, 1));
 }
 .qty-bar span.full {
-  background: var(--green);
+  background: var(--blue);
 }
 .attach-list {
   list-style: none;
@@ -4319,6 +4512,15 @@ td.has-error input {
     font-size: 8pt;
     color: #525252;
   }
+}
+/* F25: a named @page only applies when an element selects it with the
+   `page` property — until now nothing did, so the paper-size setting
+   changed only the on-screen sheet width and every print still came
+   out A4. Generic print shells carrying the Letter class (the
+   books/tax print pages set it from the print settings) select the
+   letter page here. */
+.print-shell-letter {
+  page: letter;
 }
 @media print {
   html,
@@ -4506,7 +4708,7 @@ button.contact-card-add {
 .aging-bar-fill:not(.empty) {
   height: 100%;
   border-radius: inherit;
-  background: #4ade80;
+  background: var(--blue);
 }
 /* Home Non-VAT card: accent below warn %; amber/red win once warn thresholds hit. */
 .home-nonvat .aging-bar-fill:not(.empty) {
@@ -4525,6 +4727,46 @@ button.contact-card-add {
 .print-placeholder { color: var(--red); font-weight: 600; }
 .plain-list { list-style: none; padding: 0; margin: 0; }
 .plain-list li { padding: calc(6px * var(--ui-scale, 1)) 0; border-bottom: 1px solid var(--border, #eee); }
+
+/* ---------- Top search results (/search) ---------- */
+.top-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: calc(28px * var(--ui-scale, 1));
+}
+.top-search-group-title {
+  margin: 0 0 calc(8px * var(--ui-scale, 1));
+  font-size: calc(13px * var(--ui-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2, #404040);
+}
+.top-search-hits li:last-child {
+  border-bottom: none;
+}
+.top-search-hit {
+  display: block;
+  color: var(--text, #0a0a0a);
+  text-decoration: none;
+  font-size: calc(14px * var(--ui-scale, 1));
+  line-height: 1.4;
+  padding: calc(4px * var(--ui-scale, 1)) 0;
+}
+.top-search-hit:hover {
+  color: var(--blue);
+}
+.top-search-see-all {
+  display: inline-block;
+  margin-top: calc(8px * var(--ui-scale, 1));
+  font-size: calc(13px * var(--ui-scale, 1));
+  font-weight: 500;
+  color: var(--blue);
+  text-decoration: none;
+}
+.top-search-see-all:hover {
+  text-decoration: underline;
+}
 @media print {
   .statement-doc { font-size: 11pt; }
   .statement-doc table { page-break-inside: auto; }
@@ -4821,6 +5063,42 @@ button.contact-card-add {
   @bottom-left {
     content: none;
   }
+}
+/* F25: the Letter twin of pp-doc — identical margins and margin
+   boxes, Letter size. Selected by .pp-paper-letter below; the
+   identity strip rules for it are emitted per document by
+   printStripCss alongside the pp-doc ones. */
+@page pp-doc-letter {
+  size: letter;
+  margin: 15mm 0.39in 0.63in;
+  @top-left {
+    content: "■ HACIEN";
+    font-size: 7.5pt;
+    letter-spacing: 0.09em;
+    color: #737373;
+  }
+  @bottom-left {
+    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    font-size: 8pt;
+    color: #525252;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 8pt;
+    color: #525252;
+  }
+}
+@page pp-doc-letter:first {
+  margin-top: 0.25in;
+  @top-left {
+    content: none;
+  }
+  @bottom-left {
+    content: none;
+  }
+}
+.pp-page.pp-paper-letter {
+  page: pp-doc-letter;
 }
 .pp-letterhead {
   min-width: 0;
@@ -6214,7 +6492,7 @@ button.contact-card-add {
   font-weight: 600;
 }
 .home-dashboard .card {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--home-card-border);
   border-radius: var(--home-card-radius);
   box-shadow: 0 1px calc(2px * var(--ui-scale, 1)) rgba(15, 23, 42, 0.04);
@@ -6706,7 +6984,7 @@ button.contact-card-add {
   overflow: hidden;
 }
 .home-tax:hover {
-  background: #fff;
+  background: var(--white);
 }
 .home-tax-full {
   display: flex;
@@ -7442,7 +7720,7 @@ button.contact-card-add {
   position: sticky;
   top: 0;
   z-index: 4;
-  background: #fff;
+  background: var(--white);
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: calc(8px * var(--ui-scale, 1));
@@ -7648,7 +7926,7 @@ button.contact-card-add {
   text-align: left;
   background: none;
   border: none;
-  border-radius: calc(6px * var(--ui-scale, 1));
+  border-radius: calc(8px * var(--ui-scale, 1));
   padding: calc(6px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1));
   font: inherit;
   cursor: pointer;
@@ -7684,10 +7962,30 @@ button.contact-card-add {
   right: 0;
   z-index: 30;
   border: 1px solid var(--border);
-  border-radius: calc(8px * var(--ui-scale, 1));
+  /* Design pass step 5 (2026-11-18): dropdown menus take the 14px menu
+     radius from the design kit (was the 8px small radius). */
+  border-radius: calc(14px * var(--ui-scale, 1));
   padding: calc(8px * var(--ui-scale, 1)) calc(10px * var(--ui-scale, 1));
   background: #fff;
   box-shadow: var(--shadow-overlay);
+}
+/* Motion spec: popovers grow from their trigger (scale 0.95, fade,
+   150-250ms, ease-out). Reduced motion renders the final state. */
+@keyframes picker-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .quote-picker {
+    transform-origin: top center;
+    animation: picker-in 0.18s ease-out;
+  }
 }
 .quote-picker-add {
   display: block;
@@ -7760,7 +8058,7 @@ button.contact-card-add {
 }
 .quote-product-dl dt {
   font-weight: 700;
-  color: var(--muted);
+  color: var(--text-2);
 }
 .quote-product-dl dd {
   margin: 0;
@@ -8150,8 +8448,8 @@ button.contact-card-add {
   margin: calc(3px * var(--ui-scale, 1)) 0 0;
   padding: 0;
 }
-.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: calc(12px * var(--ui-scale, 1)); margin-top: calc(12px * var(--ui-scale, 1)); background: var(--bg-muted, #f7f7f5); }
-.wh-internal-panel-label { font-size: 0.8rem; color: var(--muted); margin-bottom: calc(8px * var(--ui-scale, 1)); font-weight: 600; }
+.wh-internal-panel { border: 1px dashed var(--border, #ccc); padding: calc(12px * var(--ui-scale, 1)); margin-top: calc(12px * var(--ui-scale, 1)); background: var(--fill); }
+.wh-internal-panel-label { font-size: 0.8rem; color: var(--text-2); margin-bottom: calc(8px * var(--ui-scale, 1)); font-weight: 600; }
 
 /* Phone scale (REQ-STAFF-PHONE-SCALE-001).
    --ui-scale is 1 above 640px, so desktop and tablet keep today's pixels.
@@ -8639,10 +8937,18 @@ button.contact-card-add {
   font-size: 12px;
   cursor: pointer;
 }
-.create-pos .confirm-zero input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--blue);
+/* Design pass step 6 (2026-11-18): every checkbox on this screen takes
+   the app's standard checkbox (18px, blue accent — the .check size).
+   The row selectors previously had no rule at all (browser-default box,
+   no accent colour) and the confirm boxes were a fixed 16px. Scoped to
+   >=641px so the phone block's 32px checkbox hold keeps winning there. */
+@media (min-width: 641px) {
+  .create-pos input[type="checkbox"] {
+    width: calc(18px * var(--ui-scale, 1));
+    height: calc(18px * var(--ui-scale, 1));
+    accent-color: var(--blue);
+    flex: 0 0 auto;
+  }
 }
 .create-pos .already-on {
   font-size: 12px;
@@ -8881,6 +9187,7 @@ button.contact-card-add {
     --grey-600: #99a3b8;
     --grey-700: #c3cbdb;
     --blue-tint: #1d3a7a;
+    --blue-dark: #9db9f5;
     --success: #7fb69a;
     --success-bg: #1e2f28;
     --warning: #d9b36c;
@@ -8888,27 +9195,212 @@ button.contact-card-add {
     --danger: #de8f8f;
     --danger-bg: #3a2323;
     --bg: #0b0e14;
-    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(4px * var(--ui-scale, 1)) var(--blue);
+    --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
   }
 }
 
-/* PO editor "Add from sales order" picker (Part B). Appended at the very end
-   on purpose: #185/#186 append their own blocks here too — keep this block
-   after merging either of them. */
+/* ---------------------------------------------------------------------------
+   F16 visual batch 2 (final check, Mac Block 1): dark-mode surfaces that
+   stayed light, phone-width settings, the audit table's min width, the
+   sidebar logo in dark mode, and the phone print preview's money columns.
+   --------------------------------------------------------------------------- */
+/* The logo SVGs are black + HACIEN blue; in dark mode swap to the light
+   variants (same blue, light wordmark). Screen only — paper keeps the
+   original black logo. */
+@media screen and (prefers-color-scheme: dark) {
+  .brand-logo-wordmark {
+    content: url("/brand/logo-wordmark-dark.svg");
+  }
+  .brand-logo-full {
+    content: url("/brand/logo-full-dark.svg");
+  }
+}
+/* Phone content band is white in light mode; in dark mode it follows the
+   theme like every other surface. */
+@media screen and (max-width: 640px) and (prefers-color-scheme: dark) {
+  .content,
+  .content:has(.home-dashboard),
+  .content:has(.home-getting-started) {
+    background: var(--bg);
+  }
+}
+/* Settings on narrow screens: the single column must be allowed to shrink
+   below its widest child's min-content, or one wide table stretches the
+   whole page (nav included) past the screen. The tax calendar table then
+   scrolls inside its own wrap instead of pushing the page. */
+@media (max-width: 768px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-page {
+    min-width: 0;
+  }
+  .tax-cal-settings-wrap {
+    overflow-x: auto;
+  }
+  .tax-cal-settings-table {
+    min-width: calc(480px * var(--ui-scale, 1));
+  }
+}
+/* Audit log: every column can wrap except the short when/who cells, so the
+   table needs no 640px floor — it fits the settings column at any width. */
+.table-wrap.audit-log-table table.list {
+  min-width: 0;
+}
+/* Phone print preview: the wide sheet's 18px "air" padding and 4.6rem
+   money columns squeeze ₱ amounts until they overlap the next column.
+   On a phone the money columns get real width and normal padding; the
+   printed sheet (media print) is untouched. */
+@media (max-width: 640px) {
+  .pp-items td.num,
+  .pp-items th.num {
+    padding-left: calc(3px * var(--ui-scale, 1));
+  }
+  .pp-items .num {
+    width: 8rem;
+    font-size: 6.8pt;
+  }
+  .pp-items td.num:last-child,
+  .pp-items th.num:last-child,
+  .pp-items tfoot th.num {
+    width: 8rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   UNSLOP: PO editor (REQ-HACIEN-BACKLOG-001 item 6). Visual only.
+   Scoped under .po-editor so quote / SO DocumentEditor is untouched.
+   Soft radius tokens from #196; light default; charcoal Variant A only via
+   the existing prefers-color-scheme: dark token flip (no new tokens).
+   --------------------------------------------------------------------------- */
+.po-editor {
+  padding-bottom: calc(24px * var(--ui-scale, 1));
+}
+/* Shared .edit-topbar hardcodes #fff (breaks dark). Override only here —
+   var(--white) is #fff in light and charcoal panel in Variant A dark. */
+.po-editor .edit-topbar {
+  background: var(--white);
+  border-bottom-color: var(--border);
+}
+.po-editor .po-supplier-name {
+  padding: calc(8px * var(--ui-scale, 1)) 0;
+}
+.po-editor .po-picker-lead {
+  margin-bottom: calc(8px * var(--ui-scale, 1));
+}
+.po-editor .po-add-line-wrap {
+  margin-top: calc(10px * var(--ui-scale, 1));
+}
+/* Auto-grow header fields: no resize handle clutter; soft control radius. */
+.po-editor textarea.po-grow {
+  resize: none;
+  overflow: hidden;
+  min-height: calc(40px * var(--ui-scale, 1));
+  border-radius: var(--radius-sm);
+}
+.po-editor .card {
+  border-radius: var(--radius-card);
+}
+.po-editor .card + .card {
+  margin-top: calc(16px * var(--ui-scale, 1));
+}
+.po-editor .totals-box {
+  border-radius: var(--radius);
+}
+.po-editor .edit-table.items-edit input,
+.po-editor .edit-table.items-edit select,
+.po-editor .edit-table.items-edit textarea {
+  border-radius: var(--radius-sm);
+}
+
+/* Phone: stack PO lines like the SO editor (thead labels via data-label). */
+@media (max-width: 640px) {
+  .po-editor .edit-table.po-items-edit {
+    overflow-x: visible;
+  }
+  .po-editor .edit-table.po-items-edit table.list,
+  .po-editor .edit-table.po-items-edit tbody,
+  .po-editor .edit-table.po-items-edit tr,
+  .po-editor .edit-table.po-items-edit td {
+    display: block;
+    width: auto;
+  }
+  .po-editor .edit-table.po-items-edit thead {
+    display: none;
+  }
+  .po-editor .edit-table.po-items-edit table.list td:first-child {
+    position: static;
+    left: auto;
+    min-width: 0;
+    z-index: auto;
+  }
+  .po-editor .edit-table.po-items-edit tbody tr {
+    border-top: 1px solid var(--border);
+    padding: calc(10px * var(--ui-scale, 1)) 0 calc(4px * var(--ui-scale, 1));
+  }
+  .po-editor .edit-table.po-items-edit td {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: calc(4px * var(--ui-scale, 1)) calc(10px * var(--ui-scale, 1));
+    align-items: start;
+    min-width: 0;
+    padding: calc(4px * var(--ui-scale, 1)) 0;
+  }
+  /* Keep every real child in the control column so linked-line notes
+     ("From the sales order", Changed vs SO, over-order) sit under the
+     textarea instead of filling the label column via auto-placement. */
+  .po-editor .edit-table.po-items-edit td > * {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .po-editor .edit-table.po-items-edit td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    font-size: calc(12px * var(--ui-scale, 1));
+    font-weight: 600;
+    color: var(--text-2);
+    padding-top: calc(8px * var(--ui-scale, 1));
+  }
+  .po-editor .edit-table.po-items-edit td.line-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: calc(8px * var(--ui-scale, 1));
+  }
+  .po-editor .edit-table.po-items-edit td.line-actions::before {
+    content: none;
+  }
+  .po-editor .edit-table.po-items-edit textarea,
+  .po-editor .edit-table.po-items-edit input,
+  .po-editor .edit-table.po-items-edit select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .po-editor .card-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .po-editor .card-head .right {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* PO editor "Add from sales order" picker (Part B). PO-only; soft tokens. */
 .so-picker {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-bottom: 14px;
+  border-radius: var(--radius-card);
+  padding: calc(14px * var(--ui-scale, 1));
+  margin-bottom: calc(16px * var(--ui-scale, 1));
   background: var(--grey-50);
 }
 .so-picker-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: calc(8px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
   align-items: flex-start;
   justify-content: space-between;
-  padding: 9px 0;
+  padding: calc(10px * var(--ui-scale, 1)) 0;
   border-top: 1px solid var(--border);
 }
 .so-picker-row:first-of-type {
@@ -8918,16 +9410,19 @@ button.contact-card-add {
   opacity: 0.55;
 }
 .so-picker-main {
-  flex: 1 1 320px;
+  flex: 1 1 calc(320px * var(--ui-scale, 1));
   min-width: 0;
 }
 .so-picker-controls {
   display: flex;
-  gap: 10px;
+  gap: calc(10px * var(--ui-scale, 1));
   align-items: flex-end;
 }
 .so-picker-controls label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: calc(4px * var(--ui-scale, 1));
+}
+.so-picker-controls input {
+  border-radius: var(--radius-sm);
 }

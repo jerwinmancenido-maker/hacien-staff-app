@@ -21,6 +21,7 @@ import { createAttachments, discardUploads, prepareUploads, type UploadFile } fr
 import { recomputeBillingStatus } from "./billings";
 import { notifyPaymentReceived } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
+import { assertPeriodOpen } from "./period-close";
 
 export type CollectionActor = PermissionUser & { id: string };
 
@@ -388,6 +389,7 @@ export async function recordCollection(
           tx,
           allocInputs.map((a) => a.billingId),
         );
+        await assertPeriodOpen(tx, input.date);
         const open = await billingsForAlloc(tx, customer.id);
         const issue = validateAllocations(input.amountReceived, allocInputs, open);
         if (issue) throw new DocRuleError(issue.message, issue.field);
@@ -578,6 +580,12 @@ export async function applyCustomerCredit(input: ApplyCreditInput, actor: Collec
         where: { id: { in: collectionIds }, customerId: input.customerId, status: "POSTED" },
       });
       if (collections.length !== collectionIds.length) throw new DocRuleError("One of the collections isn't posted for this customer.");
+      for (const c of collections) await assertPeriodOpen(tx, c.date);
+      const targetBillings = await tx.billing.findMany({
+        where: { id: { in: billingIds } },
+        select: { invoiceDate: true },
+      });
+      for (const b of targetBillings) await assertPeriodOpen(tx, b.invoiceDate);
 
       const creditLeft = new Map<string, bigint>();
       for (const c of collections) {
@@ -684,6 +692,7 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
         tx,
         before.allocations.map((a) => a.billingId),
       );
+      await assertPeriodOpen(tx, before.date);
 
       // Received 2307s block void — staff must keep the tax certificate trail.
       const received = before.withholdings.filter((w) => w.status === "RECEIVED");
@@ -873,6 +882,7 @@ export async function applyCreditSimple(customerId: string, billingId: string, a
         throw new DocRuleError("That billing isn't open for this customer. Refresh the page and try again.", "billingId");
       }
       if (billing.status === "VOID") throw new DocRuleError("That billing is void.", "billingId");
+      await assertPeriodOpen(tx, billing.invoiceDate);
       const cashApplied =
         billing.allocations.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n) +
         billing.creditApplications.reduce((a, x) => a + toScaled(money(String(x.cashApplied)), 2), 0n);
@@ -938,6 +948,12 @@ export async function applyCreditSimple(customerId: string, billingId: string, a
       }
       if (planned.length === 0) {
         throw new DocRuleError("No unapplied credit to apply. Record a collection first.", "amount");
+      }
+      for (const row of planned) {
+        if (row.kind === "collection") {
+          const src = collections.find((c) => c.id === row.sourceId);
+          if (src) await assertPeriodOpen(tx, src.date);
+        }
       }
       for (const row of planned) {
         if (row.kind === "collection") {

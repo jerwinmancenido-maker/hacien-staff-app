@@ -11,11 +11,12 @@ import { saveSettings } from "@/lib/settings";
 import { settingsValueFromForm } from "@/lib/settings/form";
 import { isSettingsKey } from "@/lib/settings/schema";
 import { saveWithholdingRates } from "@/lib/services/withholding";
+import { saveBusiness, setBusinessActive } from "@/lib/services/businesses";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
 import { createApiKey, revokeApiKey } from "@/lib/api/keys-admin";
 import { ApiError } from "@/lib/api/errors";
 import { bool, formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
-import { saveUserSignature, SignatureError } from "@/lib/services/user-signature";
+import { clearUserSignature, saveUserSignature, SignatureError } from "@/lib/services/user-signature";
 
 export async function saveSettingsAction(key: string, _prev: FormState, form: FormData): Promise<FormState> {
   const values = formValues(form);
@@ -48,6 +49,9 @@ export async function savePrintCompanyAction(_prev: FormState, form: FormData): 
     };
 
     let logoStorageKey = get("logoStorageKey") ?? "";
+    // F12: an explicit remove clears the saved logo; a new upload in the
+    // same save still wins (the upload block below runs after this).
+    if (get("removeLogo") === "1") logoStorageKey = "";
     const logo = form.get("logo");
     if (logo && typeof logo !== "string" && "arrayBuffer" in logo && logo.size > 0) {
       const { sniffLogoMime } = await import("@/lib/print/logo-sniff");
@@ -156,6 +160,9 @@ export async function updateUserAction(id: string, _prev: FormState, form: FormD
     const parsed = userInput(form);
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
     await updateUser(id, parsed.data, actor.id);
+    // F12: an explicit remove clears the saved signature; a new upload in
+    // the same save still wins (maybeSaveSignature runs after this).
+    if (str(form, "removeSignature") === "1") await clearUserSignature(id, actor.id);
     const sigErr = await maybeSaveSignature(id, form, actor.id);
     if (sigErr) return { values, fieldErrors: { signature: sigErr } };
     revalidatePath("/settings");
@@ -250,4 +257,32 @@ export async function revokeApiKeyAction(id: string): Promise<FormState> {
     revalidatePath("/settings");
     return { ok: true, message: "API key revoked. It stops working immediately." };
   });
+}
+
+/** Businesses catalogue (Reconciliation Plan 2026-11-19): add / rename. */
+export async function saveBusinessAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    const id = str(form, "id");
+    const row = await saveBusiness(
+      { id: id || undefined, name: str(form, "name"), shortLabel: str(form, "shortLabel") },
+      user,
+    );
+    revalidatePath("/settings", "page");
+    return { ok: true, message: id ? `Saved ${row.name}.` : `Added ${row.name}. It can now be picked on new quotes.` };
+  }, values);
+}
+
+/** Businesses catalogue: switch off / on (never a delete). */
+export async function setBusinessActiveAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formValues(form);
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    const id = str(form, "id");
+    const active = bool(form, "active");
+    await setBusinessActive(id, active, user);
+    revalidatePath("/settings", "page");
+    return { ok: true, message: active ? "Switched on." : "Switched off. Existing records keep the label." };
+  }, values);
 }

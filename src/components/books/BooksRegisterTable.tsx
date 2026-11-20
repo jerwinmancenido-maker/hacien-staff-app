@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDate, formatPeso } from "@/lib/format";
 import type { RegisterConfig } from "@/lib/books/config";
 import {
-  COLLECTED_TOTAL_LABEL,
+  CASH_COLLECTED_TOTAL_LABEL,
   INVOICED_TOTAL_LABEL,
   SOURCE_LABELS,
   type BookRegister,
@@ -105,13 +105,17 @@ export function BooksRegisterTable({
                   const value = cell(r, c.key);
                   if (c.key === "documentNumber") {
                     return (
-                      <td key={c.key}>
+                      <td key={c.key} data-col="number">
                         {r.href ? <Link href={r.href}>{r.documentNumber}</Link> : r.documentNumber}
                       </td>
                     );
                   }
                   return (
-                    <td key={c.key} className={c.align === "right" ? "num" : undefined}>
+                    <td
+                      key={c.key}
+                      className={c.align === "right" ? "num" : undefined}
+                      data-col={c.key === "date" ? "date" : undefined}
+                    >
                       {value}
                     </td>
                   );
@@ -130,7 +134,7 @@ export function BooksRegisterTable({
                 />
                 <TotalRow
                   config={config}
-                  label={COLLECTED_TOTAL_LABEL}
+                  label={CASH_COLLECTED_TOTAL_LABEL}
                   amount={sales.collectedAmount}
                   ewt={sales.collectedEwt}
                 />

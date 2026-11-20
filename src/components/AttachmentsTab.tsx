@@ -6,7 +6,7 @@ export function AttachmentsTab({ sections }: { sections: { label: string; files:
   return (
     <div className="details-stack">
       {total === 0 ? (
-        <p className="faint">No attachments on this record yet. Attachments are added on the receiving, billing and collection forms.</p>
+        <p className="faint">No attachments on this record yet. Attachments are added on the sales order, purchase order, receiving, billing and collection forms.</p>
       ) : (
         sections
           .filter((s) => s.files.length > 0)

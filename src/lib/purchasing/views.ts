@@ -14,6 +14,7 @@ import { db } from "../db";
 import { canApprove, canSeeCosts, ForbiddenError, stripCosts, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot, getSettingsVersion } from "../settings";
 import { money, ymd } from "../documents/common";
+import { manilaToday } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { threeWayMatch } from "./match";
 import { remainingQty } from "./receipt";
@@ -30,15 +31,18 @@ import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import { receivingCoverageNote } from "../billing/coverage";
 import { buildSoPickerRows, remainingQtyForExistingPoLine, type SoPickerRow } from "./picker";
+import { attachmentKindLabel } from "../attachment-kinds";
 import {
   billExceedsPo,
   buildCostMarginSummary,
   lineHasUnorderedQty,
   lineNeedsMorePo,
+  sumLinkedExpenses,
   sumMoney,
   valueReceived,
   type CostMarginSummary,
 } from "./cost-margin";
+import { warrantySoonWindow } from "./warranty-soon";
 
 type Viewer = PermissionUser & { id: string; isAdmin: boolean };
 
@@ -59,6 +63,8 @@ export type PoListFilter = {
   open?: boolean;
   /** Non-void supplier bill totals higher than the PO subtotal. */
   billedOver?: boolean;
+  /** Business filter: "own" = the app's own company only; otherwise a Business id. */
+  businessId?: string;
 };
 
 export async function listPurchaseOrdersView(filter: PoListFilter, viewer: PermissionUser) {
@@ -73,10 +79,16 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.open ? { status: { in: ["APPROVED", "SENT", "PARTIALLY_RECEIVED"] } } : {}),
       ...(billedOver ? { status: { not: "VOID" }, bills: { some: { status: { not: "VOID" } } } } : {}),
+      ...(filter.businessId === "own"
+        ? { businessId: null }
+        : filter.businessId
+          ? { businessId: filter.businessId }
+          : {}),
       ...(q ? { OR: [{ number: { contains: q } }, { supplier: { name: { contains: q } } }, { salesOrder: { number: { contains: q } } }] } : {}),
     },
     include: {
       supplier: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
       salesOrder: { select: { id: true, number: true } },
       ...(billedOver ? { bills: { where: { status: { not: "VOID" } }, select: { amount: true } } } : {}),
     },
@@ -95,6 +107,8 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
   return filtered.map((r) => ({
     id: r.id,
     number: r.number,
+    businessName: r.business?.name ?? null,
+    businessShortLabel: r.business?.shortLabel ?? null,
     revision: r.revision,
     status: r.status,
     supplierName: r.supplier.name,
@@ -114,12 +128,34 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     where: { id },
     include: {
       supplier: { select: { id: true, name: true, tin: true, active: true } },
+      business: { select: { id: true, name: true, shortLabel: true } },
       supplierContact: { select: { id: true, name: true, email: true, phone: true } },
       salesOrder: { select: { id: true, number: true, customer: { select: { id: true, name: true } } } },
-      items: { where: { removedAt: null }, orderBy: { sortOrder: "asc" }, include: { salesOrderItem: { select: { id: true, qty: true } } } },
+      items: {
+        where: { removedAt: null },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          salesOrderItem: { select: { id: true, qty: true } },
+          salesOrderItemComponent: { select: { id: true, qty: true } },
+        },
+      },
       approvedBy: userName,
       createdBy: userName,
       updatedBy: userName,
+      // REQ-ATTACH-001: the PO's OWN files (supplier quotes). Cost data —
+      // stripped with the bills below for viewers who can't see costs.
+      attachments: {
+        where: { archivedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          fileName: true,
+          sizeBytes: true,
+          kind: true,
+          createdAt: true,
+          uploadedBy: { select: { name: true } },
+        },
+      },
       receivingReports: {
         orderBy: [{ receivedDate: "desc" }, { createdAt: "desc" }],
         include: { receivedBy: userName, items: true, attachments: attachmentSelect },
@@ -145,17 +181,31 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
   const siblings = soLineIds.length
     ? await db.purchaseOrderItem.findMany({
         where: { salesOrderItemId: { in: soLineIds }, removedAt: null, purchaseOrder: { status: { not: "VOID" } } },
-        select: { salesOrderItemId: true, qty: true },
+        select: { salesOrderItemId: true, salesOrderItemComponentId: true, qty: true },
       })
     : [];
 
   const items = po.items.map((i) => {
     const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : null;
+    // F17: a lot-component line orders component qty × lot qty (e.g. 4
+    // per bundle × 1 bundle = 4), so comparing it to the SO line's qty
+    // (1 lot) warned falsely. Component lines compare against the
+    // component's expected total and only sum siblings of the SAME
+    // component.
+    const componentQty = i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
+    const expectedQty =
+      soQty && componentQty ? fromScaled((toScaled(componentQty, 2) * toScaled(soQty, 2)) / 100n, 2) : soQty;
     const warning =
-      soQty && po.status !== "VOID"
+      expectedQty && po.status !== "VOID"
         ? qtyMismatch(
-            soQty,
-            siblings.filter((s) => s.salesOrderItemId === i.salesOrderItemId).map((s) => money(s.qty)),
+            expectedQty,
+            siblings
+              .filter(
+                (s) =>
+                  s.salesOrderItemId === i.salesOrderItemId &&
+                  (s.salesOrderItemComponentId ?? null) === (i.salesOrderItemComponentId ?? null),
+              )
+              .map((s) => money(s.qty)),
           )
         : null;
     return {
@@ -209,6 +259,10 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     // Audit F: the page hides money UI when this is false.
     canSeeCosts: withCosts,
     supplier: po.supplier,
+    businessId: po.businessId,
+    business: po.business,
+    gapReasonCode: po.gapReasonCode,
+    gapNote: po.gapNote,
     supplierContact: po.supplierContact,
     salesOrder: po.salesOrder,
     approvedBy: po.approvedBy?.name ?? null,
@@ -252,6 +306,15 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
         withholdingApplied: money(a.withholdingApplied),
       })),
     })),
+    attachments: po.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      sizeBytes: a.sizeBytes,
+      kind: a.kind,
+      kindLabel: attachmentKindLabel(a.kind),
+      uploadedBy: a.uploadedBy.name,
+      createdAt: a.createdAt,
+    })),
     match,
     postedReceipts: po.receivingReports.filter((r) => r.status === "POSTED").length,
     approval: {
@@ -269,6 +332,7 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
     subtotal: null,
     items: view.items.map((i) => ({ ...i, unitCost: null, total: null })),
     bills: [],
+    attachments: [],
     match: null,
   };
 }
@@ -368,6 +432,8 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     id: po.id,
     number: po.number,
     status: po.status,
+    businessId: po.businessId ?? "",
+    salesOrderId: po.salesOrderId,
     supplierId: po.supplierId,
     supplierContactId: po.supplierContactId ?? "",
     date: ymd(po.date)!,
@@ -376,6 +442,8 @@ export async function getPurchaseOrderEditData(id: string, viewer: PermissionUse
     deliveryAddressText: po.deliveryAddressText ?? "",
     supplierAddressText: po.supplierAddressText ?? "",
     notes: po.notes ?? "",
+    /** ISO token for the PO editor's stale-edit guard. */
+    updatedAt: po.updatedAt.toISOString(),
     items: po.items.map((i) => {
       const soQty = i.salesOrderItem ? money(i.salesOrderItem.qty) : i.salesOrderItemComponent ? money(i.salesOrderItemComponent.qty) : null;
       const bucket =
@@ -702,12 +770,27 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
     };
   });
 
+  // Phase 4 #7 (L2): POSTED expenses linked to this SO directly or via
+  // one of its POs — ONE query over the two indexed FKs; a row matching
+  // both links is returned once by the OR, and sumLinkedExpenses dedupes
+  // by id at the seam regardless. VOID expenses never count (L4).
+  const poIds = pos.map((p) => p.id);
+  const linkedRows = await db.expense.findMany({
+    where: {
+      status: "POSTED",
+      OR: [{ salesOrderId }, ...(poIds.length > 0 ? [{ purchaseOrderId: { in: poIds } }] : [])],
+    },
+    select: { id: true, amount: true },
+  });
+  const linkedExpenses = sumLinkedExpenses(linkedRows.map((r) => ({ id: r.id, amount: money(r.amount) })));
+
   return buildCostMarginSummary({
     contractPrice: money(so.contractPrice),
     plannedCost: money(so.supplierCost),
     withholdingTotal: money(so.withholdingTotal),
     pos: poInputs,
     uncoveredLineCount,
+    linkedExpenses,
   });
 }
 
@@ -802,7 +885,19 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
           notes: true,
           voidReason: true,
           receivedBy: { select: { name: true } },
-          items: { select: { purchaseOrderItemId: true, qtyReceived: true, warrantyEndDate: true, serialNumbers: true } },
+          items: {
+            select: {
+              id: true,
+              purchaseOrderItemId: true,
+              qtyReceived: true,
+              warrantyEndDate: true,
+              serialNumbers: true,
+              warrantyClaims: {
+                orderBy: { createdAt: "asc" },
+                select: { id: true, serialNumber: true, fault: true, supplierRef: true, status: true, createdAt: true, createdBy: { select: { name: true } } },
+              },
+            },
+          },
           attachments: attachmentSelect,
         },
       },
@@ -841,9 +936,30 @@ export async function getReceivingView(purchaseOrderId: string, viewer: Permissi
       deliveryRef: r.deliveryRef,
       notes: r.notes,
       voidReason: r.voidReason,
-      items: r.items.map((x) => ({ description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
+      items: r.items.map((x) => ({ id: x.id, description: desc.get(x.purchaseOrderItemId) ?? "(removed line)", qty: money(x.qtyReceived), warrantyEndDate: ymd(x.warrantyEndDate), serialNumbers: x.serialNumbers })),
       attachments: r.attachments,
     })),
+    // Phase 3 #8b: this PO's warranty claims, flattened from its receiving
+    // lines (grouped by receiving report, newest report first). The page
+    // only shows them when the feature flag is on; no costs in the payload.
+    warrantyClaims: po.receivingReports.flatMap((r) =>
+      r.items.flatMap((x) =>
+        x.warrantyClaims.map((c) => ({
+          id: c.id,
+          receivingReportItemId: x.id,
+          receivingReportNumber: r.number,
+          receivingReportStatus: r.status,
+          itemDescription: desc.get(x.purchaseOrderItemId) ?? "(removed line)",
+          serialNumber: c.serialNumber,
+          lineSerialNumbers: x.serialNumbers,
+          fault: c.fault,
+          supplierRef: c.supplierRef,
+          status: c.status,
+          createdAt: ymd(manilaToday(c.createdAt))!, // F32: Manila calendar day, not UTC
+          createdBy: c.createdBy.name,
+        })),
+      ),
+    ),
   };
   return stripCosts(view, viewer);
 }
@@ -914,6 +1030,158 @@ export async function purchasingStats(where: Prisma.PurchaseOrderWhereInput = {}
     db.purchaseOrder.count({ where: { ...where, status: { in: RECEIVABLE } } }),
   ]);
   return { openPos: open._count, openPosTotal: money(open._sum.subtotal ?? "0"), awaitingReceipt: awaiting };
+}
+
+// ---------------------------------------------------------------------------
+// SL-05: warranties ending soon (POSTED RR lines only; no prices)
+// ---------------------------------------------------------------------------
+
+export type WarrantySoonRow = {
+  id: string;
+  warrantyEndDate: string;
+  itemDescription: string;
+  serialNumbers: string | null;
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  supplierName: string;
+  salesOrderNumber: string | null;
+};
+
+const warrantySoonWhere = (now?: Date): Prisma.ReceivingReportItemWhereInput => {
+  const { from, to } = warrantySoonWindow(manilaToday(now));
+  return {
+    warrantyEndDate: { gte: from, lte: to },
+    receivingReport: { status: "POSTED" },
+    purchaseOrderItem: { removedAt: null },
+  };
+};
+
+/** Receiving lines whose supplier warranty ends in the next 30 Manila days, soonest first. */
+export async function listWarrantiesEndingSoon(opts: { take?: number; now?: Date; q?: string } = {}): Promise<WarrantySoonRow[]> {
+  const q = opts.q?.trim();
+  const rows = await db.receivingReportItem.findMany({
+    where: {
+      ...warrantySoonWhere(opts.now),
+      // The receiving page's warranty-soon toolbar promises search by PO
+      // number, supplier, or serial (same contains pattern as
+      // listReceivingView); the bell count stays unfiltered (no q passed).
+      ...(q
+        ? {
+            OR: [
+              { serialNumbers: { contains: q } },
+              { purchaseOrderItem: { description: { contains: q } } },
+              { receivingReport: { purchaseOrder: { number: { contains: q } } } },
+              { receivingReport: { purchaseOrder: { supplier: { name: { contains: q } } } } },
+              { receivingReport: { purchaseOrder: { salesOrder: { number: { contains: q } } } } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      warrantyEndDate: true,
+      serialNumbers: true,
+      purchaseOrderItem: { select: { description: true } },
+      receivingReport: {
+        select: {
+          purchaseOrder: {
+            select: {
+              id: true,
+              number: true,
+              supplier: { select: { name: true } },
+              salesOrder: { select: { number: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ warrantyEndDate: "asc" }, { id: "asc" }],
+    take: opts.take ?? 500,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    warrantyEndDate: ymd(r.warrantyEndDate)!,
+    itemDescription: r.purchaseOrderItem.description,
+    serialNumbers: r.serialNumbers,
+    purchaseOrderId: r.receivingReport.purchaseOrder.id,
+    purchaseOrderNumber: r.receivingReport.purchaseOrder.number,
+    supplierName: r.receivingReport.purchaseOrder.supplier.name,
+    salesOrderNumber: r.receivingReport.purchaseOrder.salesOrder?.number ?? null,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 #8b: warranty claims list (all POs; no prices)
+// ---------------------------------------------------------------------------
+
+export type WarrantyClaimRow = {
+  id: string;
+  status: string;
+  fault: string;
+  serialNumber: string | null;
+  supplierRef: string | null;
+  createdAt: string;
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  supplierName: string;
+  itemDescription: string;
+  receivingReportNumber: string;
+};
+
+/** Every warranty claim, newest first, with its supplier / PO context. */
+export async function listWarrantyClaims(opts: { q?: string } = {}): Promise<WarrantyClaimRow[]> {
+  const q = opts.q?.trim();
+  const rows = await db.warrantyClaim.findMany({
+    where: q
+      ? {
+          OR: [
+            { fault: { contains: q } },
+            { serialNumber: { contains: q } },
+            { receivingReportItem: { receivingReport: { purchaseOrder: { number: { contains: q } } } } },
+            { receivingReportItem: { receivingReport: { purchaseOrder: { supplier: { name: { contains: q } } } } } },
+            { receivingReportItem: { purchaseOrderItem: { description: { contains: q } } } },
+          ],
+        }
+      : {},
+    select: {
+      id: true,
+      status: true,
+      fault: true,
+      serialNumber: true,
+      supplierRef: true,
+      createdAt: true,
+      receivingReportItem: {
+        select: {
+          purchaseOrderItem: { select: { description: true } },
+          receivingReport: {
+            select: {
+              number: true,
+              purchaseOrder: { select: { id: true, number: true, supplier: { select: { name: true } } } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 500,
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    status: c.status,
+    fault: c.fault,
+    serialNumber: c.serialNumber,
+    supplierRef: c.supplierRef,
+    createdAt: ymd(manilaToday(c.createdAt))!, // F32: Manila calendar day, not UTC
+    purchaseOrderId: c.receivingReportItem.receivingReport.purchaseOrder.id,
+    purchaseOrderNumber: c.receivingReportItem.receivingReport.purchaseOrder.number,
+    supplierName: c.receivingReportItem.receivingReport.purchaseOrder.supplier.name,
+    itemDescription: c.receivingReportItem.purchaseOrderItem.description,
+    receivingReportNumber: c.receivingReportItem.receivingReport.number,
+  }));
+}
+
+export async function countWarrantiesEndingSoon(now?: Date): Promise<number> {
+  return db.receivingReportItem.count({ where: warrantySoonWhere(now) });
 }
 
 export { PO_STATUSES };

@@ -71,6 +71,8 @@ export function CustomerForm({
     return initialPick;
   });
   const e = state.fieldErrors ?? {};
+  // Duplicate-name soft warning: dismissed per warning text; a fresh warning re-shows.
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
   // Blank stays blank. Do not invent the first list item for a customer who has no terms yet.
   const [defaultTerms, setDefaultTerms] = useState(state.values?.defaultTerms ?? customer?.defaultTerms ?? "");
@@ -129,9 +131,24 @@ export function CustomerForm({
 
   return (
     <form onSubmit={onSubmit} noValidate id="customer-form">
+      {customer?.updatedAt && <input type="hidden" name="updatedAt" value={new Date(customer.updatedAt).toISOString()} />}
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input type="hidden" name="confirmDuplicateName" value="1" />
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={pending}>
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>

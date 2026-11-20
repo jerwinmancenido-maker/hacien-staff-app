@@ -1,12 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDateTime } from "@/lib/format";
-import { canSeeCosts } from "@/lib/permissions";
+import { can, canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../../editor-data";
+import { listBusinesses } from "@/lib/services/businesses";
 import { confirmNoneAndMarkQuoteSentAction, createQuoteAddressAction, markQuoteSentAction, saveQuoteAction } from "../../actions";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,12 +18,13 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
   if (quote.status !== "DRAFT" && quote.status !== "SENT") redirect(`/quotes/${id}`);
   const { settings } = await getSettingsSnapshot();
   const withCosts = canSeeCosts(user);
-  const [active, inactiveCurrent, rates, suppliers, staffUsers] = await Promise.all([
+  const [active, inactiveCurrent, rates, suppliers, staffUsers, businesses] = await Promise.all([
     editorCustomers(),
     editorCustomers({ id: quote.customer.id }),
     editorRates(quote.withholding),
     editorSuppliers(user),
     editorStaffUsers(quote.preparedById),
+    listBusinesses({ activeOnly: true }),
   ]);
   const customers = active.some((c) => c.id === quote.customer.id) ? active : [...inactiveCurrent, ...active];
 
@@ -36,6 +38,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         revision={quote.revision}
         status={quote.status}
         approvalStatus={quote.approvalStatus}
+        canApprove={can(user, "approve")}
+        approvalLimits={{ marginBelowPct: settings.approval.marginBelowPct, totalAbove: settings.approval.totalAbove }}
         customers={customers}
         rates={rates}
         suppliers={suppliers}
@@ -48,6 +52,10 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
         staffUsers={staffUsers}
+        businesses={businesses}
+        ownCompanyName={settings.company.name}
+        canTagBusiness={can(user, "approve")}
+        initialBusinessId={quote.businessId}
         preparedById={quote.preparedById}
         deliveryAddressId={quote.deliveryAddressId}
         addAddressAction={createQuoteAddressAction}
@@ -60,6 +68,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         initial={{
           customerId: quote.customer.id,
           contactId: quote.contact?.id ?? "",
+          updatedAt: quote.updatedAt.toISOString(),
           date: quote.date,
           validUntil: quote.validUntil,
           validForDays: quote.validityDays,

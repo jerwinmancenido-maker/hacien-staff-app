@@ -271,6 +271,10 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
       admin,
     );
 
+    const soFresh = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      select: { updatedAt: true },
+    });
     await expect(
       updateSalesOrder(
         so.id,
@@ -280,6 +284,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
           terms: so.terms,
           notes: so.notes,
           deliveryAddress: so.deliveryAddress,
+          updatedAt: soFresh.updatedAt.toISOString(),
           items: [
             {
               id: item.id,
@@ -300,8 +305,11 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
     const delivery = await db.delivery.findFirstOrThrow({
       where: { salesOrderId: so.id, voidedAt: null },
     });
-    await voidSalesOrder(so.id, "Test void after delivery", admin);
-    const voided = await voidDelivery(delivery.id, "Reverse after SO void", admin);
+    // F29: the delivery (child) is voided before the SO, like every
+    // other document family — voidSalesOrder now refuses while a
+    // live delivery exists.
+    const voided = await voidDelivery(delivery.id, "Reverse before SO void", admin);
+    await voidSalesOrder(so.id, "Test void after delivery voided", admin);
     expect(voided.voidedAt).toBeInstanceOf(Date);
     const line = await db.salesOrderItem.findUniqueOrThrow({ where: { id: item.id } });
     expect(money(line.deliveredQty)).toBe("0.00");

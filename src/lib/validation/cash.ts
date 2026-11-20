@@ -53,6 +53,16 @@ export const cashAccountInputSchema = z
 
 export type CashAccountInput = z.infer<typeof cashAccountInputSchema>;
 
+// Optional order link (Phase 4 #7 re-planned): blank / omitted -> null.
+// Optional property: every older payload (and every test fixture) omits it.
+const optionalOrderId = z
+  .string()
+  .trim()
+  .max(64)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null));
+
 export const expenseInputSchema = z
   .object({
     date: ymd,
@@ -60,6 +70,14 @@ export const expenseInputSchema = z
       .string()
       .trim()
       .transform((v) => v || null),
+    // .optional() keeps the output property optional, so older callers that
+    // omit the links still typecheck; recordExpense normalises
+    // undefined -> null, and parseExpenseForm always supplies "" -> null.
+    salesOrderId: optionalOrderId.optional(),
+    purchaseOrderId: optionalOrderId.optional(),
+    // Business entity: omitted → inherit the linked order's tag (or own
+    // company when unlinked). parseExpenseForm supplies "" -> null.
+    businessId: optionalOrderId.optional(),
     payeeText: z
       .string()
       .trim()
@@ -67,6 +85,8 @@ export const expenseInputSchema = z
       .transform((v) => v || null),
     categoryId: z.string().min(1, "Pick a category."),
     amount: moneyStr,
+    /** F37: set only when the user confirmed the over-balance warning. */
+    allowOverBalance: z.boolean().optional(),
     withholdingApplied: optionalMoney,
     cashAccountId: z.string().min(1, "Pick which account paid this."),
     receiptNo: z
@@ -98,6 +118,8 @@ export const cashTransferInputSchema = z
     fromAccountId: z.string().min(1, "Pick the account money left."),
     toAccountId: z.string().min(1, "Pick the account money went to."),
     amount: moneyStr,
+    /** F37: set only when the user confirmed the over-balance warning. */
+    allowOverBalance: z.boolean().optional(),
     notes: z
       .string()
       .trim()
@@ -153,8 +175,11 @@ export function parseExpenseForm(
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     receiptNo: String(form.get("receiptNo") ?? ""),
     notes: String(form.get("notes") ?? ""),
+    salesOrderId: String(form.get("salesOrderId") ?? ""),
+    purchaseOrderId: String(form.get("purchaseOrderId") ?? ""),
+    businessId: String(form.get("businessId") ?? ""),
   };
-  const parsed = expenseInputSchema.safeParse(values);
+  const parsed = expenseInputSchema.safeParse({ ...values, allowOverBalance: form.get("confirmOverBalance") === "1" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;
@@ -173,7 +198,7 @@ export function parseCashTransferForm(
     amount: String(form.get("amount") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
-  const parsed = cashTransferInputSchema.safeParse(values);
+  const parsed = cashTransferInputSchema.safeParse({ ...values, allowOverBalance: form.get("confirmOverBalance") === "1" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;

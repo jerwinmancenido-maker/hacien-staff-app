@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveSupplierBank } from "@/lib/banks";
 import { normalizeTin, TIN_FORMAT_MESSAGE } from "./tin";
 
 const optionalText = (max: number) =>
@@ -118,6 +119,8 @@ export function customerSchema(
       // Optional on input; saveCustomer defaults it to true (and the DB
       // column defaults to true), so older callers omitting it still pass.
       orderTextUpdates: z.boolean().optional(),
+      /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved (F21). */
+      updatedAt: z.string().datetime().optional(),
     })
     .superRefine((v, ctx) => {
       if (v.defaultWithholding == null) {
@@ -137,6 +140,9 @@ export function supplierSchema(allowedTerms: readonly string[]) {
     tin: tinField,
     taxType: z.enum(SUPPLIER_TAX_TYPES, { error: "Pick a tax type." }),
     defaultTerms: termsField(allowedTerms),
+    // Optional key: older callers (and non-Admin forms, which render no bank
+    // fields) may omit it entirely; absent means "leave as stored".
+    bankName: optionalText(191).optional(),
     bankAccountName: optionalText(191),
     bankAccountNumber: optionalText(64),
     bankBranch: optionalText(191),
@@ -148,10 +154,12 @@ export type SupplierInput = z.infer<ReturnType<typeof supplierSchema>>;
 
 /** Warning (not a block) shown on suppliers without bank details. */
 export function missingBankDetails(s: {
+  bankName?: string | null;
   bankAccountName: string | null;
   bankAccountNumber: string | null;
+  bankBranch?: string | null;
 }): boolean {
-  return !s.bankAccountName?.trim() || !s.bankAccountNumber?.trim();
+  return !resolveSupplierBank(s).bankName || !s.bankAccountName?.trim() || !s.bankAccountNumber?.trim();
 }
 
 export function contactSchema(allowedRoles: readonly string[]) {

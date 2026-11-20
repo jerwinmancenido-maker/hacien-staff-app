@@ -80,7 +80,7 @@ export default async function CashAccountDetailPage({
             {formatPeso(money(account.openingBalance))} on {day(ymd(account.openingDate))}
           </dd>
           <dt>Running balance</dt>
-          <dd className="num strong">{formatPeso(balance)}</dd>
+          <dd className={`num strong${Number(balance) < 0 ? " neg" : ""}`}>{formatPeso(balance)}</dd>
         </dl>
       </div>
 
@@ -120,7 +120,7 @@ export default async function CashAccountDetailPage({
                       <td>{r.href ? <Link href={r.href}>{r.number}</Link> : r.number}</td>
                       <td>{r.description}</td>
                       <td className="num">{formatPeso(r.signedAmount)}</td>
-                      <td className="num">{formatPeso(r.runningBalance)}</td>
+                      <td className={`num${Number(r.runningBalance) < 0 ? " neg" : ""}`}>{formatPeso(r.runningBalance)}</td>
                     </tr>
                   ))}
                 </tbody>

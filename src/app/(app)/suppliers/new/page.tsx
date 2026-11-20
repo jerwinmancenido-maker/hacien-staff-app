@@ -9,7 +9,7 @@ export default async function NewSupplierPage() {
   const { settings } = await getSettingsSnapshot();
   return (
     <>
-      <PageHeader title="New supplier" subtitle="Name is required. Add UnionBank details before paying." />
+      <PageHeader title="New supplier" subtitle="Name is required. Add the supplier's bank details before paying." />
       <div className="card">
         <SupplierForm supplier={null} terms={settings.lists.paymentTerms} action={saveSupplierAction.bind(null, null)} canEdit isAdmin={user.isAdmin} />
       </div>

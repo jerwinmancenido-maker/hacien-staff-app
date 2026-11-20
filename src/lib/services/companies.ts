@@ -5,6 +5,7 @@ import { settleApiWrite } from "../api/context";
 import { db, isUniqueViolation } from "../db";
 import { writeAudit } from "../audit";
 import { extractLast4, isMaskedBankAccountNumber, maskBankAccountNumber, resolveBankAccountNumber } from "../bank-mask";
+import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_CUSTOMER } from "../documents/common";
 import { ForbiddenError } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
@@ -107,6 +108,15 @@ async function assertTinFree(find: TinOwnerLookup, tin: string | null, exceptId:
 }
 
 const customerTinOwner: TinOwnerLookup = (args) => db.customer.findFirst(args);
+
+/** Exact-name lookup for the duplicate-name soft warning on customer create
+ * (plain equality — MySQL's ci collation matches the name case-insensitively). */
+export function findCustomerWithName(name: string) {
+  return db.customer.findFirst({
+    where: { name: { equals: name.trim() } },
+    select: { id: true, name: true, active: true },
+  });
+}
 const supplierTinOwner: TinOwnerLookup = (args) => db.supplier.findFirst(args);
 
 /** Prisma JSON columns reject plain `null`; use DbNull for "not set". */
@@ -154,6 +164,9 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
         return created;
       }
       const before = await tx.customer.findUniqueOrThrow({ where: { id } });
+      // F21: stale-edit guard — only when the editor sent its loaded
+      // token (API/test callers without one keep last-writer-wins).
+      if (input.updatedAt) requireMatchingUpdatedAt(before.updatedAt, input.updatedAt, STALE_EDIT_MESSAGE_CUSTOMER);
       const typeChanged = before.withholdingType !== input.withholdingType;
       const pickChanged = !withholdingPickEqual(before.defaultWithholding, input.defaultWithholding);
       // S-19: changing an existing customer's withholding is Admin only (fail closed).
@@ -248,7 +261,15 @@ export async function duplicateCustomer(id: string, actor: CustomerSaveActor | s
 // Suppliers
 // ---------------------------------------------------------------------------
 
-export type SupplierFilter = { q?: string; matchTin?: boolean; taxType?: SupplierTaxType; showInactive?: boolean; onlyIds?: string[] };
+export type SupplierFilter = {
+  q?: string;
+  matchTin?: boolean;
+  taxType?: SupplierTaxType;
+  showInactive?: boolean;
+  onlyIds?: string[];
+  /** Optional cap (e.g. top search). Staff list omits this and loads the filtered set. */
+  take?: number;
+};
 
 export function listSuppliers(f: SupplierFilter) {
   const q = f.q?.trim();
@@ -268,6 +289,7 @@ export function listSuppliers(f: SupplierFilter) {
     },
     include: mainAddress,
     orderBy: { name: "asc" },
+    ...(f.take != null ? { take: f.take } : {}),
   });
 }
 
@@ -287,7 +309,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
-        if (!isAdmin && (input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
+        if (!isAdmin && (input.bankName || input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
           throw new CompanyRuleError("Only an Admin can add or edit bank details.", "bankAccountNumber");
         }
         const created = await tx.supplier.create({
@@ -308,6 +330,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
         !isMaskedBankAccountNumber(submittedNumber) &&
         submittedNumber !== before.bankAccountNumber;
       const bankAltered =
+        (input.bankName != null && input.bankName !== before.bankName) ||
         (input.bankAccountName != null && input.bankAccountName !== before.bankAccountName) ||
         numberChanged ||
         (input.bankBranch != null && input.bankBranch !== before.bankBranch) ||
@@ -320,6 +343,7 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
       const finalInput: SupplierInput = !isAdmin
         ? {
             ...input,
+            bankName: before.bankName,
             bankAccountName: before.bankAccountName,
             bankAccountNumber: before.bankAccountNumber,
             bankBranch: before.bankBranch,

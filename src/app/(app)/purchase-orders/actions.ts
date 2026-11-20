@@ -18,10 +18,15 @@ import {
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill, voidSupplierBill } from "@/lib/services/supplier-bills";
 import { postSupplierReturn, voidSupplierReturn } from "@/lib/services/returns";
+import { setPurchaseOrderGapReason } from "@/lib/services/reconciliation";
 import { formFiles } from "@/lib/form-files";
 import { billInputSchema, closeReasonSchema, createFromSoSchema, poInputSchema, returnInputSchema } from "@/lib/validation/purchasing";
 import { voidReasonSchema } from "@/lib/validation/quotes";
 import { formValues, str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { db } from "@/lib/db";
+import { DocRuleError } from "@/lib/documents/common";
+import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
+import { pickedAttachmentKind, PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 
 function payload(form: FormData): unknown {
   try {
@@ -155,6 +160,41 @@ export async function voidBillAction(purchaseOrderId: string, billId: string, re
   });
 }
 
+/**
+ * REQ-ATTACH-001: attach files (the supplier's quote, other documents) to
+ * this purchase order. Cost-gated like every PO write — the files are cost
+ * data. A void PO takes no new files.
+ */
+export async function uploadPurchaseOrderAttachmentsAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async (): Promise<FormState> => {
+    const user = await requireCostAction("edit_data");
+    const po = await db.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
+    if (!po) throw new DocRuleError("Purchase order not found.");
+    if (po.status === "VOID") throw new DocRuleError("This purchase order is void, so files can't be attached to it.");
+    const kind = pickedAttachmentKind(str(form, "kind"), PURCHASE_ORDER_ATTACHMENT_KINDS);
+    if (!kind) return { fieldErrors: { kind: "Pick what kind of file this is." } };
+    const { files, error } = await formFiles(form);
+    if (error) return { fieldErrors: { files: error } };
+    if (files.length === 0) return { fieldErrors: { files: "Pick at least one file to upload." } };
+    const uploads = await prepareUploads(files);
+    try {
+      await db.$transaction(async (tx) => {
+        // Re-check inside the transaction: a void that lands between the
+        // check above and this insert must not leave files on a VOID PO.
+        const fresh = await tx.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
+        if (!fresh) throw new DocRuleError("Purchase order not found.");
+        if (fresh.status === "VOID") throw new DocRuleError("This purchase order is void, so files can't be attached to it.");
+        await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { purchaseOrderId: id }, user.id);
+      });
+    } catch (e) {
+      await discardUploads(uploads);
+      throw e;
+    }
+    refresh(id);
+    return { ok: true, message: "Files attached." };
+  });
+}
+
 /** S-50: post a supplier return (RMA) against this PO. */
 export async function postSupplierReturnAction(purchaseOrderId: string, _prev: FormState, form: FormData): Promise<FormState> {
   let goTo: string | null = null;
@@ -180,5 +220,20 @@ export async function voidSupplierReturnAction(purchaseOrderId: string, id: stri
     await voidSupplierReturn(id, reason, user);
     refresh(purchaseOrderId);
     return { ok: true, message: "Return voided." };
+  });
+}
+
+/** Reconciliation note (PR-C, 2026-11-19): why this PO has no supplier bill yet. */
+export async function setPurchaseOrderGapReasonAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireCostAction("edit_data");
+    await setPurchaseOrderGapReason(
+      id,
+      { code: str(form, "gapReasonCode") || null, note: str(form, "gapNote") || null },
+      user,
+    );
+    refresh(id);
+    revalidatePath("/books/reconciliation");
+    return { ok: true, message: "Reconciliation note saved." };
   });
 }

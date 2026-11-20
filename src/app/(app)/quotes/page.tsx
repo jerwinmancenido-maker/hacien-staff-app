@@ -5,11 +5,13 @@ import { can, canSeeCosts } from "@/lib/permissions";
 import { listQuotesView, QUOTE_STATUSES } from "@/lib/quotes/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
-import { EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
+import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
+import { listBusinesses } from "@/lib/services/businesses";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
-import { QUOTE_STATUS_LABELS, QuoteStatusChip } from "@/components/docs/DocParts";
+import { QUOTE_STATUS_LABELS, QuoteStatusChip, QuoteWorkflowApprovalChip } from "@/components/docs/DocParts";
+import { QUOTE_APPROVAL_LABELS, quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 
-type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string };
+type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string; business?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const p = new URLSearchParams();
@@ -27,6 +29,9 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const openOnly = s.open === "1";
   const noReplyDays = s.noReply === "7" ? 7 : undefined;
   const status = QUOTE_STATUSES.includes(s.status as QuoteStatus) ? (s.status as QuoteStatus) : undefined;
+  const businesses = await listBusinesses();
+  const business =
+    s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
   const quotes = await listQuotesView(
     {
       q: s.q,
@@ -34,11 +39,12 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       needsApproval: needsApproval || undefined,
       noReplyAfterDays: noReplyDays,
       open: openOnly || undefined,
+      businessId: business,
     },
     user,
   );
   const withCosts = canSeeCosts(user);
-  const filtered = !!(s.q || status || needsApproval || noReplyDays || openOnly);
+  const filtered = !!(s.q || status || needsApproval || noReplyDays || openOnly || business);
 
   return (
     <>
@@ -98,6 +104,22 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           No reply (7 days)
         </Link>
       </div>
+      {businesses.length > 0 && (
+        <div className="toolbar" style={{ marginTop: 6 }}>
+          <span className="small faint">Business:</span>
+          <Link className={`filter-chip${!business ? " active" : ""}`} href={href(s, { business: undefined })}>
+            All
+          </Link>
+          <Link className={`filter-chip${business === "own" ? " active" : ""}`} href={href(s, { business: "own" })}>
+            Own company
+          </Link>
+          {businesses.filter((b) => b.active || b.id === business).map((b) => (
+            <Link key={b.id} className={`filter-chip${business === b.id ? " active" : ""}`} href={href(s, { business: b.id })}>
+              {b.shortLabel}
+            </Link>
+          ))}
+        </div>
+      )}
       {quotes.length === 0 ? (
         <div className="card">
           {filtered ? (
@@ -137,7 +159,9 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                 number: (
                   <div className="cell-primary">
                     <div>
-                      <div className="title">{q.number}</div>
+                      <div className="title">
+                        {q.number} {q.businessShortLabel && <Chip tone="dark">{q.businessShortLabel}</Chip>}
+                      </div>
                       <div className="sub">{formatDate(day(q.date))}</div>
                     </div>
                   </div>
@@ -145,8 +169,21 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                 rev: q.revision,
                 customer: <PrimaryCell name={q.customerName} />,
                 total: <span className="strong">{formatPeso(q.contractPrice)}</span>,
-                margin: q.netMarginPct !== undefined ? `${q.netMarginPct}%` : null,
-                status: <QuoteStatusChip status={q.status} />,
+                margin:
+                  q.netMarginPct !== undefined ? (q.supplierCostState === "none" ? "—" : `${q.netMarginPct}%`) : null,
+                status: (
+                  <>
+                    {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && (
+                      <QuoteStatusChip status={q.status} />
+                    )}
+                    {q.status !== "VOID" && q.approvalStatus !== "PENDING" && (
+                      <QuoteWorkflowApprovalChip
+                        status={q.approvalStatus}
+                        label={QUOTE_APPROVAL_LABELS[q.approvalStatus]}
+                      />
+                    )}
+                  </>
+                ),
                 valid: formatDate(day(q.validUntil)),
               },
               sort: {
@@ -154,7 +191,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                 rev: q.revision,
                 customer: q.customerName,
                 total: Number(q.contractPrice),
-                margin: q.netMarginPct !== undefined ? Number(q.netMarginPct) : null,
+                margin: q.netMarginPct !== undefined && q.supplierCostState !== "none" ? Number(q.netMarginPct) : null,
                 status: q.status,
                 valid: q.validUntil,
               },

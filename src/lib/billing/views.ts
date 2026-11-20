@@ -7,7 +7,7 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
@@ -567,6 +567,11 @@ export async function arAgingSummary(): Promise<{
     include: {
       customer: { select: { id: true, name: true, withholdingType: true } },
       allocations: { where: { collection: { status: "POSTED" } } },
+      // F14: return-credit applications reduce the balance too — the
+      // global summary missed the merge the list/detail loaders already
+      // had (Audit D), so a billing settled by a credit memo still
+      // counted as fully owed here, on Home, and on the billing hub.
+      creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
     },
   });
   const byCustomer = new Map<string, { name: string; rows: { dueDate: Date; balance: string; isGovernment?: boolean }[]; overdue: bigint }>();
@@ -576,7 +581,7 @@ export async function arAgingSummary(): Promise<{
   let openCount = 0;
   for (const b of billings) {
     const isGov = b.customer.withholdingType === "GOVERNMENT";
-    const balance = billingBalance(money(b.amount), appliedOf(b.allocations));
+    const balance = billingBalance(money(b.amount), appliedOf([...b.allocations, ...b.creditApplications]));
     const bal = toScaled(balance, 2);
     if (bal <= 0n) continue;
     openCount += 1;
@@ -748,8 +753,22 @@ export async function getBookletView(docType: BookletType = "SI") {
     select: { id: true, number: true, reason: true },
   });
 
+  // The serial claim is the permanent record: it survives document deletes,
+  // so a claimed number whose document was deleted (and which was never
+  // marked spoiled) still counts as used. Without this the grid — and the
+  // next-free suggestion built on it — would offer a number the write path
+  // then rejects as already used.
+  const claims = await db.bookletSerialClaim.findMany({
+    where: { type: docType, number: { gte: range.seriesFrom, lte: range.seriesTo } },
+    select: { number: true },
+  });
+  const covered = new Set<number>([...used.map((u) => u.invoiceNo), ...spoiled.map((s) => s.number)]);
+  const claimedOnly: UsedDocSlot[] = claims
+    .filter((c) => !covered.has(c.number))
+    .map((c) => ({ invoiceNo: c.number, status: "RECORDED" }));
+
   const typeName = BOOKLET_DOC_TYPES[docType]?.label ?? "Sales Invoice";
-  const grid = bookletGrid(range, used, spoiled, typeName);
+  const grid = bookletGrid(range, [...used, ...claimedOnly], spoiled, typeName);
 
   return {
     docType,

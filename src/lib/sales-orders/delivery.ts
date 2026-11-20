@@ -111,3 +111,22 @@ export function soDeliveryProgress(
   const label = fullyDelivered ? "Fully delivered" : `${delivered} of ${total} delivered`;
   return { total, delivered, fullyDelivered, label };
 }
+
+/** True when at least one live line still has ordered qty left to deliver. */
+export function soHasRemainingToDeliver(
+  items: readonly Pick<OpenDeliveryLine, "qty" | "deliveredQty">[],
+): boolean {
+  return items.some((i) => toScaled(remainingDeliveryQty(i), 2) > 0n);
+}
+
+/**
+ * Overview deliveries line (same counts as Deliveries tab / auto-close).
+ * e.g. "2 of 5 lines delivered · 3 left to deliver" or "Fully delivered".
+ */
+export function soDeliveryOverviewLabel(
+  progress: Pick<SoDeliveryProgress, "total" | "delivered" | "fullyDelivered">,
+): string {
+  if (progress.fullyDelivered) return "Fully delivered";
+  const left = progress.total - progress.delivered;
+  return `${progress.delivered} of ${progress.total} lines delivered · ${left} left to deliver`;
+}

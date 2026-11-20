@@ -6,17 +6,20 @@ import { QuoteEditor } from "@/components/docs/QuoteEditor";
 import { customerArSnapshot } from "@/lib/billing/views";
 import { formatPeso } from "@/lib/format";
 import { editorCustomers, editorRates, editorStaffUsers, editorSuppliers } from "../editor-data";
+import { listBusinesses } from "@/lib/services/businesses";
+import { can } from "@/lib/permissions";
 import { confirmNoneAndMarkQuoteSentAction, createQuoteAddressAction, markQuoteSentAction, saveQuoteAction } from "../actions";
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
   const user = await requirePagePermission("edit_data");
   const { customer: customerParam } = await searchParams;
   const { settings } = await getSettingsSnapshot();
-  const [customers, rates, suppliers, staffUsers] = await Promise.all([
+  const [customers, rates, suppliers, staffUsers, businesses] = await Promise.all([
     editorCustomers(),
     editorRates(),
     editorSuppliers(user),
     editorStaffUsers(user.id),
+    listBusinesses({ activeOnly: true }),
   ]);
   const today = manilaToday();
   const preset = customers.find((c) => c.id === customerParam);
@@ -51,6 +54,9 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           warrantyNotes: settings.print.warrantyNotes ?? "",
         }}
         staffUsers={staffUsers}
+        businesses={businesses}
+        ownCompanyName={settings.company.name}
+        canTagBusiness={can(user, "approve")}
         preparedById={user.id}
         deliveryAddressId={preset?.defaultDeliveryId ?? null}
         addAddressAction={createQuoteAddressAction}

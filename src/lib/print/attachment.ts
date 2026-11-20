@@ -74,6 +74,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
           id: true,
           number: true,
           settingsVersionId: true,
+          deliveryAddress: true,
           customer: { select: { name: true, address: true } },
           quote: { select: { deliveryNotes: true, warrantyNotes: true } },
         },
@@ -101,7 +102,12 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     deliveryDate: formatDate(new Date(ymd(delivery.deliveryDate)!)),
     receivedBy: delivery.receivedBy,
     customerName: so.customer.name,
-    customerAddress: so.customer.address,
+    // F22: the address the goods go to is the SO's chosen delivery
+    // address (stored at conversion) — the customer's legacy free-text
+    // address is only a fallback. Using the customer field alone left
+    // the packing list's Delivery address blank ("—") whenever that
+    // field was empty, even with a full address on the order.
+    customerAddress: so.deliveryAddress ?? so.customer.address,
     items: delivery.items.map((i) => ({
       description: i.salesOrderItem.description,
       qty: `${money(i.qty)} ${i.salesOrderItem.unit}`,

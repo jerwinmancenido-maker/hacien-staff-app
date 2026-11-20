@@ -25,6 +25,7 @@ import {
   approveQuoteAction,
   confirmNoneAndMarkQuoteSentAction,
   convertQuoteAction,
+  createQuoteAddressAction,
   duplicateQuoteAction,
   emailDraftAction,
   markQuoteLostAction,
@@ -67,6 +68,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
         title={
           <>
             {q.number}
+            {q.business && <Chip tone="dark">{q.business.shortLabel}</Chip>}
             <Chip>Rev {q.revision}</Chip>
             {quoteHeaderShowsStatusChip(q.status, q.approvalStatus) && <QuoteStatusChip status={q.status} />}
             {q.status !== "VOID" && (
@@ -84,6 +86,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             number={q.number}
             status={q.status}
             approvalStatus={q.approvalStatus}
+            approvalReasons={q.approval.reasons ?? []}
+            approvalReasonsHidden={q.approval.hiddenReasons ?? false}
             canEdit={canEdit}
             canVoid={canVoid(user)}
             canDelete={canDeleteDocument(user)}
@@ -91,9 +95,12 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             openSalesOrderId={openSo?.id ?? null}
             customerAddress={q.deliveryAddressText ?? suggestedAddress}
             addressOptions={addressOptions}
+            customerId={q.customer.id}
+            customerName={q.customer.name}
             withholdingNotSet={isWithholdingNotSet(q.withholdingPick)}
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             hasAcceptance={q.hasAcceptance}
+            businessName={q.business?.name}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
@@ -101,6 +108,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
               void: voidQuoteAction,
               delete: deleteQuoteAction,
               convert: convertQuoteAction,
+              addAddress: createQuoteAddressAction,
               email: emailDraftAction,
               refreshCompanyDetails: refreshQuoteCompanyDetailsAction,
               duplicate: duplicateQuoteAction,
@@ -111,6 +119,27 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           />
         }
       />
+      {q.revisionChain.length > 0 && (
+        <p className="muted small" style={{ margin: "4px 0 10px" }}>
+          Revisions:{" "}
+          {q.revisionChain.map((entry, i) => (
+            <span key={entry.kind === "quote" ? entry.id : `deleted-${entry.revision}`}>
+              {i > 0 && " · "}
+              {entry.kind === "deleted" ? (
+                <>Rev {entry.revision} — deleted</>
+              ) : entry.isCurrent ? (
+                <b>
+                  Rev {entry.revision} ({entry.number}) — this one
+                </b>
+              ) : (
+                <Link href={`/quotes/${entry.id}`}>
+                  Rev {entry.revision} ({entry.number})
+                </Link>
+              )}
+            </span>
+          ))}
+        </p>
+      )}
       {q.status === "VOID" && (
         <div className="alert error" role="status">
           <b>Void.</b> {q.voidReason} This quote is read-only.
@@ -315,7 +344,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
                   No acceptance recorded yet. Converting to a sales order needs one of: a signed conforme above, a buyer PO
                   number, or the record below.
                 </p>
-                {editable && <AcceptanceForm action={recordQuoteAcceptanceAction.bind(null, q.id)} />}
+                {editable && <AcceptanceForm action={recordQuoteAcceptanceAction.bind(null, q.id)} hasConforme={q.conformeFiles.length > 0} />}
               </>
             )}
           </div>

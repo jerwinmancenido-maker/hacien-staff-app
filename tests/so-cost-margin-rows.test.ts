@@ -31,6 +31,7 @@ const summary: CostMarginSummary = {
   contractPrice: "94130.00",
   withholdingTotal: "941.30",
   incurredCost: "0.00",
+  linkedExpenses: "0.00",
   plannedCost: "40355.00",
   costState: "partial",
   marginLabel: "Margin so far",

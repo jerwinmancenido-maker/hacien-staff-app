@@ -6,6 +6,9 @@ import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listBillings, listSalesOrderCollections } from "@/lib/billing/views";
+import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
+import { db } from "@/lib/db";
+import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { salesOrderMoney } from "@/lib/billing/status";
 import { soBillingSummary } from "@/lib/services/billings";
 import { toScaled } from "@/lib/quotes/calc";
@@ -21,11 +24,20 @@ import { GovernmentDealBox } from "@/components/sales-orders/GovernmentDealBox";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { DeliverySection } from "@/components/sales-orders/DeliverySection";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
+import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
+import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
+import { SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
-import { deleteSalesOrderAction, recordDeliveryAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
+import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, setSalesOrderGapReasonAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
+import { listBusinesses } from "@/lib/services/businesses";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { BusinessReclassifyForm } from "./BusinessReclassifyForm";
+import { GapReasonForm } from "@/components/docs/GapReasonForm";
+import { salesOrderGapState } from "@/lib/services/reconciliation";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
 
@@ -50,13 +62,15 @@ export default async function SalesOrderPage({
   // Show Create POs while any line still has unordered qty. A partial PO
   // (or a voided one) must not hide the menu.
   const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.needsMorePo;
-  const [billingSummary, billings, costMargin, deliveries, collections, returns] = await Promise.all([
+  const [billingSummary, billings, costMargin, deliveries, collections, returns, gapState] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
     so.canSeeCosts ? getSoCostMargin(so.id, user) : Promise.resolve(null),
     listSalesOrderDeliveries(so.id),
     listSalesOrderCollections(so.id),
     listCustomerReturns(so.id),
+    // E7: the gap-reason editor shows only while a billing gap exists.
+    can(user, "edit_data") && so.status !== "VOID" ? salesOrderGapState(so.id) : Promise.resolve(null),
   ]);
   const money = billingSummary
     ? salesOrderMoney(so.status, billingSummary.contractPrice, [
@@ -68,7 +82,15 @@ export default async function SalesOrderPage({
         },
       ])
     : null;
-  const canBill = can(user, "record_billing") && so.status === "OPEN" && money != null && toScaled(money.leftToBill, 2) > 0n;
+  const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
+  // Business entity: Admins get the reclassify form; everyone sees the label.
+  const allBusinesses = user.isAdmin ? await listBusinesses() : [];
+  const { settings } = await getSettingsSnapshot();
+  // Phase 2 #6: credit-limit warning (never a block). The SO save action
+  // redirects to this page, so this banner is what "warn on SO save" shows;
+  // the figure comes from the ONE customerExposure helper the billing form
+  // also uses, so both screens always quote the same number (scenario C1).
+  const exposure = await customerExposure(db, so.customer.id);
   const overdueOnSo = billings.find((b) => b.overdue.overdue && !b.isGovernment);
 
   // Documents is for everyone; Cost & margin stays cost-users only.
@@ -83,6 +105,7 @@ export default async function SalesOrderPage({
         title={
           <>
             {so.number}
+            {so.business && <Chip tone="dark">{so.business.shortLabel}</Chip>}
             {money?.completed ? <Chip tone="grey">Fully billed &amp; paid</Chip> : <SoStatusChip status={so.status} />}
           </>
         }
@@ -105,6 +128,31 @@ export default async function SalesOrderPage({
           <b>Void.</b> {so.voidReason}
         </div>
       )}
+      {so.business && (
+        <div className="alert warn" role="status">
+          This order belongs to <b>{so.business.name}</b>. It is tracked here for operations and profit, and stays out of{" "}
+          {settings.company.name}&apos;s sales, Books, and tax figures. Billing for it is issued by {so.business.name}, not
+          from this app&apos;s booklet.
+        </div>
+      )}
+      {user.isAdmin && (
+        <BusinessReclassifyForm
+          ownCompanyName={settings.company.name}
+          currentBusinessId={so.businessId}
+          businesses={allBusinesses}
+          action={reclassifySalesOrderBusinessAction.bind(null, so.id)}
+        />
+      )}
+      {gapState?.show && (
+        <GapReasonForm
+          kind="SO"
+          currentCode={so.gapReasonCode}
+          currentNote={so.gapNote}
+          action={setSalesOrderGapReasonAction.bind(null, so.id)}
+          partial={gapState.partial}
+        />
+      )}
+      <CreditLimitWarning text={creditLimitWarningText(exposure)} />
 
       <PillTabs
         active={tab}
@@ -134,7 +182,7 @@ export default async function SalesOrderPage({
           {
             key: "attachments",
             label: "Attachments",
-            count: deliveries.flatMap((d) => d.attachments).length,
+            count: so.attachments.length + deliveries.flatMap((d) => d.attachments).length,
             href: `${base}?tab=attachments`,
           },
         ]}
@@ -146,7 +194,7 @@ export default async function SalesOrderPage({
         <div className="card">
           <h2>Documents</h2>
           <p className="small muted">Source quote, billings, collections, delivery receipts and purchase orders for this order. Receiving and supplier bills stay in the Cost &amp; margin tab.</p>
-          <div className="table-wrap">
+          <div className="table-wrap items-table">
             <table className="list" aria-label="Documents">
               <thead>
                 <tr>
@@ -307,7 +355,7 @@ export default async function SalesOrderPage({
           {returns.length === 0 ? (
             <EmptyState line="Nothing returned yet. Returned goods come off what was delivered, and their value becomes customer credit." />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap items-table">
               <table className="list" aria-label="Customer returns">
                 <thead>
                   <tr>
@@ -358,7 +406,23 @@ export default async function SalesOrderPage({
       )}
 
       {tab === "attachments" && (
-        <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
+        <div className="details-stack">
+          <OwnAttachmentsCard
+            title="Sales order files"
+            emptyText="No files attached to this sales order yet. Attach the customer's PO here."
+            files={so.attachments}
+            canArchive={canDeleteDocument(user)}
+            archiveAction={archiveAttachmentAction}
+            upload={
+              can(user, "edit_data") && so.status !== "VOID"
+                ? { action: uploadSalesOrderAttachmentsAction.bind(null, so.id), kinds: SALES_ORDER_ATTACHMENT_KINDS, idPrefix: "so-attach" }
+                : null
+            }
+          />
+          {deliveries.some((d) => d.attachments.length > 0) && (
+            <AttachmentsTab sections={[{ label: "Deliveries", files: deliveries.flatMap((d) => d.attachments) }]} />
+          )}
+        </div>
       )}
 
       {tab === "overview" && (
@@ -419,8 +483,16 @@ export default async function SalesOrderPage({
             </div>
           </div>
           <p className="small muted">
-            Deliveries: {deliveries.length} receipt{deliveries.length === 1 ? "" : "s"} ·{" "}
-            <Link href={`${base}?tab=deliveries`}>View →</Link>
+            Deliveries:{" "}
+            {soDeliveryOverviewLabel(
+              soDeliveryProgress(
+                so.items.map((i) => ({
+                  qty: i.qty,
+                  deliveredQty: i.deliveredQty ?? "0.00",
+                })),
+              ),
+            )}{" "}
+            · <Link href={`${base}?tab=deliveries`}>View →</Link>
           </p>
           {billingSummary && (
             <div className="card" aria-label="Billing">
@@ -449,7 +521,7 @@ export default async function SalesOrderPage({
               </p>
             </div>
           )}
-          <div className="card" aria-label="Purchasing">
+          <div className="card so-purchasing-progress" aria-label="Purchasing">
             <div className="card-head">
               <h2>Purchasing progress</h2>
               <div className="right small muted">
@@ -464,7 +536,6 @@ export default async function SalesOrderPage({
                 )}
               </div>
             </div>
-
           </div>
           {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>

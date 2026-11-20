@@ -146,6 +146,11 @@ const items = z.array(itemSchema).min(1, "Add at least one item.").max(200, "At 
 const quoteInputObject = z.object({
     customerId: z.string().trim().min(1, "Pick a customer."),
     contactId: optionalId,
+    /** Business entity: empty = the app's own company (HACIEN). */
+    // Business entity (2026-11-19): plain optional (NOT optionalId) so the
+    // property stays optional in the inferred input type — omitted means
+    // "leave unchanged" on update, null/"" means the own company.
+    businessId: z.string().trim().max(64).nullable().optional(),
     date: dateOnly("Date"),
     /** Empty → date + Settings → Quote defaults validity days. */
     validUntil: z
@@ -215,6 +220,8 @@ const quoteInputObject = z.object({
     withholdingExplicitNone: z.boolean().optional(),
     /** When true, non-override lines are re-snapshotted from the quote pick. */
     reapplyWithholding: z.boolean().optional(),
+    /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved. */
+    updatedAt: z.string().datetime().optional(),
     items,
   })
   .refine((v) => !v.validUntil || v.validUntil >= v.date, { message: "Valid until can't be before the quote date.", path: ["validUntil"] })
@@ -316,6 +323,8 @@ export const salesOrderInputSchema = convertInputSchema.extend({
   withholdingCodes: z.array(z.string().trim().min(1).max(32)).max(20).nullable().optional(),
   /** Required when an Admin changes a won sales order's prices, quantities, or total. */
   priceOverrideReason: z.string().trim().max(1000).optional(),
+  /** ISO `updatedAt` the editor loaded — stale-edit guard refuses when the row moved. */
+  updatedAt: z.string().datetime(),
   items,
 });
 export type SalesOrderInput = z.infer<typeof salesOrderInputSchema>;

@@ -70,6 +70,9 @@ model User {
   receivingReportsBy     ReceivingReport[]    @relation("ReceivingReportReceivedBy")
   receivingReportsMade   ReceivingReport[]    @relation("ReceivingReportCreatedBy")
   supplierReturnsMade  SupplierReturn[]     @relation("SupplierReturnCreatedBy")
+  warrantyClaimsMade   WarrantyClaim[]      @relation("WarrantyClaimCreatedBy")
+  periodLocksClosed    PeriodLock[]         @relation("PeriodLockClosedBy")
+  periodLocksReopened  PeriodLock[]         @relation("PeriodLockReopenedBy")
   customerReturnsMade  CustomerReturn[]     @relation("CustomerReturnCreatedBy")
   customerCreditsMade  CustomerCredit[]     @relation("CustomerCreditCreatedBy")
   supplierBillsCreated   SupplierBill[]
@@ -225,8 +228,29 @@ model Customer {
   collections  Collection[]
   withholdings Withholding2307[]
   customerCredits CustomerCredit[]
+  statementReminderSends StatementReminderSend[]
 
   @@index([name])
+}
+
+// Phase 3 #9: one row per statement/payment reminder email actually sent.
+// Written only after a successful send, in the same transaction as its
+// audit row. Doubles as the duplicate-guard source (same customer +
+// recipient + period inside the guard window is refused).
+model StatementReminderSend {
+  id             String   @id @default(cuid())
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  recipient      String   @db.VarChar(191)
+  periodFrom     DateTime?
+  periodTo       DateTime?
+  // Snapshot of the statement closing balance at send time (pesos).
+  closingBalance Decimal  @db.Decimal(15, 2)
+  sentById       String   @db.VarChar(191)
+  sentAt         DateTime @default(now())
+
+  @@index([customerId, sentAt])
+  @@index([recipient, sentAt])
 }
 
 model Supplier {
@@ -238,7 +262,10 @@ model Supplier {
   address           String?         @db.Text
   taxType           SupplierTaxType
   defaultTerms      String?         @db.VarChar(100)
-  // UnionBank details used when paying this supplier.
+  // The supplier's OWN bank details, used when paying this supplier.
+  // bankName is the supplier's bank (picked from the PH bank list or typed
+  // via "Other"); legacy rows keep it NULL and resolve from bankBranch.
+  bankName          String?         @db.VarChar(191)
   bankAccountName   String?         @db.VarChar(191)
   bankAccountNumber String?         @db.VarChar(64)
   bankBranch        String?         @db.VarChar(191)
@@ -407,6 +434,12 @@ enum AuditAction {
   // Admin delete of a draft or void document. Appended at the end so existing
   // rows keep their values (MySQL ENUM order). No backfill.
   delete
+  // Phase 3 #9: a statement/payment reminder email was sent. Appended at
+  // the end so existing rows keep their values (MySQL ENUM order).
+  send_email
+  // Phase 4 #4: one audit row per CSV items import (entityId = batch id).
+  // Appended at the end so existing rows keep their values.
+  import
 }
 
 // ---------------------------------------------------------------------------
@@ -719,6 +752,7 @@ enum QuoteApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+  NOT_REQUIRED
 }
 
 enum SalesOrderStatus {
@@ -740,6 +774,16 @@ model Quote {
   id                String      @id @default(cuid())
   number            String      @unique @db.VarChar(40)
   revision          Int         @default(1)
+  // Finish-all Phase 2 #5: revision chain. Null on a Rev 1 original and on
+  // plain duplicates; a NEW REVISION copy stores the id of the chain's
+  // Rev 1 quote here, so the quote page can link every revision in the
+  // chain — and still name a revision number whose quote was deleted.
+  revisionChainId   String?
+  // Business entity (Reconciliation Plan 2026-11-19): NULL = the app's own
+  // company (HACIEN). Non-null = the transaction belongs to that Business
+  // (Settings catalogue) and stays out of HACIEN's sales/Books/tax.
+  businessId        String?
+  business          Business?   @relation(fields: [businessId], references: [id])
   customerId        String
   customer          Customer    @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -825,9 +869,11 @@ model Quote {
   salesOrders SalesOrder[]
 
   @@index([customerId])
+  @@index([businessId])
   @@index([status])
   @@index([approvalStatus])
   @@index([date])
+  @@index([revisionChainId])
 }
 
 // Item catalog, Step 1 (Option A): master list of products staff quote.
@@ -845,6 +891,8 @@ model Item {
   details          String?   @db.Text
   defaultUnitPrice Decimal?  @db.Decimal(15, 2)
   active           Boolean   @default(true)
+  // Phase 4 #4: CSV import batch stamp (nullable; null = created manually).
+  importBatchId    String?   @db.VarChar(40)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   quoteItems       QuoteItem[]
@@ -853,6 +901,7 @@ model Item {
 
   @@index([active])
   @@index([name])
+  @@index([importBatchId])
 }
 
 // Items are never deleted: a line removed in the editor gets `removedAt`.
@@ -931,6 +980,16 @@ model SalesOrder {
   trackingRef       String?          @unique @db.VarChar(24)
   quoteId           String
   quote             Quote            @relation(fields: [quoteId], references: [id])
+  // Business entity, copied from the quote at conversion. NULL = HACIEN.
+  businessId        String?
+  business          Business?        @relation(fields: [businessId], references: [id])
+  // Reconciliation note (PR-C, 2026-11-19): why this order has no billing
+  // yet — a fact about the document ("Customer did not request an
+  // invoice", "Billing pending details", or a free note). Changes no
+  // total, Book entry or print. gapReasonCode is one of the SO codes in
+  // src/lib/reconciliation-shared.ts; gapNote is the free text.
+  gapReasonCode     String?          @db.VarChar(40)
+  gapNote           String?          @db.Text
   customerId        String
   customer          Customer         @relation(fields: [customerId], references: [id])
   contactId         String?
@@ -973,8 +1032,11 @@ model SalesOrder {
   billings       Billing[]
   deliveries     Delivery[]
   customerReturns CustomerReturn[]
+  attachments    DocumentAttachment[]
+  expenses       Expense[]
 
   @@index([quoteId])
+  @@index([businessId])
   @@index([customerId])
   @@index([status])
   @@index([date])
@@ -1140,6 +1202,15 @@ model PurchaseOrder {
   supplier            Supplier            @relation(fields: [supplierId], references: [id])
   supplierContactId   String?
   supplierContact     Contact?            @relation(fields: [supplierContactId], references: [id])
+  // Business entity: copied from the SO for SO-born POs; picked directly
+  // on standalone POs. NULL = HACIEN.
+  businessId          String?
+  business            Business?           @relation(fields: [businessId], references: [id])
+  // Reconciliation note (PR-C, 2026-11-19): why this PO has no supplier
+  // bill yet ("Supplier did not issue an invoice", "Invoice awaited", or
+  // a free note). Facts about the document only — see SalesOrder.
+  gapReasonCode       String?             @db.VarChar(40)
+  gapNote             String?             @db.Text
   // Null = standalone PO.
   salesOrderId        String?
   salesOrder          SalesOrder?         @relation(fields: [salesOrderId], references: [id])
@@ -1176,8 +1247,11 @@ model PurchaseOrder {
   receivingReports ReceivingReport[]
   bills            SupplierBill[]
   supplierReturns  SupplierReturn[]
+  attachments      DocumentAttachment[]
+  expenses         Expense[]
 
   @@index([supplierId])
+  @@index([businessId])
   @@index([salesOrderId])
   @@index([status])
   @@index([date])
@@ -1267,8 +1341,65 @@ model ReceivingReportItem {
   // S-48: serial numbers received on this line, comma-separated.
   serialNumbers       String?           @db.Text
 
+  warrantyClaims WarrantyClaim[]
+
   @@index([receivingReportId])
   @@index([purchaseOrderItemId])
+}
+
+// Phase 3 #8b: supplier warranty claims. One claim per receiving line
+// (ReceivingReportItem); supplier, PO and serials come through the
+// receiving record. Supplier-side only — no customer or money fields.
+// Status set approved by Jerwin 2026-11-14: OPEN -> SENT_TO_SUPPLIER ->
+// APPROVED / REJECTED -> REPLACED / CLOSED. Every status change is
+// audited in the same transaction (see services/warranty-claims.ts).
+enum WarrantyClaimStatus {
+  OPEN
+  SENT_TO_SUPPLIER
+  APPROVED
+  REJECTED
+  REPLACED
+  CLOSED
+}
+
+model WarrantyClaim {
+  id                    String              @id @default(cuid())
+  receivingReportItemId String
+  receivingReportItem   ReceivingReportItem @relation(fields: [receivingReportItemId], references: [id])
+  // The one serial being claimed, when the receiving line recorded
+  // serials. Null = the claim covers the line as a whole.
+  serialNumber          String?             @db.VarChar(100)
+  // What is wrong with the goods (staff words, required).
+  fault                 String              @db.Text
+  // Supplier's own claim / RMA reference, once they give one.
+  supplierRef           String?             @db.VarChar(64)
+  status                WarrantyClaimStatus @default(OPEN)
+  createdById           String
+  createdBy             User                @relation("WarrantyClaimCreatedBy", fields: [createdById], references: [id])
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([receivingReportItemId])
+  @@index([status])
+}
+
+// Phase 4 #10: period close. One row per closed/open month ("2026-11").
+// `closed` is the row's CURRENT state; the close/reopen stamps keep the
+// LAST close and LAST reopen (the full history lives in the audit log).
+// Additive only — old code never reads this table.
+model PeriodLock {
+  id           String    @id @default(cuid())
+  yearMonth    String    @unique @db.VarChar(7)
+  closed       Boolean   @default(false)
+  closedById   String?
+  closedBy     User?     @relation("PeriodLockClosedBy", fields: [closedById], references: [id])
+  closedAt     DateTime?
+  reopenedById String?
+  reopenedBy   User?     @relation("PeriodLockReopenedBy", fields: [reopenedById], references: [id])
+  reopenedAt   DateTime?
+  reopenReason String?   @db.VarChar(500)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 // S-50: returns to supplier (RMA). Posting reduces the PO line's receivedQty
@@ -1450,9 +1581,10 @@ model SupplierBillItem {
 
 // Files attached to a receiving report (delivery receipt photo), a supplier
 // bill (invoice scan), a billing (filled-in booklet copy), a collection, a
-// supplier payment (proof of payment), or a BIR 2307. Same storage as business
-// documents: random key under UPLOAD_DIR, magic-byte sniffed, never deleted
-// (archivedAt instead).
+// supplier payment (proof of payment), a BIR 2307, or — REQ-ATTACH-001 — a
+// sales order (customer PO) or purchase order (supplier quote). Same storage
+// as business documents: random key under UPLOAD_DIR, magic-byte sniffed,
+// never deleted (archivedAt instead).
 model DocumentAttachment {
   id                        String                   @id @default(cuid())
   receivingReportId         String?
@@ -1479,6 +1611,16 @@ model DocumentAttachment {
   taxCalendarCompletion     TaxCalendarCompletion?   @relation(fields: [taxCalendarCompletionId], references: [id])
   quoteId                   String?
   quote                       Quote?                         @relation(fields: [quoteId], references: [id])
+  salesOrderId              String?
+  // onDelete SetNull (unlike the other owners' RESTRICT): plan amendment (a)
+  // lets a void SO be deleted once its files are archived, and the archived
+  // rows must survive that delete — the FK nulls instead of blocking it.
+  salesOrder                SalesOrder?              @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderId           String?
+  purchaseOrder             PurchaseOrder?           @relation(fields: [purchaseOrderId], references: [id])
+  // REQ-ATTACH-001: per-file label on SO/PO files (CUSTOMER_PO,
+  // SUPPLIER_QUOTE, OTHER — see src/lib/attachment-kinds.ts). Null elsewhere.
+  kind                      String?                  @db.VarChar(40)
   fileName                  String                   @db.VarChar(255)
   mimeType                  String                   @db.VarChar(100)
   sizeBytes                 Int
@@ -1500,6 +1642,9 @@ model DocumentAttachment {
   @@index([deliveryId])
   @@index([spoiledBookletNumberId])
   @@index([taxCalendarCompletionId])
+  @@index([quoteId])
+  @@index([salesOrderId])
+  @@index([purchaseOrderId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1923,6 +2068,29 @@ model ExpenseCategory {
   expenses Expense[]
 }
 
+// Business-entity catalogue (Reconciliation Plan, 2026-11-19): other
+// businesses whose transactions Jerwin records in this app for operations.
+// Managed in Settings → Businesses; NEVER hard-deleted (deactivate only).
+// The app's own company (HACIEN) is NOT a row here — it is the implicit
+// default, represented by a NULL businessId on documents.
+model Business {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(160)
+  shortLabel String  @db.VarChar(24)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes       Quote[]
+  salesOrders  SalesOrder[]
+  purchaseOrders PurchaseOrder[]
+  expenses     Expense[]
+
+  @@index([active])
+  @@index([name])
+}
+
 // Internal EXP-YYYY-####. Hand-recorded company expense (no VAT input tax).
 // Optional withholdingApplied mirrors Part 6 EWT (cash out of the account is
 // still `amount` only — withholding is not cash leaving the account).
@@ -1943,6 +2111,18 @@ model Expense {
   cashAccount        CashAccount    @relation(fields: [cashAccountId], references: [id])
   receiptNo          String?        @db.VarChar(64)
   notes              String?        @db.Text
+  // Phase 4 #7 (re-planned): optional link to the order this expense is a
+  // cost of (e.g. a Lalamove delivery fee). Null = unlinked (the expense
+  // behaves exactly as before). SET NULL on delete: an expense is money
+  // history and survives an order hard-delete as unlinked history.
+  salesOrderId       String?
+  salesOrder         SalesOrder?    @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  // Business entity: inherited from the linked SO/PO when set there;
+  // picked directly on unlinked expenses. NULL = HACIEN.
+  businessId         String?
+  business           Business?      @relation(fields: [businessId], references: [id])
   status             ExpenseStatus  @default(POSTED)
   voidedAt           DateTime?
   voidReason         String?        @db.Text
@@ -1958,6 +2138,9 @@ model Expense {
   @@index([cashAccountId])
   @@index([categoryId])
   @@index([supplierId])
+  @@index([salesOrderId])
+  @@index([purchaseOrderId])
+  @@index([businessId])
 }
 
 // Internal TRF-YYYY-####. Move money between cash accounts (e.g. cash deposit).

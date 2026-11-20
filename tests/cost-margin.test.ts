@@ -9,6 +9,7 @@ import {
   chooseCostBasis,
   lineHasUnorderedQty,
   lineNeedsMorePo,
+  sumLinkedExpenses,
   sumMoney,
   valueReceived,
   type CostMarginPoInput,
@@ -166,6 +167,86 @@ describe("cost state", () => {
     expect(summary.costState).toBe("full");
     expect(summary.marginLabel).toBe("Actual margin");
     expect(summary.incurredCost).toBe("40.00");
+  });
+});
+
+describe("linked expenses (Phase 4 #7, L2/L5)", () => {
+  it("sumLinkedExpenses counts each expense id once", () => {
+    expect(
+      sumLinkedExpenses([
+        { id: "e1", amount: "350.00" },
+        { id: "e1", amount: "350.00" },
+        { id: "e2", amount: "150.50" },
+      ]),
+    ).toBe("500.50");
+    expect(sumLinkedExpenses([])).toBe("0.00");
+  });
+
+  it("linked-only incurred shows Margin so far, planned unchanged (X1 seam)", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "5000.00",
+      plannedCost: "4000.00",
+      uncoveredLineCount: 0,
+      pos: [],
+      linkedExpenses: "350.00",
+    });
+    expect(summary.linkedExpenses).toBe("350.00");
+    expect(summary.incurredCost).toBe("350.00");
+    expect(summary.costState).toBe("partial");
+    expect(summary.marginLabel).toBe("Margin so far");
+    expect(summary.actual).toEqual({ margin: "4650.00", marginPct: "93.00" });
+    expect(summary.planned).toEqual({ margin: "1000.00", marginPct: "20.00" });
+    expect(summary.afterWithholding.margin).toBe("4650.00");
+  });
+
+  it("linked expenses add on top of PO incurred; full coverage stays full", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "1000.00",
+      plannedCost: "400.00",
+      uncoveredLineCount: 0,
+      pos: [po({ poTotal: "400.00", hasBills: true, billedAmount: "400.00" })],
+      linkedExpenses: "100.00",
+    });
+    expect(summary.incurredCost).toBe("500.00");
+    expect(summary.costState).toBe("full");
+    expect(summary.actual).toEqual({ margin: "500.00", marginPct: "50.00" });
+    expect(summary.planned).toEqual({ margin: "600.00", marginPct: "60.00" });
+  });
+
+  it("no linked expenses keeps the old behaviour exactly", () => {
+    const summary = buildCostMarginSummary({
+      contractPrice: "1000.00",
+      plannedCost: "400.00",
+      uncoveredLineCount: 0,
+      pos: [po({ poTotal: "400.00" })],
+    });
+    expect(summary.linkedExpenses).toBe("0.00");
+    expect(summary.incurredCost).toBe("0.00");
+    expect(summary.costState).toBe("none");
+  });
+
+  it("renders the breakdown row only when linked expenses are present", async () => {
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { SoCostMarginTab } = await import("@/components/purchasing/SoCostMarginTab");
+    const withLinked = buildCostMarginSummary({
+      contractPrice: "5000.00",
+      plannedCost: "4000.00",
+      uncoveredLineCount: 0,
+      pos: [],
+      linkedExpenses: "350.00",
+    });
+    const html = renderToStaticMarkup(createElement(SoCostMarginTab, { summary: withLinked }));
+    expect(html).toContain("Delivery &amp; linked expenses");
+    expect(html).toContain("350");
+    const without = buildCostMarginSummary({
+      contractPrice: "5000.00",
+      plannedCost: "4000.00",
+      uncoveredLineCount: 0,
+      pos: [],
+    });
+    const html2 = renderToStaticMarkup(createElement(SoCostMarginTab, { summary: without }));
+    expect(html2).not.toContain("Delivery &amp; linked expenses");
   });
 });
 

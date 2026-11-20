@@ -32,6 +32,23 @@ export function uploadMaxBytes(env: Record<string, string | undefined> = process
   return uploadMaxMb(env) * 1024 * 1024;
 }
 
+/** Client-side size check: same wording as checkUpload / BusinessDocuments. */
+export function clientUploadSizeError(files: readonly { size: number }[], maxMb: number): string | null {
+  const maxBytes = maxMb * 1024 * 1024;
+  return files.some((f) => f.size > maxBytes) ? `The file is too big. The limit is ${maxMb} MB.` : null;
+}
+
+/**
+ * After a size reject, clear the native file input so picking the same path
+ * fires change again. React state (label + error) is left alone.
+ */
+export function resetNativeFileInputAfterSizeReject(
+  input: { value: string } | null | undefined,
+  sizeError: string | null | undefined,
+): void {
+  if (sizeError && input) input.value = "";
+}
+
 /** Display name only (never used on disk): no path parts or control characters, at most 255 chars. */
 export function cleanFileName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";

@@ -4,14 +4,15 @@
 import type { QuoteStatus } from "@prisma/client";
 import { toScaled } from "./calc";
 
-export type QuoteApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type QuoteApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "NOT_REQUIRED";
 
-export const QUOTE_APPROVAL_STATUSES: QuoteApprovalStatus[] = ["PENDING", "APPROVED", "REJECTED"];
+export const QUOTE_APPROVAL_STATUSES: QuoteApprovalStatus[] = ["PENDING", "APPROVED", "REJECTED", "NOT_REQUIRED"];
 
 export const QUOTE_APPROVAL_LABELS: Record<QuoteApprovalStatus, string> = {
   PENDING: "Waiting for approval",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  NOT_REQUIRED: "Approval not required",
 };
 
 /**
@@ -71,7 +72,7 @@ export function quoteMarkSentGate(input: {
 
 /** Error if send / email / convert is blocked by approval state, else null. */
 export function quoteNotApprovedError(approvalStatus: QuoteApprovalStatus): string | null {
-  if (approvalStatus === "APPROVED") return null;
+  if (approvalStatus === "APPROVED" || approvalStatus === "NOT_REQUIRED") return null;
   if (approvalStatus === "REJECTED") return "This quote was rejected. Fix it and wait for approval before sending or converting.";
   return "This quote is waiting for approval. An Approver or Admin must approve it before sending or converting.";
 }

@@ -37,12 +37,16 @@ export type PoEditorItem = {
 export type PoEditorInitial = {
   supplierId: string;
   supplierContactId: string;
+  /** Business entity: "" = own company. Optional — older callers omit it. */
+  businessId?: string;
   date: string;
   expectedDate: string;
   terms: string;
   deliveryAddressText: string;
   supplierAddressText: string;
   notes: string;
+  /** Edit only: ISO `updatedAt` loaded with the PO (stale-edit guard). */
+  updatedAt?: string;
   items: PoEditorItem[];
 };
 
@@ -103,6 +107,7 @@ function GrowTextarea({ id, rows, value, onValue }: { id: string; rows: number; 
     <textarea
       id={id}
       ref={ref}
+      className="po-grow"
       rows={rows}
       value={value}
       onChange={(ev) => {
@@ -133,6 +138,10 @@ export function PoEditor({
   action,
   cancelHref,
   soPicker,
+  businesses = [],
+  ownCompanyName = "HACIEN",
+  canTagBusiness = false,
+  businessLockedLabel = null,
 }: {
   isNew: boolean;
   initial: PoEditorInitial;
@@ -145,6 +154,12 @@ export function PoEditor({
   cancelHref: string;
   /** Part B: "Add from sales order" rows (edit page of an SO-born PO only). */
   soPicker?: { soNumber: string; rows: SoPickerRow[] } | null;
+  /** Business entity (2026-11-19): picker data. Hidden for SO-born POs —
+   * their business follows the sales order (lockedLabel says so). */
+  businesses?: { id: string; name: string; shortLabel: string }[];
+  ownCompanyName?: string;
+  canTagBusiness?: boolean;
+  businessLockedLabel?: string | null;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
   const [h, setH] = useState(() => ({ ...initial }));
@@ -239,12 +254,14 @@ export function PoEditor({
   const payload = {
     supplierId: h.supplierId,
     supplierContactId: h.supplierContactId || null,
+    businessId: h.businessId || null,
     date: h.date,
     expectedDate: h.expectedDate,
     terms: h.terms,
     deliveryAddressText: h.deliveryAddressText,
     supplierAddressText: h.supplierAddressText,
     notes: h.notes,
+    ...(isNew || !initial.updatedAt ? {} : { updatedAt: initial.updatedAt }),
     items: items.map((i) => ({
       id: i.id,
       description: i.description,
@@ -259,7 +276,7 @@ export function PoEditor({
   const itemErrors = Object.entries(e).filter(([k]) => k.startsWith("items"));
 
   return (
-    <>
+    <div className="po-editor">
     <form onSubmit={onSubmit} noValidate>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {state.message && (
@@ -303,11 +320,40 @@ export function PoEditor({
           ) : (
             <div className="field">
               <span className="label">Supplier</span>
-              <div className="strong" style={{ padding: "8px 0" }}>
+              <div className="strong po-supplier-name">
                 {supplier?.name}
               </div>
             </div>
           )}
+          {businessLockedLabel ? (
+            <div className="field">
+              <span className="label">Business</span>
+              <div className="strong">{businessLockedLabel}</div>
+              <div className="hint">Follows the sales order — change it there (Admin).</div>
+            </div>
+          ) : businesses.length > 0 || h.businessId ? (
+            <div className={`field${e.businessId ? " has-error" : ""}`}>
+              <label htmlFor="businessId">Business — whose purchase is this?</label>
+              <select
+                id="businessId"
+                value={h.businessId ?? ""}
+                disabled={!canTagBusiness}
+                onChange={(ev) => setH((prev) => ({ ...prev, businessId: ev.target.value }))}
+              >
+                <option value="">{ownCompanyName} (own company)</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+                {h.businessId && !businesses.some((b) => b.id === h.businessId) && (
+                  <option value={h.businessId}>Current business (switched off)</option>
+                )}
+              </select>
+              {!canTagBusiness && <div className="hint">Only an Admin or Approver can tag a PO to another business.</div>}
+              {e.businessId && <div className="error">{e.businessId}</div>}
+            </div>
+          ) : null}
           <div className={`field${e.supplierContactId ? " has-error" : ""}`}>
             <label htmlFor="supplierContactId">Supplier contact</label>
             <SearchPicker
@@ -380,7 +426,7 @@ export function PoEditor({
         </div>
         {pickerOpen && soPicker && (
           <div className="so-picker">
-            <div className="small faint" style={{ marginBottom: 8 }}>
+            <div className="small faint po-picker-lead">
               From {soPicker.soNumber}. Lines that can still be ordered for this supplier — quantity starts at what is left.
               Ordering more than what is left is allowed; it is saved as an extra and recorded.
             </div>
@@ -448,7 +494,7 @@ export function PoEditor({
             <tbody>
               {items.map((i, idx) => (
                 <tr key={i.key}>
-                  <td>
+                  <td data-label="Description">
                     <PoDescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                     {i.linked && <div className="small faint">From the sales order</div>}
                     {i.linked && i.soQty != null && changedVsSo(i) && (
@@ -458,22 +504,22 @@ export function PoEditor({
                       <div className="small warn-text">More than what is left on the sales order ({i.remainingQty} left) — saved as an extra.</div>
                     )}
                   </td>
-                  <td className="col-kind">
+                  <td className="col-kind" data-label="Kind">
                     <select aria-label={`Line ${idx + 1} kind`} value={i.kind} onChange={(ev) => setItem(i.key, { kind: ev.target.value as ItemKind })}>
                       <option value="GOODS">Goods</option>
                       <option value="SERVICES">Services</option>
                     </select>
                   </td>
-                  <td className="num col-qty">
+                  <td className="num col-qty" data-label="Qty">
                     <input aria-label={`Line ${idx + 1} qty`} inputMode="decimal" className="w-num-s" value={i.qty} onChange={(ev) => setItem(i.key, { qty: ev.target.value })} />
                   </td>
-                  <td className="col-unit">
+                  <td className="col-unit" data-label="Unit">
                     <input aria-label={`Line ${idx + 1} unit`} className="w-unit" value={i.unit} onChange={(ev) => setItem(i.key, { unit: ev.target.value })} />
                   </td>
-                  <td className="num col-money">
+                  <td className="num col-money" data-label="Unit cost">
                     <input aria-label={`Line ${idx + 1} unit cost`} inputMode="decimal" className="w-num" value={i.unitCost} onChange={(ev) => setItem(i.key, { unitCost: formatMoneyInput(ev.target.value) })} />
                   </td>
-                  <td className="num col-money strong">{formatPeso(safeTotal(i))}</td>
+                  <td className="num col-money strong" data-label="Total">{formatPeso(safeTotal(i))}</td>
                   <td className="line-actions">
                     <button type="button" className="btn-link danger" aria-label={`Remove line ${idx + 1}`} disabled={items.length === 1} onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}>
                       ✕
@@ -484,7 +530,7 @@ export function PoEditor({
             </tbody>
           </table>
         </div>
-        <div style={{ marginTop: 10 }}>
+        <div className="po-add-line-wrap">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blank()])}>
             Add line
           </button>
@@ -513,6 +559,6 @@ export function PoEditor({
     {addSupplierOpen && (
       <AddSupplierDialog open={addSupplierOpen} onClose={() => setAddSupplierOpen(false)} termsOptions={termsOptions} onSaved={onSupplierAdded} />
     )}
-    </>
+    </div>
   );
 }

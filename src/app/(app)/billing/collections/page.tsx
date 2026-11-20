@@ -72,7 +72,7 @@ export default async function CollectionsListPage({
       ) : (
         <div className="card">
           <div className="table-wrap">
-            <table className="list" aria-label="Collections">
+            <table className="list collections-table" aria-label="Collections">
               <thead>
                 <tr>
                   <th>Number</th>
@@ -89,23 +89,28 @@ export default async function CollectionsListPage({
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="clickable row-has-link">
-                    <td>
+                    <td data-col="number">
                       <a href={`/billing/collections/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/collections/${r.id}`}>{r.number}</Link>
                     </td>
-                    <td>{day(r.date)}</td>
+                    <td data-col="date">{day(r.date)}</td>
                     <td>
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td>
+                    <td data-col="method">
                       <MethodLabel method={r.method} />
                     </td>
-                    <td>{r.receiptNo ?? "—"}</td>
+                    <td data-col="number">{r.receiptNo ?? "—"}</td>
                     <td className="num">{formatPeso(r.amountReceived)}</td>
                     <td className="num">{formatPeso(r.cashApplied)}</td>
                     <td className="num">{formatPeso(r.unappliedCredit)}</td>
-                    <td>
-                      <CollectionStatusChip status={r.status} /> {r.isDeposit && <Chip tone="blue">Deposit</Chip>}
+                    <td data-col="status">
+                      <CollectionStatusChip status={r.status} />
+                      {r.isDeposit && (
+                        <div>
+                          <Chip tone="blue">Deposit</Chip>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

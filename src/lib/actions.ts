@@ -3,6 +3,8 @@
 import { ForbiddenError } from "./auth/current-user";
 import { DocRuleError } from "./documents/common";
 import { CompanyRuleError } from "./services/companies";
+import { BusinessRuleError } from "./services/businesses";
+import { ItemRuleError } from "./services/items";
 import { WithholdingRuleError } from "./services/withholding";
 import { UserRuleError } from "./services/users";
 import { SettingsConflictError } from "./settings/service";
@@ -12,7 +14,7 @@ export async function runAction(fn: () => Promise<FormState>, values?: Record<st
   try {
     return await fn();
   } catch (e) {
-    if (e instanceof CompanyRuleError || e instanceof DocRuleError || e instanceof WithholdingRuleError) {
+    if (e instanceof CompanyRuleError || e instanceof DocRuleError || e instanceof WithholdingRuleError || e instanceof ItemRuleError || e instanceof BusinessRuleError) {
       const fieldErrors = e instanceof DocRuleError && e.fields ? e.fields : e.field ? { [e.field]: e.message } : undefined;
       return fieldErrors ? { values, fieldErrors, message: e.message } : { values, message: e.message };
     }

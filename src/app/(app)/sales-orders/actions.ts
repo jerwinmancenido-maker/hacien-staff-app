@@ -6,6 +6,8 @@ import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user
 import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
+import { reclassifySalesOrderBusiness } from "@/lib/services/businesses";
+import { setSalesOrderGapReason } from "@/lib/services/reconciliation";
 import { deleteSalesOrder } from "@/lib/services/document-delete";
 import { recordDelivery, voidDelivery } from "@/lib/services/deliveries";
 import { postCustomerReturn, voidCustomerReturn } from "@/lib/services/customer-returns";
@@ -14,6 +16,10 @@ import { govDealInputSchema, salesOrderInputSchema, voidReasonSchema } from "@/l
 import { parseDeliveryForm } from "@/lib/validation/deliveries";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
 import { formFiles } from "@/lib/form-files";
+import { db } from "@/lib/db";
+import { DocRuleError } from "@/lib/documents/common";
+import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
+import { pickedAttachmentKind, SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 
 export async function saveSalesOrderAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   let goTo: string | null = null;
@@ -130,6 +136,42 @@ export async function voidDeliveryForOrder(salesOrderId: string, deliveryId: str
   return voidDeliveryAction(deliveryId, salesOrderId, reason);
 }
 
+/**
+ * REQ-ATTACH-001: attach files (the customer's PO, other documents) to this
+ * sales order. Same shape as the quote conforme upload. Deliberately NO
+ * billing check: files are documents, not money, so attaching stays allowed
+ * after the order is billed. A void order takes no new files.
+ */
+export async function uploadSalesOrderAttachmentsAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async (): Promise<FormState> => {
+    const user = await requireActionPermission("edit_data");
+    const so = await db.salesOrder.findUnique({ where: { id }, select: { status: true } });
+    if (!so) throw new DocRuleError("Sales order not found.");
+    if (so.status === "VOID") throw new DocRuleError("This sales order is void, so files can't be attached to it.");
+    const kind = pickedAttachmentKind(str(form, "kind"), SALES_ORDER_ATTACHMENT_KINDS);
+    if (!kind) return { fieldErrors: { kind: "Pick what kind of file this is." } };
+    const { files, error } = await formFiles(form);
+    if (error) return { fieldErrors: { files: error } };
+    if (files.length === 0) return { fieldErrors: { files: "Pick at least one file to upload." } };
+    const uploads = await prepareUploads(files);
+    try {
+      await db.$transaction(async (tx) => {
+        // Re-check inside the transaction: a void that lands between the
+        // check above and this insert must not leave files on a VOID order.
+        const fresh = await tx.salesOrder.findUnique({ where: { id }, select: { status: true } });
+        if (!fresh) throw new DocRuleError("Sales order not found.");
+        if (fresh.status === "VOID") throw new DocRuleError("This sales order is void, so files can't be attached to it.");
+        await createAttachments(tx, uploads.map((u) => ({ ...u, kind })), { salesOrderId: id }, user.id);
+      });
+    } catch (e) {
+      await discardUploads(uploads);
+      throw e;
+    }
+    revalidatePath(`/sales-orders/${id}`);
+    return { ok: true, message: "Files attached." };
+  });
+}
+
 /** Audit D: record a customer return (credit memo); the goods come back and the customer gets credit. */
 export async function postCustomerReturnAction(salesOrderId: string, _prev: FormState, form: FormData): Promise<FormState> {
   let goTo: string | null = null;
@@ -163,5 +205,34 @@ export async function voidCustomerReturnAction(salesOrderId: string, id: string,
     revalidatePath("/sales-orders");
     revalidatePath(`/sales-orders/${salesOrderId}`);
     return { ok: true, message: "Return voided." };
+  });
+}
+
+/** Business entity (2026-11-19): Admin reclassify of an order's business. */
+export async function reclassifySalesOrderBusinessAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    const raw = str(form, "businessId");
+    await reclassifySalesOrderBusiness(id, raw ? raw : null, user);
+    revalidatePath(`/sales-orders/${id}`);
+    revalidatePath("/sales-orders");
+    return { ok: true, message: "Business updated. The order's POs and linked expenses moved with it." };
+  });
+}
+
+/** Reconciliation note (PR-C, 2026-11-19): why this order has no billing yet. */
+export async function setSalesOrderGapReasonAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new ForbiddenError();
+    await setSalesOrderGapReason(
+      id,
+      { code: str(form, "gapReasonCode") || null, note: str(form, "gapNote") || null },
+      user,
+    );
+    revalidatePath(`/sales-orders/${id}`);
+    revalidatePath("/books/reconciliation");
+    return { ok: true, message: "Reconciliation note saved." };
   });
 }

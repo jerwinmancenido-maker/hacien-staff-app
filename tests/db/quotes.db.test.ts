@@ -704,6 +704,7 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
           deliveryAddress: so.deliveryAddress,
           terms: so.terms,
           notes: so.notes,
+          updatedAt: so.updatedAt.toISOString(),
           items,
         },
         costUser,
@@ -852,6 +853,24 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(full?.totals.netMargin).toBe("85000.00");
       expect(full?.items[0]?.supplierName).toBe(supplier.name);
       expect((await listQuotesView({ q: customer.name }, costUser))[0]?.netMarginPct).toBe("15.74");
+      expect((await listQuotesView({ q: customer.name }, costUser))[0]?.supplierCostState).toBe("full");
+    });
+
+    it("list rows expose supplierCostState 'none' when no line has a cost, so the list can hide the stored 100% margin", async () => {
+      const customer = await makeCustomer();
+      const q = await createQuote(
+        quoteInput(customer.id, await freshYear(), {
+          items: [
+            { id: null, description: "Blank cost line", kind: "GOODS", qty: "1", unit: "pc", supplierId: null, supplierUnitCost: "", unitPrice: "500" },
+          ],
+        }),
+        costUser,
+      );
+      const row = (await listQuotesView({ q: customer.name }, costUser)).find((r) => r.id === q.id);
+      expect(row?.supplierCostState).toBe("none");
+      // A non-cost user never sees the state (or any cost field).
+      const hidden = (await listQuotesView({ q: customer.name }, staff)).find((r) => r.id === q.id);
+      expect(hidden && "supplierCostState" in hidden).toBe(false);
     });
 
     it("a non-cost user's edit keeps the existing costs", async () => {
@@ -940,7 +959,23 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       expect(after?.status).toBe("VOID");
       expect(after?.number).toBe(order.number);
       expect((await db.quote.findUnique({ where: { id: q.id } }))?.status).toBe("SENT");
-      await expect(updateSalesOrder(order.id, { buyerPoNo: null, contactId: null, terms: null, notes: null, deliveryAddress: null, items: quoteInput(customer.id, 2026).items }, costUser)).rejects.toThrow(/open sales order/);
+      await expect(
+        updateSalesOrder(
+          order.id,
+          {
+            buyerPoNo: null,
+            contactId: null,
+            terms: null,
+            notes: null,
+            deliveryAddress: null,
+            updatedAt: (
+              await db.salesOrder.findUniqueOrThrow({ where: { id: order.id }, select: { updatedAt: true } })
+            ).updatedAt.toISOString(),
+            items: quoteInput(customer.id, 2026).items,
+          },
+          costUser,
+        ),
+      ).rejects.toThrow(/open sales order/);
 
       const voids = await db.documentVoid.findMany({ where: { docId: order.id } });
       expect(voids).toHaveLength(1);

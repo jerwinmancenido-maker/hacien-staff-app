@@ -81,12 +81,12 @@ export default async function PrintIncomeTaxPage({
   ];
 
   return (
-    <div className="print-shell">
+    <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/tax/income?${q}`}>
           Back to worksheet
         </Link>
-        <span className="small muted">A4 · {TAX_WORKSHEET_PAGES.income.title}</span>
+        <span className="small muted">{settings.print.paperSize} · {TAX_WORKSHEET_PAGES.income.title}</span>
         <PrintButton />
       </div>
       <div className="alert warn print-toolbar-alert no-print" role="status">
@@ -105,6 +105,11 @@ export default async function PrintIncomeTaxPage({
 
         <p>
           <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
+        </p>
+
+        <p className="small">
+          Invoiced basis (line a): gross billings {formatPeso(sheet.invoicedGrossTotal)}, less customer returns{" "}
+          {formatPeso(sheet.invoicedReturnsTotal)}, net {formatPeso(sheet.invoicedTotal)}.
         </p>
 
         {sheet.overThreshold ? (

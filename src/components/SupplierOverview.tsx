@@ -6,6 +6,7 @@ import { Avatar, Chip, type ChipTone } from "./ui";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
 import { formatAddress } from "@/lib/addresses/format";
 import { maskBankAccountNumber } from "@/lib/bank-mask";
+import { resolveSupplierBank } from "@/lib/banks";
 import { AlertTriangleIcon, PlusIcon } from "./Icons";
 import { SupplierBankAccount } from "./SupplierBankAccount";
 
@@ -148,7 +149,7 @@ export async function SupplierOverview({
           <div className="bank-details-grid">
             <div>
               <div className="meta-label">Bank</div>
-              <div className="meta-val strong">UnionBank</div>
+              <div className="meta-val strong">{resolveSupplierBank(supplier).bankName}</div>
             </div>
             <div>
               <div className="meta-label">Account name</div>
@@ -166,7 +167,7 @@ export async function SupplierOverview({
             </div>
             <div>
               <div className="meta-label">Branch</div>
-              <div className="meta-val">{supplier.bankBranch || <span className="faint">—</span>}</div>
+              <div className="meta-val">{resolveSupplierBank(supplier).branch || <span className="faint">—</span>}</div>
             </div>
           </div>
         </div>

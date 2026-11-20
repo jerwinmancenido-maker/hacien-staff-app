@@ -21,13 +21,17 @@ import {
 } from "@/lib/tax/income-tax-method";
 import { RecordList, type RecordItem } from "@/components/RecordList";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
+import { readableDiffValue } from "@/components/DiffView";
 import { PlusIcon } from "@/components/Icons";
 import { SettingsForm } from "./SettingsForm";
 import { TaxCalendarForm } from "./TaxCalendarForm";
 import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
-import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction } from "./actions";
+import { uploadMaxMb } from "@/lib/business-docs/sniff";
+import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction } from "./actions";
+import { BusinessesForm } from "./BusinessesForm";
+import { listBusinesses } from "@/lib/services/businesses";
 import { AuditLogTab } from "./AuditLogTab";
 import { ApiKeysTab, type ApiKeyRow } from "./ApiKeysTab";
 import { listApiKeys } from "@/lib/api/keys-admin";
@@ -42,6 +46,7 @@ const SECTIONS = [
   { key: "quote-terms", label: "Quote terms", help: "Approval limits, quote validity, and the payment terms offered on quotes." },
   { key: "tax", label: "Tax and BIR", help: "Tax year, BIR calendar, and withholding rates. Check with your accountant when unsure." },
   { key: "booklet", label: "Invoice booklet", help: "Booklet invoice numbers and how collections are recorded." },
+  { key: "businesses", label: "Businesses", help: "Other businesses whose transactions you record in this app. Their orders stay out of this company's sales, Books and tax." },
   { key: "users", label: "Users and roles", help: "Who can sign in, and what each person may do." },
   { key: "api-keys", label: "API keys", help: "Keys for other software using /api/v1. Every key acts as the API / Bot user; the full key is shown once, at creation." },
   { key: "audit", label: "Audit log", help: "Every change, sign-in and settings save, plus past settings versions. Records are never deleted." },
@@ -61,6 +66,7 @@ const SECTION_BY_TAB: Record<string, Section> = {
   withholding: "tax",
   booklet: "booklet",
   billing: "booklet",
+  businesses: "businesses",
   users: "users",
   "api-keys": "api-keys",
   audit: "audit",
@@ -68,9 +74,9 @@ const SECTION_BY_TAB: Record<string, Section> = {
 };
 
 function show(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
-  if (Array.isArray(v)) return v.join(", ");
-  return String(v);
+  // readableDiffValue renders arrays/objects in plain words — a raw join
+  // printed "[object Object]" for the banks / e-wallets lists.
+  return readableDiffValue(v);
 }
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string; entity?: string; action?: string; user?: string; from?: string; to?: string; page?: string }> }) {
@@ -80,6 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const section: Section = SECTION_BY_TAB[raw ?? ""] ?? "company";
   const snap = await getSettingsSnapshot();
   const s = snap.settings;
+  const businesses = section === "businesses" ? await listBusinesses() : [];
   const save = (key: string) => saveSettingsAction.bind(null, key);
 
   return (
@@ -331,6 +338,27 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.payables2307Enabled,
                 hint: "OFF by default. Leave OFF — HACIEN does not withhold tax from suppliers unless tagged by BIR as a withholding agent. Env override: PAYABLES_2307_ENABLED.",
               },
+              {
+                name: "itemsImportEnabled",
+                label: "Enable CSV import (Item catalog)",
+                kind: "checkbox",
+                value: s.features.itemsImportEnabled,
+                hint: "OFF by default. Turn on to import items from a .csv file on the Items page. Env override: ITEMS_IMPORT_ENABLED.",
+              },
+              {
+                name: "periodCloseEnabled",
+                label: "Enable Period close (Books — lock a month against new postings)",
+                kind: "checkbox",
+                value: s.features.periodCloseEnabled,
+                hint: "OFF by default. Turn on to close and reopen months on the Books page. Closing a month refuses new postings dated in it until an Admin reopens it. Env override: PERIOD_CLOSE_ENABLED.",
+              },
+              {
+                name: "warrantyClaimsEnabled",
+                label: "Enable Warranty claims (supplier claims on receiving lines)",
+                kind: "checkbox",
+                value: s.features.warrantyClaimsEnabled,
+                hint: "OFF by default. Turn on to file and track supplier warranty claims from the Receiving pages. Env override: WARRANTY_CLAIMS_ENABLED.",
+              },
             ]}
           />
         )}
@@ -341,6 +369,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             print={s.print}
             versionId={snap.versionId}
             action={savePrintCompanyAction}
+            maxMb={uploadMaxMb()}
           />
         )}
 
@@ -372,6 +401,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 suffix: "days before expiry",
               },
             ]}
+          />
+        )}
+
+        {section === "businesses" && (
+          <BusinessesForm
+            ownCompanyName={s.company.name}
+            businesses={businesses}
+            saveAction={saveBusinessAction}
+            toggleAction={setBusinessActiveAction}
           />
         )}
 
@@ -441,7 +479,7 @@ async function UsersTab() {
       { label: roleLabel(u), tone: "grey" },
       {
         label: u.canSeeCosts ? "Can see costs" : "Cost hidden",
-        tone: u.canSeeCosts ? "dark" : "grey",
+        tone: u.canSeeCosts ? "blue" : "grey",
       },
       ...(u.email === API_BOT_EMAIL
         ? [{ label: "API bot – can't sign in", tone: "grey" as const }]

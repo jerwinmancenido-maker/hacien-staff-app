@@ -13,7 +13,15 @@ describe("phone UI scale", () => {
     const phone = css.match(/@media screen and \(max-width:\s*640px\)\s*\{([\s\S]*?)\n\}/);
     expect(phone?.[1]).toMatch(/--ui-scale:\s*0\.65;/);
     expect(css).not.toMatch(/zoom\s*:/);
-    expect(css).not.toMatch(/transform\s*:\s*scale\(/);
+    // No transform-scaling of the UI itself. Two allowed exceptions, both
+    // motion-spec animation rather than layout scaling: per-element
+    // :active press feedback (rule 4: scale 0.97) and the picker popover
+    // entrance (@keyframes picker-in: grows from 0.95 at its trigger).
+    // Strip both before the blanket check.
+    const withoutPressFeedback = css
+      .replace(/[^{}]*:active\s*\{[^}]*\}/g, "")
+      .replace(/@keyframes picker-in \{[\s\S]*?\n\}/, "");
+    expect(withoutPressFeedback).not.toMatch(/transform\s*:\s*scale\(/);
   });
 
   it("scales shared lengths with the variable and leaves 1px borders", () => {

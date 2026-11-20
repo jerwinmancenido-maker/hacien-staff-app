@@ -12,6 +12,7 @@ import { receiptStatus, type PoStatus } from "../purchasing/status";
 import { checkReturn } from "../purchasing/returns";
 import type { ReturnInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
+import { assertPeriodOpen } from "./period-close";
 
 export type ReturnActor = PermissionUser & { id: string };
 
@@ -39,6 +40,7 @@ export async function postSupplierReturn(purchaseOrderId: string, input: ReturnI
     db.$transaction(async (tx) => {
       const po = await lockForReturn(tx, purchaseOrderId);
       if (!RETURNABLE.includes(po.status)) throw new DocRuleError("Only a PO out for delivery can have returns.");
+      await assertPeriodOpen(tx, input.returnDate);
       const check = checkReturn(po.lines, input.lines);
       if (!check.ok) throw new DocRuleError(check.message);
       const number = await allocateDocNumber(tx, "SUPPLIER_RETURN", year, RETURN_FORMAT);
@@ -96,6 +98,7 @@ export async function voidSupplierReturn(id: string, reason: string, actor: Retu
       if (!ret) throw new DocRuleError("Return not found.");
       if (ret.status === "VOID") throw new DocRuleError("This return is already void.");
       const po = await lockForReturn(tx, ret.purchaseOrderId);
+      await assertPeriodOpen(tx, ret.returnDate);
       const byId = new Map(po.lines.map((l) => [l.id, l]));
       for (const item of ret.items) {
         const line = byId.get(item.purchaseOrderItemId);

@@ -8,13 +8,14 @@ import { assertCan, assertCanVoid, canSeeCosts } from "../permissions";
 import { docTotals, fromScaled, toScaled } from "../quotes/calc";
 import { salesOrderMoney } from "../billing/status";
 import { soDeliveryProgress } from "../sales-orders/delivery";
-import { auditItems, DocRuleError, DOC_TX, money, withholdingCodes, withTxRetry, ymd } from "../documents/common";
+import { auditItems, DocRuleError, DOC_TX, money, requireMatchingUpdatedAt, STALE_EDIT_MESSAGE, withholdingCodes, withTxRetry, ymd } from "../documents/common";
 import { itemData, planItems } from "../quotes/items";
 import { preserveLegacyWithholdingOnSave, rateFromDocWithholding } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { voidReasonSchema, type GovDealInput, type SalesOrderInput } from "../validation/quotes";
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
+import { assertPeriodOpen } from "./period-close";
 
 type SoWithItems = SalesOrder & { items: (SalesOrderItem & { components?: SalesOrderItemComponent[] })[] };
 
@@ -185,6 +186,12 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
     db.$transaction(async (tx) => {
       const before = await lockSalesOrder(tx, id);
       if (before.status !== "OPEN") throw new DocRuleError("Only an open sales order can be edited.");
+      // Stale-edit guard: refuse before any line writes when the page's
+      // loaded updatedAt no longer matches the locked row.
+      const expectedUpdatedAt = requireMatchingUpdatedAt(before.updatedAt, input.updatedAt);
+      // Period close: the SO input carries no date and this update never
+      // writes `date`, so the old and new period are the same stored date.
+      await assertPeriodOpen(tx, before.date);
       if (input.contactId) {
         const contact = await tx.contact.findUnique({ where: { id: input.contactId } });
         if (!contact || contact.customerId !== before.customerId || !contact.active) {
@@ -224,14 +231,14 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         const siNo = liveBillings[0]!.invoiceNo;
         const whFrozen = `This order already has SI no. ${siNo}. Withholding can't change after a billing is issued — void that billing first.`;
         if (input.reapplyWithholding === true) {
-          throw new DocRuleError(whFrozen, "items");
+          throw new DocRuleError(whFrozen, "withholdingCodes");
         }
         if (input.withholdingCodes !== undefined) {
           const storedSet = new Set(snapshotList(before.withholding).map((w) => w.code));
           const inputSet = new Set(input.withholdingCodes ?? []);
           const pickChanged = inputSet.size !== storedSet.size || [...inputSet].some((c) => !storedSet.has(c));
           if (pickChanged) {
-            throw new DocRuleError(whFrozen, "items");
+            throw new DocRuleError(whFrozen, "withholdingCodes");
           }
         }
       }
@@ -247,11 +254,18 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ? input.withholdingCodes
             : parseWithholdingPick(customer.defaultWithholding);
       const rates = await listWithholdingRates(tx, { activeOnly: false });
+      // `existing` for the snapshot build rescues ONLY codes with no
+      // active rate (a deactivated rate already on this order keeps its
+      // stored rate/ATC). An active code must take the CURRENT Settings
+      // snapshot — the editor rewrote the lines from current rates, so
+      // reusing the stored snapshot for it would desync header and lines.
+      const activeCodes = new Set(rates.filter((r) => r.active).map((r) => r.code));
+      const existingForBuild = storedSnapshots.filter((s) => !activeCodes.has(s.code));
       const pickSnapshots =
         liveBillings.length
           ? storedSnapshots
           : pickCodes && pickCodes.length
-            ? buildWithholdingSnapshot(pickCodes, rates, [], { skipUnknown: true })
+            ? buildWithholdingSnapshot(pickCodes, rates, existingForBuild, { skipUnknown: true })
             : [];
       const { items: planned, removedIds } = planItems(stored, input.items, withCosts, {
         withholdingPicks: pickSnapshots,
@@ -287,9 +301,19 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
             ),
           }
         : null;
+      // PR-2b: the stored snapshot is the order's pick of record. A save
+      // that carries a pick (or an explicit re-apply) stores THAT pick's
+      // snapshots; any other unbilled save keeps the stored snapshot
+      // untouched. Rebuilding it from the lines (preserved.withholding)
+      // collapses stacked picks — a line at a combined rate has no single
+      // code — into LINE_* summaries, and the header pick would no longer
+      // round-trip on the next edit. Totals still always come from the
+      // lines (preserved.totals).
       const finalWithholding = liveBillings.length
         ? (before.withholding as unknown as Prisma.InputJsonValue)
-        : (preserved.withholding as unknown as Prisma.InputJsonValue);
+        : input.withholdingCodes !== undefined || input.reapplyWithholding === true
+          ? (pickSnapshots as unknown as Prisma.InputJsonValue)
+          : (before.withholding as unknown as Prisma.InputJsonValue);
       const finalTotals = billedTotals
         ? {
             ...preserved.totals,
@@ -486,8 +510,8 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
         if (item.id) await tx.salesOrderItem.update({ where: { id: item.id }, data: itemData(item) });
         else await tx.salesOrderItem.create({ data: { ...itemData(item), salesOrderId: id } });
       }
-      const after = await tx.salesOrder.update({
-        where: { id },
+      const headerWrite = await tx.salesOrder.updateMany({
+        where: { id, updatedAt: expectedUpdatedAt },
         data: {
           contactId: input.contactId,
           buyerPoNo: input.buyerPoNo,
@@ -507,6 +531,10 @@ export async function updateSalesOrder(id: string, input: SalesOrderInput, actor
           ...finalTotals,
           updatedById: actor.id,
         },
+      });
+      if (headerWrite.count !== 1) throw new DocRuleError(STALE_EDIT_MESSAGE);
+      const after = await tx.salesOrder.findUniqueOrThrow({
+        where: { id },
         include: { items: { where: { removedAt: null } } },
       });
       await writeAudit(tx, {
@@ -581,6 +609,25 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
   return db.$transaction(async (tx) => {
     const before = await lockSalesOrder(tx, id);
     if (before.status === "VOID") throw new DocRuleError("This sales order is already void.");
+    await assertPeriodOpen(tx, before.date);
+    // F29: an SO with live downstream documents can't be voided —
+    // the children are voided first, mirroring voidPurchaseOrder's
+    // receiving-report guard. Without this, an SO whose billing is
+    // fully Paid could be voided, leaving the Paid billing pointing
+    // at a void order and the quote reverting to Sent under it
+    // (Mac run X6). Collections and applied return credits hang off
+    // billings, so the billing count covers them.
+    const liveBillings = await tx.billing.count({ where: { salesOrderId: id, status: { not: "VOID" } } });
+    if (liveBillings > 0) throw new DocRuleError("Void the billings first.");
+    // Returns before deliveries: a return reduces deliveredQty, so
+    // voiding its delivery first would drive the quantity negative
+    // — the return must be undone before its delivery can be.
+    const liveReturns = await tx.customerReturn.count({ where: { salesOrderId: id, status: "POSTED" } });
+    if (liveReturns > 0) throw new DocRuleError("Void the customer returns first.");
+    const liveDeliveries = await tx.delivery.count({ where: { salesOrderId: id, voidedAt: null } });
+    if (liveDeliveries > 0) throw new DocRuleError("Void the deliveries first.");
+    const livePos = await tx.purchaseOrder.count({ where: { salesOrderId: id, status: { not: "VOID" } } });
+    if (livePos > 0) throw new DocRuleError("Void the purchase orders first.");
     await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
     const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });

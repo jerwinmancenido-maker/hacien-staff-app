@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
 import { listItemHistory } from "@/lib/items/history";
+import { isItemsImportEnabled } from "@/lib/items/import-enabled";
 import { listItems } from "@/lib/services/items";
 import { ITEM_KIND_LABELS } from "@/lib/validation/items";
 import { formatPeso } from "@/lib/format";
@@ -32,6 +33,8 @@ export default async function ItemsPage({
   // to reactivate it).
   const includeInactive = showInactive === "1";
   const items = activeTab === "catalog" ? await listItems({ q: cq, includeInactive }) : [];
+  // Phase 4 #4: "Import CSV" sits in the catalog action slot, flag-gated only.
+  const importEnabled = activeTab === "catalog" && canEdit ? await isItemsImportEnabled() : false;
 
   return (
     <>
@@ -44,9 +47,16 @@ export default async function ItemsPage({
         }
         actions={
           activeTab === "catalog" && canEdit ? (
-            <Link className="btn" href="/items/new">
-              + New item
-            </Link>
+            <>
+              {importEnabled ? (
+                <Link className="btn secondary" href="/items/import">
+                  Import CSV
+                </Link>
+              ) : null}{" "}
+              <Link className="btn" href="/items/new">
+                + New item
+              </Link>
+            </>
           ) : undefined
         }
       />

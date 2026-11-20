@@ -10,7 +10,7 @@ import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER, ExpenseStatusChip } from "@/components/cash/CashParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
-import { PageHeader } from "@/components/ui";
+import { Chip, PageHeader } from "@/components/ui";
 import { voidExpenseAction } from "../../actions";
 
 const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—");
@@ -38,6 +38,7 @@ export default async function ExpenseDetailPage({
         title={
           <>
             {e.number}
+            {e.business && <Chip tone="dark">{e.business.shortLabel}</Chip>}
             <ExpenseStatusChip status={e.status} />
           </>
         }
@@ -75,6 +76,22 @@ export default async function ExpenseDetailPage({
           </dd>
           <dt>Category</dt>
           <dd>{e.category.label}</dd>
+          {e.salesOrder && (
+            <>
+              <dt>Linked sales order</dt>
+              <dd>
+                <Link href={`/sales-orders/${e.salesOrder.id}`}>{e.salesOrder.number}</Link>
+              </dd>
+            </>
+          )}
+          {e.purchaseOrder && (
+            <>
+              <dt>Linked purchase order</dt>
+              <dd>
+                <Link href={`/purchase-orders/${e.purchaseOrder.id}`}>{e.purchaseOrder.number}</Link>
+              </dd>
+            </>
+          )}
           <dt>Paid from</dt>
           <dd>
             <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>

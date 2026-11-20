@@ -7,9 +7,11 @@ import { assertCan, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { toScaled } from "../quotes/calc";
 import type { CashTransferInput } from "../validation/cash";
+import { assertPeriodOpen } from "./period-close";
 
 export type TransferActor = PermissionUser & { id: string };
 
@@ -55,6 +57,7 @@ export async function recordCashTransfer(input: CashTransferInput, actor: Transf
 
   return withTxRetry(() =>
     db.$transaction(async (tx) => {
+      await assertPeriodOpen(tx, input.date);
       const from = await tx.cashAccount.findUnique({ where: { id: input.fromAccountId } });
       const to = await tx.cashAccount.findUnique({ where: { id: input.toAccountId } });
       if (!from || !from.active) {
@@ -63,6 +66,9 @@ export async function recordCashTransfer(input: CashTransferInput, actor: Transf
       if (!to || !to.active) {
         throw new DocRuleError("Pick an active 'to' account.", "toAccountId");
       }
+      // F37: warn (via the form) / refuse (here) when the transfer takes
+      // the 'from' account negative and the user has not confirmed.
+      await assertFundsInTx(tx, from, input.amount, "transfer", "amount", input.allowOverBalance);
 
       const number = await allocateDocNumber(tx, "CASH_TRANSFER", year, format);
       const transfer = await tx.cashTransfer.create({
@@ -106,6 +112,7 @@ export async function voidCashTransfer(id: string, reason: string, actor: Transf
       const before = await tx.cashTransfer.findUnique({ where: { id } });
       if (!before) throw new DocRuleError("Transfer not found.");
       if (before.status === "VOID") throw new DocRuleError("This transfer is already void.");
+      await assertPeriodOpen(tx, before.date);
 
       const now = new Date();
       const after = await tx.cashTransfer.update({

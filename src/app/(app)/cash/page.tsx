@@ -95,7 +95,7 @@ export default async function CashHomePage() {
                       {a.accountHintLast4 && <div className="faint small">···{a.accountHintLast4}</div>}
                     </td>
                     <td>{CASH_ACCOUNT_TYPE_LABELS[a.type]}</td>
-                    <td className="num strong">{formatPeso(a.balance)}</td>
+                    <td className={`num strong${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</td>
                   </tr>
                 ))}
                 {Number(summary.unassignedNet) !== 0 && (

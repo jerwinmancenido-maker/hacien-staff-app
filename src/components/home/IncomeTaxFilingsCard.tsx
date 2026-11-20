@@ -43,7 +43,7 @@ function IncomeTaxFilingRow({
       className="income-tax-filing-row"
       style={{
         padding: "10px 14px",
-        borderBottom: "1px solid #f1f5f9",
+        borderBottom: "1px solid var(--divider)",
         display: "flex",
         flexDirection: "column",
         gap: 6,
@@ -335,8 +335,8 @@ export function IncomeTaxFilingsCard({
           justifyContent: "space-between",
           alignItems: "center",
           padding: "10px 14px",
-          borderBottom: "1px solid #f1f5f9",
-          backgroundColor: "#ffffff",
+          borderBottom: "1px solid var(--divider)",
+          backgroundColor: "var(--card)",
         }}
       >
         <div>
@@ -366,14 +366,14 @@ export function IncomeTaxFilingsCard({
       <div className="income-tax-filings-list">
         {filings?.q1701 ? (
           <IncomeTaxFilingRow
-            key={`${filings.q1701.occurrenceKey}-${filings.q1701.isFiled}-${filings.q1701.referenceNo ?? ""}`}
+            key={`${filings.q1701.occurrenceKey}-${filings.q1701.isFiled}-${filings.q1701.markedDone}-${filings.q1701.referenceNo ?? ""}`}
             item={filings.q1701}
             isAdmin={isAdmin}
           />
         ) : null}
         {filings?.a1701 ? (
           <IncomeTaxFilingRow
-            key={`${filings.a1701.occurrenceKey}-${filings.a1701.isFiled}-${filings.a1701.referenceNo ?? ""}`}
+            key={`${filings.a1701.occurrenceKey}-${filings.a1701.isFiled}-${filings.a1701.markedDone}-${filings.a1701.referenceNo ?? ""}`}
             item={filings.a1701}
             isAdmin={isAdmin}
           />

@@ -56,6 +56,11 @@ export const poInputSchema = z
   .object({
     supplierId: z.string().trim().min(1, "Pick a supplier."),
     supplierContactId: optionalId,
+    /** Business entity (standalone POs): empty = the app's own company. */
+    // Business entity (2026-11-19): plain optional (NOT optionalId) so the
+    // property stays optional in the inferred input type — omitted means
+    // "leave unchanged" on update, null/"" means the own company.
+    businessId: z.string().trim().max(64).nullable().optional(),
     date: dateOnly("PO date"),
     expectedDate: optionalDate("Expected date"),
     terms: optionalText(100),
@@ -63,6 +68,8 @@ export const poInputSchema = z
     supplierAddressText: optionalText(1000),
     notes: optionalText(5000),
     items: z.array(poLineSchema).min(1, "Add at least one item.").max(200, "At most 200 items."),
+    /** ISO `updatedAt` the editor loaded (edits only) — stale-edit guard refuses when the row moved. */
+    updatedAt: z.string().datetime().optional(),
   })
   .refine((v) => !v.expectedDate || v.expectedDate >= v.date, { message: "Expected date can't be before the PO date.", path: ["expectedDate"] });
 export type PoInput = z.infer<typeof poInputSchema>;

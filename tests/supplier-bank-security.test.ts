@@ -324,6 +324,7 @@ describe("3. Non-Admin edit denied & safe saves", () => {
       tin: "222-333-444-000",
       taxType: "VAT" as const,
       defaultTerms: "30 days",
+      bankName: "BPI",
       bankAccountName: "New HW Name",
       bankAccountNumber: "777788889999",
       bankBranch: "BGC",
@@ -332,6 +333,7 @@ describe("3. Non-Admin edit denied & safe saves", () => {
     };
 
     const saved = await saveSupplier("sup-200", adminUpdate, admin);
+    expect(saved.bankName).toBe("BPI");
     expect(saved.bankAccountNumber).toBe("777788889999");
     expect(saved.bankBranch).toBe("BGC");
   });

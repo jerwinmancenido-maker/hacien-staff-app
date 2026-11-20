@@ -16,6 +16,7 @@ export type AuditEntityType =
   | "Quote"
   | "SalesOrder"
   | "Address"
+  | "Business"
   | "BusinessDocument"
   | "PurchaseOrder"
   | "ReceivingReport"
@@ -36,6 +37,9 @@ export type AuditEntityType =
   | "TaxPaidQuarter"
   | "TaxCalendarCompletion"
   | "SpoiledBookletNumber"
+  | "StatementReminder"
+  | "WarrantyClaim"
+  | "PeriodLock"
   | "EmailSuppression";
 
 type Plain = Record<string, unknown>;

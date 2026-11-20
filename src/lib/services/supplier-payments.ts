@@ -11,11 +11,13 @@ import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { assertCashEnabled } from "../cash/features";
+import { assertFundsInTx } from "../cash/funds";
 import { assertPayables2307Enabled } from "../payables/issue2307";
 import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationInput } from "../payables/allocations";
 import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type PayablesActor = PermissionUser & { id: string };
 
@@ -164,7 +166,7 @@ async function upsertSupplier2307(
 function assertPaymentMethodFields(input: SupplierPaymentInput) {
   const reference = input.reference?.trim() ?? "";
   if (input.method === "BANK_TRANSFER" && !reference) {
-    throw new DocRuleError("Add the UnionBank reference", "reference");
+    throw new DocRuleError("Add the bank transfer reference", "reference");
   }
   if (input.method === "E_WALLET" && !reference) {
     throw new DocRuleError("Reference number is required.", "reference");
@@ -203,6 +205,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         }));
         const billIds = allocInputs.map((a) => a.supplierBillId);
         await lockBills(tx, billIds);
+        await assertPeriodOpen(tx, input.date);
         await assertBillsAllocatable(tx, billIds);
         const open = await billsForAlloc(tx, supplier.id);
         const issue = validatePaymentAllocations(input.amountPaid, allocInputs, open);
@@ -214,6 +217,8 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
           if (!acct || !acct.active) {
             throw new DocRuleError("Pick an active cash account, or leave it blank (Not assigned).", "cashAccountId");
           }
+          // F37: warn/refuse when the payment takes the account negative.
+          await assertFundsInTx(tx, acct, input.amountPaid, "payment", "amountPaid", input.allowOverBalance);
         }
 
         const number = await allocateDocNumber(tx, "SUPPLIER_PAYMENT", year, format);
@@ -313,6 +318,7 @@ export async function voidSupplierPayment(id: string, reason: string, actor: Pay
         tx,
         before.allocations.map((a) => a.supplierBillId),
       );
+      await assertPeriodOpen(tx, before.date);
 
       const issued = before.withholdings.filter((w) => w.status === "ISSUED");
       if (issued.length) {

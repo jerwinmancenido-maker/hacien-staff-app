@@ -24,6 +24,14 @@ describe("S-57 notifications bell", () => {
     expect(lib).toContain("PARTIALLY_RECEIVED");
   });
 
+  it("SL-05 adds warranty ending soon for everyone with view", () => {
+    const lib = src("src/lib/notifications.ts");
+    expect(lib).toContain('key: "warranty-soon"');
+    expect(lib).toContain("Warranty ending soon");
+    expect(lib).toContain("listWarrantiesEndingSoon");
+    expect(src("src/app/(app)/receiving/page.tsx")).toContain('warranty=soon');
+  });
+
   it("layout renders the live bell instead of the dead button", () => {
     const layout = src("src/app/(app)/layout.tsx");
     expect(layout).toContain("NotificationsBell");

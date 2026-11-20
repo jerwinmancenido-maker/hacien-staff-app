@@ -24,6 +24,7 @@ export const AUDIT_ENTITIES = [
   "Supplier",
   "Contact",
   "Address",
+  "Business",
   "BusinessDocument",
   "DocumentAttachment",
   "Delivery",
@@ -34,6 +35,7 @@ export const AUDIT_ENTITIES = [
   "TaxPaidQuarter",
   "SpoiledBookletNumber",
   "EmailSuppression",
+  "StatementReminder",
 ] as const;
 
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
@@ -53,6 +55,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Supplier: "Supplier",
   Contact: "Contact",
   Address: "Address",
+  Business: "Business",
   BusinessDocument: "Business document",
   DocumentAttachment: "Attachment",
   Delivery: "Delivery",
@@ -63,6 +66,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   TaxPaidQuarter: "Tax paid",
   SpoiledBookletNumber: "Spoiled booklet no.",
   EmailSuppression: "Email suppression",
+  StatementReminder: "Statement reminder",
 };
 
 const PAST: Record<AuditAction, string> = {
@@ -78,6 +82,8 @@ const PAST: Record<AuditAction, string> = {
   email_draft: "Drafted email",
   download: "Downloaded",
   delete: "Deleted",
+  send_email: "Sent email",
+  import: "Imported",
 };
 
 /** Number stored on a delete snapshot, so the log can name a row that is gone. */
@@ -139,7 +145,6 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
       case "PurchaseOrder":
       case "Billing":
       case "Collection":
-      case "SupplierBill":
       case "ReceivingReport":
       case "SupplierReturn":
       case "SupplierPayment":
@@ -151,7 +156,6 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           PurchaseOrder: db.purchaseOrder,
           Billing: db.billing,
           Collection: db.collection,
-          SupplierBill: db.supplierBill,
           ReceivingReport: db.receivingReport,
           SupplierReturn: db.supplierReturn,
           SupplierPayment: db.supplierPayment,
@@ -159,6 +163,14 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           CashTransfer: db.cashTransfer,
         }[type] as { findMany: (a: { where: { id: { in: string[] } }; select: { id: true; number: true } }) => Promise<{ id: string; number: string }[]> };
         put(type, (await model.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })).map((r) => ({ id: r.id, label: r.number })));
+        break;
+      }
+      case "SupplierBill": {
+        // Supplier bills carry their number in billNumber, not number.
+        // Grouping them with the number models above made the whole
+        // audit log crash the moment a bill entry appeared (2026-11-18).
+        const found = await db.supplierBill.findMany({ where: { id: { in: ids } }, select: { id: true, billNumber: true } });
+        put(type, found.map((r) => ({ id: r.id, label: r.billNumber })));
         break;
       }
       case "Customer":

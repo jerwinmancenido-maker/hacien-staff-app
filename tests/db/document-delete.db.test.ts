@@ -48,7 +48,7 @@ import { voidSalesOrder } from "@/lib/services/sales-orders";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { recordCollection, voidCollection } from "@/lib/services/collections";
 import { getBookRegister, listBookSourceRows } from "@/lib/services/books";
-import { createReminder } from "@/lib/services/reminders";
+import { createReminder, listMyReminders } from "@/lib/services/reminders";
 import {
   armDocumentDeleteFailure,
   deleteBilling,
@@ -193,6 +193,26 @@ describe.skipIf(!env.hasDb)("admin delete of draft and void documents", () => {
       }
     }
     expect(await db.quote.findUnique({ where: { id: quote.id } })).not.toBeNull();
+  });
+
+  it("F33: reminder rows carry the record's number; a gone record reads null", async () => {
+    const year = await freshYear();
+    const { quote } = await draftQuote(year);
+    const mine = await createReminder(admin.id, {
+      entityType: "QUOTE",
+      entityId: quote.id,
+      remindAt: `${year}-04-01`,
+      note: "F33 number check",
+    });
+    const orphan = await createReminder(admin.id, {
+      entityType: "PURCHASE_ORDER",
+      entityId: "no-such-po-id",
+      remindAt: `${year}-04-01`,
+      note: "F33 orphan check",
+    });
+    const rows = await listMyReminders(admin.id);
+    expect(rows.find((r) => r.id === mine.id)?.entityNumber).toBe(quote.number);
+    expect(rows.find((r) => r.id === orphan.id)?.entityNumber).toBeNull();
   });
 
   it("refuses a missing or blank reason", async () => {

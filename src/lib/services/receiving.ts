@@ -11,12 +11,14 @@ import { assertCan, assertCanVoid, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
+import { toScaled } from "../quotes/calc";
 import { applyReceipt, checkReceipt, type OpenLine } from "../purchasing/receipt";
 import { poActionError, receiptStatus, type PoStatus } from "../purchasing/status";
 import type { ReceiptInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { assertPeriodOpen } from "./period-close";
 
 export type RrActor = PermissionUser & { id: string };
 
@@ -74,8 +76,24 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
         const po = await lockForReceiving(tx, purchaseOrderId);
         const err = poActionError(po.status, "receive");
         if (err) throw new DocRuleError(err);
+        await assertPeriodOpen(tx, input.receivedDate);
         const check = checkReceipt(po.lines as OpenLine[], input.lines);
         if (!check.ok) throw new ReceiptError(check.message, check.errors);
+        // F31: one serial per unit — more serials than pieces received
+        // on a line is a typo that used to post silently (X9:
+        // RR-2026-0004 took 2 serials for 1 piece). Refuse, marking
+        // the line, like the quantity checks above.
+        const serialErrors: Record<string, string> = {};
+        for (const e of check.entries) {
+          const serials = normalizeSerialNumbers(input.lines.find((l) => l.lineId === e.lineId)?.serialNumbers);
+          if (!serials) continue;
+          const count = serials.split(", ").length;
+          if (BigInt(count) * 100n > toScaled(e.qty, 2)) {
+            serialErrors[e.lineId] =
+              `${count} serial numbers but only ${e.qty.replace(/\.00$/, "")} received on this line — one serial per unit.`;
+          }
+        }
+        if (Object.keys(serialErrors).length) throw new ReceiptError("Check the serial numbers marked below.", serialErrors);
         const number = await allocateDocNumber(tx, "RECEIVING_REPORT", year, format);
         const rr = await tx.receivingReport.create({
           data: {
@@ -147,6 +165,7 @@ export async function voidReceivingReport(id: string, reason: string, actor: RrA
       await tx.$queryRaw`SELECT \`id\` FROM \`ReceivingReport\` WHERE \`id\` = ${id} FOR UPDATE`;
       const rr = await tx.receivingReport.findUniqueOrThrow({ where: { id }, include: { items: true } });
       if (rr.status === "VOID") throw new DocRuleError("This receiving report is already void.");
+      await assertPeriodOpen(tx, rr.receivedDate);
       if (!["SENT", "PARTIALLY_RECEIVED", "RECEIVED"].includes(po.status)) {
         throw new DocRuleError(po.status === "CLOSED" ? "The PO is closed; its receiving reports can't be voided." : "The PO is void.");
       }
