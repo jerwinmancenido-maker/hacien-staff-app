@@ -6,6 +6,7 @@ import { getPurchaseOrderView } from "@/lib/purchasing/views";
 import { listSupplierReturns } from "@/lib/services/returns";
 import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
 import { formatDateTime, formatPeso } from "@/lib/format";
+import { COST_NOT_SET_LABEL, supplierCostMissing } from "@/lib/quotes/calc";
 import { Activity } from "@/components/Activity";
 import { PillTabs } from "@/components/PillTabs";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
@@ -219,7 +220,9 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                       </td>
                       <td className="num">{qtyText(i.qty)}</td>
                       <td>{i.unit}</td>
-                      {po.canSeeCosts && <td className="num">{formatPeso(i.unitCost!)}</td>}
+                      {po.canSeeCosts && (
+                        <td className="num">{supplierCostMissing(i.unitCost) ? COST_NOT_SET_LABEL : formatPeso(i.unitCost!)}</td>
+                      )}
                       {po.canSeeCosts && <td className="num strong">{formatPeso(i.total!)}</td>}
                       <td className="num">
                         {qtyText(i.receivedQty)} / {qtyText(i.qty)}

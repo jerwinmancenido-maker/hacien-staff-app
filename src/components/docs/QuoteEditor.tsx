@@ -229,11 +229,13 @@ function DescTextarea({
   value,
   onValue,
   onKeyDown,
+  placeholder,
 }: {
   label: string;
   value: string;
   onValue: (v: string) => void;
   onKeyDown?: (ev: KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -246,7 +248,7 @@ function DescTextarea({
       className="quote-desc"
       rows={1}
       value={value}
-      placeholder="Search by product name or SKU…"
+      placeholder={placeholder ?? "Search by product name or SKU…"}
       onChange={(ev) => {
         onValue(ev.target.value);
         growDesc(ev.target);
@@ -1695,9 +1697,20 @@ export function QuoteEditor({
                         <div className="quote-ln-no">{idx + 1}</div>
                         <div className="quote-ln-dsc">
                           <div className="quote-ln-descwrap">
-                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
+                            <DescTextarea
+                              label={i.isLot ? `Line ${idx + 1} lot name / description` : `Line ${idx + 1} description`}
+                              placeholder={i.isLot ? "Lot name / description — prints as the lot's spec text" : undefined}
+                              value={i.description}
+                              onValue={(v) => onDescription(i, v)}
+                              onKeyDown={(ev) => onDescKeyDown(i, ev)}
+                            />
                             {pickerBox(i)}
                           </div>
+                          {i.isLot ? (
+                            <div className="small muted quote-ln-comp-hint">
+                              This is the lot&apos;s name — required, and it prints as the lot&apos;s spec text. The members below carry the parts and their cost.
+                            </div>
+                          ) : null}
                           {productMeta(i)}
                           <div className="quote-ln-tags">
                             {usePickChips ? (
@@ -2110,9 +2123,20 @@ export function QuoteEditor({
                       </div>
                       <div className="quote-line-card-desc">
                         <div className="quote-ln-descwrap">
-                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
+                          <DescTextarea
+                            label={i.isLot ? `Line ${idx + 1} lot name / description` : `Line ${idx + 1} description`}
+                            placeholder={i.isLot ? "Lot name / description — prints as the lot's spec text" : undefined}
+                            value={i.description}
+                            onValue={(v) => onDescription(i, v)}
+                            onKeyDown={(ev) => onDescKeyDown(i, ev)}
+                          />
                           {pickerBox(i)}
                         </div>
+                        {i.isLot ? (
+                          <div className="small muted quote-ln-comp-hint">
+                            This is the lot&apos;s name — required, and it prints as the lot&apos;s spec text. The members below carry the parts and their cost.
+                          </div>
+                        ) : null}
                         {productMeta(i)}
                       </div>
                       <div className="quote-line-card-row3">
@@ -2462,7 +2486,14 @@ export function QuoteEditor({
                           <>
                             {formatPeso(totals.netMargin)}{" "}
                             <span className="muted">
-                              ({Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%)
+                              {/* D8: partial state — the percent prices the
+                                  cost-not-set lines at ₱0, so show "—" for
+                                  it and keep only the peso "Margin so far". */}
+                              (
+                              {totals.supplierCostState === "partial"
+                                ? "—"
+                                : `${Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%`}
+                              )
                             </span>
                           </>
                         )}

@@ -28,7 +28,7 @@ import {
   withholdingCodesFromSo,
 } from "@/lib/services/collections";
 import { listTransactions } from "@/lib/services/transactions";
-import { arAgingSummary, countPending2307Certificates, getStatement, list2307 } from "@/lib/billing/views";
+import { arAgingSummary, countPending2307Certificates, customerArSnapshot, getStatement, list2307 } from "@/lib/billing/views";
 import { getBillingPrintModel } from "@/lib/print/views";
 import { amountInWords } from "@/lib/print/amount-in-words";
 import { saveCustomer } from "@/lib/services/companies";
@@ -597,6 +597,58 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     const applied = allocs.reduce((a, x) => a + toScaled(money(x.cashApplied), 2), 0n);
     expect(applied).toBe(toScaled("500.00", 2));
     expect(await customerCreditBalance(customer.id)).toBe("0.00");
+  });
+
+  it("customerArSnapshot: a fully paid billing counts as billed with nothing outstanding (D33)", async () => {
+    const year = await freshYear();
+    const { customer, so } = await openSo(year);
+    const soRow = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+    const contract = money(soRow.contractPrice);
+    const wh = money(soRow.withholdingTotal);
+    const cash = fromScaled(toScaled(contract, 2) - toScaled(wh, 2), 2);
+    const billing = await recordBilling(
+      {
+        salesOrderId: so.id,
+        amount: contract,
+        invoiceNo: nextInvoice(),
+        invoiceDate: new Date(Date.UTC(year, 2, 5)),
+        dueDate: new Date(Date.UTC(year, 3, 4)),
+        notes: null,
+      },
+      admin,
+    );
+    await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "BANK_TRANSFER",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: `OR-D33-${year}`,
+        amountReceived: cash,
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: cash,
+            withholdingApplied: wh,
+            withholdingRate: "0.0100",
+            atcCode: "WC010",
+          },
+        ],
+      },
+      admin,
+    );
+
+    const snap = await customerArSnapshot(customer.id);
+    expect(snap.hasBillings).toBe(true);
+    expect(snap.aging.total).toBe("0.00");
+
+    const fresh = await makeCustomer(["GOODS_1"]);
+    const emptySnap = await customerArSnapshot(fresh.id);
+    expect(emptySnap.hasBillings).toBe(false);
+    expect(emptySnap.aging.total).toBe("0.00");
   });
 
   it("getStatement opening credit and AR as of from respect appliedOn", async () => {

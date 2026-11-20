@@ -258,3 +258,43 @@ describe("line withholding percent (0–15%)", () => {
     );
   });
 });
+
+describe("lot line description (VR1 lot-editor trap)", () => {
+  const base = {
+    id: null,
+    description: "Line",
+    kind: "GOODS" as const,
+    qty: "1",
+    unit: "pc",
+    unitPrice: "100",
+    supplierUnitCost: "0",
+  };
+
+  it("still requires a description on a lot line, even with valid components", () => {
+    // The requirement is intentional — the lot description is the printed
+    // spec text. The VR1 fix labels the editor field so users can find it;
+    // the rule itself must not soften.
+    const r = itemSchema.safeParse({
+      ...base,
+      description: "   ",
+      isLot: true,
+      components: [{ description: "Part inside the lot", qty: "1", unit: "pc", unitCost: "10" }],
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(
+        r.error.issues.some((i) => i.path[0] === "description" && i.message === "Description is required."),
+      ).toBe(true);
+    }
+  });
+
+  it("accepts a lot line once its description is filled in", () => {
+    const r = itemSchema.safeParse({
+      ...base,
+      description: "Rack bundle, installed",
+      isLot: true,
+      components: [{ description: "Part inside the lot", qty: "1", unit: "pc", unitCost: "10" }],
+    });
+    expect(r.success).toBe(true);
+  });
+});

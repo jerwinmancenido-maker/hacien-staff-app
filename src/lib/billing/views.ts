@@ -819,7 +819,9 @@ export async function customerArSnapshot(customerId: string) {
   // Audit E: deposits held — unapplied cash on isDeposit collections.
   const deposits = await customerDepositBalance(customerId);
   const anyOverdue = rows.some((r) => r.overdue);
-  return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total };
+  // D33: "ever billed" is separate from "still owed" — a customer whose
+  // billings are all paid has an aging total of 0 but was billed.
+  return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total, hasBillings: billings.length > 0 };
 }
 
 /** Statement of account data (printable). Title must say it's not an official invoice. */
