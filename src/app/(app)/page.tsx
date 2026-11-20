@@ -46,7 +46,7 @@ export default async function HomePage() {
     dash.header.newQuoteHref || dash.header.newBillingHref ? (
       <div className="home-header-actions">
         {dash.header.newQuoteHref ? (
-          <Link className="btn btn-secondary home-btn-quote" href={dash.header.newQuoteHref}>
+          <Link className="btn home-btn-quote" href={dash.header.newQuoteHref}>
             <FileIcon size={15} />
             New quote
           </Link>

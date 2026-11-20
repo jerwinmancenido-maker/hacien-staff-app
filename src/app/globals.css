@@ -547,10 +547,11 @@ a.tracker-card:hover {
   margin-bottom: calc(4px * var(--ui-scale, 1));
 }
 .page-header h1 {
-  font-family: var(--font-display-stack);
+  /* Round 1 D2: Archivo Black is wordmark-only — page headings use the
+     standard heading font (Inter) at semibold, like .card h2. */
+  font-family: var(--font);
   font-size: calc(30px * var(--ui-scale, 1));
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 600;
   margin: 0;
   display: flex;
   align-items: center;
@@ -579,7 +580,10 @@ a.tracker-card:hover {
   gap: calc(6px * var(--ui-scale, 1));
   height: calc(36px * var(--ui-scale, 1));
   padding: 0 calc(16px * var(--ui-scale, 1));
-  border-radius: var(--radius);
+  /* Round 1 D3 / guidelines §22 ruling (Option C): full pill — radius is
+     half the height — at the current 36px/30px heights. 999px keeps the
+     pill at any --ui-scale, the same value tabs and chips already use. */
+  border-radius: 999px;
   border: 1px solid transparent;
   background: var(--blue);
   color: #fff;
@@ -617,7 +621,7 @@ a.tracker-card:hover {
   background: var(--card);
   color: var(--ink);
   border-color: var(--border);
-  border-radius: var(--radius);
+  border-radius: 999px;
   font-weight: 500;
 }
 .btn-secondary:hover {
@@ -692,23 +696,16 @@ a.tracker-card:hover {
   }
 }
 .btn-danger {
+  /* §22 ruling: destructive is red OUTLINE, never solid red — there is no
+     solid variant; confirmation dialogs use this outline style too. */
   background: var(--card);
   color: var(--red);
   border-color: var(--red);
-  border-radius: var(--radius);
+  border-radius: 999px;
   font-weight: 500;
 }
 .btn-danger:hover {
   background: var(--red-bg);
-}
-.btn-danger.solid {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
-  border-radius: var(--radius);
-}
-.btn-danger.solid:hover {
-  background: #991b1b;
 }
 .btn-sm {
   height: calc(30px * var(--ui-scale, 1));
@@ -1306,16 +1303,16 @@ tr.inactive .cell-primary .sub {
   min-height: calc(40px * var(--ui-scale, 1));
 }
 .input,
-.field input[type="text"],
-.field input[type="email"],
-.field input[type="password"],
-.field input[type="number"],
+.field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]):not([type="color"]),
 .field select,
 .field textarea {
   width: 100%;
   /* Design pass step 5 (2026-11-18): inputs meet the component spec —
      42px editor-input height and the 11px control radius (inputs are
-     controls on the soft radius scale, not "small" 8px elements). */
+     controls on the soft radius scale, not "small" 8px elements).
+     Round 1 D24: the selector covers every text-like/date input type —
+     date, month, search and tel inputs inside .field previously missed
+     the rule and rendered as short native controls. */
   height: calc(42px * var(--ui-scale, 1));
   padding: 0 calc(12px * var(--ui-scale, 1));
   border: 1px solid var(--border);
@@ -1335,6 +1332,23 @@ tr.inactive .cell-primary .sub {
 .input:focus {
   border-color: var(--blue);
   box-shadow: var(--focus-ring);
+}
+/* Round 1 D24 safety net: controls rendered WITHOUT .field/.input (filter
+   bars, inline table editors, simple forms — e.g. the Businesses editor,
+   tax year/quarter selects, books month pickers, items search) otherwise
+   fall back to native 19–26px radius-0 rendering. Zero-specificity
+   :where() means every real component rule (edit tables, compact settings
+   inputs, .field) still wins; this only catches controls nothing else
+   styles. Inputs inside .search-pill keep the pill's borderless look. */
+:where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]):not([type="color"]):not(.search-pill *),
+    select:not(.search-pill *)
+  ) {
+  height: calc(42px * var(--ui-scale, 1));
+  padding: 0 calc(12px * var(--ui-scale, 1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
 }
 .field.has-error input,
 .field.has-error select,
@@ -1388,7 +1402,7 @@ tr.inactive .cell-primary .sub {
   margin-bottom: calc(8px * var(--ui-scale, 1));
 }
 .settings-shell .page-header h1 {
-  font-size: calc(26px * var(--ui-scale, 1));
+  /* Round 1: no size override — Settings H1 matches every other page (30px). */
   line-height: 1.15;
 }
 .settings-shell .page-header .subtitle {
@@ -2219,10 +2233,10 @@ tr.inactive .cell-primary .sub {
   padding: 0 0 calc(22px * var(--ui-scale, 1));
 }
 .auth-card h1 {
-  font-family: var(--font-display-stack);
+  /* Round 1 D2: same heading treatment as .page-header h1 (Inter, not Archivo). */
+  font-family: var(--font);
   font-size: calc(24px * var(--ui-scale, 1));
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 600;
   margin: 0 0 calc(4px * var(--ui-scale, 1));
 }
 .auth-card .subtitle {
@@ -6534,9 +6548,9 @@ button.contact-card-add {
   display: inline-flex;
   align-items: center;
   gap: calc(6px * var(--ui-scale, 1));
-  height: calc(34px * var(--ui-scale, 1));
+  /* Round 1 D3: no local height/radius override — Home header buttons use
+     the standard .btn 36px full pill like every other page header. */
   padding: 0 calc(14px * var(--ui-scale, 1));
-  border-radius: calc(9px * var(--ui-scale, 1));
   font-weight: 600;
 }
 .home-dashboard .card {
