@@ -380,6 +380,16 @@ describe.skipIf(!env.hasDb)("tax worksheets (MySQL)", () => {
     await voidCollection(colVoidEwt.id, "void ewt", admin);
     await voidCollection(voidCol.id, "void plain", admin);
 
+    // The surviving collection's 2307 is still PENDING (not yet received from
+    // the customer), so it must NOT credit the 1701Q payable yet.
+    const pending = await creditableWithholdingYtd(year, 1);
+    expect(pending).toBe("0.00");
+
+    // Once the certificate is received, the same amount becomes creditable.
+    await db.withholding2307.updateMany({
+      where: { collectionId: col.id },
+      data: { status: "RECEIVED", receivedAt: new Date(Date.UTC(year, 1, 20)) },
+    });
     const f = await creditableWithholdingYtd(year, 1);
     expect(f).toBe("100.00");
 
