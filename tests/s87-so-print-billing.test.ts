@@ -45,7 +45,7 @@ describe("S-87 print billing statement from the SO", () => {
   it("the billing print reached by those links is a statement, not an invoice", () => {
     const model = read("src/lib/print/views.ts");
     expect(model).toContain('title: "BILLING STATEMENT"');
-    expect(model).toContain('label: "Booklet invoice no."');
+    expect(model).toContain('label: "Sales Invoice no. (booklet)"');
     // Footer: billing prints carry "This is not an official invoice/receipt".
     expect(taxFooterLines("billing")).toContain("This is not an official invoice/receipt");
     // And no sales-invoice print route is linked from the SO page.

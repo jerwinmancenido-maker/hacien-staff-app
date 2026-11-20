@@ -222,6 +222,14 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
   });
   if (!q) return null;
+  // The buyer's PO usually arrives at conversion and is stored on the
+  // sales order only — the quote record stays null. Reprints of the
+  // quotation (the customer's acceptance paper) fall back to the
+  // converted order's number so the reference is not lost.
+  const buyerPoNo =
+    q.buyerPoNo ??
+    (await db.salesOrder.findFirst({ where: { quoteId: q.id }, select: { buyerPoNo: true } }))?.buyerPoNo ??
+    null;
   const letter = await letterhead(q.settingsVersionId);
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
@@ -254,7 +262,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
-      ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
+      ...(buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: buyerPoNo }] : []),
     ],
     // Full-width above items — not in the narrow right meta column.
     subject: q.subject?.trim() ? q.subject : null,
@@ -435,7 +443,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       email: null,
     },
     meta: [
-      { label: "Booklet invoice no.", value: String(b.invoiceNo) },
+      { label: "Sales Invoice no. (booklet)", value: String(b.invoiceNo) },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
       ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
@@ -467,9 +475,16 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
     where: { id },
     include: {
       customer: true,
-      cashAccount: { select: { name: true } },
       allocations: {
-        include: { billing: { select: { number: true, invoiceNo: true } } },
+        include: {
+          billing: {
+            select: {
+              number: true,
+              invoiceNo: true,
+              salesOrder: { select: { number: true, buyerPoNo: true } },
+            },
+          },
+        },
       },
       createdBy: { select: { name: true } },
     },
@@ -485,6 +500,12 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   const footer = await baseFooter("collection", letter, { thankYou: true });
   // Billing numbers already carry their "BL-" prefix — do not add another.
   const refs = c.allocations.map((a) => `${a.billing.number} / booklet #${a.billing.invoiceNo}`);
+  // The customer's own filing chain: the order and their PO reference,
+  // the same references the billing print carries.
+  const soRefs = [...new Set(c.allocations.map((a) => a.billing.salesOrder.number))];
+  const poRefs = [
+    ...new Set(c.allocations.map((a) => a.billing.salesOrder.buyerPoNo).filter((v): v is string => Boolean(v))),
+  ];
   const doc: ProfessionalPrintModel = {
     kind: "collection",
     title: "Collection Acknowledgement",
@@ -508,7 +529,8 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
       ...(c.receiptNo ? [{ label: "Receipt no.", value: c.receiptNo }] : []),
       ...(c.reference ? [{ label: "Reference", value: c.reference }] : []),
       ...(refs.length ? [{ label: "Applied to", value: refs.join(", ")}] : []),
-      ...(c.cashAccount ? [{ label: "Deposited to", value: c.cashAccount.name }] : []),
+      ...(soRefs.length ? [{ label: "Sales order", value: soRefs.join(", ") }] : []),
+      ...(poRefs.length ? [{ label: "Customer PO/ref", value: poRefs.join(", ") }] : []),
     ],
     items: [
       itemRow({

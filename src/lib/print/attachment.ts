@@ -24,6 +24,9 @@ export type AttachmentSheetItem = {
   note: string | null;
   /** Lot (bundle) lines print with the bold navy lot-title styling. */
   isLot: boolean;
+  /** Lot components (description + qty/unit only — never supplier or
+   * cost), so the receiver can check the bundle's contents on paper. */
+  parts: { description: string; qty: string }[];
 };
 
 export type AttachmentSheet = {
@@ -36,6 +39,10 @@ export type AttachmentSheet = {
   receivedBy: string | null;
   customerName: string;
   customerAddress: string | null;
+  /** The order's contact person — the driver needs a name and phone
+   * number on the paper at the gate. */
+  contactName: string | null;
+  contactPhone: string | null;
   items: AttachmentSheetItem[];
   warrantyNotes: string | null;
   banks: { label: string; accountName: string; accountPrinted: string }[];
@@ -55,6 +62,11 @@ export function splitSerials(serialNumbers: string | null | undefined): string[]
     .filter(Boolean);
 }
 
+/** Packing-list quantities print whole when they are whole ("2 pc", not
+ * "2.00 pc") — the same ".00" strip the professional documents apply. */
+const qtyText = (qty: { toFixed(n: number): string } | number | string, unit: string) =>
+  `${money(qty).replace(/\.00$/, "")} ${unit}`;
+
 /** SI numbers for the title line: linked manual SI numbers, or a blank when none yet. */
 export function formatSiNumbers(invoiceNos: string[]): string {
   const nos = invoiceNos.map((n) => n.trim()).filter(Boolean);
@@ -67,7 +79,23 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     include: {
       items: {
         orderBy: { id: "asc" },
-        include: { salesOrderItem: { select: { description: true, unit: true, isLot: true } } },
+        include: {
+          salesOrderItem: {
+            select: {
+              description: true,
+              unit: true,
+              isLot: true,
+              // Same select shape as the print lot-components include in
+              // views.ts: description + qty + unit only — supplier and
+              // cost never reach this sheet.
+              components: {
+                where: { removedAt: null },
+                orderBy: { sortOrder: "asc" },
+                select: { description: true, qty: true, unit: true },
+              },
+            },
+          },
+        },
       },
       salesOrder: {
         select: {
@@ -76,6 +104,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
           settingsVersionId: true,
           deliveryAddress: true,
           customer: { select: { name: true, address: true } },
+          contact: { select: { name: true, phone: true } },
           quote: { select: { deliveryNotes: true, warrantyNotes: true } },
         },
       },
@@ -108,12 +137,18 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     // the packing list's Delivery address blank ("—") whenever that
     // field was empty, even with a full address on the order.
     customerAddress: so.deliveryAddress ?? so.customer.address,
+    contactName: so.contact?.name ?? null,
+    contactPhone: so.contact?.phone ?? null,
     items: delivery.items.map((i) => ({
       description: i.salesOrderItem.description,
-      qty: `${money(i.qty)} ${i.salesOrderItem.unit}`,
+      qty: qtyText(i.qty, i.salesOrderItem.unit),
       serials: splitSerials(i.serialNumbers),
       note: i.note,
       isLot: i.salesOrderItem.isLot,
+      parts: i.salesOrderItem.components.map((c) => ({
+        description: c.description,
+        qty: qtyText(c.qty, c.unit),
+      })),
     })),
     warrantyNotes,
     banks: paymentInstructionsFromSettings(settings.print).filter((p) => p.kind === "bank"),
