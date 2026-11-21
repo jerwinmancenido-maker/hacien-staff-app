@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { printStripCss } from "@/lib/print/strip-style";
 import type { AttachmentSheet } from "@/lib/print/attachment";
@@ -89,12 +90,19 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
               <td className="pp-n">{i + 1}</td>
               <td className="pp-desc">
                 <div className={item.isLot ? "pp-pre pp-lot-title" : "pp-pre"}>{item.description}</div>
+                {/* D18: catalog identity (SKU · brand · model) as a muted
+                    sub-line, so the receiver can match the physical item
+                    to the catalog. Free-text lines carry no meta. */}
+                {item.meta ? <div className="pp-item-detail">{item.meta}</div> : null}
                 {item.note ? <div className="pp-item-detail pp-pre">{item.note}</div> : null}
                 {item.isLot
                   ? item.parts.map((p, j) => (
-                      <div key={j} className="pp-item-detail pp-pre">
-                        {p.description} · {p.qty}
-                      </div>
+                      <Fragment key={j}>
+                        <div className="pp-item-detail pp-pre">
+                          {p.description} · {p.qty}
+                        </div>
+                        {p.meta ? <div className="pp-item-detail">{p.meta}</div> : null}
+                      </Fragment>
                     ))
                   : null}
               </td>

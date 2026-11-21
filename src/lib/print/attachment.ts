@@ -19,6 +19,10 @@ import { POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
 
 export type AttachmentSheetItem = {
   description: string;
+  /** Catalog identity ("SKU x · Brand · Model") when the line links to
+   * a catalog Item that carries any of the three; null for free-text
+   * lines — they print exactly as before (D18). */
+  meta: string | null;
   qty: string;
   serials: string[];
   note: string | null;
@@ -26,7 +30,7 @@ export type AttachmentSheetItem = {
   isLot: boolean;
   /** Lot components (description + qty/unit only — never supplier or
    * cost), so the receiver can check the bundle's contents on paper. */
-  parts: { description: string; qty: string }[];
+  parts: { description: string; qty: string; meta: string | null }[];
 };
 
 export type AttachmentSheet = {
@@ -67,6 +71,17 @@ export function splitSerials(serialNumbers: string | null | undefined): string[]
 const qtyText = (qty: { toFixed(n: number): string } | number | string, unit: string) =>
   `${money(qty).replace(/\.00$/, "")} ${unit}`;
 
+/** Catalog identity for a print line, in the quote editor caption's
+ * format ("SKU x · Brand · Model"); null when the line links to no
+ * catalog item, or the item carries none of the three fields. */
+export function itemMetaText(
+  item: { brand: string | null; model: string | null; sku: string | null } | null | undefined,
+): string | null {
+  if (!item) return null;
+  const text = [item.sku ? `SKU ${item.sku}` : null, item.brand, item.model].filter(Boolean).join(" · ");
+  return text || null;
+}
+
 /** SI numbers for the title line: linked manual SI numbers, or a blank when none yet. */
 export function formatSiNumbers(invoiceNos: string[]): string {
   const nos = invoiceNos.map((n) => n.trim()).filter(Boolean);
@@ -85,13 +100,21 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
               description: true,
               unit: true,
               isLot: true,
+              quoteItemId: true,
               // Same select shape as the print lot-components include in
               // views.ts: description + qty + unit only — supplier and
-              // cost never reach this sheet.
+              // cost never reach this sheet. D18 adds the component's
+              // catalog identity (brand/model/SKU) so the receiver can
+              // match the physical item to the catalog.
               components: {
                 where: { removedAt: null },
                 orderBy: { sortOrder: "asc" },
-                select: { description: true, qty: true, unit: true },
+                select: {
+                  description: true,
+                  qty: true,
+                  unit: true,
+                  item: { select: { brand: true, model: true, sku: true } },
+                },
               },
             },
           },
@@ -112,6 +135,21 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
   });
   if (!delivery || delivery.voidedAt) return null;
   const so = delivery.salesOrder;
+  // D18: an SO line carries no catalog link of its own — it reaches its
+  // Item through the quote line it was copied from at conversion
+  // (quoteItemId → QuoteItem.item). Lot components link directly (the
+  // select above). Lines with no link, or items with no brand/model/SKU,
+  // print no meta line.
+  const quoteItemIds = [
+    ...new Set(delivery.items.map((i) => i.salesOrderItem.quoteItemId).filter((v): v is string => Boolean(v))),
+  ];
+  const quoteItems = quoteItemIds.length
+    ? await db.quoteItem.findMany({
+        where: { id: { in: quoteItemIds } },
+        select: { id: true, item: { select: { brand: true, model: true, sku: true } } },
+      })
+    : [];
+  const itemByQuoteItemId = new Map(quoteItems.map((qi) => [qi.id, qi.item]));
   const latest = await getSettingsSnapshot();
   const pinned = so.settingsVersionId ? await getSettingsVersion(so.settingsVersionId) : null;
   const settings = (pinned ?? latest).settings;
@@ -141,6 +179,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     contactPhone: so.contact?.phone ?? null,
     items: delivery.items.map((i) => ({
       description: i.salesOrderItem.description,
+      meta: itemMetaText(i.salesOrderItem.quoteItemId ? itemByQuoteItemId.get(i.salesOrderItem.quoteItemId) : null),
       qty: qtyText(i.qty, i.salesOrderItem.unit),
       serials: splitSerials(i.serialNumbers),
       note: i.note,
@@ -148,6 +187,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
       parts: i.salesOrderItem.components.map((c) => ({
         description: c.description,
         qty: qtyText(c.qty, c.unit),
+        meta: itemMetaText(c.item),
       })),
     })),
     warrantyNotes,
