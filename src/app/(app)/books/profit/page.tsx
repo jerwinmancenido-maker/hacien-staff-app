@@ -106,8 +106,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                     Total — deals dated in {month}
                   </td>
                   <td className="num strong">{formatPeso(dealTotals.contractPrice)}</td>
-                  <td className="num strong">{formatPeso(dealTotals.returns)}</td>
-                  <td className="num strong">{formatPeso(dealTotals.supplierCost)}</td>
+                  <td className="num strong col-phone-hide">{formatPeso(dealTotals.returns)}</td>
+                  <td className="num strong col-phone-hide">{formatPeso(dealTotals.supplierCost)}</td>
                   <td className="num strong">{formatPeso(dealTotals.margin)}</td>
                   <td className="num" />
                 </tr>
