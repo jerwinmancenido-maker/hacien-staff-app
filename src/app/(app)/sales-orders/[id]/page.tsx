@@ -5,7 +5,7 @@ import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
 import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listBillings, listSalesOrderCollections } from "@/lib/billing/views";
+import { getBookletView, listBillings, listSalesOrderCollections } from "@/lib/billing/views";
 import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
 import { db } from "@/lib/db";
 import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
@@ -96,6 +96,9 @@ export default async function SalesOrderPage({
   // Documents is for everyone; Cost & margin stays cost-users only.
   const tab: Tab =
     rawTab === "cost-margin" ? (so.canSeeCosts ? "cost-margin" : "overview") : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+  // DR booklet state for the delivery form's next-free hint — the same view
+  // the booklet page prints, so the hint can never disagree with it.
+  const drBooklet = tab === "deliveries" ? await getBookletView("DR") : null;
   const base = `/sales-orders/${id}`;
   const costWarnings = costMargin?.warnings.length ?? 0;
 
@@ -303,6 +306,9 @@ export default async function SalesOrderPage({
       )}
       {tab === "deliveries" && (
           <DeliverySection
+            nextDrNo={drBooklet?.nextFree ?? null}
+            drSeriesFrom={drBooklet?.range.seriesFrom ?? null}
+            drSeriesTo={drBooklet?.range.seriesTo ?? null}
             status={so.status}
             items={so.items.map((i) => ({
               id: i.id,
