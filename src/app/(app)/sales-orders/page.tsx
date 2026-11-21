@@ -85,6 +85,9 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
         >
           Needs supplier PO
         </Link>
+        <Link className="filter-chip" href="/sales-orders/aging">
+          Aging
+        </Link>
       </div>
       {businesses.length > 0 && (
         <div className="toolbar" style={{ marginTop: 6 }}>

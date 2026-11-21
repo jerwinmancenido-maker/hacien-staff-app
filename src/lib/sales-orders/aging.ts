@@ -1,0 +1,149 @@
+// SO aging: OPEN sales orders bucketed by days since the order date, using
+// the same age bands as AR aging (src/lib/billing/aging.ts) so the two aging
+// views read the same way. Read-only — no writes anywhere in this module.
+//
+// Scope rules:
+// - Own-company documents only (businessId null), the same wall the tax and
+//   Books surfaces apply: another business's orders never appear here.
+// - An order ages only while money is still left to bill on it. Fully billed
+//   orders move to AR aging (they are billed; collection is AR's job), and
+//   VOID / CLOSED orders are out entirely.
+
+import { db } from "../db";
+import { money, ymd } from "../documents/common";
+import { fromScaled, toScaled } from "../quotes/calc";
+import { AGING_BUCKETS, agingBucket, type AgingBucket } from "../billing/aging";
+import { billingToday, calendarDaysBetween } from "../billing/dates";
+import { remainingToBill } from "../billing/status";
+
+export type SoAgingInputRow = {
+  id: string;
+  number: string;
+  customerName: string;
+  /** SO date (DATE column, stored as 00:00 UTC of that calendar day). */
+  date: Date;
+  status: string;
+  contractPrice: string;
+  /** Amounts of the SO's NON-VOID billings (the loader filters VOID out). */
+  billedAmounts: readonly string[];
+};
+
+export type SoAgingRow = {
+  id: string;
+  number: string;
+  customerName: string;
+  /** SO date as YYYY-MM-DD. */
+  date: string;
+  daysOpen: number;
+  bucket: AgingBucket;
+  contractPrice: string;
+  billed: string;
+  leftToBill: string;
+};
+
+export type SoAgingBand = {
+  bucket: AgingBucket;
+  rows: SoAgingRow[];
+  /** Money sums across the band's rows. */
+  contractPrice: string;
+  billed: string;
+  leftToBill: string;
+};
+
+export type SoAgingSummary = {
+  /** Bands in AR aging order (current → 90+); bands with no rows are omitted. */
+  bands: SoAgingBand[];
+  orderCount: number;
+  totalContractPrice: string;
+  totalBilled: string;
+  totalLeftToBill: string;
+};
+
+/**
+ * Pure builder so unit tests pin the bucketing without a database.
+ * The band edges come from agingBucket() — the same function AR aging uses —
+ * fed with the SO date in place of a due date: days between the SO date and
+ * today is the order's age. The AR government carve-out does not apply here
+ * (it exists so government receivables never read as overdue; an old
+ * government order still has unbilled work to age).
+ */
+export function buildSoAging(rows: readonly SoAgingInputRow[], today: Date = billingToday()): SoAgingSummary {
+  const kept: SoAgingRow[] = [];
+  for (const r of rows) {
+    if (r.status !== "OPEN") continue;
+    const leftToBill = remainingToBill(r.contractPrice, r.billedAmounts);
+    if (toScaled(leftToBill, 2) <= 0n) continue;
+    const billed = fromScaled(toScaled(r.contractPrice, 2) - toScaled(leftToBill, 2), 2);
+    kept.push({
+      id: r.id,
+      number: r.number,
+      customerName: r.customerName,
+      date: ymd(r.date)!,
+      daysOpen: calendarDaysBetween(r.date, today),
+      bucket: agingBucket(r.date, today),
+      contractPrice: r.contractPrice,
+      billed,
+      leftToBill,
+    });
+  }
+  // Oldest first within a band — the longest-waiting orders get eyes first.
+  kept.sort((a, b) => b.daysOpen - a.daysOpen || b.number.localeCompare(a.number));
+
+  const bands: SoAgingBand[] = [];
+  let totalContract = 0n;
+  let totalBilled = 0n;
+  let totalLeft = 0n;
+  for (const bucket of AGING_BUCKETS) {
+    const bandRows = kept.filter((r) => r.bucket === bucket);
+    if (bandRows.length === 0) continue;
+    let bandContract = 0n;
+    let bandBilled = 0n;
+    let bandLeft = 0n;
+    for (const r of bandRows) {
+      bandContract += toScaled(r.contractPrice, 2);
+      bandBilled += toScaled(r.billed, 2);
+      bandLeft += toScaled(r.leftToBill, 2);
+    }
+    totalContract += bandContract;
+    totalBilled += bandBilled;
+    totalLeft += bandLeft;
+    bands.push({
+      bucket,
+      rows: bandRows,
+      contractPrice: fromScaled(bandContract, 2),
+      billed: fromScaled(bandBilled, 2),
+      leftToBill: fromScaled(bandLeft, 2),
+    });
+  }
+  return {
+    bands,
+    orderCount: kept.length,
+    totalContractPrice: fromScaled(totalContract, 2),
+    totalBilled: fromScaled(totalBilled, 2),
+    totalLeftToBill: fromScaled(totalLeft, 2),
+  };
+}
+
+/** DB loader: OPEN, own-company sales orders with their non-void billings. */
+export async function listSalesOrderAging(today: Date = billingToday()): Promise<SoAgingSummary> {
+  const rows = await db.salesOrder.findMany({
+    where: { status: "OPEN", businessId: null },
+    include: {
+      customer: { select: { name: true } },
+      billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
+    },
+    orderBy: [{ date: "asc" }, { number: "asc" }],
+  });
+  return buildSoAging(
+    rows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      customerName: r.customer.name,
+      date: r.date,
+      status: r.status,
+      contractPrice: money(r.contractPrice),
+      billedAmounts: r.billings.map((b) => money(b.amount)),
+    })),
+    today,
+  );
+}
