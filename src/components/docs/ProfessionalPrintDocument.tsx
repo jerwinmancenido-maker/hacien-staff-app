@@ -171,7 +171,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       : doc.kind === "sales_order"
         ? "SO no."
         : doc.kind === "billing"
-          ? "Billing no."
+          ? "Sales Invoice no."
           : doc.kind === "customer_statement"
             ? "Customer"
             : doc.kind === "supplier_statement"

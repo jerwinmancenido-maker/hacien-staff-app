@@ -127,7 +127,11 @@ export const billingPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "billing",
     title: "BILLING STATEMENT",
-    number: "BL-2026-0001",
+    // Standardized scheme (2026-11-21): the Sales Invoice (booklet)
+    // number is the primary number; the internal BL number is a
+    // secondary meta cell.
+    number: "1",
+    meta: [{ label: "Billing no.", value: "BL-2026-0001" }],
     hideStatus: true,
     thankYou: true,
     taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],

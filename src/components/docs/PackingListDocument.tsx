@@ -38,7 +38,7 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-docnum">
           <div className="pp-docnum-label">Attachment to DR No.</div>
           <div className="pp-docnum-value">{sheet.drNumber}</div>
-          <div className="pp-docnum-sub">SI No. {sheet.siNumbers}</div>
+          <div className="pp-docnum-sub">Sales Invoice No. {sheet.siNumbers}</div>
         </div>
       </div>
 
