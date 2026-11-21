@@ -97,7 +97,7 @@ export default async function BooksHomePage({
             const q = `?from=${period.fromYmd}&to=${period.toYmd}`;
             return (
               <li key={key} style={{ marginBottom: 12 }}>
-                <Link href={`/books/${c.path}${q}`}>
+                <Link className="link" href={`/books/${c.path}${q}`}>
                   <b>{c.title}</b>
                 </Link>
                 <div className="faint small">{c.subtitle}</div>
@@ -105,19 +105,19 @@ export default async function BooksHomePage({
             );
           })}
           <li style={{ marginBottom: 12 }}>
-            <Link href="/books/profit">
+            <Link className="link" href="/books/profit">
               <b>Monthly profit</b>
             </Link>
             <div className="faint small">Net profit for the month and margin by deal, with CSV export.</div>
           </li>
           <li style={{ marginBottom: 12 }}>
-            <Link href={TAX_WORKSHEET_PAGES.home.href}>
+            <Link className="link" href={TAX_WORKSHEET_PAGES.home.href}>
               <b>{TAX_WORKSHEET_PAGES.home.title}</b>
             </Link>
             <div className="faint small">{TAX_WORKSHEET_PAGES.home.subtitle}</div>
           </li>
           <li style={{ marginBottom: 0 }}>
-            <Link href={TAX_CALENDAR_PAGE.href}>
+            <Link className="link" href={TAX_CALENDAR_PAGE.href}>
               <b>{TAX_CALENDAR_PAGE.title}</b>
             </Link>
             <div className="faint small">{TAX_CALENDAR_PAGE.subtitle}</div>
