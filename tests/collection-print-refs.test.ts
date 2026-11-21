@@ -18,3 +18,31 @@ describe("collection print — Applied to references", () => {
     expect(views).toContain("${a.billing.number} / booklet #${a.billing.invoiceNo}");
   });
 });
+
+// VR1 Client F4: the acknowledgement printed the internal cash-account
+// name ("Deposited to: BDO Ops") — a bookkeeping label the customer
+// cannot act on — and omitted the sales-order / buyer-PO references the
+// billing print carries, breaking the customer's filing chain.
+describe("collection print — customer filing references, no internal account name", () => {
+  const start = views.indexOf("export async function getCollectionPrintModel");
+  const model = views.slice(start, views.indexOf("export async function getPurchaseOrderPrintModel", start));
+
+  it("never prints the internal cash-account name", () => {
+    expect(model).not.toContain("Deposited to");
+    expect(model).not.toContain("cashAccount");
+  });
+
+  it("loads the sales order and buyer PO through the allocations", () => {
+    expect(model).toContain("salesOrder: { select: { number: true, buyerPoNo: true } }");
+  });
+
+  it("carries the Sales order and Customer PO/ref meta cells, like the billing print", () => {
+    expect(model).toContain('{ label: "Sales order", value: soRefs.join(", ") }');
+    expect(model).toContain('{ label: "Customer PO/ref", value: poRefs.join(", ") }');
+  });
+
+  it("leaves the EWT-applied line exactly as established", () => {
+    expect(model).toContain('"EWT (2307) applied"');
+    expect(model).toContain("EWT_2307_NOTE");
+  });
+});

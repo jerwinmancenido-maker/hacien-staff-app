@@ -56,6 +56,13 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-party-box">
           <div className="pp-label">Customer</div>
           <div className="pp-strong">{sheet.customerName}</div>
+          {sheet.contactName ? (
+            <div>
+              <span className="pp-label-inline">Attn: </span>
+              {sheet.contactName}
+              {sheet.contactPhone ? <span className="pp-party-contact-bits"> · {sheet.contactPhone}</span> : null}
+            </div>
+          ) : null}
         </div>
         <div className="pp-party-box">
           <div className="pp-label">Delivery address</div>
@@ -83,6 +90,13 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
               <td className="pp-desc">
                 <div className={item.isLot ? "pp-pre pp-lot-title" : "pp-pre"}>{item.description}</div>
                 {item.note ? <div className="pp-item-detail pp-pre">{item.note}</div> : null}
+                {item.isLot
+                  ? item.parts.map((p, j) => (
+                      <div key={j} className="pp-item-detail pp-pre">
+                        {p.description} · {p.qty}
+                      </div>
+                    ))
+                  : null}
               </td>
               <td className="num pp-qty">{item.qty}</td>
               <td>{item.serials.length ? item.serials.join(", ") : "—"}</td>
