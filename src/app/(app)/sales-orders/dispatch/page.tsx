@@ -21,7 +21,7 @@ export default async function DispatchQueuePage() {
         subtitle="Open sales orders with goods still to deliver, oldest first. Own-company orders only."
       />
       <div className="toolbar">
-        <Link className="filter-chip" href="/sales-orders">
+        <Link className="btn secondary" href="/sales-orders">
           ← All sales orders
         </Link>
       </div>
@@ -31,11 +31,11 @@ export default async function DispatchQueuePage() {
           <div className="value num">{summary.orderCount}</div>
         </div>
         <div className="card stat">
-          <div className="label">Total units remaining</div>
+          <div className="label">Quantity still to deliver</div>
           <div className="value num">{money(summary.totalUnitsRemaining).replace(/\.00$/, "")}</div>
         </div>
         <div className={`card stat${oldest && oldest.daysOpen > 30 ? " stat-red" : ""}`}>
-          <div className="label">Oldest wait</div>
+          <div className="label">Longest-waiting order</div>
           <div className="value num">{oldest ? `${oldest.daysOpen} day${oldest.daysOpen === 1 ? "" : "s"}` : "—"}</div>
         </div>
       </div>
@@ -49,8 +49,11 @@ export default async function DispatchQueuePage() {
         summary.rows.map((r) => (
           <div className="card" key={r.id} style={{ marginBottom: 20 }}>
             <h2 style={{ marginTop: 0 }}>
-              <Link href={`/sales-orders/${r.id}`}>{r.number}</Link> · {r.customerName}
+              <Link className="link" href={`/sales-orders/${r.id}`}>{r.number}</Link>
             </h2>
+            <p className="small" style={{ marginTop: 0 }}>
+              {r.customerName}
+            </p>
             <p className="small faint" style={{ marginTop: 0 }}>
               Ordered {formatDate(new Date(`${r.date}T00:00:00.000Z`))} · {r.daysOpen} day{r.daysOpen === 1 ? "" : "s"} open
               {r.contactName ? ` · Contact: ${r.contactName}${r.contactPhone ? ` · ${r.contactPhone}` : ""}` : ""}
@@ -78,7 +81,7 @@ export default async function DispatchQueuePage() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td className="strong">Total remaining</td>
+                    <td className="strong">Total qty remaining</td>
                     <td className="num strong">{money(r.unitsRemaining).replace(/\.00$/, "")}</td>
                   </tr>
                 </tfoot>

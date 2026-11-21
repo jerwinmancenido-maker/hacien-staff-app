@@ -758,7 +758,7 @@ a.tracker-card:hover {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(200px * var(--ui-scale, 1)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(220px * var(--ui-scale, 1)), 1fr));
   gap: calc(14px * var(--ui-scale, 1));
   margin-bottom: calc(14px * var(--ui-scale, 1));
   align-items: stretch;
@@ -770,6 +770,15 @@ a.tracker-card:hover {
   height: 100%;
   align-self: stretch;
   box-sizing: border-box;
+}
+.stat {
+  min-width: 0;
+}
+/* A plain stat card's danger signal: the aging/dispatch pages apply stat-red
+   to a .card.stat, but the only pre-existing rule targeted
+   .stat-link.stat-red .foot, so the red never rendered. Wire the value. */
+.card.stat.stat-red .value {
+  color: var(--red);
 }
 .stat .label {
   color: var(--text-2);
@@ -1023,6 +1032,14 @@ a.tracker-card:hover {
   padding: 0;
   max-height: none;
 }
+/* Aging band cards: the table sits directly on the card surface — no second
+   bordered box inside the card (same treatment as .payments-table-card). */
+.band-card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
 .payments-empty {
   max-width: 100%;
 }
@@ -1080,6 +1097,17 @@ table.list td {
   padding: calc(8px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1));
   border-top: 1px solid var(--divider);
   vertical-align: middle;
+}
+/* Long names in list tables: cap the cell and ellipsize on desktop (the full
+   name rides the cell's title attribute); at phone width the .col-phone-cap
+   rule above governs instead. */
+@media (min-width: 641px) {
+  table.list td.cell-cap {
+    max-width: calc(16rem * var(--ui-scale, 1));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 /* Document numbers (QT/SO/PO/BL/CR...) never wrap mid-number on desktop;
    the phone card layouts keep their overflow-wrap rules below. Dates and
