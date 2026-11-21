@@ -14,7 +14,7 @@ const search = readFileSync(path.join(process.cwd(), "src/lib/items/search.ts"),
 
 describe("compact quote line: search box and dropdown", () => {
   it("the description box carries the search placeholder", () => {
-    expect(editor).toContain('placeholder="Search by product name or SKU…"');
+    expect(editor).toContain('placeholder={placeholder ?? "Search by product name or SKU…"}');
     expect(editor).toContain("<span>Product — search by name or SKU</span>");
   });
 
