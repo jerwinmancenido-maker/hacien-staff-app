@@ -94,7 +94,7 @@ export function VoidDialog({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-danger solid" disabled={pending || reason.trim().length < 3}>
+          <button type="submit" className="btn btn-danger" disabled={pending || reason.trim().length < 3}>
             {pending ? "Voiding…" : `Void ${docLabel}`}
           </button>
         </div>
@@ -149,7 +149,7 @@ export function DeleteDialog({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-danger solid" disabled={pending || reason.trim().length < 3}>
+          <button type="submit" className="btn btn-danger" disabled={pending || reason.trim().length < 3}>
             {pending ? "Deleting…" : "Delete"}
           </button>
         </div>
