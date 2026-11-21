@@ -9,7 +9,9 @@
 // - Net: revenue − supplier bills − expenses.
 // - Margin by deal: sales orders dated in the month (non-void), contract
 //   price less the deal's posted returns, minus supplier cost; margin % is
-//   blank when the net contract price is ₱0.
+//   blank when the net contract price is ₱0, and also when the supplier
+//   cost was never set (₱0.00 — a 100% figure would print the bookkeeping
+//   placeholder as fact, D8).
 import { db } from "../db";
 import { money, ymd } from "../documents/common";
 import { divRound, fromScaled, toScaled } from "../quotes/calc";
@@ -48,6 +50,10 @@ export function dealMargin(contractPrice: string, supplierCost: string): { margi
   const margin = toScaled(contractPrice, 2) - toScaled(supplierCost, 2);
   const price = toScaled(contractPrice, 2);
   if (price === 0n) return { margin: fromScaled(margin, 2), marginPct: null };
+  // D8: ₱0.00 supplier cost means "not set" everywhere in the app
+  // (supplierCostMissing, quotes/calc) — keep the peso margin (the full
+  // price, as stored) but show no percent instead of a factual 100%.
+  if (toScaled(supplierCost, 2) === 0n) return { margin: fromScaled(margin, 2), marginPct: null };
   // F23: round like the quotes side (divRound, half away from zero) —
   // plain BigInt division truncated, so 24.3077% showed as 24.30 on the
   // Monthly profit page while the quotes list showed 24.31.

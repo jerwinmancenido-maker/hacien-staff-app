@@ -169,7 +169,10 @@ function MarginRow({ totals }: { totals: TotalsBoxData }) {
           COST_NOT_SET_LABEL
         ) : (
           <>
-            {formatPeso(totals.netMargin ?? 0)} <span className="muted">({totals.netMarginPct}%)</span>
+            {/* D8: in the partial state the stored percent prices the
+                missing lines at ₱0 — keep the peso "Margin so far" but
+                show no percent until every line has a cost. */}
+            {formatPeso(totals.netMargin ?? 0)} <span className="muted">({state === "partial" ? "—" : `${totals.netMarginPct}%`})</span>
           </>
         )}
       </span>

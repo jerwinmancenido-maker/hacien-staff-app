@@ -43,7 +43,7 @@ export async function CustomerOverview({
   docCounts: DocCounts;
   docStats: OpenDocStats;
   warnDays: number;
-  ar?: { aging: AgingAmounts; overdue: string; credit: string; anyOverdue: boolean; balanceDue: string; overdueLabel?: string | null };
+  ar?: { aging: AgingAmounts; overdue: string; credit: string; anyOverdue: boolean; balanceDue: string; hasBillings?: boolean; overdueLabel?: string | null };
   /** S-58: false hides the TIN row (view-only users). */
   canSeeTin?: boolean;
 }) {
@@ -181,8 +181,12 @@ export async function CustomerOverview({
             ))}
           </div>
           <div className="aging-note faint small">
-            {!ar || Number(ar.aging.total) === 0 ? (
+            {!ar ? (
               <span>Nothing billed yet.</span>
+            ) : Number(ar.aging.total) === 0 ? (
+              // D33: an all-paid customer has nothing OUTSTANDING — "Nothing
+              // billed yet" is only true when no billing exists at all.
+              <span>{ar.hasBillings ? "Nothing outstanding." : "Nothing billed yet."}</span>
             ) : Number(ar.overdue) > 0 ? (
               <span>Overdue {formatPeso(ar.overdue)}.</span>
             ) : null}
