@@ -60,6 +60,10 @@
   --warning-bg: #fffbeb;
   --danger: #b91c1c;
   --danger-bg: #fef2f2;
+  /* Design guide v1.5: the destructive BUTTON outline is this soft
+     red. Scoped to .btn-danger only — the label text keeps --red
+     (readable on white), and error text / alerts keep --danger. */
+  --danger-outline: #f08a8a;
 
   /* Aliases used across the stylesheet (Home / brand-06). */
   --bg: var(--grey-50);
@@ -697,10 +701,12 @@ a.tracker-card:hover {
 }
 .btn-danger {
   /* §22 ruling: destructive is red OUTLINE, never solid red — there is no
-     solid variant; confirmation dialogs use this outline style too. */
+     solid variant; confirmation dialogs use this outline style too.
+     Design guide v1.5 retoken: the outline is the soft red
+     (--danger-outline); the label keeps the darker --red for contrast. */
   background: var(--card);
   color: var(--red);
-  border-color: var(--red);
+  border-color: var(--danger-outline);
   border-radius: 999px;
   font-weight: 500;
 }
@@ -5687,6 +5693,23 @@ button.contact-card-add {
   font-size: 8pt;
   color: var(--pp-muted);
 }
+/* Packing list Received-by fields (mock v2 enrichment, 2026-11-21):
+   labelled write-in lines under the signature line. */
+.pp-sign-field {
+  color: #555;
+  margin-top: calc(2px * var(--ui-scale, 1));
+  min-height: 1.1em;
+}
+.pp-received-condition {
+  font-size: 9pt;
+  margin-top: calc(10px * var(--ui-scale, 1));
+}
+.pp-condition-line {
+  display: inline-block;
+  width: 55mm;
+  max-width: 60%;
+  border-bottom: 1px solid #0a0a0a;
+}
 .pp-foot {
   /* Sit right after content on short quotes (no flex spacer gap).
      On long/multi-page quotes the footer still follows the closing block
@@ -9256,6 +9279,7 @@ button.contact-card-add {
     --warning-bg: #332b18;
     --danger: #de8f8f;
     --danger-bg: #3a2323;
+    --danger-outline: #f08a8a;
     --bg: #0b0e14;
     --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
   }

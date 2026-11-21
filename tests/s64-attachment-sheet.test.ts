@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { formatSiNumbers, splitSerials, type AttachmentSheet } from "@/lib/print/attachment";
+import { formatSiNumbers, itemMetaText, splitSerials, type AttachmentSheet } from "@/lib/print/attachment";
 import { PackingListDocument } from "@/components/docs/PackingListDocument";
 
 const root = process.cwd();
@@ -65,7 +65,12 @@ describe("S-64 attachment sheet — lot parts, contact, whole quantities", () =>
 
   it("loads lot components with the description + qty + unit only select", () => {
     expect(model).toContain("components: {");
-    expect(model).toContain("select: { description: true, qty: true, unit: true }");
+    // D18 extended the select with the component's catalog identity
+    // (brand/model/SKU) — still no supplier or cost fields.
+    expect(model).toContain("item: { select: { brand: true, model: true, sku: true } }");
+    expect(model).toContain("description: true,");
+    expect(model).toContain("qty: true,");
+    expect(model).toContain("unit: true,");
     // Supplier and cost must never reach this sheet.
     expect(model).not.toContain("unitCost");
     expect(model).not.toContain("supplierId");
@@ -97,16 +102,25 @@ describe("S-64 attachment sheet — lot parts, contact, whole quantities", () =>
       items: [
         {
           description: "ICT Bundle",
+          meta: null,
           qty: "1 lot",
           serials: [],
           note: null,
           isLot: true,
           parts: [
-            { description: "Laptop unit", qty: "2 pc" },
-            { description: "Docking station", qty: "1.50 pc" },
+            { description: "Laptop unit", qty: "2 pc", meta: "SKU LT-100 · Lenovo · ThinkPad T14" },
+            { description: "Docking station", qty: "1.50 pc", meta: null },
           ],
         },
-        { description: "HDMI cable", qty: "3 pc", serials: ["SN-9"], note: null, isLot: false, parts: [] },
+        {
+          description: "HDMI cable",
+          meta: "SKU CB-9 · Ugreen · 4K 2m",
+          qty: "3 pc",
+          serials: ["SN-9"],
+          note: null,
+          isLot: false,
+          parts: [],
+        },
       ],
       warrantyNotes: null,
       banks: [],
@@ -151,5 +165,158 @@ describe("S-64 attachment sheet — lot parts, contact, whole quantities", () =>
     expect(html).toContain("3 pc");
     expect(html).not.toContain("2.00 pc");
     expect(html).not.toContain("3.00 pc");
+  });
+});
+
+// VR1 D18: brand/model/SKU reached no print. The packing list now prints
+// the catalog identity as a muted sub-line where a line links to a
+// catalog Item (top-level lines via their quote line; lot components
+// directly). Free-text lines print exactly as before.
+describe("S-64 attachment sheet — catalog identity (D18)", () => {
+  const model = src("src/lib/print/attachment.ts");
+
+  it("formats the meta in the editor caption's format, SKU first", () => {
+    expect(itemMetaText({ sku: "LT-100", brand: "Lenovo", model: "ThinkPad T14" })).toBe(
+      "SKU LT-100 · Lenovo · ThinkPad T14",
+    );
+    expect(itemMetaText({ sku: null, brand: "Ugreen", model: null })).toBe("Ugreen");
+    expect(itemMetaText({ sku: "CB-9", brand: null, model: null })).toBe("SKU CB-9");
+    expect(itemMetaText({ sku: null, brand: null, model: null })).toBeNull();
+    expect(itemMetaText(null)).toBeNull();
+    expect(itemMetaText(undefined)).toBeNull();
+  });
+
+  it("threads the item through the quote line for top-level lines, and directly for components", () => {
+    expect(model).toContain("quoteItemId: true");
+    expect(model).toContain("db.quoteItem.findMany");
+    expect(model).toContain("itemByQuoteItemId");
+    expect(model).toContain("meta: itemMetaText(c.item)");
+  });
+
+  it("renders the meta sub-line for linked lines and parts, and nothing for free-text lines", () => {
+    const sheet: AttachmentSheet = {
+      deliveryId: "del-1",
+      salesOrderId: "so-1",
+      salesOrderNumber: "SO-2026-0001",
+      drNumber: "10452",
+      siNumbers: "10",
+      deliveryDate: "November 21, 2026",
+      receivedBy: null,
+      customerName: "Acme Corporation",
+      customerAddress: "123 Gate Street, Pasig",
+      contactName: null,
+      contactPhone: null,
+      items: [
+        {
+          description: "ICT Bundle",
+          meta: null,
+          qty: "1 lot",
+          serials: [],
+          note: null,
+          isLot: true,
+          parts: [{ description: "Laptop unit", qty: "2 pc", meta: "SKU LT-100 · Lenovo · ThinkPad T14" }],
+        },
+        {
+          description: "HDMI cable",
+          meta: "SKU CB-9 · Ugreen · 4K 2m",
+          qty: "3 pc",
+          serials: [],
+          note: null,
+          isLot: false,
+          parts: [],
+        },
+        { description: "Free-text labour", meta: null, qty: "1 lot", serials: [], note: null, isLot: false, parts: [] },
+      ],
+      warrantyNotes: null,
+      banks: [],
+      company: {
+        registeredName: "HACIEN Information Technology Solutions",
+        tradeName: "",
+        tin: "",
+        address: "",
+        phone: "",
+        email: "",
+        website: "",
+        logoUrl: null,
+      },
+      qrSvg: "",
+      policiesUrl: "https://haciensolutions.com/policies",
+      versionLine: "Policies v2.2",
+      missing: [],
+    };
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet }));
+    // Top-level linked line and linked lot part both show their identity.
+    expect(html).toContain("SKU CB-9 · Ugreen · 4K 2m");
+    expect(html).toContain("SKU LT-100 · Lenovo · ThinkPad T14");
+    // Exactly two meta lines print — the free-text line adds none.
+    expect(html.split("SKU ").length - 1).toBe(2);
+    expect(html).toContain("Free-text labour");
+  });
+});
+
+// Owner-approved print mock v2 enrichment (Jerwin 2026-11-21; VR1
+// Driver F3): the Received by block was one unlabelled line — no
+// printed name, designation or time, and no condition-of-goods
+// wording — too weak as proof of delivery.
+describe("S-64 attachment sheet — Received by block (mock v2 fields)", () => {
+  function receivedSheet(receivedBy: string | null): AttachmentSheet {
+    return {
+      deliveryId: "del-1",
+      salesOrderId: "so-1",
+      salesOrderNumber: "SO-2026-0001",
+      drNumber: "10452",
+      siNumbers: "10",
+      deliveryDate: "November 21, 2026",
+      receivedBy,
+      customerName: "Acme Corporation",
+      customerAddress: "123 Gate Street, Pasig",
+      contactName: null,
+      contactPhone: null,
+      items: [],
+      warrantyNotes: null,
+      banks: [],
+      company: {
+        registeredName: "HACIEN Information Technology Solutions",
+        tradeName: "",
+        tin: "",
+        address: "",
+        phone: "",
+        email: "",
+        website: "",
+        logoUrl: null,
+      },
+      qrSvg: "",
+      policiesUrl: "https://haciensolutions.com/policies",
+      versionLine: "Policies v2.2",
+      missing: [],
+    };
+  }
+
+  it("prints the labelled Printed name / Designation / Date & time fields and the condition line", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet(null) }));
+    expect(html).toContain("Printed name: ");
+    expect(html).toContain("Designation: ");
+    expect(html).toContain("Date &amp; time: ");
+    expect(html).toContain("Received in good condition unless noted here:");
+    expect(html).toContain("pp-condition-line");
+    // The signature line itself stays.
+    expect(html).toContain("pp-sign-line");
+  });
+
+  it("fills the recorded name and delivery date into the fields when the receipt is recorded", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet("Juan Dela Cruz") }));
+    const nameAt = html.indexOf("Printed name: ");
+    expect(html.slice(nameAt, nameAt + 60)).toContain("Juan Dela Cruz");
+    const timeAt = html.indexOf("Date &amp; time: ");
+    expect(html.slice(timeAt, timeAt + 60)).toContain("November 21, 2026");
+  });
+
+  it("leaves the fields blank for handwriting when no receipt is recorded yet", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet(null) }));
+    const timeAt = html.indexOf("Date &amp; time: ");
+    // Nothing fills the Date & time field (the meta strip's own
+    // "Delivery date" cell is a different, earlier part of the sheet).
+    expect(html.slice(timeAt, timeAt + 40)).not.toContain("November 21, 2026");
+    expect(html).not.toContain("Juan Dela Cruz");
   });
 });

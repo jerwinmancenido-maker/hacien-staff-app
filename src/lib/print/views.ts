@@ -426,7 +426,13 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   const doc: ProfessionalPrintModel = {
     kind: "billing",
     title: "BILLING STATEMENT",
-    number: b.number,
+    // Standardized invoice-number presentation (Jerwin 2026-11-21): the
+    // Sales Invoice (booklet) number is the document's primary number —
+    // it headlines the print and the component labels it "Sales Invoice
+    // no." — while the internal billing number rides secondary in the
+    // meta strip as "Billing no.". Same scheme as the packing list and
+    // the collection acknowledgement.
+    number: String(b.invoiceNo),
     date: day(ymd(b.invoiceDate)),
     status: b.status,
     hideStatus: HIDE_STATUS_ON_PRINT.has("billing"),
@@ -443,7 +449,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       email: null,
     },
     meta: [
-      { label: "Sales Invoice no. (booklet)", value: String(b.invoiceNo) },
+      { label: "Billing no.", value: b.number },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
       ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
@@ -451,7 +457,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     ],
     items: [
       itemRow({
-        description: `Billing for sales order ${b.salesOrder.number} (booklet #${b.invoiceNo})`,
+        description: `Billing for sales order ${b.salesOrder.number} (Sales Invoice No. ${b.invoiceNo})`,
         qty: "1.00",
         unit: "lot",
         unitPrice: amount,
@@ -499,7 +505,9 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   if (Number(whTotal) > 0) totals.unshift({ label: "EWT (2307) applied", amount: whTotal });
   const footer = await baseFooter("collection", letter, { thankYou: true });
   // Billing numbers already carry their "BL-" prefix — do not add another.
-  const refs = c.allocations.map((a) => `${a.billing.number} / booklet #${a.billing.invoiceNo}`);
+  // The booklet number rides under its standardized name (Sales Invoice
+  // No.), the same wording as the billing print and the packing list.
+  const refs = c.allocations.map((a) => `${a.billing.number} / Sales Invoice No. ${a.billing.invoiceNo}`);
   // The customer's own filing chain: the order and their PO reference,
   // the same references the billing print carries.
   const soRefs = [...new Set(c.allocations.map((a) => a.billing.salesOrder.number))];

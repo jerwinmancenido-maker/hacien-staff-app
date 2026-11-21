@@ -171,7 +171,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       : doc.kind === "sales_order"
         ? "SO no."
         : doc.kind === "billing"
-          ? "Billing no."
+          ? "Sales Invoice no."
           : doc.kind === "customer_statement"
             ? "Customer"
             : doc.kind === "supplier_statement"
@@ -271,7 +271,13 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           <tbody>
             {doc.items.map((i, n) => {
               const comps = i.components ?? [];
-              if (comps.length === 0) {
+              // Quotations print a lot as ONE row — the lot's own name,
+              // qty "1 lot", the price on the lot alone (Jerwin's standing
+              // lot rule; 2026-11-21 ruling supersedes the 2026-11-09 block
+              // design below for quotes). The components never print on a
+              // quotation; they belong on the packing list. Sales orders
+              // keep the block design.
+              if (comps.length === 0 || doc.kind === "quote") {
                 return (
                   <tr key={n}>
                     <td className="pp-n">{n + 1}</td>
@@ -286,17 +292,18 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
                   </tr>
                 );
               }
-              // Lot (bundle) line, block design (owner 2026-11-09): NO title
-              // row — the lot's name rides on the Subject. One row per member
-              // part (title + spec bullets, the part's OWN qty/unit); the #
-              // and both price cells merge (rowSpan) across the block and
-              // centre vertically. The lot's qty is always 1, so Unit Price
-              // and Amount are the same figure — arithmetic, not duplication.
+              // Lot (bundle) line, block design (owner 2026-11-09; sales
+              // orders only since Jerwin's 2026-11-21 D1 ruling — quotes
+              // take the single-row path above): NO title row — the lot's
+              // name rides on the Subject. One row per member part (title
+              // + spec bullets, the part's OWN qty/unit); the # and both
+              // price cells merge (rowSpan) across the block and centre
+              // vertically. The lot's qty is always 1, so Unit Price and
+              // Amount are the same figure — arithmetic, not duplication.
               // CTO fix (2026-11-09): SO print models never carry a subject
               // (getSalesOrderPrintModel does not set one), so an SO lot
               // printed with no name anywhere. On sales orders the block
-              // leads with the lot's own description row (plain, no band);
-              // quote prints keep the owner's design untouched.
+              // leads with the lot's own description row (plain, no band).
               const showLotName = doc.kind === "sales_order";
               const span = comps.length + (showLotName ? 1 : 0);
               return (
