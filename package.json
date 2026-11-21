@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:tax-cal-layout": "node scripts/tax-calendar-layout-guard.mjs",
     "test:items-edit-layout": "node scripts/items-edit-layout-guard.mjs",
+    "test:table-phone-layout": "node scripts/table-phone-layout-guard.mjs",
     "test:print-2307-received-layout": "node scripts/print-2307-received-layout-guard.mjs",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

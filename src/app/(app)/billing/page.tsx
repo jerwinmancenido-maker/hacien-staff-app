@@ -120,7 +120,7 @@ export default async function BillingHomePage() {
                 <tr>
                   <th>Customer</th>
                   {AGING_BUCKETS.map((b) => (
-                    <th key={b} className="num">
+                    <th key={b} className="num col-phone-hide">
                       {AGING_BUCKET_LABELS[b]}
                     </th>
                   ))}
@@ -135,7 +135,7 @@ export default async function BillingHomePage() {
                       <Link href={`/customers/${r.customerId}?tab=balances`}>{r.customerName}</Link>
                     </td>
                     {AGING_BUCKETS.map((b) => (
-                      <td key={b} className="num">
+                      <td key={b} className="num col-phone-hide">
                         {formatPeso(r.aging[b])}
                       </td>
                     ))}

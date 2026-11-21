@@ -124,7 +124,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           columns={[
             { key: "number", label: "SO no." },
             { key: "customer", label: "Customer" },
-            { key: "po", label: "Buyer PO" },
+            { key: "po", label: "Buyer PO", className: "col-phone-hide" },
             { key: "total", label: "Total", numeric: true },
             { key: "status", label: "Status" },
             { key: "date", label: "Date" },
