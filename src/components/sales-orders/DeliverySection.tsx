@@ -7,7 +7,7 @@ import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { useFormAction } from "@/components/useFormAction";
 import { FileInput } from "@/components/FileInput";
-import { soDeliveryProgress } from "@/lib/sales-orders/delivery";
+import { soDeliveryProgress, soPodIncomplete } from "@/lib/sales-orders/delivery";
 import { formatBookletNumber } from "@/lib/billing/booklet";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -74,6 +74,7 @@ export function DeliverySection({
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const [serials, setSerials] = useState<Record<string, string>>({});
   const progress = soDeliveryProgress(items);
+  const podIncomplete = soPodIncomplete(progress, deliveries);
   const todayYmd = isoDate(manilaToday());
 
   const { state, pending, onSubmit } = useFormAction(async (prev, form) => {
@@ -107,6 +108,7 @@ export function DeliverySection({
         <h2>Deliveries</h2>
         <div className="right" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <span className="small muted strong">{progress.label}</span>
+          {podIncomplete && <span className="chip amber">POD incomplete</span>}
           {canEdit && status === "OPEN" && !showForm && (
             <button
               type="button"

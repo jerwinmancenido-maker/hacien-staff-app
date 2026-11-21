@@ -251,6 +251,7 @@ export function ConvertDialog({
             <label htmlFor="buyerPoNo">Buyer PO no.</label>
             <input id="buyerPoNo" type="text" value={v.buyerPoNo} onChange={(ev) => setV({ ...v, buyerPoNo: ev.target.value })} />
             {e.buyerPoNo && <div className="error">{e.buyerPoNo}</div>}
+            <div className="hint">Converting needs acceptance evidence — this buyer PO number, a recorded acceptance, or an uploaded conforme. Any one of the three is enough.</div>
           </div>
           <div className={`field${e.buyerPoDate ? " has-error" : ""}`}>
             <label htmlFor="buyerPoDate">Buyer PO date</label>

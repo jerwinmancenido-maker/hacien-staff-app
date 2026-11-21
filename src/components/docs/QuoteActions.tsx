@@ -408,7 +408,7 @@ type SoProps = {
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false }: SoProps & { canBill?: boolean; canCreatePos?: boolean }) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string }) {
   const [voiding, setVoiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const items: MenuItem[] = [];
@@ -416,6 +416,7 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
   // S-66: Record billing and Create POs used to sit beside the menu as
   // separate buttons on the SO page; they are menu items now.
   if (canBill) items.push({ key: "record-billing", label: "Record billing", href: `/billing/billings/new?salesOrderId=${id}` });
+  if (canCollect && customerId) items.push({ key: "record-collection", label: "Record collection", href: `/billing/collections/new?customerId=${customerId}` });
   if (canCreatePos) items.push({ key: "create-pos", label: "Create POs", href: `/sales-orders/${id}/purchase-orders` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
   // S-87: one "Print billing statement" entry per billing, opening the

@@ -1402,6 +1402,18 @@ export function QuoteEditor({
 
   const statusLabel = status === "DRAFT" ? "Draft" : status;
   const metaTitle = isNew ? "New" : quoteNumber ?? "Quote";
+  // VR1 majors-B fix 2: Save draft / Mark as sent disable on the conditions
+  // in the buttons' disabled expression below; name the blocker beside the
+  // buttons so a greyed-out Save is never silent.
+  const saveBlocker = busy
+    ? null
+    : !h.customerId
+      ? "Pick a customer to save"
+      : Object.keys(whPctErrors).length > 0
+        ? "Fix the withholding % errors to save"
+        : hasValidityError
+          ? (validityDaysError ?? validUntilError)
+          : null;
 
   return (
     <>
@@ -1439,6 +1451,11 @@ export function QuoteEditor({
                 Preview print
               </button>
             )}
+            {saveBlocker ? (
+              <span className="small muted" style={{ alignSelf: "center" }}>
+                {saveBlocker}
+              </span>
+            ) : null}
             <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError}>
               {pending ? "Saving…" : "Save draft"}
             </button>
