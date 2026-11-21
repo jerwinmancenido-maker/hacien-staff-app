@@ -88,6 +88,9 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
         <Link className="filter-chip" href="/sales-orders/aging">
           Aging
         </Link>
+        <Link className="filter-chip" href="/sales-orders/dispatch">
+          Dispatch queue
+        </Link>
       </div>
       {businesses.length > 0 && (
         <div className="toolbar" style={{ marginTop: 6 }}>
