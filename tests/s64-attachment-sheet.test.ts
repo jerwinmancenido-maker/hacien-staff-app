@@ -253,3 +253,70 @@ describe("S-64 attachment sheet — catalog identity (D18)", () => {
     expect(html).toContain("Free-text labour");
   });
 });
+
+// Owner-approved print mock v2 enrichment (Jerwin 2026-11-21; VR1
+// Driver F3): the Received by block was one unlabelled line — no
+// printed name, designation or time, and no condition-of-goods
+// wording — too weak as proof of delivery.
+describe("S-64 attachment sheet — Received by block (mock v2 fields)", () => {
+  function receivedSheet(receivedBy: string | null): AttachmentSheet {
+    return {
+      deliveryId: "del-1",
+      salesOrderId: "so-1",
+      salesOrderNumber: "SO-2026-0001",
+      drNumber: "10452",
+      siNumbers: "10",
+      deliveryDate: "November 21, 2026",
+      receivedBy,
+      customerName: "Acme Corporation",
+      customerAddress: "123 Gate Street, Pasig",
+      contactName: null,
+      contactPhone: null,
+      items: [],
+      warrantyNotes: null,
+      banks: [],
+      company: {
+        registeredName: "HACIEN Information Technology Solutions",
+        tradeName: "",
+        tin: "",
+        address: "",
+        phone: "",
+        email: "",
+        website: "",
+        logoUrl: null,
+      },
+      qrSvg: "",
+      policiesUrl: "https://haciensolutions.com/policies",
+      versionLine: "Policies v2.2",
+      missing: [],
+    };
+  }
+
+  it("prints the labelled Printed name / Designation / Date & time fields and the condition line", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet(null) }));
+    expect(html).toContain("Printed name: ");
+    expect(html).toContain("Designation: ");
+    expect(html).toContain("Date &amp; time: ");
+    expect(html).toContain("Received in good condition unless noted here:");
+    expect(html).toContain("pp-condition-line");
+    // The signature line itself stays.
+    expect(html).toContain("pp-sign-line");
+  });
+
+  it("fills the recorded name and delivery date into the fields when the receipt is recorded", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet("Juan Dela Cruz") }));
+    const nameAt = html.indexOf("Printed name: ");
+    expect(html.slice(nameAt, nameAt + 60)).toContain("Juan Dela Cruz");
+    const timeAt = html.indexOf("Date &amp; time: ");
+    expect(html.slice(timeAt, timeAt + 60)).toContain("November 21, 2026");
+  });
+
+  it("leaves the fields blank for handwriting when no receipt is recorded yet", () => {
+    const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet: receivedSheet(null) }));
+    const timeAt = html.indexOf("Date &amp; time: ");
+    // Nothing fills the Date & time field (the meta strip's own
+    // "Delivery date" cell is a different, earlier part of the sheet).
+    expect(html.slice(timeAt, timeAt + 40)).not.toContain("November 21, 2026");
+    expect(html).not.toContain("Juan Dela Cruz");
+  });
+});

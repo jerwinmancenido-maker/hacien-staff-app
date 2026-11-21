@@ -18,6 +18,9 @@ import type { AttachmentSheet } from "@/lib/print/attachment";
  * Received by is a signatory now, not a meta row: the receiver signs
  * this sheet, and when the receipt is already recorded the printed name
  * and the delivery date stand as the signature, like the other prints.
+ * The block carries the mock v2 fields (printed name, designation,
+ * date & time) plus a condition-of-goods line (2026-11-21 ruling), so
+ * the signed sheet stands as proof of delivery.
  */
 export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
   return (
@@ -144,11 +147,29 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-signatory">
           <div className="pp-sign-role">Received by</div>
           <div className="pp-sign-line" aria-hidden="true" />
-          <div className="pp-sign-name">{sheet.receivedBy ?? " "}</div>
-          <div className="pp-sign-date">Date</div>
-          {sheet.receivedBy ? <div className="pp-sign-date">{sheet.deliveryDate}</div> : null}
+          {/* Mock v2 fields (2026-11-21 ruling): the receiver's printed
+              name, designation and the date & time of receipt are
+              labelled write-in fields, so the sheet stands as proof of
+              delivery. When the receipt is already recorded, the
+              recorded name and the delivery date fill them in. All
+              fields stay optional — this is print layout only. */}
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">Printed name: </span>
+            {sheet.receivedBy ?? ""}
+          </div>
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">Designation: </span>
+          </div>
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">{"Date & time: "}</span>
+            {sheet.receivedBy ? sheet.deliveryDate : ""}
+          </div>
         </div>
       </section>
+
+      <p className="pp-received-condition">
+        Received in good condition unless noted here: <span className="pp-condition-line" aria-hidden="true" />
+      </p>
 
       <footer className="pp-foot">
         <div className="pp-foot-left">

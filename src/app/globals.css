@@ -5687,6 +5687,23 @@ button.contact-card-add {
   font-size: 8pt;
   color: var(--pp-muted);
 }
+/* Packing list Received-by fields (mock v2 enrichment, 2026-11-21):
+   labelled write-in lines under the signature line. */
+.pp-sign-field {
+  color: #555;
+  margin-top: calc(2px * var(--ui-scale, 1));
+  min-height: 1.1em;
+}
+.pp-received-condition {
+  font-size: 9pt;
+  margin-top: calc(10px * var(--ui-scale, 1));
+}
+.pp-condition-line {
+  display: inline-block;
+  width: 55mm;
+  max-width: 60%;
+  border-bottom: 1px solid #0a0a0a;
+}
 .pp-foot {
   /* Sit right after content on short quotes (no flex spacer gap).
      On long/multi-page quotes the footer still follows the closing block
