@@ -67,8 +67,41 @@ describe.skipIf(!env.hasDb)("period close Tier 2 + admin deletes (MySQL)", () =>
     await db.$disconnect();
   });
 
-  let invoiceSeq = 910_000 + Math.floor(Math.random() * 50_000);
-  const nextInvoice = () => ++invoiceSeq;
+  // Probe-up allocator (same pattern as collection-deposit): the shared test
+  // DB keeps every suite's billings, so a blind random base can land on a
+  // number another suite already used or spoiled. Seed above the current
+  // maximum and skip any candidate that is already taken.
+  let invoiceSeq = 0;
+
+  async function nextInvoice(): Promise<number> {
+    if (invoiceSeq === 0) {
+      const [maxBilling, maxSpoiled, maxClaim] = await Promise.all([
+        db.billing.aggregate({ _max: { invoiceNo: true } }),
+        db.spoiledBookletNumber.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+        db.bookletSerialClaim.aggregate({ _max: { number: true }, where: { type: "SI" } }),
+      ]);
+      const maxUsed = Math.max(
+        910_000,
+        Number(maxBilling._max.invoiceNo ?? 0),
+        Number(maxSpoiled._max.number ?? 0),
+        Number(maxClaim._max.number ?? 0),
+      );
+      invoiceSeq = maxUsed + Math.floor(Math.random() * 500) + 1;
+    }
+
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const candidate = ++invoiceSeq;
+      const [takenBilling, spoiled, takenClaim] = await Promise.all([
+        db.billing.findFirst({ where: { invoiceNo: candidate }, select: { id: true } }),
+        db.spoiledBookletNumber.findFirst({ where: { type: "SI", number: candidate }, select: { id: true } }),
+        db.bookletSerialClaim.findFirst({ where: { type: "SI", number: candidate }, select: { number: true } }),
+      ]);
+      if (!takenBilling && !spoiled && !takenClaim) {
+        return candidate;
+      }
+    }
+    throw new Error("Could not allocate unused SI number after 500 attempts");
+  }
 
   /** Parallel suites can republish settings with the default 1–500 booklet. */
   async function ensureWideBooklet() {
@@ -223,7 +256,7 @@ describe.skipIf(!env.hasDb)("period close Tier 2 + admin deletes (MySQL)", () =>
     await ensureWideBooklet();
     const a = await makeSo(d(2023, 10, 2));
     const billing = await recordBilling(
-      { salesOrderId: a.so.id, amount: "1000.00", invoiceNo: nextInvoice(), invoiceDate: d(2023, 10, 10), dueDate: plusDays(d(2023, 10, 10), 30), notes: null },
+      { salesOrderId: a.so.id, amount: "1000.00", invoiceNo: await nextInvoice(), invoiceDate: d(2023, 10, 10), dueDate: plusDays(d(2023, 10, 10), 30), notes: null },
       admin,
     );
     await voidBilling(billing.id, "Entered in error", admin);
@@ -233,7 +266,7 @@ describe.skipIf(!env.hasDb)("period close Tier 2 + admin deletes (MySQL)", () =>
 
     const b = await makeSo(d(2023, 11, 2));
     const billing2 = await recordBilling(
-      { salesOrderId: b.so.id, amount: "1000.00", invoiceNo: nextInvoice(), invoiceDate: d(2023, 11, 10), dueDate: plusDays(d(2023, 11, 10), 30), notes: null },
+      { salesOrderId: b.so.id, amount: "1000.00", invoiceNo: await nextInvoice(), invoiceDate: d(2023, 11, 10), dueDate: plusDays(d(2023, 11, 10), 30), notes: null },
       admin,
     );
     await voidBilling(billing2.id, "Entered in error", admin);
