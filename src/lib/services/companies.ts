@@ -9,6 +9,7 @@ import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_CUSTOMER } from "../docume
 import { ForbiddenError } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
+import { isNameLikeCustomerQuery, rankCustomerNameSuggestions } from "../search/suggest-customers";
 import { listWithholdingRates } from "./withholding";
 
 export class CompanyRuleError extends Error {
@@ -85,6 +86,27 @@ export function listCustomers(f: CustomerFilter) {
     ...(f.skip != null ? { skip: f.skip } : {}),
     ...(f.take != null ? { take: f.take } : {}),
   });
+}
+
+/** Hard cap on the candidate scan for name suggestions, so the bound is structural. */
+const SUGGESTION_CANDIDATE_CAP = 5000;
+
+/**
+ * L25 Fix B: "Did you mean" suggestions for a misspelled customer name.
+ * Fallback only — callers invoke this ONLY when the exact search came back
+ * empty, and the hits render as labelled suggestion links, never as results.
+ * Customer names only; the ranking itself lives in the pure, unit-tested
+ * src/lib/search/suggest-customers.ts.
+ */
+export async function suggestCustomersByName(q: string): Promise<{ id: string; name: string }[]> {
+  if (!isNameLikeCustomerQuery(q)) return [];
+  const rows = await db.customer.findMany({
+    where: { active: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+    take: SUGGESTION_CANDIDATE_CAP,
+  });
+  return rankCustomerNameSuggestions(q, rows);
 }
 
 export function getCustomer(id: string) {

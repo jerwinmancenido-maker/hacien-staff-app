@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { WithholdingType } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeTin } from "@/lib/permissions";
-import { listCustomers } from "@/lib/services/companies";
+import { listCustomers, suggestCustomersByName } from "@/lib/services/companies";
 import { expiryWarningDays, ownersWithExpiringDocuments } from "@/lib/services/business-documents";
 import { formatAddress } from "@/lib/addresses/format";
 import { WITHHOLDING_LABELS, WITHHOLDING_TYPES } from "@/lib/validation/companies";
@@ -48,6 +48,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     ...(expiringOnly ? { onlyIds: expiringIds } : {}),
   });
   const filtered = !!(s.q || wh || whNotSet || expiringOnly);
+  // L25 Fix B: a name search that found nothing gets "Did you mean"
+  // suggestions (customer names only, labelled links in the empty state).
+  const nameSuggestions = s.q && customers.length === 0 ? await suggestCustomersByName(s.q) : [];
 
   const filterTabs = [
     { key: "all", label: "All", href: href(s, { wh: undefined }) },
@@ -178,7 +181,20 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             : "No customers yet. Add your first customer."
         }
         emptyAction={
-          !filtered && can(user, "edit_data") ? (
+          nameSuggestions.length > 0 ? (
+            <span>
+              Did you mean:{" "}
+              {nameSuggestions.map((sg, i) => (
+                <span key={sg.id}>
+                  {i > 0 ? ", " : ""}
+                  <Link href={`/customers/${sg.id}`} className="link">
+                    {sg.name}
+                  </Link>
+                </span>
+              ))}
+              ?
+            </span>
+          ) : !filtered && can(user, "edit_data") ? (
             <Link className="btn btn-secondary" href="/customers/new">
               New customer
             </Link>

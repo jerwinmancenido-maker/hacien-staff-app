@@ -105,4 +105,18 @@ describe("top search wiring", () => {
     expect(src).toContain("Try a number, a name, or a serial.");
     expect(src).not.toMatch(/formatPeso|contractPrice|subtotal|\.amount|\.balance/);
   });
+
+  it("L25 Fix B: empty /search offers Did-you-mean customer suggestions, fallback only", () => {
+    const src = read("src/app/(app)/search/page.tsx");
+    expect(src).toContain("suggestCustomersByName");
+    expect(src).toContain("groups.length === 0 ? await suggestCustomersByName(q) : []");
+    expect(src).toContain("Did you mean:");
+  });
+
+  it("L25 Fix B: customers list empty state offers the same suggestions", () => {
+    const src = read("src/app/(app)/customers/page.tsx");
+    expect(src).toContain("suggestCustomersByName");
+    expect(src).toContain("customers.length === 0 ? await suggestCustomersByName(s.q) : []");
+    expect(src).toContain("Did you mean:");
+  });
 });
