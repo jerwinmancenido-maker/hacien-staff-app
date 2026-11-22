@@ -133,7 +133,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
             { key: "po", label: "Buyer PO", className: "col-phone-hide" },
             { key: "total", label: "Total", numeric: true },
             { key: "status", label: "Status" },
-            { key: "date", label: "Date" },
+            { key: "date", label: "Date", className: "col-phone-hide" },
           ]}
           rows={orders.map((o) => ({
             id: o.id,

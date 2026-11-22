@@ -865,7 +865,7 @@ a.tracker-card:hover {
   align-items: center;
   height: calc(32px * var(--ui-scale, 1));
   padding: 0 calc(14px * var(--ui-scale, 1));
-  border-radius: var(--radius);
+  border-radius: calc(999px * var(--ui-scale, 1));
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text-2);
@@ -989,6 +989,19 @@ a.tracker-card:hover {
     display: none;
   }
   table.list .col-phone-cap {
+    max-width: 10rem;
+    overflow-wrap: break-word;
+  }
+}
+/* Small-tablet demotions (≤860px, Complete Review 2026-11-22): the same
+   column-priority idea as the D12 phone classes at a wider breakpoint —
+   SO Aging's six columns push "Left to bill" +49px past the edge at
+   768px, and the billing list's customer names crowd its money columns. */
+@media (max-width: 860px) {
+  table.list .col-tab-hide {
+    display: none;
+  }
+  table.list .col-tab-cap {
     max-width: 10rem;
     overflow-wrap: break-word;
   }
@@ -1132,6 +1145,15 @@ table.list td {
   table.list td[data-col="record"] > div:first-child {
     white-space: nowrap;
   }
+}
+/* SO Aging is a hand-rolled table: its number/date cells keep the
+   no-mid-value-wrap protection at EVERY width (Calibration Case #1 —
+   below 769px the sticky first column wrapped "SO-/2026-/0002"). On
+   phones the table scrolls sideways inside its wrap by design, so the
+   whole number stays whole and scrolls with the row. */
+table.list.aging-table td[data-col="number"],
+table.list.aging-table td[data-col="date"] {
+  white-space: nowrap;
 }
 table.list td[data-col="record"] > div + div {
   overflow-wrap: break-word;
@@ -2404,7 +2426,7 @@ pre.json {
   gap: calc(6px * var(--ui-scale, 1));
   padding: calc(7px * var(--ui-scale, 1)) calc(14px * var(--ui-scale, 1));
   min-height: calc(40px * var(--ui-scale, 1));
-  border-radius: calc(9px * var(--ui-scale, 1));
+  border-radius: calc(999px * var(--ui-scale, 1));
   border: none;
   background: transparent;
   color: var(--text-2);
@@ -2430,6 +2452,20 @@ pre.json {
   color: var(--text);
   font-weight: 600;
   box-shadow: var(--shadow-pill);
+}
+/* Books family: section tabs carry the brand-blue active state, and at
+   desktop widths the strip wraps instead of overflowing the viewport
+   (Complete Review 2026-11-22: Books measured zero blue elements and
+   the Operations tab sat +137px inside the scroll track). */
+.books-nav .pill-tab.active {
+  background: var(--blue);
+  color: #fff;
+}
+@media (min-width: 769px) {
+  .books-nav .pill-tabs-track {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
 }
 .pill-tab-count {
   font-size: calc(11px * var(--ui-scale, 1));
@@ -2618,10 +2654,11 @@ pre.json {
   height: calc(18px * var(--ui-scale, 1));
   padding: 0 calc(4px * var(--ui-scale, 1));
   border-radius: calc(9px * var(--ui-scale, 1));
-  background: var(--red, #c00);
-  color: #fff;
+  background: var(--card);
+  border: 1px solid var(--danger-outline);
+  color: var(--red);
   font-size: calc(11px * var(--ui-scale, 1));
-  line-height: calc(18px * var(--ui-scale, 1));
+  line-height: calc(16px * var(--ui-scale, 1));
   text-align: center;
 }
 .notif-panel {

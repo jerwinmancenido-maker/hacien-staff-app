@@ -40,7 +40,7 @@ export default async function TaxWorksheetsHomePage({
           Default period: <b>{period.label}</b>
           {period.isDefault ? " (latest finished quarter)" : ""}.{" "}
           {period.year !== current.year || period.quarter !== current.quarter ? (
-            <Link href={`/books/tax?year=${current.year}&quarter=${current.quarter}`}>
+            <Link className="link" href={`/books/tax?year=${current.year}&quarter=${current.quarter}`}>
               Current quarter ({quarterLabel(current.year, current.quarter)})
             </Link>
           ) : null}
@@ -48,7 +48,7 @@ export default async function TaxWorksheetsHomePage({
         <ul className="plain-list" style={{ paddingLeft: 18, marginBottom: 0 }}>
           {PAGES.map((p) => (
             <li key={p.key} style={{ marginBottom: 12 }}>
-              <Link href={`${p.href}?${q}`}>
+              <Link className="link" href={`${p.href}?${q}`}>
                 <b>{p.title}</b>
               </Link>
               <div className="faint small">{p.subtitle}</div>
