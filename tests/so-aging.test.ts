@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSoAging, type SoAgingInputRow } from "@/lib/sales-orders/aging";
+import { buildSoAging, pageSoAging, type SoAgingInputRow, type SoAgingSummary } from "@/lib/sales-orders/aging";
 
 /**
  * SO aging bucketing (VR1 CEO finding: "no aging anywhere" for sales orders).
@@ -111,5 +111,86 @@ describe("SO aging bucketing", () => {
     expect(s.orderCount).toBe(0);
     expect(s.bands).toEqual([]);
     expect(s.totalLeftToBill).toBe("0.00");
+  });
+});
+
+describe("SO aging paging", () => {
+  /** 100 orders 10 days old (d1_30) + 150 orders 100 days old (d90_plus). */
+  function bigSummary(): SoAgingSummary {
+    const rows: SoAgingInputRow[] = [];
+    for (let i = 0; i < 100; i++) rows.push(row({ date: daysAgo(10) }));
+    for (let i = 0; i < 150; i++) rows.push(row({ date: daysAgo(100) }));
+    return buildSoAging(rows, TODAY);
+  }
+  const flat = (s: SoAgingSummary) => s.bands.flatMap((b) => b.rows);
+
+  it("bands carry their whole-band row count", () => {
+    const s = bigSummary();
+    expect(s.bands.map((b) => [b.bucket, b.rowCount, b.rows.length])).toEqual([
+      ["d1_30", 100, 100],
+      ["d90_plus", 150, 150],
+    ]);
+  });
+
+  it("pages the band tables while the summary stays whole-set", () => {
+    const s = bigSummary();
+    const p1 = pageSoAging(s);
+    expect(p1.total).toBe(250);
+    expect(p1.totalPages).toBe(3);
+    expect(p1.page).toBe(1);
+    expect(p1.pageSize).toBe(100);
+    expect(p1.items).toEqual(flat(s).slice(0, 100));
+    // Page 1 is exactly the first band; the second band starts on page 2.
+    expect(p1.bands.map((b) => b.bucket)).toEqual(["d1_30"]);
+    // Paging reads the summary; it never narrows it.
+    expect(s.orderCount).toBe(250);
+    expect(s.totalLeftToBill).toBe("250000.00");
+    expect(s.bands.map((b) => b.rows.length)).toEqual([100, 150]);
+  });
+
+  it("page slices tile the whole aging set with no gaps or overlaps", () => {
+    const s = bigSummary();
+    const seen: string[] = [];
+    const { totalPages } = pageSoAging(s);
+    for (let p = 1; p <= totalPages; p++) {
+      for (const r of pageSoAging(s, p).items) seen.push(r.id);
+    }
+    expect(seen).toEqual(flat(s).map((r) => r.id));
+    expect(new Set(seen).size).toBe(250);
+    expect(pageSoAging(s, 3).items).toHaveLength(50);
+  });
+
+  it("a band spanning pages keeps whole-band totals and count on every page", () => {
+    const s = bigSummary();
+    const whole = s.bands[1]!;
+    for (const p of [2, 3]) {
+      const band = pageSoAging(s, p).bands.find((b) => b.bucket === "d90_plus")!;
+      expect(band.contractPrice).toBe(whole.contractPrice);
+      expect(band.billed).toBe(whole.billed);
+      expect(band.leftToBill).toBe(whole.leftToBill);
+      expect(band.rowCount).toBe(150);
+    }
+    expect(pageSoAging(s, 2).bands[0]!.rows).toHaveLength(100);
+    expect(pageSoAging(s, 3).bands[0]!.rows).toHaveLength(50);
+    // The figures the header cards and grand total render never move.
+    expect(s.totalContractPrice).toBe("250000.00");
+    expect(s.totalBilled).toBe("0.00");
+    expect(s.totalLeftToBill).toBe("250000.00");
+  });
+
+  it("clamps a page past the end and treats an invalid page as page 1", () => {
+    const s = bigSummary();
+    expect(pageSoAging(s, 99).page).toBe(3);
+    expect(pageSoAging(s, 99).items).toEqual(flat(s).slice(200));
+    expect(pageSoAging(s, 0).page).toBe(1);
+    expect(pageSoAging(s, Number.NaN).page).toBe(1);
+  });
+
+  it("a set under one page is page 1 of 1 with bands untouched", () => {
+    const s = buildSoAging([row({ date: daysAgo(5) }), row({ date: daysAgo(100) })], TODAY);
+    const p1 = pageSoAging(s);
+    expect(p1.totalPages).toBe(1);
+    expect(p1.bands).toEqual(s.bands);
+    expect(p1.items).toEqual(flat(s));
   });
 });

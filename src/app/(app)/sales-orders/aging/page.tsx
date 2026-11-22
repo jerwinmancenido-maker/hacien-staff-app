@@ -1,13 +1,29 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listSalesOrderAging } from "@/lib/sales-orders/aging";
+import { listSalesOrderAging, pageSoAging } from "@/lib/sales-orders/aging";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import { AGING_BUCKET_LABELS } from "@/lib/billing/aging";
 import { PageHeader } from "@/components/ui";
 
-export default async function SoAgingPage() {
+type Search = { page?: string };
+
+function href(s: Search, patch: Partial<Search>) {
+  const merged: Search = { ...s, ...patch };
+  // Only a patch that names the page keeps one.
+  if (!("page" in patch)) delete merged.page;
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+  const qs = p.toString();
+  return `/sales-orders/aging${qs ? `?${qs}` : ""}`;
+}
+
+export default async function SoAgingPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requirePagePermission("view");
+  const s = await searchParams;
   const summary = await listSalesOrderAging();
+  const agingPage = pageSoAging(summary, parsePageParam(s.page));
   const oldestBand = summary.bands.find((b) => b.bucket === "d90_plus");
 
   return (
@@ -42,7 +58,7 @@ export default async function SoAgingPage() {
           </p>
         </div>
       ) : (
-        summary.bands.map((band) => (
+        agingPage.bands.map((band) => (
           <div className="card band-card" key={band.bucket} style={{ marginBottom: 20 }}>
             <h2 style={{ marginTop: 0 }}>
               {band.bucket === "current" ? "Current — opened today" : `${AGING_BUCKET_LABELS[band.bucket]} days open`}
@@ -78,7 +94,7 @@ export default async function SoAgingPage() {
                 <tfoot>
                   <tr>
                     <td colSpan={4} className="strong">
-                      Band total — {band.rows.length} order{band.rows.length === 1 ? "" : "s"}
+                      Band total — {band.rowCount} order{band.rowCount === 1 ? "" : "s"}
                     </td>
                     <td className="num strong col-phone-hide">{formatPeso(band.contractPrice)}</td>
                     <td className="num strong col-phone-hide col-tab-hide">{formatPeso(band.billed)}</td>
@@ -114,6 +130,13 @@ export default async function SoAgingPage() {
           </div>
         </div>
       )}
+      <ListPager
+        page={agingPage.page}
+        totalPages={agingPage.totalPages}
+        total={agingPage.total}
+        hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
+        jumpAction="/sales-orders/aging"
+      />
     </>
   );
 }
