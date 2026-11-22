@@ -99,7 +99,7 @@ export default async function ItemsPage({
               columns={[
                 { key: "item", label: "Item", sortable: false },
                 { key: "brand", label: "Brand / Model", sortable: false },
-                { key: "category", label: "Category", sortable: false },
+                { key: "category", label: "Category", sortable: false, className: "col-phone-hide" },
                 { key: "sku", label: "SKU", sortable: false },
                 { key: "unit", label: "Unit", sortable: false },
                 { key: "price", label: "Default price", numeric: true, sortable: false },

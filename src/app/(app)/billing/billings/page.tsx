@@ -109,10 +109,10 @@ export default async function BillingsListPage({
                 <tr>
                   <th>Booklet no.</th>
                   <th className="col-tab-cap">Customer</th>
-                  <th className="col-phone-hide">SO</th>
-                  <th className="col-phone-hide">Invoice date</th>
-                  <th>Due</th>
-                  <th className="num">Amount</th>
+                  <th className="col-phone-hide col-tab-hide">SO</th>
+                  <th className="col-phone-hide col-tab-hide">Invoice date</th>
+                  <th className="col-phone-hide col-tab-hide">Due</th>
+                  <th className="num col-phone-hide">Amount</th>
                   <th className="num">Balance</th>
                   <th>Status</th>
                 </tr>
@@ -128,18 +128,18 @@ export default async function BillingsListPage({
                     <td className="col-tab-cap">
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td data-col="number" className="col-phone-hide">
+                    <td data-col="number" className="col-phone-hide col-tab-hide">
                       <Link href={`/sales-orders/${r.salesOrder.id}`}>{r.salesOrder.number}</Link>
                     </td>
-                    <td data-col="date" className="col-phone-hide">{day(r.invoiceDate)}</td>
+                    <td data-col="date" className="col-phone-hide col-tab-hide">{day(r.invoiceDate)}</td>
                     {/* The "Expected by … (estimate)" label is prose and may wrap;
                         a plain due date gets the no-wrap date treatment. */}
                     {r.expectedPaymentLabel ? (
-                      <td>{r.expectedPaymentLabel}</td>
+                      <td className="col-phone-hide col-tab-hide">{r.expectedPaymentLabel}</td>
                     ) : (
-                      <td data-col="date">{day(r.dueDate)}</td>
+                      <td data-col="date" className="col-phone-hide col-tab-hide">{day(r.dueDate)}</td>
                     )}
-                    <td className="num">{formatPeso(r.amount)}</td>
+                    <td className="num col-phone-hide">{formatPeso(r.amount)}</td>
                     <td className="num strong">{formatPeso(r.balance)}</td>
                     <td data-col="status">
                       <BillingStatusChip status={r.status} /> {!r.isGovernment && <OverdueBadge label={r.overdue.label} />}

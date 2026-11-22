@@ -92,7 +92,7 @@ export function BooksRegisterTable({
           <thead>
             <tr>
               {config.columns.map((c) => (
-                <th key={c.key} className={c.key === "particulars" ? "col-phone-cap" : c.align === "right" ? "num" : undefined}>
+                <th key={c.key} className={c.key === "particulars" ? (config.key === "journal" ? "col-phone-hide" : "col-phone-cap") : c.key === "source" ? "col-tab-hide" : c.key === "party" && config.key === "journal" ? "col-tab-hide" : c.align === "right" ? "num" : undefined}>
                   {c.label}
                 </th>
               ))}
@@ -113,7 +113,7 @@ export function BooksRegisterTable({
                   return (
                     <td
                       key={c.key}
-                      className={c.key === "particulars" ? "col-phone-cap" : c.align === "right" ? "num" : undefined}
+                      className={c.key === "particulars" ? (config.key === "journal" ? "col-phone-hide" : "col-phone-cap") : c.key === "source" ? "col-tab-hide" : c.key === "party" && config.key === "journal" ? "col-tab-hide" : c.align === "right" ? "num" : undefined}
                       data-col={c.key === "date" ? "date" : undefined}
                     >
                       {value}

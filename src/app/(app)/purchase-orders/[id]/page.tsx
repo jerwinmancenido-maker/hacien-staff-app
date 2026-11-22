@@ -200,7 +200,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     <th>Unit</th>
                     {po.canSeeCosts && <th className="num">Unit cost</th>}
                     {po.canSeeCosts && <th className="num">Total</th>}
-                    <th className="num">Received</th>
+                    <th className="num col-phone-hide">Received</th>
                     <th aria-label="Progress" />
                   </tr>
                 </thead>
@@ -224,7 +224,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         <td className="num">{supplierCostMissing(i.unitCost) ? COST_NOT_SET_LABEL : formatPeso(i.unitCost!)}</td>
                       )}
                       {po.canSeeCosts && <td className="num strong">{formatPeso(i.total!)}</td>}
-                      <td className="num">
+                      <td className="num col-phone-hide">
                         {qtyText(i.receivedQty)} / {qtyText(i.qty)}
                       </td>
                       <td style={{ minWidth: 90 }}>
