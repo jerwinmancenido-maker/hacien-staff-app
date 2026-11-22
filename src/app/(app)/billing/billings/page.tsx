@@ -77,7 +77,7 @@ export default async function BillingsListPage({
       ) : (
         <div className="card">
           <div className="table-wrap">
-            <table className="list" aria-label="Billings">
+            <table className="list billing-list-table" aria-label="Billings">
               <thead>
                 <tr>
                   <th>Booklet no.</th>
