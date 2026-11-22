@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { SalesOrderStatus } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { listSalesOrdersPageView, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
@@ -32,7 +34,6 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
   const businesses = await listBusinesses();
   const business =
     s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
-  const pageParam = Number.parseInt(s.page ?? "", 10);
   const orderPage = await listSalesOrdersPageView(
     {
       q: s.q,
@@ -42,7 +43,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
       toDeliver: toDeliver || undefined,
       businessId: business,
     },
-    Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1,
+    parsePageParam(s.page),
   );
   const orders = orderPage.items;
   const filtered = !!(s.q || status || needsPo || openOnly || toDeliver || business);
@@ -165,26 +166,21 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           }))}
         />
       )}
-      {orderPage.totalPages > 1 && (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <span className="small faint">
-            Page {orderPage.page} of {orderPage.totalPages} · {orderPage.total} records
-          </span>
-          {orderPage.page > 1 && (
-            <Link
-              className="btn btn-secondary"
-              href={href(s, { page: orderPage.page - 1 > 1 ? String(orderPage.page - 1) : undefined })}
-            >
-              Prev
-            </Link>
-          )}
-          {orderPage.page < orderPage.totalPages && (
-            <Link className="btn btn-secondary" href={href(s, { page: String(orderPage.page + 1) })}>
-              Next
-            </Link>
-          )}
-        </div>
-      )}
+      <ListPager
+        page={orderPage.page}
+        totalPages={orderPage.totalPages}
+        total={orderPage.total}
+        hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
+        jumpAction="/sales-orders"
+        jumpParams={{
+          q: s.q,
+          status: s.status,
+          needsPo: s.needsPo,
+          open: s.open,
+          toDeliver: s.toDeliver,
+          business: s.business,
+        }}
+      />
     </>
   );
 }

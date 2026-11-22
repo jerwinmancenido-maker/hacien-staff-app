@@ -3,6 +3,8 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listBillingsPage, BILLING_STATUSES, BILLING_STATUS_LABELS } from "@/lib/billing/views";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import type { BillingStatus } from "@prisma/client";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
@@ -25,7 +27,7 @@ export default async function BillingsListPage({
       : "ALL";
   const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
   const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
-  const pageParam = sp.page ? Number.parseInt(sp.page, 10) : undefined;
+  const pageParam = parsePageParam(sp.page);
   const pageSizeParam = sp.pageSize ? Number.parseInt(sp.pageSize, 10) : undefined;
   const {
     rows,
@@ -152,27 +154,21 @@ export default async function BillingsListPage({
         </div>
       )}
 
-      {total > 0 && (
-        <div className="toolbar" style={{ marginTop: 16, justifyContent: "space-between", alignItems: "center" }}>
-          {currentPage > 1 ? (
-            <Link className="btn btn-secondary" href={pageHref(currentPage - 1)}>
-              Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="small faint">
-            Page {currentPage} of {totalPages} · {total} records
-          </span>
-          {currentPage < totalPages ? (
-            <Link className="btn btn-secondary" href={pageHref(currentPage + 1)}>
-              Next
-            </Link>
-          ) : (
-            <span />
-          )}
-        </div>
-      )}
+      <ListPager
+        page={currentPage}
+        totalPages={totalPages}
+        total={total}
+        hrefFor={pageHref}
+        jumpAction="/billing/billings"
+        jumpParams={{
+          status: status !== "ALL" ? status : undefined,
+          q: sp.q,
+          customerId: sp.customerId,
+          from: fromYmd,
+          to: toYmd,
+          pageSize: String(currentPageSize),
+        }}
+      />
     </>
   );
 }

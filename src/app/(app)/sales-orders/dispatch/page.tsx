@@ -3,6 +3,8 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/format";
 import { money } from "@/lib/documents/common";
 import { listDispatchQueue, pageDispatchQueue } from "@/lib/sales-orders/dispatch";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import { PageHeader } from "@/components/ui";
 
 /** Quantities print whole when they are whole ("2 pc", not "2.00 pc") —
@@ -25,8 +27,7 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
   await requirePagePermission("view");
   const s = await searchParams;
   const summary = await listDispatchQueue();
-  const pageParam = Number.parseInt(s.page ?? "", 10);
-  const queuePage = pageDispatchQueue(summary, Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1);
+  const queuePage = pageDispatchQueue(summary, parsePageParam(s.page));
   const oldest = summary.rows[0];
 
   return (
@@ -116,26 +117,13 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
           </div>
         ))
       )}
-      {queuePage.totalPages > 1 && (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <span className="small faint">
-            Page {queuePage.page} of {queuePage.totalPages} · {queuePage.total} records
-          </span>
-          {queuePage.page > 1 && (
-            <Link
-              className="btn btn-secondary"
-              href={href(s, { page: queuePage.page - 1 > 1 ? String(queuePage.page - 1) : undefined })}
-            >
-              Prev
-            </Link>
-          )}
-          {queuePage.page < queuePage.totalPages && (
-            <Link className="btn btn-secondary" href={href(s, { page: String(queuePage.page + 1) })}>
-              Next
-            </Link>
-          )}
-        </div>
-      )}
+      <ListPager
+        page={queuePage.page}
+        totalPages={queuePage.totalPages}
+        total={queuePage.total}
+        hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
+        jumpAction="/sales-orders/dispatch"
+      />
     </>
   );
 }

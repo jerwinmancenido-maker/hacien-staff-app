@@ -903,6 +903,22 @@ a.tracker-card:hover {
 .toolbar .btn {
   height: calc(44px * var(--ui-scale, 1));
 }
+/* Shared list pager jump form (ListPager): inline in the pager toolbar,
+   wraps with it on phone widths. */
+.pager-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8px * var(--ui-scale, 1));
+  margin: 0;
+}
+.pager-jump label {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale, 1));
+}
+.pager-jump .input {
+  width: 4.5em;
+}
 .toolbar .filter-chip {
   height: calc(44px * var(--ui-scale, 1));
   font-size: calc(13px * var(--ui-scale, 1));
