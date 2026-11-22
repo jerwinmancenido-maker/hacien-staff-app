@@ -52,6 +52,14 @@ describe("dispatch queue builder", () => {
     ]);
     expect(s.rows[0]!.unitsRemaining).toBe("8.25");
     expect(s.totalUnitsRemaining).toBe("8.25");
+    expect(s.rows[0]!.unitsByUnit).toEqual([
+      { unit: "pc", qty: "6.00" },
+      { unit: "m", qty: "2.25" },
+    ]);
+    expect(s.totalByUnit).toEqual([
+      { unit: "pc", qty: "6.00" },
+      { unit: "m", qty: "2.25" },
+    ]);
   });
 
   it("excludes fully delivered orders", () => {
@@ -93,8 +101,39 @@ describe("dispatch queue builder", () => {
     expect(s.totalUnitsRemaining).toBe("13.00");
   });
 
+  it("groups remaining quantities by unit per order and in the summary", () => {
+    const s = buildDispatchQueue(
+      [
+        row({
+          number: "SO-2026-0201",
+          lines: [
+            { description: "Widget", qty: "3.00", deliveredQty: "0.00", unit: "pc" },
+            { description: "Cable roll", qty: "1.00", deliveredQty: "0.00", unit: "lot" },
+            { description: "Gadget", qty: "2.00", deliveredQty: "0.00", unit: "pc" },
+          ],
+        }),
+        row({
+          number: "SO-2026-0202",
+          lines: [{ description: "Widget", qty: "4.00", deliveredQty: "1.00", unit: "pc" }],
+        }),
+      ],
+      TODAY,
+    );
+    const first = s.rows.find((r) => r.number === "SO-2026-0201")!;
+    expect(first.unitsByUnit).toEqual([
+      { unit: "pc", qty: "5.00" },
+      { unit: "lot", qty: "1.00" },
+    ]);
+    expect(first.unitsRemaining).toBe("6.00");
+    expect(s.totalByUnit).toEqual([
+      { unit: "pc", qty: "8.00" },
+      { unit: "lot", qty: "1.00" },
+    ]);
+    expect(s.totalUnitsRemaining).toBe("9.00");
+  });
+
   it("handles the empty queue", () => {
     const s = buildDispatchQueue([], TODAY);
-    expect(s).toEqual({ rows: [], orderCount: 0, totalUnitsRemaining: "0.00" });
+    expect(s).toEqual({ rows: [], orderCount: 0, totalUnitsRemaining: "0.00", totalByUnit: [] });
   });
 });

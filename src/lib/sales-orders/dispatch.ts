@@ -57,6 +57,9 @@ export type DispatchRow = {
   lines: DispatchLine[];
   /** Sum of the remaining quantities across the order's lines. */
   unitsRemaining: string;
+  /** The same remaining quantities grouped by unit, first-seen unit order —
+   * what the page renders; unitsRemaining stays as the blended sum. */
+  unitsByUnit: { unit: string; qty: string }[];
 };
 
 export type DispatchSummary = {
@@ -64,7 +67,16 @@ export type DispatchSummary = {
   rows: DispatchRow[];
   orderCount: number;
   totalUnitsRemaining: string;
+  /** totalUnitsRemaining grouped by unit, first-seen unit order. */
+  totalByUnit: { unit: string; qty: string }[];
 };
+
+/** Adds qty into a first-seen-ordered per-unit grouping (scaled sums). */
+function addUnitQty(groups: { unit: string; qty: bigint }[], unit: string, qty: bigint): void {
+  const g = groups.find((x) => x.unit === unit);
+  if (g) g.qty += qty;
+  else groups.push({ unit, qty });
+}
 
 /** Pure builder so unit tests pin the queue rules without a database. */
 export function buildDispatchQueue(
@@ -73,18 +85,22 @@ export function buildDispatchQueue(
 ): DispatchSummary {
   const kept: DispatchRow[] = [];
   let totalUnits = 0n;
+  const totalByUnitScaled: { unit: string; qty: bigint }[] = [];
   for (const r of rows) {
     if (r.status !== "OPEN") continue;
     const lines: DispatchLine[] = [];
     let units = 0n;
+    const rowByUnit: { unit: string; qty: bigint }[] = [];
     for (const l of r.lines) {
       const left = remainingDeliveryQty(l);
       if (toScaled(left, 2) <= 0n) continue;
       lines.push({ description: l.description, qtyRemaining: left, unit: l.unit });
       units += toScaled(left, 2);
+      addUnitQty(rowByUnit, l.unit, toScaled(left, 2));
     }
     if (lines.length === 0) continue;
     totalUnits += units;
+    for (const g of rowByUnit) addUnitQty(totalByUnitScaled, g.unit, g.qty);
     kept.push({
       id: r.id,
       number: r.number,
@@ -96,10 +112,16 @@ export function buildDispatchQueue(
       contactPhone: r.contactPhone,
       lines,
       unitsRemaining: fromScaled(units, 2),
+      unitsByUnit: rowByUnit.map((g) => ({ unit: g.unit, qty: fromScaled(g.qty, 2) })),
     });
   }
   kept.sort((a, b) => b.daysOpen - a.daysOpen || a.number.localeCompare(b.number));
-  return { rows: kept, orderCount: kept.length, totalUnitsRemaining: fromScaled(totalUnits, 2) };
+  return {
+    rows: kept,
+    orderCount: kept.length,
+    totalUnitsRemaining: fromScaled(totalUnits, 2),
+    totalByUnit: totalByUnitScaled.map((g) => ({ unit: g.unit, qty: fromScaled(g.qty, 2) })),
+  };
 }
 
 /** DB loader: OPEN, own-company sales orders with lines and contact. */
