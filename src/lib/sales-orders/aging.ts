@@ -124,16 +124,37 @@ export function buildSoAging(rows: readonly SoAgingInputRow[], today: Date = bil
   };
 }
 
-/** DB loader: OPEN, own-company sales orders with their non-void billings. */
+/**
+ * DB loader: OPEN, own-company sales orders with their non-void billings.
+ *
+ * Perf (finding 1040): the builder only ever sums the billing amounts
+ * (remainingToBill), so instead of hydrating every billing row of every
+ * order, one groupBy SUM does that work in SQL and the orders themselves
+ * load through a lean select of just the fields the builder reads.
+ * Amounts are Decimal(15,2), so the SQL sum is exact to the centavo and
+ * the figures are unchanged.
+ */
 export async function listSalesOrderAging(today: Date = billingToday()): Promise<SoAgingSummary> {
-  const rows = await db.salesOrder.findMany({
-    where: { status: "OPEN", businessId: null },
-    include: {
-      customer: { select: { name: true } },
-      billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
-    },
-    orderBy: [{ date: "asc" }, { number: "asc" }],
-  });
+  const [rows, billedSums] = await Promise.all([
+    db.salesOrder.findMany({
+      where: { status: "OPEN", businessId: null },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        status: true,
+        contractPrice: true,
+        customer: { select: { name: true } },
+      },
+      orderBy: [{ date: "asc" }, { number: "asc" }],
+    }),
+    db.billing.groupBy({
+      by: ["salesOrderId"],
+      where: { status: { not: "VOID" }, salesOrder: { status: "OPEN", businessId: null } },
+      _sum: { amount: true },
+    }),
+  ]);
+  const billedBySo = new Map(billedSums.map((g) => [g.salesOrderId, g._sum.amount]));
   return buildSoAging(
     rows.map((r) => ({
       id: r.id,
@@ -142,7 +163,7 @@ export async function listSalesOrderAging(today: Date = billingToday()): Promise
       date: r.date,
       status: r.status,
       contractPrice: money(r.contractPrice),
-      billedAmounts: r.billings.map((b) => money(b.amount)),
+      billedAmounts: billedBySo.has(r.id) ? [money(billedBySo.get(r.id)!)] : [],
     })),
     today,
   );
