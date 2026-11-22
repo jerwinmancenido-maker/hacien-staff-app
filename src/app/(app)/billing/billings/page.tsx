@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listBillings, BILLING_STATUSES, BILLING_STATUS_LABELS } from "@/lib/billing/views";
+import { listBillingsPage, BILLING_STATUSES, BILLING_STATUS_LABELS } from "@/lib/billing/views";
 import type { BillingStatus } from "@prisma/client";
 import { BillingNav } from "@/components/billing/BillingNav";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
@@ -14,7 +14,7 @@ const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 export default async function BillingsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; customerId?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; customerId?: string; from?: string; to?: string; page?: string; pageSize?: string }>;
 }) {
   const user = await requirePagePermission("view");
   const sp = await searchParams;
@@ -25,7 +25,34 @@ export default async function BillingsListPage({
       : "ALL";
   const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
   const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
-  const rows = await listBillings({ status, q: sp.q, customerId: sp.customerId, fromYmd, toYmd });
+  const pageParam = sp.page ? Number.parseInt(sp.page, 10) : undefined;
+  const pageSizeParam = sp.pageSize ? Number.parseInt(sp.pageSize, 10) : undefined;
+  const {
+    rows,
+    total,
+    page: currentPage,
+    pageSize: currentPageSize,
+    totalPages,
+  } = await listBillingsPage({
+    status,
+    q: sp.q,
+    customerId: sp.customerId,
+    fromYmd,
+    toYmd,
+    page: pageParam,
+    pageSize: pageSizeParam,
+  });
+  const pageHref = (target: number) => {
+    const params = new URLSearchParams();
+    if (status !== "ALL") params.set("status", status);
+    if (sp.q) params.set("q", sp.q);
+    if (sp.customerId) params.set("customerId", sp.customerId);
+    if (fromYmd) params.set("from", fromYmd);
+    if (toYmd) params.set("to", toYmd);
+    params.set("pageSize", String(currentPageSize));
+    params.set("page", String(target));
+    return `/billing/billings?${params.toString()}`;
+  };
   const canRecord = can(user, "record_billing");
 
   return (
@@ -122,6 +149,28 @@ export default async function BillingsListPage({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="toolbar" style={{ marginTop: 16, justifyContent: "space-between", alignItems: "center" }}>
+          {currentPage > 1 ? (
+            <Link className="btn btn-secondary" href={pageHref(currentPage - 1)}>
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="small faint">
+            Page {currentPage} of {totalPages} · {total} records
+          </span>
+          {currentPage < totalPages ? (
+            <Link className="btn btn-secondary" href={pageHref(currentPage + 1)}>
+              Next
+            </Link>
+          ) : (
+            <span />
+          )}
         </div>
       )}
     </>
