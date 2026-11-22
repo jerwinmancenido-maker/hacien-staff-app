@@ -127,6 +127,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
       ) : (
         <DataTable
           label="Sales orders"
+          wrapClassName="so-list-table"
           columns={[
             { key: "number", label: "SO no." },
             { key: "customer", label: "Customer" },

@@ -1155,6 +1155,23 @@ table.list.aging-table td[data-col="number"],
 table.list.aging-table td[data-col="date"] {
   white-space: nowrap;
 }
+/* SO list + billing list: the same all-widths protection, extended from
+   the aging table (run 66 findings 1027/1030/1036 - at 768px the desktop
+   rule no longer applies, so SO numbers, buyer-PO numbers and dates
+   wrapped mid-value on the SO list, and SO references wrapped on the
+   billing list). The SO list is scoped through its DataTable wrap class
+   (the audit log wrapClassName precedent); the billing list carries its
+   own table class like the aging table. On phones the PO, date and
+   reference columns are hidden by the batch-B classes, and the tables
+   scroll inside their wraps by design, so the whole number stays whole
+   at every width. */
+.so-list-table table.list td[data-col="number"],
+.so-list-table table.list td[data-col="po"],
+.so-list-table table.list td[data-col="date"],
+table.list.billing-list-table td[data-col="number"],
+table.list.billing-list-table td[data-col="date"] {
+  white-space: nowrap;
+}
 table.list td[data-col="record"] > div + div {
   overflow-wrap: break-word;
 }
