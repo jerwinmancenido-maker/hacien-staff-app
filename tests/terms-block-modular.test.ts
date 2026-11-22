@@ -7,18 +7,23 @@
 import { describe, expect, it } from "vitest";
 import {
   buildQuoteSoTermsPoints,
+  COD_POINT2_TEXT,
+  findBlockedPaymentTerms,
   getQuoteSoTermsPoints,
+  printedTermsLabel,
   quoteSoTermsPoint2,
   quoteSoTermsPoint3,
   quoteSoTermsPoint5,
+  resolvePaymentTerm,
+  sanitizePrintedNotes,
 } from "@/lib/print/terms-block";
 
 describe("modular terms block", () => {
-  it("default block is 7 points with the v3 fallback payment sentence", () => {
+  it("default block is 7 points; with no terms recorded Point 2 asserts no schedule", () => {
     const points = buildQuoteSoTermsPoints({});
     expect(points).toHaveLength(7);
     expect(points[0]).toContain("1. This quotation is valid for 15 days unless the quote states otherwise.");
-    expect(points[1]).toContain("2. Payment: 50% down payment when you order, 50% on delivery.");
+    expect(points[1]).toBe("2. Payment: Pay by bank transfer, check or cash, only to the account printed on this document.");
     expect(points[2]).toContain("3. Lead times are estimates, not fixed deadlines, and are subject to supplier stock.");
     expect(points[3]).toContain("4. On delivery, note any missing boxes");
     expect(points[4]).toContain("Unless specific warranty notes on this quotation state otherwise, warranty is the manufacturer's or distributor's");
@@ -38,11 +43,22 @@ describe("modular terms block", () => {
     expect(quoteSoTermsPoint2("Net 30 (approved accounts only)")).toBe(
       "Payment: Net 30 calendar days from delivery and invoice date (for approved corporate and government accounts). Pay by bank transfer, check or cash, only to the account printed on this document.",
     );
-    // Custom or empty terms fall back to the v3 combined text (Needs owner check).
-    expect(quoteSoTermsPoint2("Custom terms here")).toContain("50% down payment when you order, 50% on delivery.");
-    expect(quoteSoTermsPoint2("Custom terms here")).toContain("Pay by bank transfer, check or cash, only to the account printed on this document.");
-    expect(quoteSoTermsPoint2(null)).toContain("50% down payment when you order, 50% on delivery.");
-    expect(quoteSoTermsPoint2("")).toContain("50% down payment when you order, 50% on delivery.");
+    // Custom terms print the quote's own text + the Option 3A anti-fraud
+    // sentence (lawyer ruling 2026-11-23) \u2014 never the old 50/50 fallback.
+    expect(quoteSoTermsPoint2("Custom terms here")).toBe(
+      "Payment: Custom terms here. Pay by bank transfer, check or cash, only to the account printed on this document (or to our authorized representative against an official HACIEN Sales Invoice or Collection Receipt).",
+    );
+    expect(quoteSoTermsPoint2("Custom terms here")).not.toContain("50% down payment when you order");
+    // A trailing period in the custom text is not doubled.
+    expect(quoteSoTermsPoint2("30% on order, balance on delivery.")).toBe(
+      "Payment: 30% on order, balance on delivery. Pay by bank transfer, check or cash, only to the account printed on this document (or to our authorized representative against an official HACIEN Sales Invoice or Collection Receipt).",
+    );
+    // No terms recorded: Point 2 still prints, anti-fraud sentence only.
+    expect(quoteSoTermsPoint2(null)).toBe(
+      "Payment: Pay by bank transfer, check or cash, only to the account printed on this document.",
+    );
+    expect(quoteSoTermsPoint2("")).toBe(quoteSoTermsPoint2(null));
+    expect(quoteSoTermsPoint2(null)).not.toContain("50% down payment when you order");
     // No variant mentions another variant's terms.
     expect(quoteSoTermsPoint2("Net 30 (approved accounts only)")).not.toContain("50% down payment upon order confirmation");
     expect(quoteSoTermsPoint2("50% down, 50% on delivery")).not.toContain("Net 30 calendar days");
@@ -109,5 +125,65 @@ describe("modular terms block", () => {
     expect(points).toHaveLength(7);
     expect(points[0]).toContain("1. This quotation is valid for 7 days.");
     expect(getQuoteSoTermsPoints(null)).toHaveLength(7);
+  });
+});
+
+describe("COD structured term (lawyer ruling 2026-11-23, Option 1A + 3A)", () => {
+  it("resolves every stored terms string into one structured kind", () => {
+    expect(resolvePaymentTerm("COD")).toEqual({ kind: "COD", customText: null });
+    expect(resolvePaymentTerm("cod")).toEqual({ kind: "COD", customText: null });
+    expect(resolvePaymentTerm(" COD ")).toEqual({ kind: "COD", customText: null });
+    expect(resolvePaymentTerm("100% upfront (software and special orders)").kind).toBe("UPFRONT");
+    expect(resolvePaymentTerm("50% down, 50% on delivery").kind).toBe("FIFTY_FIFTY");
+    expect(resolvePaymentTerm("Net 30 (approved accounts only)").kind).toBe("NET30");
+    expect(resolvePaymentTerm("30% on order, 70% on acceptance")).toEqual({
+      kind: "CUSTOM",
+      customText: "30% on order, 70% on acceptance",
+    });
+    expect(resolvePaymentTerm(null).kind).toBe("NONE");
+    expect(resolvePaymentTerm("").kind).toBe("NONE");
+  });
+
+  it("a COD quote's Point 2 is exactly the COD constant, with no 50/50 sentence anywhere", () => {
+    expect(quoteSoTermsPoint2("COD")).toBe(COD_POINT2_TEXT);
+    const points = buildQuoteSoTermsPoints({ paymentTerms: "COD" });
+    expect(points).toHaveLength(7);
+    expect(points[1]).toBe(`2. ${COD_POINT2_TEXT}`);
+    const whole = points.join("\n");
+    expect(whole).not.toContain("50% down payment when you order");
+    expect(whole).not.toContain("50% down payment upon order confirmation");
+    expect(whole).not.toContain("50% on delivery");
+  });
+
+  it("the printed Remarks label is generated from the term", () => {
+    expect(printedTermsLabel("COD")).toBe("COD");
+    expect(printedTermsLabel("cod")).toBe("COD");
+    expect(printedTermsLabel("Net 30 (approved accounts only)")).toBe("Net 30 (approved accounts only)");
+    expect(printedTermsLabel("50% down, 50% on delivery")).toBe("50% down, 50% on delivery");
+    expect(printedTermsLabel(null)).toBeNull();
+    expect(printedTermsLabel("")).toBeNull();
+  });
+
+  it("free-text notes cannot carry a payment term onto the print", () => {
+    expect(findBlockedPaymentTerms("Ask for Net 30 terms")).toEqual(["Net <days>"]);
+    expect(findBlockedPaymentTerms("50/50 agreed, down payment first, upfront rest, COD")).toEqual([
+      "50/50",
+      "down payment",
+      "upfront",
+      "COD",
+    ]);
+    expect(findBlockedPaymentTerms("Deliver to Gate 3 after 5 PM")).toEqual([]);
+    expect(sanitizePrintedNotes("Deliver to Gate 3. Ask for Net 30 terms.")).toBe(
+      "Deliver to Gate 3. Ask for terms.",
+    );
+    expect(sanitizePrintedNotes("COD")).toBeNull();
+    expect(sanitizePrintedNotes("Payment 50/50 agreed")).toBe("Payment agreed");
+    expect(sanitizePrintedNotes("down payment received, balance upfront")).toBe("received, balance");
+    // Clean notes print byte-identical.
+    expect(sanitizePrintedNotes("Deliver after 5 PM, call on arrival.")).toBe(
+      "Deliver after 5 PM, call on arrival.",
+    );
+    expect(sanitizePrintedNotes(null)).toBeNull();
+    expect(sanitizePrintedNotes("")).toBeNull();
   });
 });

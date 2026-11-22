@@ -66,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
       "50% down, 50% on delivery",
       "100% upfront (software and special orders)",
       "Net 30 (approved accounts only)",
+      "COD",
     ],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
   },

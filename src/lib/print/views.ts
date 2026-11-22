@@ -28,7 +28,11 @@ import {
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
 import { POLICY_VERSION_LINE } from "./policies";
-import { buildQuoteSoTermsPoints } from "./terms-block";
+import {
+  buildQuoteSoTermsPoints,
+  printedTermsLabel,
+  sanitizePrintedNotes,
+} from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintLotPart, PrintMoneyLine, PrintSignatory } from "./types";
@@ -286,7 +290,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       withholding,
     }),
     totalInWords: amountInWords(total),
-    terms: q.terms || letter.print.quoteTerms || null,
+    terms: printedTermsLabel(q.terms) ?? (letter.print.quoteTerms || null),
     // Modular terms (lawyer/CPA sign-off 2026-11-06): point 2 follows the
     // quote's payment terms, point 3 the per-quote lead time, point 5 the
     // goods/services variant, point 6 only for business customers. A quote
@@ -301,7 +305,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     versionLine: POLICY_VERSION_LINE,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
-    notes: q.notes,
+    notes: sanitizePrintedNotes(q.notes),
     // S-69: a quote's own delivery/warranty notes win; otherwise the
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
@@ -379,7 +383,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       withholding,
     }),
     totalInWords: amountInWords(total),
-    terms: so.terms,
+    terms: printedTermsLabel(so.terms),
     // Modular terms, same as the quote: the SO carries the source quote's
     // validity, lead time and payment terms (terms is copied at conversion).
     termsBlock: buildQuoteSoTermsPoints({
@@ -390,7 +394,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       isIndividual: so.customer.isIndividual,
     }),
     versionLine: POLICY_VERSION_LINE,
-    notes: so.notes,
+    notes: sanitizePrintedNotes(so.notes),
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
     signatories: customerSignatories(so.createdBy.name),
@@ -467,8 +471,8 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     totals,
     // Words must equal the Total shown (gross), to the centavo.
     totalInWords: amountInWords(amount),
-    terms: b.salesOrder.terms,
-    notes: b.notes,
+    terms: printedTermsLabel(b.salesOrder.terms),
+    notes: sanitizePrintedNotes(b.notes),
     signatories: customerSignatories(b.createdBy.name),
     ...footer,
     thankYou: true,
