@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { QuoteStatus } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
-import { listQuotesView, QUOTE_STATUSES } from "@/lib/quotes/views";
+import { listQuotesPageView, QUOTE_STATUSES } from "@/lib/quotes/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
@@ -11,11 +11,15 @@ import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { QUOTE_STATUS_LABELS, QuoteStatusChip, QuoteWorkflowApprovalChip } from "@/components/docs/DocParts";
 import { QUOTE_APPROVAL_LABELS, quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 
-type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string; business?: string };
+type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string; business?: string; page?: string };
 
 function href(s: Search, patch: Partial<Search>) {
+  const merged: Search = { ...s, ...patch };
+  // Filter/search changes restart at page 1 — only a patch that names the
+  // page keeps one.
+  if (!("page" in patch)) delete merged.page;
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries({ ...s, ...patch })) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
   const qs = p.toString();
   return `/quotes${qs ? `?${qs}` : ""}`;
 }
@@ -32,7 +36,8 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const businesses = await listBusinesses();
   const business =
     s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
-  const quotes = await listQuotesView(
+  const pageParam = Number.parseInt(s.page ?? "", 10);
+  const quotePage = await listQuotesPageView(
     {
       q: s.q,
       status: openOnly ? undefined : status,
@@ -42,7 +47,9 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       businessId: business,
     },
     user,
+    Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1,
   );
+  const quotes = quotePage.items;
   const withCosts = canSeeCosts(user);
   const filtered = !!(s.q || status || needsApproval || noReplyDays || openOnly || business);
 
@@ -197,6 +204,26 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
               },
             }))}
           />
+        </div>
+      )}
+      {quotePage.totalPages > 1 && (
+        <div className="toolbar" style={{ marginTop: 10 }}>
+          <span className="small faint">
+            Page {quotePage.page} of {quotePage.totalPages} · {quotePage.total} records
+          </span>
+          {quotePage.page > 1 && (
+            <Link
+              className="btn btn-secondary"
+              href={href(s, { page: quotePage.page - 1 > 1 ? String(quotePage.page - 1) : undefined })}
+            >
+              Prev
+            </Link>
+          )}
+          {quotePage.page < quotePage.totalPages && (
+            <Link className="btn btn-secondary" href={href(s, { page: String(quotePage.page + 1) })}>
+              Next
+            </Link>
+          )}
         </div>
       )}
     </>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { SalesOrderStatus } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { listSalesOrdersView, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
+import { listSalesOrdersPageView, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
@@ -9,11 +9,15 @@ import { SearchIcon } from "@/components/Icons";
 import { SO_STATUS_LABELS, SoStatusChip } from "@/components/docs/DocParts";
 import { listBusinesses } from "@/lib/services/businesses";
 
-type Search = { q?: string; status?: string; needsPo?: string; open?: string; toDeliver?: string; business?: string };
+type Search = { q?: string; status?: string; needsPo?: string; open?: string; toDeliver?: string; business?: string; page?: string };
 
 function href(s: Search, patch: Partial<Search>) {
+  const merged: Search = { ...s, ...patch };
+  // Filter/search changes restart at page 1 — only a patch that names the
+  // page keeps one.
+  if (!("page" in patch)) delete merged.page;
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries({ ...s, ...patch })) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
   const qs = p.toString();
   return `/sales-orders${qs ? `?${qs}` : ""}`;
 }
@@ -28,14 +32,19 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
   const businesses = await listBusinesses();
   const business =
     s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
-  const orders = await listSalesOrdersView({
-    q: s.q,
-    status: openOnly || needsPo || toDeliver ? undefined : status,
-    needsPo: needsPo || undefined,
-    open: openOnly || undefined,
-    toDeliver: toDeliver || undefined,
-    businessId: business,
-  });
+  const pageParam = Number.parseInt(s.page ?? "", 10);
+  const orderPage = await listSalesOrdersPageView(
+    {
+      q: s.q,
+      status: openOnly || needsPo || toDeliver ? undefined : status,
+      needsPo: needsPo || undefined,
+      open: openOnly || undefined,
+      toDeliver: toDeliver || undefined,
+      businessId: business,
+    },
+    Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1,
+  );
+  const orders = orderPage.items;
   const filtered = !!(s.q || status || needsPo || openOnly || toDeliver || business);
 
   return (
@@ -155,6 +164,26 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
             sort: { number: o.number, customer: o.customerName, po: o.buyerPoNo, total: Number(o.contractPrice), status: o.status, date: o.date },
           }))}
         />
+      )}
+      {orderPage.totalPages > 1 && (
+        <div className="toolbar" style={{ marginTop: 10 }}>
+          <span className="small faint">
+            Page {orderPage.page} of {orderPage.totalPages} · {orderPage.total} records
+          </span>
+          {orderPage.page > 1 && (
+            <Link
+              className="btn btn-secondary"
+              href={href(s, { page: orderPage.page - 1 > 1 ? String(orderPage.page - 1) : undefined })}
+            >
+              Prev
+            </Link>
+          )}
+          {orderPage.page < orderPage.totalPages && (
+            <Link className="btn btn-secondary" href={href(s, { page: String(orderPage.page + 1) })}>
+              Next
+            </Link>
+          )}
+        </div>
       )}
     </>
   );
