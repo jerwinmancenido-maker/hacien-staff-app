@@ -30,6 +30,7 @@ import { mergeCompanyLetterhead } from "../print/company";
 import { soHasRemainingToDeliver } from "../sales-orders/delivery";
 import { attachmentKindLabel } from "../attachment-kinds";
 import { buildRevisionChain } from "./revision-chain";
+import { pagingWindow, type ListPage } from "../paging";
 
 type StoredMoney = {
   contractPrice: string;
@@ -411,8 +412,23 @@ export type QuoteListFilter = {
   now?: Date;
 };
 
-export async function listQuotesView(filter: QuoteListFilter, viewer: PermissionUser) {
-  const withCosts = canSeeCosts(viewer);
+export type QuoteListRow = {
+  id: string;
+  number: string;
+  revision: number;
+  businessName: string | null;
+  businessShortLabel: string | null;
+  customerName: string;
+  contractPrice: string;
+  status: QuoteStatus;
+  approvalStatus: QuoteApprovalStatus;
+  date: string;
+  validUntil: string;
+  netMarginPct?: string;
+  supplierCostState?: SupplierCostState;
+};
+
+function quoteListWhere(filter: QuoteListFilter): Prisma.QuoteWhereInput {
   const q = filter.q?.trim();
   const needsApproval = filter.needsApproval === true;
   const openOnly = filter.open === true;
@@ -444,7 +460,15 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
     where.date = { lte: cutoff };
   }
 
-  const rows = await db.quote.findMany({
+  return where;
+}
+
+async function fetchQuoteListRows(
+  where: Prisma.QuoteWhereInput,
+  withCosts: boolean,
+  page?: { skip: number; take: number },
+) {
+  return db.quote.findMany({
     where,
     include: {
       customer: { select: { name: true } },
@@ -452,9 +476,14 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       ...(withCosts ? { items: { select: { supplierTotal: true } } } : {}),
     },
     orderBy: [{ date: "desc" }, { number: "desc" }],
-    take: 500,
+    ...(page ? { skip: page.skip, take: page.take } : { take: 500 }),
   });
+}
 
+function mapQuoteListRows(
+  rows: Awaited<ReturnType<typeof fetchQuoteListRows>>,
+  withCosts: boolean,
+): QuoteListRow[] {
   const mapped = rows.map((r) => {
     const row = {
       id: r.id,
@@ -480,21 +509,38 @@ export async function listQuotesView(filter: QuoteListFilter, viewer: Permission
       : row;
   });
 
-  return mapped as ({
-    id: string;
-    number: string;
-    revision: number;
-    businessName: string | null;
-    businessShortLabel: string | null;
-    customerName: string;
-    contractPrice: string;
-    status: QuoteStatus;
-    approvalStatus: QuoteApprovalStatus;
-    date: string;
-    validUntil: string;
-    netMarginPct?: string;
-    supplierCostState?: SupplierCostState;
-  })[];
+  return mapped as QuoteListRow[];
+}
+
+export async function listQuotesView(filter: QuoteListFilter, viewer: PermissionUser) {
+  const withCosts = canSeeCosts(viewer);
+  const rows = await fetchQuoteListRows(quoteListWhere(filter), withCosts);
+  return mapQuoteListRows(rows, withCosts);
+}
+
+/**
+ * Paged variant for the Quotes list page (finding 1023): the same filter and
+ * row mapping as listQuotesView, but the database returns one page plus the
+ * full match count, so records past the old 500-row cap stay reachable.
+ */
+export async function listQuotesPageView(
+  filter: QuoteListFilter,
+  viewer: PermissionUser,
+  page?: number,
+  pageSize?: number,
+): Promise<ListPage<QuoteListRow>> {
+  const withCosts = canSeeCosts(viewer);
+  const where = quoteListWhere(filter);
+  const total = await db.quote.count({ where });
+  const win = pagingWindow(total, page, pageSize);
+  const rows = await fetchQuoteListRows(where, withCosts, win);
+  return {
+    items: mapQuoteListRows(rows, withCosts),
+    total,
+    page: win.page,
+    pageSize: win.pageSize,
+    totalPages: win.totalPages,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -696,7 +742,19 @@ export type SalesOrderListFilter = {
   businessId?: string;
 };
 
-export async function listSalesOrdersView(filter: SalesOrderListFilter) {
+export type SalesOrderListRow = {
+  id: string;
+  number: string;
+  businessName: string | null;
+  businessShortLabel: string | null;
+  customerName: string;
+  buyerPoNo: string | null;
+  contractPrice: string;
+  status: SalesOrderStatus;
+  date: string;
+};
+
+function salesOrderListWhere(filter: SalesOrderListFilter): Prisma.SalesOrderWhereInput {
   const q = filter.q?.trim();
   const needsPo = filter.needsPo === true;
   const openUnbilled = filter.open === true;
@@ -722,56 +780,75 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       : {}),
   };
 
-  if (!needsPo) {
-    const rows = await db.salesOrder.findMany({
-      where,
-      include: {
-        customer: { select: { name: true } },
-        business: { select: { name: true, shortLabel: true } },
-        ...(openUnbilled
-          ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
-          : {}),
-        ...(toDeliver
-          ? { items: { where: { removedAt: null }, select: { qty: true, deliveredQty: true } } }
-          : {}),
-      },
-      orderBy: [{ date: "desc" }, { number: "desc" }],
-      take: 500,
-    });
-    type Row = (typeof rows)[number] & {
-      billings?: { amount: unknown }[];
-      items?: { qty: unknown; deliveredQty: unknown }[];
-    };
-    const mapped = [];
-    for (const raw of rows as Row[]) {
-      const contractPrice = money(raw.contractPrice);
-      if (openUnbilled) {
-        const billed = (raw.billings ?? []).map((b) => money(b.amount));
-        if (toScaled(remainingToBill(contractPrice, billed), 2) <= 0n) continue;
-      }
-      if (toDeliver) {
-        const live = (raw.items ?? []).map((i) => ({
-          qty: money(i.qty),
-          deliveredQty: money(i.deliveredQty),
-        }));
-        if (!soHasRemainingToDeliver(live)) continue;
-      }
-      mapped.push({
-        id: raw.id,
-        number: raw.number,
-        businessName: raw.business?.name ?? null,
-        businessShortLabel: raw.business?.shortLabel ?? null,
-        customerName: raw.customer.name,
-        buyerPoNo: raw.buyerPoNo,
-        contractPrice,
-        status: raw.status,
-        date: ymd(raw.date)!,
-      });
-    }
-    return mapped;
-  }
+  return where;
+}
 
-  const rows = await db.salesOrder.findMany({
+async function fetchSalesOrderListRows(
+  where: Prisma.SalesOrderWhereInput,
+  openUnbilled: boolean,
+  toDeliver: boolean,
+  page?: { skip: number; take: number } | null,
+) {
+  return db.salesOrder.findMany({
+    where,
+    include: {
+      customer: { select: { name: true } },
+      business: { select: { name: true, shortLabel: true } },
+      ...(openUnbilled
+        ? { billings: { where: { status: { not: "VOID" } }, select: { amount: true } } }
+        : {}),
+      ...(toDeliver
+        ? { items: { where: { removedAt: null }, select: { qty: true, deliveredQty: true } } }
+        : {}),
+    },
+    orderBy: [{ date: "desc" }, { number: "desc" }],
+    ...(page === undefined ? { take: 500 } : page === null ? {} : { skip: page.skip, take: page.take }),
+  });
+}
+
+function mapSalesOrderListRows(
+  rows: Awaited<ReturnType<typeof fetchSalesOrderListRows>>,
+  openUnbilled: boolean,
+  toDeliver: boolean,
+): SalesOrderListRow[] {
+  type Row = (typeof rows)[number] & {
+    billings?: { amount: unknown }[];
+    items?: { qty: unknown; deliveredQty: unknown }[];
+  };
+  const mapped = [];
+  for (const raw of rows as Row[]) {
+    const contractPrice = money(raw.contractPrice);
+    if (openUnbilled) {
+      const billed = (raw.billings ?? []).map((b) => money(b.amount));
+      if (toScaled(remainingToBill(contractPrice, billed), 2) <= 0n) continue;
+    }
+    if (toDeliver) {
+      const live = (raw.items ?? []).map((i) => ({
+        qty: money(i.qty),
+        deliveredQty: money(i.deliveredQty),
+      }));
+      if (!soHasRemainingToDeliver(live)) continue;
+    }
+    mapped.push({
+      id: raw.id,
+      number: raw.number,
+      businessName: raw.business?.name ?? null,
+      businessShortLabel: raw.business?.shortLabel ?? null,
+      customerName: raw.customer.name,
+      buyerPoNo: raw.buyerPoNo,
+      contractPrice,
+      status: raw.status,
+      date: ymd(raw.date)!,
+    });
+  }
+  return mapped;
+}
+
+async function fetchNeedsPoRows(
+  where: Prisma.SalesOrderWhereInput,
+  page?: { skip: number; take: number } | null,
+) {
+  return db.salesOrder.findMany({
     where,
     include: {
       customer: { select: { name: true } },
@@ -788,9 +865,11 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       },
     },
     orderBy: [{ date: "desc" }, { number: "desc" }],
-    take: 500,
+    ...(page === undefined ? { take: 500 } : page === null ? {} : { skip: page.skip, take: page.take }),
   });
+}
 
+function filterNeedsPoRows(rows: Awaited<ReturnType<typeof fetchNeedsPoRows>>): SalesOrderListRow[] {
   return rows
     .filter((r) =>
       r.items.some((item) => {
@@ -809,6 +888,68 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
       status: r.status,
       date: ymd(r.date)!,
     }));
+}
+
+export async function listSalesOrdersView(filter: SalesOrderListFilter) {
+  const needsPo = filter.needsPo === true;
+  const openUnbilled = filter.open === true;
+  const toDeliver = filter.toDeliver === true;
+  const where = salesOrderListWhere(filter);
+
+  if (!needsPo) {
+    const rows = await fetchSalesOrderListRows(where, openUnbilled, toDeliver);
+    return mapSalesOrderListRows(rows, openUnbilled, toDeliver);
+  }
+
+  const rows = await fetchNeedsPoRows(where);
+  return filterNeedsPoRows(rows);
+}
+
+/**
+ * Paged variant for the Sales Orders list page (finding 1023). The plain
+ * branch pages in the database (count + skip/take). The open / toDeliver /
+ * needsPo branches filter in memory, so they fetch uncapped, filter exactly
+ * as listSalesOrdersView does, and slice the filtered list — the total is
+ * the filtered count.
+ */
+export async function listSalesOrdersPageView(
+  filter: SalesOrderListFilter,
+  page?: number,
+  pageSize?: number,
+): Promise<ListPage<SalesOrderListRow>> {
+  const needsPo = filter.needsPo === true;
+  const openUnbilled = filter.open === true;
+  const toDeliver = filter.toDeliver === true;
+  const where = salesOrderListWhere(filter);
+
+  if (!needsPo && !openUnbilled && !toDeliver) {
+    const total = await db.salesOrder.count({ where });
+    const win = pagingWindow(total, page, pageSize);
+    const rows = await fetchSalesOrderListRows(where, openUnbilled, toDeliver, win);
+    return {
+      items: mapSalesOrderListRows(rows, openUnbilled, toDeliver),
+      total,
+      page: win.page,
+      pageSize: win.pageSize,
+      totalPages: win.totalPages,
+    };
+  }
+
+  const filtered = needsPo
+    ? filterNeedsPoRows(await fetchNeedsPoRows(where, null))
+    : mapSalesOrderListRows(
+        await fetchSalesOrderListRows(where, openUnbilled, toDeliver, null),
+        openUnbilled,
+        toDeliver,
+      );
+  const win = pagingWindow(filtered.length, page, pageSize);
+  return {
+    items: filtered.slice(win.skip, win.skip + win.take),
+    total: filtered.length,
+    page: win.page,
+    pageSize: win.pageSize,
+    totalPages: win.totalPages,
+  };
 }
 
 // ---------------------------------------------------------------------------
