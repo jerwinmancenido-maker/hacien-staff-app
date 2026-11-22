@@ -2,8 +2,11 @@ name: CI
 
 on:
   pull_request:
+    branches: [staging]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -12,10 +15,17 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     services:
       mysql:
-        image: mysql:8
+        # Pinned to the 8.0 line: the local gate runs MySQL 8.0, and Prisma
+        # 6.19's engine panics against MySQL 8.4 — CI must prove the same
+        # database the gate proves.
+        image: mysql:8.0
         env:
+          # Throwaway credentials: this service container exists only for the
+          # duration of the run and is destroyed with it. Never staging/prod
+          # or real secrets.
           MYSQL_ROOT_PASSWORD: local_only_dummy
           MYSQL_USER: hacien
           MYSQL_PASSWORD: local_only_dummy
@@ -30,13 +40,20 @@ jobs:
 
     env:
       # Fake local-only values from AGENTS.md — never staging/prod or real secrets.
-      DATABASE_URL: mysql://hacien:local_only_dummy@127.0.0.1:3306/hacien
+      DATABASE_URL: mysql://hacien:local_only_dummy@127.0.0.1:3306/hacien_test
       TEST_DATABASE_URL: mysql://hacien:local_only_dummy@127.0.0.1:3306/hacien_test
-      SESSION_SECRET: local-only-ci-session-secret
+      SESSION_SECRET: ci-local-dummy-secret
       APP_URL: http://localhost:3000
+      # Same heap cap as the local gate scripts.
+      NODE_OPTIONS: --max-old-space-size=2048
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Gate the PR's exact head commit — not the synthetic merge commit
+          # checkout would pick by default for pull_request events. (Empty on
+          # push / workflow_dispatch, where the triggering ref is used.)
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -46,30 +63,54 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create throwaway test database
-        # Use the mysql:8 image client over the network; apt mysql-client on
+      - name: UNIT
+        run: npx vitest run --project unit
+
+      - name: reset+migrate
+        # Local-gate mirror: drop + recreate hacien_test, then migrate deploy.
+        # Use the mysql:8.0 image client over the network; apt mysql-client on
         # ubuntu-latest can upgrade host mysql-server and fail dpkg configure.
         run: |
-          docker run --rm --network host mysql:8 \
+          docker run --rm --network host mysql:8.0 \
             mysql -h127.0.0.1 -uroot -plocal_only_dummy -e "
-              CREATE DATABASE IF NOT EXISTS hacien_test;
+              DROP DATABASE IF EXISTS hacien_test;
+              CREATE DATABASE hacien_test;
               GRANT ALL PRIVILEGES ON hacien_test.* TO 'hacien'@'%';
               FLUSH PRIVILEGES;
             "
-
-      - name: Apply migrations
-        run: |
           npx prisma migrate deploy
-          DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
 
-      - name: Lint
-        run: npm run lint
+      # The db suite runs in 3 chunks, split exactly like the local gate:
+      # sorted tests/db/*.db.test.ts, contiguous chunks of ceil(N/3).
+      - name: DB1
+        run: |
+          mapfile -t DBFILES < <(ls tests/db/*.db.test.ts)
+          CHUNKSZ=$(( ( ${#DBFILES[@]} + 2 ) / 3 ))
+          chunk=("${DBFILES[@]:0:CHUNKSZ}")
+          echo "DB1: ${#chunk[@]} of ${#DBFILES[@]} db test files"
+          npx vitest run --project db --maxWorkers=2 "${chunk[@]}"
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: DB2
+        run: |
+          mapfile -t DBFILES < <(ls tests/db/*.db.test.ts)
+          CHUNKSZ=$(( ( ${#DBFILES[@]} + 2 ) / 3 ))
+          chunk=("${DBFILES[@]:CHUNKSZ:CHUNKSZ}")
+          echo "DB2: ${#chunk[@]} of ${#DBFILES[@]} db test files"
+          npx vitest run --project db --maxWorkers=2 "${chunk[@]}"
 
-      - name: Test
-        run: npm test
+      - name: DB3
+        run: |
+          mapfile -t DBFILES < <(ls tests/db/*.db.test.ts)
+          CHUNKSZ=$(( ( ${#DBFILES[@]} + 2 ) / 3 ))
+          chunk=("${DBFILES[@]:$((2*CHUNKSZ)):CHUNKSZ}")
+          echo "DB3: ${#chunk[@]} of ${#DBFILES[@]} db test files"
+          npx vitest run --project db --maxWorkers=2 "${chunk[@]}"
 
-      - name: Build
+      - name: TSC
+        run: npx tsc --noEmit
+
+      - name: ESLINT
+        run: npx eslint .
+
+      - name: BUILD
         run: npm run build

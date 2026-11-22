@@ -19,6 +19,7 @@ export type BooksTab = (typeof TABS)[number]["key"];
 export function BooksNav({ active }: { active: BooksTab }) {
   return (
     <PillTabs
+      className="books-nav"
       active={active}
       tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: t.href }))}
       ariaLabel="Books sections"
