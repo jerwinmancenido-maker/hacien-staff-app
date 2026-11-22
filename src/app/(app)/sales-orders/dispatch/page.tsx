@@ -32,11 +32,22 @@ export default async function DispatchQueuePage() {
         </div>
         <div className="card stat">
           <div className="label">Quantity still to deliver</div>
-          <div className="value num">{money(summary.totalUnitsRemaining).replace(/\.00$/, "")}</div>
+          <div className="value num">
+            {summary.totalByUnit.length > 0
+              ? summary.totalByUnit.map((p) => qtyText(p.qty, p.unit)).join(" · ")
+              : "0"}
+          </div>
         </div>
         <div className={`card stat${oldest && oldest.daysOpen > 30 ? " stat-red" : ""}`}>
           <div className="label">Longest-waiting order</div>
-          <div className="value num">{oldest ? `${oldest.daysOpen} day${oldest.daysOpen === 1 ? "" : "s"}` : "—"}</div>
+          <div className="value num">
+            {oldest ? (
+              <>
+                <Link className="link" href={`/sales-orders/${oldest.id}`}>{oldest.number}</Link>
+                <span className="small faint"> · {oldest.daysOpen} day{oldest.daysOpen === 1 ? "" : "s"}</span>
+              </>
+            ) : "—"}
+          </div>
         </div>
       </div>
       {summary.orderCount === 0 ? (
@@ -82,7 +93,7 @@ export default async function DispatchQueuePage() {
                 <tfoot>
                   <tr>
                     <td className="strong">Total qty remaining</td>
-                    <td className="num strong">{money(r.unitsRemaining).replace(/\.00$/, "")}</td>
+                    <td className="num strong">{r.unitsByUnit.map((p) => qtyText(p.qty, p.unit)).join(" · ")}</td>
                   </tr>
                 </tfoot>
               </table>

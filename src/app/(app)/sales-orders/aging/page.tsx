@@ -94,11 +94,19 @@ export default async function SoAgingPage() {
         <div className="card band-card">
           <div className="table-wrap">
             <table className="list" aria-label="SO aging grand total">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th className="num col-phone-hide">Total</th>
+                  <th className="num col-phone-hide col-tab-hide">Billed</th>
+                  <th className="num">Left to bill</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
                   <td className="strong">Grand total — left to bill across {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}</td>
-                  <td className="num strong">{formatPeso(summary.totalContractPrice)}</td>
-                  <td className="num strong">{formatPeso(summary.totalBilled)}</td>
+                  <td className="num strong col-phone-hide">{formatPeso(summary.totalContractPrice)}</td>
+                  <td className="num strong col-phone-hide col-tab-hide">{formatPeso(summary.totalBilled)}</td>
                   <td className="num strong">{formatPeso(summary.totalLeftToBill)}</td>
                 </tr>
               </tbody>
