@@ -19,6 +19,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
+import { COD_POINT2_TEXT } from "@/lib/print/terms-block";
 import { getQuotePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
 import {
   approveQuote,
@@ -118,5 +119,58 @@ describe.skipIf(!hasDb)("modular terms block on quote and SO prints (MySQL)", ()
     expect(soModel!.doc.termsBlock).toEqual(quoteModel!.doc.termsBlock);
     expect(soModel!.doc.termsBlock![1]).toContain("2. Payment: 50% down payment upon order confirmation");
     expect(soModel!.doc.termsBlock![2]).toContain("3. Estimated lead time: 7 business days");
+  });
+
+  it("COD quote prints the COD Point 2, a generated COD Remarks row, and guarded notes", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const q = await createQuote(
+      quoteInput(customer.id, year, {
+        terms: "COD",
+        notes: "Deliver to Gate 3. Ask for Net 30 terms.",
+      }),
+      admin,
+    );
+    const model = await getQuotePrintModel(q.id);
+    expect(model).not.toBeNull();
+    // Remarks row is generated from the structured term.
+    expect(model!.doc.terms).toBe("COD");
+    const block = model!.doc.termsBlock!;
+    expect(block).toHaveLength(7);
+    expect(block[1]).toBe(`2. ${COD_POINT2_TEXT}`);
+    expect(block.join(" ")).not.toContain("50% down payment when you order");
+    expect(block.join(" ")).not.toContain("50% down payment upon order confirmation");
+    // The free-text note's typed payment term never reaches the print.
+    expect(model!.doc.notes).toBe("Deliver to Gate 3. Ask for terms.");
+    // The SO carries the same COD block and Remarks row.
+    await approveQuote(q.id, admin);
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    const so = await convertQuoteToSalesOrder(
+      q.id,
+      { buyerPoNo: `PO-COD-${tag()}`, deliveryAddressId },
+      admin,
+      { date: new Date(Date.UTC(year, 2, 16)) },
+    );
+    const soModel = await getSalesOrderPrintModel(so.id);
+    expect(soModel).not.toBeNull();
+    expect(soModel!.doc.terms).toBe("COD");
+    expect(soModel!.doc.termsBlock).toEqual(block);
+  });
+
+  it("custom-terms quote prints its own text with the Option 3A anti-fraud sentence", async () => {
+    const year = await freshYear();
+    const customer = await makeCustomer();
+    const q = await createQuote(
+      quoteInput(customer.id, year, {
+        terms: "30% on order, 40% on delivery, 30% within 15 days of acceptance",
+      }),
+      admin,
+    );
+    const model = await getQuotePrintModel(q.id);
+    expect(model).not.toBeNull();
+    expect(model!.doc.termsBlock![1]).toBe(
+      "2. Payment: 30% on order, 40% on delivery, 30% within 15 days of acceptance. Pay by bank transfer, check or cash, only to the account printed on this document (or to our authorized representative against an official HACIEN Sales Invoice or Collection Receipt).",
+    );
+    expect(model!.doc.termsBlock!.join(" ")).not.toContain("50% down payment when you order");
   });
 });

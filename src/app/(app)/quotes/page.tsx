@@ -3,6 +3,8 @@ import type { QuoteStatus } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
 import { listQuotesPageView, QUOTE_STATUSES } from "@/lib/quotes/views";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
@@ -36,7 +38,6 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const businesses = await listBusinesses();
   const business =
     s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
-  const pageParam = Number.parseInt(s.page ?? "", 10);
   const quotePage = await listQuotesPageView(
     {
       q: s.q,
@@ -47,7 +48,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       businessId: business,
     },
     user,
-    Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1,
+    parsePageParam(s.page),
   );
   const quotes = quotePage.items;
   const withCosts = canSeeCosts(user);
@@ -206,26 +207,21 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           />
         </div>
       )}
-      {quotePage.totalPages > 1 && (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <span className="small faint">
-            Page {quotePage.page} of {quotePage.totalPages} · {quotePage.total} records
-          </span>
-          {quotePage.page > 1 && (
-            <Link
-              className="btn btn-secondary"
-              href={href(s, { page: quotePage.page - 1 > 1 ? String(quotePage.page - 1) : undefined })}
-            >
-              Prev
-            </Link>
-          )}
-          {quotePage.page < quotePage.totalPages && (
-            <Link className="btn btn-secondary" href={href(s, { page: String(quotePage.page + 1) })}>
-              Next
-            </Link>
-          )}
-        </div>
-      )}
+      <ListPager
+        page={quotePage.page}
+        totalPages={quotePage.totalPages}
+        total={quotePage.total}
+        hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
+        jumpAction="/quotes"
+        jumpParams={{
+          q: s.q,
+          status: s.status,
+          needsApproval: s.needsApproval,
+          noReply: s.noReply,
+          open: s.open,
+          business: s.business,
+        }}
+      />
     </>
   );
 }

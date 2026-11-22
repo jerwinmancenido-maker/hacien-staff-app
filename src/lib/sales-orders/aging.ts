@@ -15,6 +15,7 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { AGING_BUCKETS, agingBucket, type AgingBucket } from "../billing/aging";
 import { billingToday, calendarDaysBetween } from "../billing/dates";
 import { remainingToBill } from "../billing/status";
+import { pagingWindow, type ListPage } from "../paging";
 
 export type SoAgingInputRow = {
   id: string;
@@ -44,6 +45,12 @@ export type SoAgingRow = {
 export type SoAgingBand = {
   bucket: AgingBucket;
   rows: SoAgingRow[];
+  /**
+   * Rows in the whole band. Equals rows.length in an unpaged summary;
+   * pageSoAging slices rows for display but never narrows this count —
+   * the band total line always speaks for the full band.
+   */
+  rowCount: number;
   /** Money sums across the band's rows. */
   contractPrice: string;
   billed: string;
@@ -110,6 +117,7 @@ export function buildSoAging(rows: readonly SoAgingInputRow[], today: Date = bil
     bands.push({
       bucket,
       rows: bandRows,
+      rowCount: bandRows.length,
       contractPrice: fromScaled(bandContract, 2),
       billed: fromScaled(bandBilled, 2),
       leftToBill: fromScaled(bandLeft, 2),
@@ -121,6 +129,43 @@ export function buildSoAging(rows: readonly SoAgingInputRow[], today: Date = bil
     totalContractPrice: fromScaled(totalContract, 2),
     totalBilled: fromScaled(totalBilled, 2),
     totalLeftToBill: fromScaled(totalLeft, 2),
+  };
+}
+
+export type SoAgingPage = ListPage<SoAgingRow> & {
+  /**
+   * The bands this page touches, in summary order, each with its rows
+   * sliced to the page window. Band money totals and rowCount stay
+   * whole-band — paging narrows only which rows render.
+   */
+  bands: SoAgingBand[];
+};
+
+/**
+ * Slice-after-build paging for the aging page (finding 1040, mirroring
+ * pageDispatchQueue): the summary is always built from the FULL open-orders
+ * set, so the stat cards, band totals, and grand total are identical on
+ * every page; only the rendered rows are windowed. The flattened row order
+ * is the page's render order — bands in summary order, rows as built — so
+ * the pages tile the full set exactly, with no gaps or overlaps.
+ */
+export function pageSoAging(summary: SoAgingSummary, page?: number, pageSize?: number): SoAgingPage {
+  const win = pagingWindow(summary.orderCount, page, pageSize);
+  const bands: SoAgingBand[] = [];
+  let offset = 0;
+  for (const band of summary.bands) {
+    const from = Math.max(0, win.skip - offset);
+    const to = Math.min(band.rows.length, win.skip + win.take - offset);
+    if (to > from) bands.push({ ...band, rows: band.rows.slice(from, to) });
+    offset += band.rows.length;
+  }
+  return {
+    items: bands.flatMap((b) => b.rows),
+    total: summary.orderCount,
+    page: win.page,
+    pageSize: win.pageSize,
+    totalPages: win.totalPages,
+    bands,
   };
 }
 

@@ -9,6 +9,16 @@
 //
 // Numbering: points keep their lawyer's numbers (1–7) even when one is
 // omitted, so the printed numbers always match the Terms of Sale clauses.
+//
+// COD + custom terms (OpenBot lawyer ruling 2026-11-23; Jerwin approved the
+// lawyer's recommendations the same day): "COD" is a first-class structured
+// term — Point 2 prints the dedicated COD text (Option 1A) and the 50%
+// down-payment sentence is fully suppressed; custom terms print the quote's
+// own text plus the Option 3A anti-fraud sentence; the printed Remarks row
+// is generated from the same structured term and free-text notes are
+// stripped of unlinked payment-term words, so the two can never contradict.
+// Locking the printed Terms of Sale as v3.1 still awaits Jerwin's separate
+// retained-lawyer confirmation — do not bump the printed version line.
 
 export const TERMS_AND_CONDITIONS_HEADING = "TERMS AND CONDITIONS" as const;
 
@@ -34,28 +44,152 @@ export function quoteSoTermsPoint1(validityDays?: number | null): string {
   return `${sentence} Prices are in PHP. HACIEN is NON-VAT registered. The delivery fee is quoted separately. Prices of imported items may change if the exchange rate moves before we order. If they do, we will send a revised quotation first.`;
 }
 
-/** The anti-fraud sentence that ends every Point 2 variant. */
+/** The anti-fraud sentence that ends every standard Point 2 variant. */
 const PAYMENT_ANTI_FRAUD =
   "Pay by bank transfer, check or cash, only to the account printed on this document.";
 
 /**
- * Point 2 — payment. Prints ONLY the sentence matching the quote's payment
- * terms. Custom or empty terms fall back to the v3 combined text (the old
- * point 2), so the block never prints no payment sentence at all.
- * Needs owner check: no custom-terms wording was supplied by the lawyer.
+ * Option 3A anti-fraud sentence (lawyer ruling 2026-11-23): ends Point 2 on
+ * custom-terms quotes — the v3 sentence plus the authorized-representative
+ * clause, so the payment-destination safeguard is never dropped.
+ */
+const CUSTOM_TERMS_ANTI_FRAUD =
+  "Pay by bank transfer, check or cash, only to the account printed on this document (or to our authorized representative against an official HACIEN Sales Invoice or Collection Receipt).";
+
+/**
+ * COD Point 2 — Option 1A, approved by Jerwin 2026-11-23 on the OpenBot
+ * lawyer's recommendation. This constant is the ONLY place the COD wording
+ * lives: Point 2 for a COD quote is exactly this text, and the 50%
+ * down-payment sentence never prints alongside it. Locking the printed
+ * Terms of Sale as v3.1 still awaits Jerwin's separate retained-lawyer
+ * confirmation.
+ */
+export const COD_POINT2_TEXT =
+  "Payment: 100% Cash on Delivery (COD) upon release of goods (checks clear before payment is final). Software and special orders: 100% before we order. Pay by cash or check payable to the name on this document only to our authorized delivery representative (against an official HACIEN Sales Invoice or Collection Receipt), or by bank transfer only to the account printed on this document.";
+
+export type PaymentTermKind =
+  | "UPFRONT"
+  | "FIFTY_FIFTY"
+  | "NET30"
+  | "COD"
+  | "CUSTOM"
+  | "NONE";
+
+export type ResolvedPaymentTerm = {
+  kind: PaymentTermKind;
+  /** The quote's own payment text (CUSTOM only; null otherwise). */
+  customText: string | null;
+};
+
+/**
+ * Resolve the stored payment-terms string into the ONE structured term that
+ * drives both Point 2 and the printed Remarks row, so the two can never
+ * disagree. The Settings defaults keep their v3 branches; "COD" (a
+ * long-standing saved value on customers and quotes) is a first-class term;
+ * any other non-empty string is the quote's own custom terms (Option 3A).
+ */
+export function resolvePaymentTerm(
+  paymentTerms?: string | null,
+): ResolvedPaymentTerm {
+  const terms = (paymentTerms ?? "").trim();
+  if (!terms) return { kind: "NONE", customText: null };
+  if (/^cod$/i.test(terms)) return { kind: "COD", customText: null };
+  if (terms.startsWith("100% upfront")) return { kind: "UPFRONT", customText: null };
+  if (terms.startsWith("50% down")) return { kind: "FIFTY_FIFTY", customText: null };
+  if (terms.startsWith("Net 30")) return { kind: "NET30", customText: null };
+  return { kind: "CUSTOM", customText: terms };
+}
+
+/**
+ * Point 2 — payment. Prints ONLY the sentence matching the quote's
+ * structured payment term, and never omits Point 2: a COD quote prints the
+ * dedicated COD text with the 50% sentence fully suppressed, custom terms
+ * print the quote's own text plus the Option 3A anti-fraud sentence, and a
+ * quote with no terms recorded prints the anti-fraud sentence alone (no
+ * payment schedule is asserted for it).
  */
 export function quoteSoTermsPoint2(paymentTerms?: string | null): string {
-  const terms = (paymentTerms ?? "").trim();
-  if (terms.startsWith("100% upfront")) {
-    return `Payment: 100% payment upon order confirmation, before we place the supplier or license order. ${PAYMENT_ANTI_FRAUD}`;
+  const term = resolvePaymentTerm(paymentTerms);
+  switch (term.kind) {
+    case "UPFRONT":
+      return `Payment: 100% payment upon order confirmation, before we place the supplier or license order. ${PAYMENT_ANTI_FRAUD}`;
+    case "FIFTY_FIFTY":
+      return `Payment: 50% down payment upon order confirmation (before we place the supplier order), and 50% on delivery. ${PAYMENT_ANTI_FRAUD}`;
+    case "NET30":
+      return `Payment: Net 30 calendar days from delivery and invoice date (for approved corporate and government accounts). ${PAYMENT_ANTI_FRAUD}`;
+    case "COD":
+      return COD_POINT2_TEXT;
+    case "CUSTOM": {
+      const text = (term.customText ?? "").replace(/\.\s*$/, "");
+      return `Payment: ${text}. ${CUSTOM_TERMS_ANTI_FRAUD}`;
+    }
+    case "NONE":
+      return `Payment: ${PAYMENT_ANTI_FRAUD}`;
   }
-  if (terms.startsWith("50% down")) {
-    return `Payment: 50% down payment upon order confirmation (before we place the supplier order), and 50% on delivery. ${PAYMENT_ANTI_FRAUD}`;
+}
+
+/**
+ * The value printed on the document's "Remarks:" row, generated from the
+ * structured term (ruling 2026-11-23): a COD quote's Remarks row is exactly
+ * "COD"; every other term keeps its stored string verbatim; no terms
+ * recorded returns null so the caller's own fallback applies.
+ */
+export function printedTermsLabel(paymentTerms?: string | null): string | null {
+  if (resolvePaymentTerm(paymentTerms).kind === "COD") return "COD";
+  return paymentTerms && paymentTerms.trim() ? paymentTerms : null;
+}
+
+/**
+ * Payment-term phrases that must never appear in the free-text notes on a
+ * printed document (lawyer ruling 2026-11-23): typed payment words could
+ * override or contradict Point 2, which is the single source of truth.
+ * "COD" is included — the only COD statement on a document is the
+ * generated Remarks row from the structured term.
+ */
+const BLOCKED_NOTE_PATTERNS: { label: string; pattern: RegExp }[] = [
+  { label: "Net <days>", pattern: /\bnet\s*\d+\b/gi },
+  { label: "50/50", pattern: /\b50\s*\/\s*50\b/g },
+  { label: "down payment", pattern: /\bdown\s+payment\b/gi },
+  { label: "upfront", pattern: /\bupfront\b/gi },
+  { label: "COD", pattern: /\bcod\b/gi },
+];
+
+/** The blocked payment-term phrases present in a free-text note, if any. */
+export function findBlockedPaymentTerms(text?: string | null): string[] {
+  if (!text) return [];
+  const found: string[] = [];
+  for (const { label, pattern } of BLOCKED_NOTE_PATTERNS) {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) found.push(label);
   }
-  if (terms.startsWith("Net 30")) {
-    return `Payment: Net 30 calendar days from delivery and invoice date (for approved corporate and government accounts). ${PAYMENT_ANTI_FRAUD}`;
+  return found;
+}
+
+/**
+ * The notes text as it may print: blocked payment-term phrases removed
+ * (the stored notes are never changed). Returns null when nothing
+ * printable remains. Applied by every print model that carries the
+ * quote's free-text notes, so a contradiction cannot reach a customer
+ * document even from notes saved before this guard existed.
+ */
+export function sanitizePrintedNotes(notes?: string | null): string | null {
+  if (!notes) return null;
+  let out = notes;
+  for (const { pattern } of BLOCKED_NOTE_PATTERNS) {
+    pattern.lastIndex = 0;
+    out = out.replace(pattern, "");
   }
-  return `Payment: 50% down payment when you order, 50% on delivery. Software and special orders: 100% before we order. 30-day terms apply only to approved corporate and government accounts. ${PAYMENT_ANTI_FRAUD}`;
+  const lines = out
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/[ \t]+/g, " ")
+        .replace(/ +([.,;:!?])/g, "$1")
+        .trim(),
+    )
+    .filter(Boolean);
+  const joined = lines.join("\n").trim();
+  return joined ? joined : null;
 }
 
 /**
@@ -97,7 +231,7 @@ export const QUOTE_SO_TERMS_POINT_7 =
 
 export type TermsBlockInput = {
   validityDays?: number | null;
-  /** The quote's payment-terms string (one of the 3 Settings defaults, or custom). */
+  /** The quote's payment-terms string (a Settings option such as "COD", or custom text). */
   paymentTerms?: string | null;
   /** Estimated lead time in business days. Null = no figure (no-figure variant). */
   leadTimeDays?: number | null;

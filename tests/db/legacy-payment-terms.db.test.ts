@@ -1,5 +1,7 @@
-// Old records may still carry payment terms outside the three HACIEN defaults
-// (e.g. COD). Those values must load, print, and remain editable.
+// Old records may still carry payment terms outside the current HACIEN
+// defaults (e.g. Net 15). Those values must load, print, and remain editable.
+// (COD itself left this legacy class on 2026-11-23: it is now a first-class
+// structured term in the defaults, with its own Point 2 in terms-block.ts.)
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -18,9 +20,9 @@ import { customerSchema } from "@/lib/validation/companies";
 import { customerDeliveryAddressId, freshYear, makeUser, quoteInput, tag } from "./fixtures";
 
 const NEW_TERMS = DEFAULT_SETTINGS.lists.paymentTerms;
-const LEGACY = "COD";
+const LEGACY = "Net 15";
 
-describe.skipIf(!hasDb)("legacy payment terms outside the 3 new options (MySQL)", () => {
+describe.skipIf(!hasDb)("legacy payment terms outside the current options (MySQL)", () => {
   let admin: Awaited<ReturnType<typeof makeUser>>;
 
   beforeAll(async () => {
@@ -32,9 +34,9 @@ describe.skipIf(!hasDb)("legacy payment terms outside the 3 new options (MySQL)"
     await db.$disconnect();
   });
 
-  it("keeps COD on load, print, and edit/save when the saved term is merged into allowed terms", async () => {
+  it("keeps Net 15 on load, print, and edit/save when the saved term is merged into allowed terms", async () => {
     const year = await freshYear();
-    const name = `Legacy COD Customer ${tag()}`;
+    const name = `Legacy Net 15 Customer ${tag()}`;
     // Seed a pre-migration-style customer whose terms are outside today's list.
     const customer = await db.customer.create({
       data: {
@@ -78,7 +80,7 @@ describe.skipIf(!hasDb)("legacy payment terms outside the 3 new options (MySQL)"
     // Update keeps the legacy term on the document.
     const updated = await updateQuote(
       q.id,
-      quoteInput(customer.id, year, { terms: LEGACY, notes: "still COD" }),
+      quoteInput(customer.id, year, { terms: LEGACY, notes: "still Net 15" }),
       admin,
     );
     expect(updated.terms).toBe(LEGACY);

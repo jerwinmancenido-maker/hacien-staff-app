@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LIST_PAGE_SIZE, pagingWindow } from "@/lib/paging";
+import { DEFAULT_LIST_PAGE_SIZE, pagingWindow, parsePageParam } from "@/lib/paging";
 
 describe("pagingWindow", () => {
   it("defaults to page 1 with the default page size", () => {
@@ -49,5 +49,44 @@ describe("pagingWindow", () => {
       for (let i = w.skip; i < Math.min(w.skip + w.take, total); i++) seen.push(i);
     }
     expect(seen).toEqual(Array.from({ length: total }, (_, i) => i));
+  });
+});
+
+describe("parsePageParam — the shared pager's jump entry (finding 1043)", () => {
+  it("parses a typed page number", () => {
+    expect(parsePageParam("3")).toBe(3);
+    expect(parsePageParam("27")).toBe(27);
+    expect(parsePageParam(" 12 ")).toBe(12);
+  });
+
+  it("floors a fractional entry the way the lists always parsed ?page=", () => {
+    expect(parsePageParam("3.9")).toBe(3);
+  });
+
+  it("reads a missing, blank, non-numeric, or sub-1 entry as page 1", () => {
+    expect(parsePageParam(undefined)).toBe(1);
+    expect(parsePageParam("")).toBe(1);
+    expect(parsePageParam("abc")).toBe(1);
+    expect(parsePageParam("0")).toBe(1);
+    expect(parsePageParam("-4")).toBe(1);
+  });
+
+  it("a jump to the last page lands on the true last page", () => {
+    // 2,050 records at the default size = 21 pages, the last holding 50.
+    const landed = pagingWindow(2050, parsePageParam("21"));
+    expect(landed.page).toBe(21);
+    expect(landed.totalPages).toBe(21);
+    expect(landed.skip).toBe(2000);
+  });
+
+  it("a jump past the end clamps to the last page, never an empty screen", () => {
+    expect(pagingWindow(2050, parsePageParam("99")).page).toBe(21);
+    expect(pagingWindow(250, parsePageParam("1000")).page).toBe(3);
+  });
+
+  it("a jump keeps the filtered total: the clamp follows the filtered page count", () => {
+    // Same typed "9" against a filtered-down list of 320 records (4 pages).
+    expect(pagingWindow(320, parsePageParam("9")).page).toBe(4);
+    expect(pagingWindow(320, parsePageParam("2")).page).toBe(2);
   });
 });

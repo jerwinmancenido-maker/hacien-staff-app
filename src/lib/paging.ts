@@ -40,3 +40,15 @@ export function pagingWindow(total: number, page?: number, pageSize?: number): P
   const skip = (clampedPage - 1) * size;
   return { page: clampedPage, pageSize: size, totalPages, skip, take: size };
 }
+
+/**
+ * Parse a raw ?page= value (including one typed into the shared pager's
+ * jump form) into a 1-based page request. Anything missing, non-numeric,
+ * or below 1 reads as page 1; the data layer still clamps the request
+ * against the real totalPages via pagingWindow, so a jump past the end
+ * lands on the last page.
+ */
+export function parsePageParam(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
