@@ -50,6 +50,8 @@ describe("quote editor lot-component picker wires the failed state", () => {
     expect(editor.split("Search failed, try again.").length - 1).toBeGreaterThanOrEqual(3);
     expect(editor.split("Retry search").length - 1).toBeGreaterThanOrEqual(4); // 2 aria-labels + 2 labels per block set
     expect(editor.split("attempt: p.attempt + 1").length - 1).toBe(2);
-    expect(editor.split("compPicker.failed || compPicker.results.length > 0").length - 1).toBe(2);
+    // 2 render conditions (desktop + mobile) + 2 aria-expanded mirrors of
+    // the same open condition on the component comboboxes (finding 1044).
+    expect(editor.split("compPicker.failed || compPicker.results.length > 0").length - 1).toBe(4);
   });
 });
