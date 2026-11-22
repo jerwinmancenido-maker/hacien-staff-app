@@ -2,16 +2,31 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/format";
 import { money } from "@/lib/documents/common";
-import { listDispatchQueue } from "@/lib/sales-orders/dispatch";
+import { listDispatchQueue, pageDispatchQueue } from "@/lib/sales-orders/dispatch";
 import { PageHeader } from "@/components/ui";
 
 /** Quantities print whole when they are whole ("2 pc", not "2.00 pc") —
  * the same strip the packing list applies. */
 const qtyText = (qty: string, unit: string) => `${money(qty).replace(/\.00$/, "")} ${unit}`;
 
-export default async function DispatchQueuePage() {
+type Search = { page?: string };
+
+function href(s: Search, patch: Partial<Search>) {
+  const merged: Search = { ...s, ...patch };
+  // Only a patch that names the page keeps one.
+  if (!("page" in patch)) delete merged.page;
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+  const qs = p.toString();
+  return `/sales-orders/dispatch${qs ? `?${qs}` : ""}`;
+}
+
+export default async function DispatchQueuePage({ searchParams }: { searchParams: Promise<Search> }) {
   await requirePagePermission("view");
+  const s = await searchParams;
   const summary = await listDispatchQueue();
+  const pageParam = Number.parseInt(s.page ?? "", 10);
+  const queuePage = pageDispatchQueue(summary, Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1);
   const oldest = summary.rows[0];
 
   return (
@@ -57,7 +72,7 @@ export default async function DispatchQueuePage() {
           </p>
         </div>
       ) : (
-        summary.rows.map((r) => (
+        queuePage.items.map((r) => (
           <div className="card" key={r.id} style={{ marginBottom: 20 }}>
             <h2 style={{ marginTop: 0 }}>
               <Link className="link" href={`/sales-orders/${r.id}`}>{r.number}</Link>
@@ -100,6 +115,26 @@ export default async function DispatchQueuePage() {
             </div>
           </div>
         ))
+      )}
+      {queuePage.totalPages > 1 && (
+        <div className="toolbar" style={{ marginTop: 10 }}>
+          <span className="small faint">
+            Page {queuePage.page} of {queuePage.totalPages} · {queuePage.total} records
+          </span>
+          {queuePage.page > 1 && (
+            <Link
+              className="btn btn-secondary"
+              href={href(s, { page: queuePage.page - 1 > 1 ? String(queuePage.page - 1) : undefined })}
+            >
+              Prev
+            </Link>
+          )}
+          {queuePage.page < queuePage.totalPages && (
+            <Link className="btn btn-secondary" href={href(s, { page: String(queuePage.page + 1) })}>
+              Next
+            </Link>
+          )}
+        </div>
       )}
     </>
   );

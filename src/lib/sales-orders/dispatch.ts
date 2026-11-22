@@ -15,6 +15,7 @@ import { money, ymd } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { billingToday, calendarDaysBetween } from "../billing/dates";
 import { remainingDeliveryQty } from "./delivery";
+import { pagingWindow, type ListPage } from "../paging";
 
 export type DispatchInputLine = {
   description: string;
@@ -180,4 +181,28 @@ export async function listDispatchQueue(today: Date = billingToday()): Promise<D
     })),
     today,
   );
+}
+
+/**
+ * Slice one page of cards out of a built queue, using the shared list pager
+ * (src/lib/paging.ts) — the same window the quotes / SO lists page with.
+ * Slicing after the build is deliberate: queue membership (an order drops
+ * off once fully delivered) is only known once buildDispatchQueue has run
+ * over every order, so the page count cannot come from a SQL COUNT. The
+ * summary figures stay whole-queue — they are computed over all rows before
+ * this slice is taken; only the rendered cards are paged.
+ */
+export function pageDispatchQueue(
+  summary: DispatchSummary,
+  page?: number,
+  pageSize?: number,
+): ListPage<DispatchRow> {
+  const win = pagingWindow(summary.orderCount, page, pageSize);
+  return {
+    items: summary.rows.slice(win.skip, win.skip + win.take),
+    total: summary.orderCount,
+    page: win.page,
+    pageSize: win.pageSize,
+    totalPages: win.totalPages,
+  };
 }

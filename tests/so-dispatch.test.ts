@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDispatchQueue, type DispatchInputRow } from "@/lib/sales-orders/dispatch";
+import { buildDispatchQueue, pageDispatchQueue, type DispatchInputRow } from "@/lib/sales-orders/dispatch";
 
 /**
  * Dispatch queue rules (VR1 Dispatcher finding: "no dispatch queue").
@@ -135,5 +135,54 @@ describe("dispatch queue builder", () => {
   it("handles the empty queue", () => {
     const s = buildDispatchQueue([], TODAY);
     expect(s).toEqual({ rows: [], orderCount: 0, totalUnitsRemaining: "0.00", totalByUnit: [] });
+  });
+});
+
+describe("dispatch queue paging", () => {
+  function bigSummary(n: number) {
+    return buildDispatchQueue(Array.from({ length: n }, () => row()), TODAY);
+  }
+
+  it("pages the cards while the summary stays whole-queue", () => {
+    const s = bigSummary(250);
+    expect(s.orderCount).toBe(250);
+    expect(s.totalUnitsRemaining).toBe("2500.00");
+    const p1 = pageDispatchQueue(s);
+    expect(p1.total).toBe(250);
+    expect(p1.totalPages).toBe(3);
+    expect(p1.page).toBe(1);
+    expect(p1.pageSize).toBe(100);
+    expect(p1.items).toEqual(s.rows.slice(0, 100));
+    // Paging reads the summary; it never narrows it.
+    expect(s.orderCount).toBe(250);
+    expect(s.totalUnitsRemaining).toBe("2500.00");
+    expect(s.rows).toHaveLength(250);
+  });
+
+  it("page slices tile the whole queue with no gaps or overlaps", () => {
+    const s = bigSummary(250);
+    const seen: string[] = [];
+    const { totalPages } = pageDispatchQueue(s);
+    for (let p = 1; p <= totalPages; p++) {
+      for (const r of pageDispatchQueue(s, p).items) seen.push(r.id);
+    }
+    expect(seen).toEqual(s.rows.map((r) => r.id));
+    expect(new Set(seen).size).toBe(250);
+    expect(pageDispatchQueue(s, 3).items).toHaveLength(50);
+  });
+
+  it("clamps a page past the end and treats an invalid page as page 1", () => {
+    const s = bigSummary(250);
+    expect(pageDispatchQueue(s, 99).page).toBe(3);
+    expect(pageDispatchQueue(s, 99).items).toEqual(s.rows.slice(200));
+    expect(pageDispatchQueue(s, 0).page).toBe(1);
+    expect(pageDispatchQueue(s, Number.NaN).page).toBe(1);
+  });
+
+  it("a queue under one page is page 1 of 1", () => {
+    const s = bigSummary(12);
+    const p1 = pageDispatchQueue(s);
+    expect(p1.totalPages).toBe(1);
+    expect(p1.items).toEqual(s.rows);
   });
 });
