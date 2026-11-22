@@ -124,20 +124,41 @@ export function buildDispatchQueue(
   };
 }
 
-/** DB loader: OPEN, own-company sales orders with lines and contact. */
+/**
+ * DB loader: OPEN, own-company sales orders with lines and contact.
+ *
+ * Perf (finding 1040): the orders load through a lean select of just the
+ * fields the builder reads, and the lines load as ONE flat query grouped
+ * in memory by order (in sortOrder), instead of hydrating every column of
+ * every order plus its nested items. Same rows, same order, same figures.
+ */
 export async function listDispatchQueue(today: Date = billingToday()): Promise<DispatchSummary> {
-  const rows = await db.salesOrder.findMany({
-    where: { status: "OPEN", businessId: null },
-    include: {
-      customer: { select: { name: true, address: true } },
-      contact: { select: { name: true, phone: true } },
-      items: {
-        orderBy: { sortOrder: "asc" },
-        select: { description: true, qty: true, deliveredQty: true, unit: true },
+  const [rows, items] = await Promise.all([
+    db.salesOrder.findMany({
+      where: { status: "OPEN", businessId: null },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        status: true,
+        deliveryAddress: true,
+        customer: { select: { name: true, address: true } },
+        contact: { select: { name: true, phone: true } },
       },
-    },
-    orderBy: [{ date: "asc" }, { number: "asc" }],
-  });
+      orderBy: [{ date: "asc" }, { number: "asc" }],
+    }),
+    db.salesOrderItem.findMany({
+      where: { salesOrder: { status: "OPEN", businessId: null } },
+      select: { salesOrderId: true, description: true, qty: true, deliveredQty: true, unit: true },
+      orderBy: [{ salesOrderId: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const linesBySo = new Map<string, typeof items>();
+  for (const i of items) {
+    const arr = linesBySo.get(i.salesOrderId);
+    if (arr) arr.push(i);
+    else linesBySo.set(i.salesOrderId, [i]);
+  }
   return buildDispatchQueue(
     rows.map((r) => ({
       id: r.id,
@@ -150,7 +171,7 @@ export async function listDispatchQueue(today: Date = billingToday()): Promise<D
       deliveryAddress: r.deliveryAddress ?? r.customer.address,
       contactName: r.contact?.name ?? null,
       contactPhone: r.contact?.phone ?? null,
-      lines: r.items.map((i) => ({
+      lines: (linesBySo.get(r.id) ?? []).map((i) => ({
         description: i.description,
         qty: money(i.qty),
         deliveredQty: money(i.deliveredQty),
