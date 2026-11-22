@@ -14,6 +14,7 @@ export type TaxTab = (typeof TABS)[number]["key"];
 export function TaxNav({ active }: { active: TaxTab }) {
   return (
     <PillTabs
+      className="books-nav"
       active={active}
       tabs={TABS.map((t) => ({ key: t.key, label: t.label, href: t.href }))}
       ariaLabel="Tax worksheet sections"
