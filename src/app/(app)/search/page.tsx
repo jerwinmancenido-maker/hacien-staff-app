@@ -103,13 +103,25 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
       title: "Customers",
       seeAllLabel: "See all in Customers →",
       seeAllHref: topSearchListHref("/customers", q),
-      hits: takeTopSearchHits(customers, (r) => ({
-        id: r.id,
-        href: `/customers/${r.id}`,
-        primary: r.name,
-        secondary: showTin && r.tin ? r.tin : "—",
-        status: r.active ? "Active" : "Inactive",
-      })),
+      hits: takeTopSearchHits(customers, (r) => {
+        // L25 Fix A: when the hit matched ONLY via a contact phone (not name
+        // or TIN), say so — a bare TIN line would read as a false positive.
+        const contact = "contacts" in r ? r.contacts[0] : undefined;
+        const matchedName = r.name.toLowerCase().includes(q.toLowerCase());
+        const matchedTin = !!r.tin && r.tin.includes(q.replace(/\s+/g, ""));
+        return {
+          id: r.id,
+          href: `/customers/${r.id}`,
+          primary: r.name,
+          secondary:
+            contact && !matchedName && !matchedTin
+              ? `Contact: ${contact.name} · ${contact.phone ?? "—"}`
+              : showTin && r.tin
+                ? r.tin
+                : "—",
+          status: r.active ? "Active" : "Inactive",
+        };
+      }),
     },
     {
       key: "suppliers",

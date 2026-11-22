@@ -45,6 +45,15 @@ const mainAddress = {
 
 export function listCustomers(f: CustomerFilter) {
   const q = f.q?.trim();
+  // L25 Fix A: a digit-like query (at least 4 digits) also matches contact
+  // phone numbers, so a contact's number finds its customer. The digit gate
+  // keeps the contacts join out of plain name searches and stops a 1–2 digit
+  // query from matching half the phone book. Archived / inactive contacts do
+  // not match: a removed contact's old number stops finding the customer.
+  const phoneClause: Prisma.ContactWhereInput | null =
+    q && q.replace(/\D/g, "").length >= 4
+      ? { phone: { contains: q }, active: true, archivedAt: null }
+      : null;
   return db.customer.findMany({
     where: {
       ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
@@ -54,14 +63,24 @@ export function listCustomers(f: CustomerFilter) {
       ...(f.withholdingPick === "NOT_SET" ? { defaultWithholding: { equals: Prisma.DbNull } } : {}),
       ...(q
         ? {
-            OR:
-              f.matchTin === false
+            OR: [
+              ...(f.matchTin === false
                 ? [{ name: { contains: q } }]
-                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }],
+                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }]),
+              ...(phoneClause ? [{ contacts: { some: phoneClause } }] : []),
+            ],
           }
         : {}),
     },
-    include: mainAddress,
+    include: {
+      ...mainAddress,
+      // Only when the phone clause fired: the matching contact rides along so
+      // /search can show WHY the customer matched (see the customers group
+      // there). No contact include — and no join cost — on any other query.
+      ...(phoneClause
+        ? { contacts: { where: phoneClause, select: { name: true, phone: true }, take: 1 } }
+        : {}),
+    },
     orderBy: { name: "asc" },
     ...(f.skip != null ? { skip: f.skip } : {}),
     ...(f.take != null ? { take: f.take } : {}),

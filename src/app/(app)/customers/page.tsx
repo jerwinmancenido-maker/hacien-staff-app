@@ -132,9 +132,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <form className="search-pill" action="/customers" role="search">
           <SearchIcon />
           <label htmlFor="q" className="sr-only">
-            Search by name or TIN
+            Search by name, TIN, or contact phone
           </label>
-          <input id="q" name="q" defaultValue={s.q} placeholder="Search by name or TIN" />
+          <input id="q" name="q" defaultValue={s.q} placeholder="Search by name, TIN, or contact phone" />
           {(wh || whNotSet) && <input type="hidden" name="wh" value={wh ?? "NOT_SET"} />}
           {showInactive && <input type="hidden" name="inactive" value="1" />}
           {expiringOnly && <input type="hidden" name="docs" value="expiring" />}
@@ -174,7 +174,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         emptyTitle={filtered ? "No matches" : "All clear here"}
         emptyLine={
           filtered
-            ? "Try another name or TIN, or clear the filter."
+            ? "Try another name, TIN, or contact phone, or clear the filter."
             : "No customers yet. Add your first customer."
         }
         emptyAction={
