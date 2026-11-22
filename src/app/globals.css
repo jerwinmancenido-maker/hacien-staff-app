@@ -993,6 +993,19 @@ a.tracker-card:hover {
     overflow-wrap: break-word;
   }
 }
+/* Small-tablet demotions (≤860px, Complete Review 2026-11-22): the same
+   column-priority idea as the D12 phone classes at a wider breakpoint —
+   SO Aging's six columns push "Left to bill" +49px past the edge at
+   768px, and the billing list's customer names crowd its money columns. */
+@media (max-width: 860px) {
+  table.list .col-tab-hide {
+    display: none;
+  }
+  table.list .col-tab-cap {
+    max-width: 10rem;
+    overflow-wrap: break-word;
+  }
+}
 .so-bill-phone {
   display: none;
   list-style: none;
@@ -1132,6 +1145,15 @@ table.list td {
   table.list td[data-col="record"] > div:first-child {
     white-space: nowrap;
   }
+}
+/* SO Aging is a hand-rolled table: its number/date cells keep the
+   no-mid-value-wrap protection at EVERY width (Calibration Case #1 —
+   below 769px the sticky first column wrapped "SO-/2026-/0002"). On
+   phones the table scrolls sideways inside its wrap by design, so the
+   whole number stays whole and scrolls with the row. */
+table.list.aging-table td[data-col="number"],
+table.list.aging-table td[data-col="date"] {
+  white-space: nowrap;
 }
 table.list td[data-col="record"] > div + div {
   overflow-wrap: break-word;

@@ -74,7 +74,7 @@ export default async function DispatchQueuePage() {
                 <tbody>
                   {r.lines.map((l, i) => (
                     <tr key={i}>
-                      <td>{l.description}</td>
+                      <td className="col-phone-cap">{l.description}</td>
                       <td className="num strong">{qtyText(l.qtyRemaining, l.unit)}</td>
                     </tr>
                   ))}
