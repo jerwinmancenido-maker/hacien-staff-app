@@ -27,7 +27,7 @@ export default async function SoAgingPage() {
           <div className="value num">{formatPeso(summary.totalLeftToBill)}</div>
         </div>
         <div className="card stat">
-          <div className="label">Open orders</div>
+          <div className="label">Orders left to bill</div>
           <div className="value num">{summary.orderCount}</div>
         </div>
         <div className={`card stat${oldestBand ? " stat-red" : ""}`}>
