@@ -83,7 +83,7 @@ export default async function CashHomePage() {
               <thead>
                 <tr>
                   <th>Account</th>
-                  <th>Type</th>
+                  <th className="col-phone-hide">Type</th>
                   <th className="num">Balance</th>
                 </tr>
               </thead>
@@ -94,7 +94,7 @@ export default async function CashHomePage() {
                       <Link href={a.href}>{a.name}</Link>
                       {a.accountHintLast4 && <div className="faint small">···{a.accountHintLast4}</div>}
                     </td>
-                    <td>{CASH_ACCOUNT_TYPE_LABELS[a.type]}</td>
+                    <td className="col-phone-hide">{CASH_ACCOUNT_TYPE_LABELS[a.type]}</td>
                     <td className={`num strong${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</td>
                   </tr>
                 ))}
@@ -104,7 +104,7 @@ export default async function CashHomePage() {
                       Not assigned
                       <div className="faint small">Old collections / payments with no account yet</div>
                     </td>
-                    <td>—</td>
+                    <td className="col-phone-hide">—</td>
                     <td className="num">{formatPeso(summary.unassignedNet)}</td>
                   </tr>
                 )}

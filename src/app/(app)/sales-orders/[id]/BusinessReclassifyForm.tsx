@@ -42,9 +42,9 @@ export function BusinessReclassifyForm({
   return (
     <form onSubmit={confirmSubmit} className="card" style={{ marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <label className="small" style={{ flex: "1 1 240px" }}>
+        <label className="small" style={{ flex: "1 1 240px", minWidth: 0 }}>
           Business this order belongs to (Admin only)
-          <select name="businessId" defaultValue={currentBusinessId ?? ""}>
+          <select name="businessId" defaultValue={currentBusinessId ?? ""} style={{ width: "100%" }}>
             <option value="">{ownCompanyName} (own company)</option>
             {businesses.map((b) => (
               <option key={b.id} value={b.id} disabled={!b.active && b.id !== currentBusinessId}>
