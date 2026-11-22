@@ -434,15 +434,15 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     expect(quoteSoTermsPoint1(7)).toContain("This quotation is valid for 7 days.");
   });
 
-  it("payment terms list contains exactly 3 options for new records", () => {
+  it("payment terms list contains exactly 4 options for new records", () => {
     const terms = DEFAULT_SETTINGS.lists.paymentTerms;
-    expect(terms).toHaveLength(3);
+    expect(terms).toHaveLength(4);
     expect(terms).toEqual([
       "50% down, 50% on delivery",
       "100% upfront (software and special orders)",
       "Net 30 (approved accounts only)",
+      "COD",
     ]);
-    expect(terms).not.toContain("COD");
     expect(terms).not.toContain("Net 15");
     expect(terms).not.toContain("Net 60");
   });
@@ -467,7 +467,7 @@ describe("Q12 prints legal terms, validity, payment terms, tax line, QR and poli
     const defaultPoints = getQuoteSoTermsPoints(15);
     expect(defaultPoints).toHaveLength(7);
     expect(defaultPoints[0]).toContain("1. This quotation is valid for 15 days unless the quote states otherwise.");
-    expect(defaultPoints[1]).toContain("2. Payment: 50% down payment when you order, 50% on delivery.");
+    expect(defaultPoints[1]).toBe("2. Payment: Pay by bank transfer, check or cash, only to the account printed on this document.");
     expect(defaultPoints[2]).toContain("3. Lead times are estimates, not fixed deadlines, and are subject to supplier stock.");
     expect(defaultPoints[3]).toContain("4. On delivery, note any missing boxes");
     expect(defaultPoints[4]).toContain("5. Unless specific warranty notes on this quotation state otherwise, warranty is the manufacturer's or distributor's");
