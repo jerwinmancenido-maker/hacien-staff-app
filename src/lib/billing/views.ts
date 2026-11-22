@@ -12,6 +12,7 @@ import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPa
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
 import { billingCoverageNote, billingPositionNote } from "./coverage";
+import { billingPageWindow } from "./paging";
 import { getNonVatMeter } from "../services/non-vat";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
@@ -53,7 +54,7 @@ type BillingListFilters = {
   toYmd?: string;
 };
 
-/** Shared where-clause for list + uncapped sum (list pages still page with take:200). */
+/** Shared where-clause for list + uncapped sum (listBillingsPage pages with it; listBillings keeps take:200). */
 function billingsWhere(filters: BillingListFilters) {
   const where: {
     customerId?: string;
@@ -97,13 +98,13 @@ export async function sumBillingsAmount(filters: BillingListFilters = {}): Promi
   return money(agg._sum.amount ?? 0);
 }
 
-export async function listBillings(filters: BillingListFilters = {}) {
+async function billingsList(filters: BillingListFilters, window: { skip: number; take: number }) {
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
   const today = billingToday();
   const overdueOnly = filters.status === "OVERDUE";
   const where = billingsWhere(filters);
-  // OVERDUE: exclude voids up front; filter overdue before take:200 so recent
+  // OVERDUE: exclude voids up front; filter overdue before paging so recent
   // current invoices cannot crowd overdue rows off the page.
   if (overdueOnly) where.status = { not: "VOID" };
 
@@ -118,8 +119,8 @@ export async function listBillings(filters: BillingListFilters = {}) {
       creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    // Page after overdue filter (below). Other statuses keep the DB take.
-    ...(overdueOnly ? {} : { take: 200 }),
+    // Page after overdue filter (below). Other statuses page in the DB query.
+    ...(overdueOnly ? {} : { skip: window.skip, take: window.take }),
   });
   const mapped = rows.map((b) => {
     const isGov = b.customer.withholdingType === "GOVERNMENT";
@@ -145,8 +146,49 @@ export async function listBillings(filters: BillingListFilters = {}) {
       aging: agingBucket(b.dueDate, today, isGov) as AgingBucket,
     };
   });
-  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(0, 200);
+  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(window.skip, window.skip + window.take);
   return mapped;
+}
+
+/** First 200 matching rows — the long-standing shape for detail/search/home callers. */
+export async function listBillings(filters: BillingListFilters = {}) {
+  return billingsList(filters, { skip: 0, take: 200 });
+}
+
+export type BillingListPage = {
+  rows: Awaited<ReturnType<typeof listBillings>>;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+/**
+ * One page of the billings list plus the full filtered count (finding 1023:
+ * the plain list capped at take:200, so billings past 200 were unreachable).
+ * The money totals elsewhere (arAgingSummary, taxYearBillingMeter,
+ * sumBillingsAmount) are separate uncapped aggregations, untouched by paging.
+ */
+export async function listBillingsPage(
+  filters: BillingListFilters & { page?: number; pageSize?: number } = {},
+): Promise<BillingListPage> {
+  const { page, pageSize, ...listFilters } = filters;
+  if (listFilters.status === "OVERDUE") {
+    // Overdue is decided in memory, so count and page the mapped list itself.
+    const all = await billingsList(listFilters, { skip: 0, take: Number.MAX_SAFE_INTEGER });
+    const win = billingPageWindow(all.length, page, pageSize);
+    return {
+      rows: all.slice(win.skip, win.skip + win.take),
+      total: all.length,
+      page: win.page,
+      pageSize: win.pageSize,
+      totalPages: win.totalPages,
+    };
+  }
+  const total = await db.billing.count({ where: billingsWhere(listFilters) });
+  const win = billingPageWindow(total, page, pageSize);
+  const rows = await billingsList(listFilters, { skip: win.skip, take: win.pageSize });
+  return { rows, total, page: win.page, pageSize: win.pageSize, totalPages: win.totalPages };
 }
 
 export async function getBillingView(id: string) {
