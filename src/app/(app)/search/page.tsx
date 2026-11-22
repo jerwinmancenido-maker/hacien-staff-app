@@ -5,7 +5,7 @@ import { listBillings, BILLING_STATUS_LABELS } from "@/lib/billing/views";
 import { listPurchaseOrdersView, listReceivingView } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS } from "@/lib/purchasing/status";
 import { listQuotesView, listSalesOrdersView } from "@/lib/quotes/views";
-import { listCustomers, listSuppliers } from "@/lib/services/companies";
+import { listCustomers, listSuppliers, suggestCustomersByName } from "@/lib/services/companies";
 import { QUOTE_STATUS_LABELS, SO_STATUS_LABELS } from "@/components/docs/DocParts";
 import { EmptyState, PageHeader } from "@/components/ui";
 import {
@@ -175,12 +175,37 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
     },
   ].filter((g) => g.hits.length > 0);
 
+  // L25 Fix B: only when the whole search came back empty — offer "Did you
+  // mean" customer-name suggestions as labelled links. Fallback only: exact
+  // results are never joined by guesses, and document numbers never
+  // fuzzy-match.
+  const customerSuggestions = groups.length === 0 ? await suggestCustomersByName(q) : [];
+
   return (
     <>
       <PageHeader title={`Results for “${q}”`} subtitle="Matches from lists you can already open." />
       {groups.length === 0 ? (
         <div className="card">
-          <EmptyState title="No matches" line="Try a number, a name, or a serial." />
+          <EmptyState
+            title="No matches"
+            line="Try a number, a name, or a serial."
+            action={
+              customerSuggestions.length > 0 ? (
+                <span>
+                  Did you mean:{" "}
+                  {customerSuggestions.map((s, i) => (
+                    <span key={s.id}>
+                      {i > 0 ? ", " : ""}
+                      <Link href={`/customers/${s.id}`} className="link">
+                        {s.name}
+                      </Link>
+                    </span>
+                  ))}
+                  ?
+                </span>
+              ) : undefined
+            }
+          />
         </div>
       ) : (
         <div className="top-search-results">
