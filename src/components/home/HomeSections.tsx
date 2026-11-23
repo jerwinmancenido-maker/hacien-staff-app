@@ -2,7 +2,7 @@
 // Phone-only compaction is CSS under max-width: 640px; desktop markup stays.
 
 import Link from "next/link";
-import { formatPeso, formatPesoLimit, formatPesoWhole } from "@/lib/format";
+import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import { collectedWholePesos } from "@/lib/home/money";
 import { HOME_RECENT_PHONE_ROWS } from "@/lib/home/activity";
@@ -101,7 +101,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CoinIcon size={14} />
           {kpis.billedThisMonth.label}
         </div>
-        <div className="home-kv num">{formatPesoWhole(kpis.billedThisMonth.amount)}</div>
+        <div className="home-kv num">{formatPeso(kpis.billedThisMonth.amount)}</div>
         <KpiMtdFoot change={kpis.billedThisMonth.change} vsCaption={kpis.billedThisMonth.vsCaption} />
       </div>
 
@@ -110,7 +110,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <InboxIcon size={14} />
           {kpis.owedByCustomers.label}
         </div>
-        <div className="home-kv num">{formatPesoWhole(kpis.owedByCustomers.amount)}</div>
+        <div className="home-kv num">{formatPeso(kpis.owedByCustomers.amount)}</div>
         <div className="home-ks">
           {kpis.owedByCustomers.overdueChip ? (
             <span className="home-chip home-chip-overdue">{kpis.owedByCustomers.overdueChip.label}</span>
@@ -124,10 +124,10 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CartIcon size={14} />
           {kpis.collectedThisMonth.label}
         </div>
-        <div className="home-kv num" aria-label="Total paid">{formatPesoWhole(paid.total)}</div>
+        <div className="home-kv num" aria-label="Total paid">{formatPeso(paid.total)}</div>
         <div className="home-ks home-ks-paid" aria-label="Cash collected and 2307 received">
-          <div>Cash collected <b className="num">{formatPesoWhole(paid.cash)}</b></div>
-          <div>2307 received <b className="num">{formatPesoWhole(paid.received2307)}</b></div>
+          <div>Cash collected <b className="num">{formatPeso(paid.cash)}</b></div>
+          <div>2307 received <b className="num">{formatPeso(paid.received2307)}</b></div>
         </div>
         <KpiMtdFoot
           change={kpis.collectedThisMonth.change}
@@ -141,7 +141,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <FileIcon size={14} />
           {kpis.billedThisYear.label}
         </div>
-        <div className="home-kv num">{formatPesoWhole(kpis.billedThisYear.amount)}</div>
+        <div className="home-kv num">{formatPeso(kpis.billedThisYear.amount)}</div>
         <div className="home-ks home-ks-bar">
           <span className="home-mini-bar home-desktop-only" aria-hidden>
             <i style={{ width: `${Math.min(100, Math.max(0, kpis.billedThisYear.barPct))}%` }} />

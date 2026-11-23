@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { formatPesoWhole } from "@/lib/format";
+import { formatPeso } from "@/lib/format";
 import { formatSalesAxisPeso, type HomeSalesMonth } from "@/lib/home/sales";
 
 /** Left gutter for axis labels on screen (px); tight when axis is hidden. */
@@ -239,7 +239,7 @@ export function SalesChart({
               {current.month.shortLabel} {current.month.key.slice(0, 4)}
               {currentIsPartial ? " · so far" : ""}
             </span>
-            <b className="num">{formatPesoWhole(current.month.amount)}</b>
+            <b className="num">{formatPeso(current.month.amount)}</b>
           </div>
         ) : null}
       </div>
