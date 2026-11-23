@@ -33,10 +33,23 @@ export async function requireCostPage(permission: Permission = "view"): Promise<
 
 export { ForbiddenError };
 
-/** For server actions: throws when signed out or lacking the permission. */
-export async function requireActionPermission(permission: Permission): Promise<CurrentUser> {
+/**
+ * For server actions: redirect to /login when signed out (F2, finding 1277).
+ * A session that ends while a form is open must send the user to sign in,
+ * not strand the entry behind an error: the old signed-out throw surfaced
+ * as a form message or the generic error page. Permission failures
+ * (signed in, not allowed) still throw ForbiddenError, as before.
+ */
+export async function requireSignedInUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
-  if (!user || !can(user, permission)) throw new ForbiddenError();
+  if (!user) redirect("/login");
+  return user;
+}
+
+/** For server actions: redirects to /login when signed out; throws when lacking the permission. */
+export async function requireActionPermission(permission: Permission): Promise<CurrentUser> {
+  const user = await requireSignedInUser();
+  if (!can(user, permission)) throw new ForbiddenError();
   return user;
 }
 

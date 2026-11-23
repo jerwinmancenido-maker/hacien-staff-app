@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanVoid, ForbiddenError } from "@/lib/permissions";
+import { requireActionPermission, requireSignedInUser } from "@/lib/auth/current-user";
+import { assertCanVoid } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
@@ -54,8 +54,7 @@ export async function postReceivingReportAction(purchaseOrderId: string, _prev: 
 
 export async function voidReceivingReportAction(purchaseOrderId: string, id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };

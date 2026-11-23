@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
+import { requireActionPermission, requireSignedInUser } from "@/lib/auth/current-user";
+import { assertCanDeleteDocument, assertCanVoid } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { updateSalesOrder, updateSalesOrderGovDeal, voidSalesOrder } from "@/lib/services/sales-orders";
 import { reclassifySalesOrderBusiness } from "@/lib/services/businesses";
@@ -45,8 +45,7 @@ export async function saveSalesOrderAction(id: string, _prev: FormState, form: F
 
 export async function voidSalesOrderAction(id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -61,8 +60,7 @@ export async function voidSalesOrderAction(id: string, reason: string): Promise<
 export async function deleteSalesOrderAction(id: string, reason: string): Promise<FormState> {
   let goTo: string | null = null;
   const result = await runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -100,8 +98,7 @@ export async function recordDeliveryAction(salesOrderId: string, _prev: FormStat
 
 export async function voidDeliveryAction(deliveryId: string, salesOrderId: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -198,8 +195,7 @@ export async function postCustomerReturnAction(salesOrderId: string, _prev: Form
 /** Audit D: void a customer return; the quantities go back and any credit already applied is reversed. */
 export async function voidCustomerReturnAction(salesOrderId: string, id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     assertCanVoid(user);
     await voidCustomerReturn(id, reason, user);
     revalidatePath("/sales-orders");
@@ -211,8 +207,7 @@ export async function voidCustomerReturnAction(salesOrderId: string, id: string,
 /** Business entity (2026-11-19): Admin reclassify of an order's business. */
 export async function reclassifySalesOrderBusinessAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     const raw = str(form, "businessId");
     await reclassifySalesOrderBusiness(id, raw ? raw : null, user);
     revalidatePath(`/sales-orders/${id}`);
@@ -224,8 +219,7 @@ export async function reclassifySalesOrderBusinessAction(id: string, _prev: Form
 /** Reconciliation note (PR-C, 2026-11-19): why this order has no billing yet. */
 export async function setSalesOrderGapReasonAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   return runAction(async () => {
-    const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    const user = await requireSignedInUser();
     await setSalesOrderGapReason(
       id,
       { code: str(form, "gapReasonCode") || null, note: str(form, "gapNote") || null },
