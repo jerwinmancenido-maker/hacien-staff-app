@@ -1,3 +1,4 @@
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
@@ -64,6 +65,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
 
   return (
     <>
+      <RecordBreadcrumbLabel label={q.number} />
       <PageHeader
         title={
           <>
