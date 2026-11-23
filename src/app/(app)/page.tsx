@@ -25,7 +25,6 @@ function greeting(hour: number) {
 function homeDateLabel(now = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: TIME_ZONE,
-    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",

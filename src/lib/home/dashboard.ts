@@ -100,7 +100,7 @@ export type HomeTaxDeadline = {
   form: string;
   description: string;
   dueLabel: string;
-  /** e.g. "Due Mon, Nov 16, 2026 · in 16 days" */
+  /** e.g. "Due Nov 16, 2026 · in 16 days" */
   dueDetail: string;
   /**
    * Phone one-line strip, e.g. "NOV 16 · 1701Q due in 16 days".
@@ -290,7 +290,6 @@ function formatWeekdayLongDate(ymd: string): string {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",
-    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
