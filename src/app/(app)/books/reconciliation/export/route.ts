@@ -8,7 +8,7 @@ import { getReconciliation, reconciliationToCsv, type Reconciliation } from "@/l
 const LISTS: Record<string, { title: string; pick: (r: Reconciliation) => Reconciliation["deliveredNotBilled"] }> = {
   delivered: { title: "Delivered, not billed", pick: (r) => r.deliveredNotBilled },
   billed: { title: "Billed, not delivered", pick: (r) => r.billedNotDelivered },
-  grni: { title: "Received, not invoiced (GRNI)", pick: (r) => r.receivedNotInvoiced },
+  grni: { title: "Received, not invoiced", pick: (r) => r.receivedNotInvoiced },
   bill: { title: "Bill recorded, goods not received", pick: (r) => r.billNotReceived },
 };
 

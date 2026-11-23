@@ -79,7 +79,6 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
           tone: x.active ? TONE[x.taxType] : "grey",
         },
         ...(x.defaultTerms ? [{ label: x.defaultTerms, tone: "grey" as ChipTone }] : []),
-        ...(isMissingBank && x.active ? [{ label: "No bank details", tone: "amber" as ChipTone }] : []),
         ...(expiringIds.includes(x.id) ? [{ label: "Documents expiring", tone: "amber" as ChipTone }] : []),
         ...(!x.active ? [{ label: "Inactive", tone: "red" as ChipTone }] : []),
       ],
