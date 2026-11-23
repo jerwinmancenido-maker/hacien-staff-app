@@ -62,6 +62,7 @@ describe.skipIf(!hasDb)("save-layer notes guard (MySQL)", () => {
 
   it("converts a quote whose stored notes carry blocked phrases — the SO carries them verbatim (legacy contract)", async () => {
     const { customer, quoteId } = await legacyQuoteWithNotes(BLOCKED_NOTE);
+    await approveQuote(quoteId, admin);
     const deliveryAddressId = await customerDeliveryAddressId(customer.id);
     await convertQuoteToSalesOrder(quoteId, { buyerPoNo: "B-GUARD", deliveryAddressId }, admin);
     expect(await db.salesOrder.count({ where: { quoteId } })).toBe(1);
