@@ -421,8 +421,8 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
   // S-87: one "Print billing statement" entry per billing, opening the
   // existing billing-statement print (never a sales invoice — the official
-  // invoice is the BIR pre-printed booklet; the print itself says
-  // "This is not an official invoice/receipt" and shows the booklet no.).
+  // invoice is the BIR pre-printed booklet; the print itself carries
+  // the shared BIR reference-only disclaimer and shows the booklet no.).
   // No entry when the SO has no billings yet.
   for (const b of billings) {
     items.push({ key: `print-billing-${b.id}`, label: `Print billing statement ${b.number}`, href: `/print/billings/${b.id}`, newTab: true });

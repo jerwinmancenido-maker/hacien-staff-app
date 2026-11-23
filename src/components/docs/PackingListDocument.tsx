@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { printStripCss } from "@/lib/print/strip-style";
+import { PACKING_LIST_DISCLAIMER } from "@/lib/print/tax-wording";
 import type { AttachmentSheet } from "@/lib/print/attachment";
 
 /**
@@ -139,7 +140,7 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
       ) : null}
 
       <div className="pp-disclaimer">
-        <p>ATTACHMENT ONLY — NOT AN OFFICIAL RECEIPT OR SALES INVOICE.</p>
+        <p>{PACKING_LIST_DISCLAIMER}</p>
         <p>THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.</p>
       </div>
 

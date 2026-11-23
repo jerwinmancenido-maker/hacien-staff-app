@@ -22,6 +22,7 @@ import { db } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { writeAudit } from "@/lib/audit";
 import { getStatement } from "@/lib/billing/views";
+import { BILLING_DISCLAIMER } from "@/lib/print/tax-wording";
 import { getMailer, type Mailer } from "@/lib/mailer";
 import { formatPeso, formatDate } from "@/lib/format";
 import { isValidEmail } from "@/lib/messaging/phone";
@@ -71,7 +72,7 @@ export function buildStatementReminder(input: {
     "",
     company,
     "",
-    "Statement of account — not an official invoice. System-generated, no signature required.",
+    BILLING_DISCLAIMER,
   );
   return { subject, text: lines.join("\n") };
 }

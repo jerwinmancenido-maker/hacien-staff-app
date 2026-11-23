@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { taxFooterLines } from "@/lib/print/tax-wording";
+import { BILLING_DISCLAIMER, taxFooterLines } from "@/lib/print/tax-wording";
 
 // S-87: print a billing statement from the SO. The billing print already
 // exists (/print/billings/[id], title BILLING STATEMENT, booklet invoice
-// no., "not an official invoice" footer) — this task only adds the links
+// no., BIR reference-only disclaimer footer) — this task only adds the links
 // to reach it from the SO. It must NOT print a sales invoice: the official
 // invoice is the BIR pre-printed booklet.
 
@@ -50,8 +50,8 @@ describe("S-87 print billing statement from the SO", () => {
     // billing number is a secondary meta cell.
     expect(model).toContain("number: String(b.invoiceNo)");
     expect(model).toContain('{ label: "Billing no.", value: b.number }');
-    // Footer: billing prints carry "This is not an official invoice/receipt".
-    expect(taxFooterLines("billing")).toContain("This is not an official invoice/receipt");
+    // Footer: billing prints carry the shared BIR reference-only disclaimer.
+    expect(taxFooterLines("billing")).toContain(BILLING_DISCLAIMER);
     // And no sales-invoice print route is linked from the SO page.
     const so = read("src/app/(app)/sales-orders/[id]/page.tsx");
     expect(so).not.toContain("/print/invoices/");
