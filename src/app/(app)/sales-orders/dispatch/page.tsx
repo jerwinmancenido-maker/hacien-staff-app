@@ -45,6 +45,7 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
         <div className="card stat">
           <div className="label">Orders to dispatch</div>
           <div className="value num">{summary.orderCount}</div>
+          <div className="foot">Oldest first</div>
         </div>
         <div className="card stat">
           <div className="label">Quantity still to deliver</div>
@@ -52,6 +53,9 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
             {summary.totalByUnit.length > 0
               ? summary.totalByUnit.map((p) => qtyText(p.qty, p.unit)).join(" · ")
               : "0"}
+          </div>
+          <div className="foot">
+            Across {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}
           </div>
         </div>
         <div className={`card stat${oldest && oldest.daysOpen > 30 ? " stat-red" : ""}`}>
@@ -64,6 +68,7 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
               </>
             ) : "—"}
           </div>
+          <div className="foot">{oldest ? oldest.customerName : "Nothing waiting"}</div>
         </div>
       </div>
       {summary.orderCount === 0 ? (

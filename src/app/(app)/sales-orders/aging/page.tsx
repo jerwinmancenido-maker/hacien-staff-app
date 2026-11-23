@@ -41,14 +41,21 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
         <div className="card stat">
           <div className="label">Total left to bill</div>
           <div className="value num">{formatPeso(summary.totalLeftToBill)}</div>
+          <div className="foot">
+            {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}
+          </div>
         </div>
         <div className="card stat">
           <div className="label">Orders left to bill</div>
           <div className="value num">{summary.orderCount}</div>
+          <div className="foot">Fully billed orders sit in AR aging</div>
         </div>
         <div className={`card stat${oldestBand ? " stat-red" : ""}`}>
           <div className="label">Left to bill — 90+ days</div>
           <div className="value num">{formatPeso(oldestBand?.leftToBill ?? "0.00")}</div>
+          <div className="foot">
+            {oldestBand ? `${oldestBand.rowCount} order${oldestBand.rowCount === 1 ? "" : "s"} in this band` : "No orders in this band"}
+          </div>
         </div>
       </div>
       {summary.orderCount === 0 ? (

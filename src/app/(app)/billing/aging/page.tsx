@@ -18,14 +18,17 @@ export default async function AgingPage() {
         <div className="card stat">
           <div className="label">Total receivable</div>
           <div className="value num">{formatPeso(summary.totalReceivable)}</div>
+          <div className="foot">Open billing balances</div>
         </div>
         <div className={`card stat${Number(summary.overdue) > 0 ? " stat-red" : ""}`}>
           <div className="label">Overdue</div>
           <div className="value num">{formatPeso(summary.overdue)}</div>
+          <div className="foot">Past due + {summary.graceDays} day grace</div>
         </div>
         <div className="card stat">
           <div className="label">Customer credit</div>
           <div className="value num">{formatPeso(summary.credit)}</div>
+          <div className="foot">Unapplied payments</div>
         </div>
       </div>
       <div className="card">
