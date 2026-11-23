@@ -18,9 +18,11 @@ describe("breadcrumb labels", () => {
     expect(breadcrumbLabelsForPath("/customers/cmwl1ea7d00003ytuknnigyx1", "Juan Dela Cruz")).toEqual(["Customers", "Juan Dela Cruz"]);
   });
 
-  it("keeps the Record fallback for short unknown segments", async () => {
+  it("ends the trail at the section name for a bad record URL with no supplied label (finding 1289)", async () => {
     const { breadcrumbLabelsForPath } = await import("@/components/Sidebar");
-    expect(breadcrumbLabelsForPath("/quotes/abc")).toEqual(["Quotes", "Record"]);
+    expect(breadcrumbLabelsForPath("/quotes/abc")).toEqual(["Quotes"]);
+    expect(breadcrumbLabelsForPath("/sales-orders/does-not-exist")).toEqual(["Sales Orders"]);
+    expect(breadcrumbLabelsForPath("/billing/billings/123")).toEqual(["Billing & Collections", "Billings"]);
   });
 });
 
