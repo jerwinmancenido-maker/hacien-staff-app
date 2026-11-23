@@ -40,7 +40,7 @@ export default async function BillingHomePage() {
           <h2>Needs Admin review</h2>
         </div>
         {waiting.length === 0 ? (
-          <p className="faint">None waiting for a check.</p>
+          <p className="faint">None waiting for review.</p>
         ) : (
           <ul className="plain-list">
             {waiting.map((row) => (

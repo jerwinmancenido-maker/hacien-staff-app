@@ -76,14 +76,14 @@ export default async function CollectionsListPage({
               <thead>
                 <tr>
                   <th>Number</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Method</th>
-                  <th>Receipt</th>
+                  <th className="col-phone-hide col-tab-hide">Date</th>
+                  <th className="col-phone-cap col-tab-cap">Customer</th>
+                  <th className="col-phone-hide col-tab-hide">Method</th>
+                  <th className="col-phone-hide col-tab-hide">Receipt</th>
                   <th className="num">Received</th>
                   <th className="num">Applied</th>
                   <th className="num">Credit</th>
-                  <th>Status</th>
+                  <th className="col-phone-hide">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,18 +93,18 @@ export default async function CollectionsListPage({
                       <a href={`/billing/collections/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
                       <Link href={`/billing/collections/${r.id}`}>{r.number}</Link>
                     </td>
-                    <td data-col="date">{day(r.date)}</td>
-                    <td>
+                    <td data-col="date" className="col-phone-hide col-tab-hide">{day(r.date)}</td>
+                    <td className="col-phone-cap col-tab-cap">
                       <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link>
                     </td>
-                    <td data-col="method">
+                    <td data-col="method" className="col-phone-hide col-tab-hide">
                       <MethodLabel method={r.method} />
                     </td>
-                    <td data-col="number">{r.receiptNo ?? "—"}</td>
+                    <td data-col="number" className="col-phone-hide col-tab-hide">{r.receiptNo ?? "—"}</td>
                     <td className="num">{formatPeso(r.amountReceived)}</td>
                     <td className="num">{formatPeso(r.cashApplied)}</td>
                     <td className="num">{formatPeso(r.unappliedCredit)}</td>
-                    <td data-col="status">
+                    <td data-col="status" className="col-phone-hide">
                       <CollectionStatusChip status={r.status} />
                       {r.isDeposit && (
                         <div>

@@ -180,6 +180,39 @@ textarea {
   white-space: nowrap;
 }
 
+/* Skip link (run-87 F9-C): first focusable in the app shell, hidden until
+   focused, so keyboard users reach main content in 2 stops instead of 22. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.skip-link:focus {
+  position: fixed;
+  top: calc(8px * var(--ui-scale, 1));
+  left: calc(8px * var(--ui-scale, 1));
+  z-index: 70;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  padding: calc(8px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
+  background: var(--card);
+  color: var(--blue);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+/* The skip target takes focus programmatically; a frame-sized outline
+   around all of main would read as a glitch, not a focus cue. */
+#main-content:focus {
+  outline: none;
+}
+
 /* ---------- App frame ---------- */
 
 .frame {
@@ -1065,6 +1098,18 @@ a.tracker-card:hover {
 /* Aging band cards: the table sits directly on the card surface — no second
    bordered box inside the card (same treatment as .payments-table-card). */
 .band-card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
+/* Every card: a table-wrap placed directly inside a card sits on the card
+   surface — no second bordered box inside the card (run-87 fix F9-B,
+   findings 1294/1297/1299; the .payments-table-card / .band-card strip
+   above, generalised to .card). Standalone list wraps (quotes /
+   sales-orders / purchase-orders / receiving) have no .card parent and
+   keep their own border — the wrap is their only surface. */
+.card > .table-wrap {
   border: none;
   border-radius: 0;
   padding: 0;
@@ -6021,6 +6066,16 @@ button.contact-card-add {
   border-radius: calc(8px * var(--ui-scale, 1));
   padding: calc(14px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
   background: #fafaf7;
+  /* Paper surface (finding 1286): the preview stands for the printed
+     letterhead, so it keeps the light theme's text tokens in both modes
+     -- the same pin-the-paper idiom as .pp-doc-root / .pp-page above.
+     Without this, dark mode flips --text / --text-2 / --text-3 near-white
+     on the paper background and the company name, address and TIN turn
+     unreadable. */
+  --text: #0a0a0a;
+  --text-2: #525252;
+  --text-3: #a3a3a3;
+  color: var(--text);
   font-size: calc(13px * var(--ui-scale, 1));
   max-width: calc(420px * var(--ui-scale, 1));
 }
