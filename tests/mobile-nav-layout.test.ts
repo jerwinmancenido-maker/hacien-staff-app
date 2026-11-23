@@ -23,3 +23,15 @@ describe("mobile nav layout guard", () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*\.nav-toggle\s*\{[^}]*display:\s*inline-flex/);
   });
 });
+
+describe("skip link guard (run-87 F9-C, findings 1295/1302/1304)", () => {
+  const frame = readFileSync(path.join(process.cwd(), "src/components/AppFrame.tsx"), "utf8");
+
+  it("places the skip link before the shell chrome, targeting main", () => {
+    const skip = frame.indexOf('className="skip-link"');
+    expect(skip).toBeGreaterThan(-1);
+    expect(frame).toMatch(/<a className="skip-link" href="#main-content">/);
+    expect(skip).toBeLessThan(frame.indexOf("nav-backdrop"));
+    expect(frame).toMatch(/<main className="content" id="main-content" tabIndex={-1}>/);
+  });
+});

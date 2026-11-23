@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanDeleteDocument, assertCanMarkAdminCheck, ForbiddenError } from "@/lib/permissions";
+import { assertCanDeleteDocument, assertCanMarkAdminCheck } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { markBillingChecked, recordBilling, updateBilling, updateBillingExpectedDate, voidBilling } from "@/lib/services/billings";
 import { deleteBilling, deleteCollection } from "@/lib/services/document-delete";
@@ -102,7 +102,7 @@ export async function deleteBillingAction(id: string, reason: string): Promise<F
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -164,7 +164,7 @@ export async function deleteCollectionAction(id: string, reason: string): Promis
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -239,7 +239,7 @@ export async function applyCreditAction(_prev: FormState, form: FormData): Promi
 
 export async function markBillingCheckedAction(id: string): Promise<void> {
   const user = await getCurrentUser();
-  if (!user) throw new ForbiddenError();
+  if (!user) redirect("/login");
   assertCanMarkAdminCheck(user);
   const billing = await markBillingChecked(id, user);
   refreshBilling(billing.customerId, billing.salesOrderId, billing.id);
@@ -247,7 +247,7 @@ export async function markBillingCheckedAction(id: string): Promise<void> {
 
 export async function markCollectionCheckedAction(id: string): Promise<void> {
   const user = await getCurrentUser();
-  if (!user) throw new ForbiddenError();
+  if (!user) redirect("/login");
   assertCanMarkAdminCheck(user);
   const collection = await markCollectionChecked(id, user);
   refreshBilling(collection.customerId, null, null);
