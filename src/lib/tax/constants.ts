@@ -17,7 +17,7 @@ export const TAX_WORKSHEET_BANNER =
 
 /** Short disclaimer under page titles. */
 export const TAX_WORKSHEET_DISCLAIMER =
-  "Preparation aid for the owner and accountant. HACIEN is non-VAT — no VAT is shown or computed. Nothing is filed by this app.";
+  "Preparation aid for the owner and accountant. HACIEN is non-VAT — no VAT is shown or computed.";
 
 /**
  * UNVERIFIED: ₱250,000 annual allowance under the 8% income tax option for a
