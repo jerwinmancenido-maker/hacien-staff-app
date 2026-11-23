@@ -7460,7 +7460,8 @@ button.contact-card-add {
     height: calc(40px * var(--ui-scale, 1));
     min-height: calc(40px * var(--ui-scale, 1));
     padding: 0 calc(10px * var(--ui-scale, 1));
-    border-radius: calc(8px * var(--ui-scale, 1));
+    /* No radius override: the shared .btn full pill holds at phone width
+       too (finding 1104 — the old 8px override rendered 5px @ 32px). */
     font-size: calc(13px * var(--ui-scale, 1));
   }
 
