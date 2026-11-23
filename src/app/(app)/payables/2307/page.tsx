@@ -50,10 +50,10 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
                 <th>Payment</th>
                 <th>Bill</th>
                 <th className="num">Amount</th>
-                <th>Rate</th>
+                <th className="col-tab-hide">Rate</th>
                 <th>ATC</th>
                 <th>Status</th>
-                <th>Issued</th>
+                <th className="col-tab-hide">Issued</th>
                 <th />
               </tr>
             </thead>
@@ -89,13 +89,13 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
                     <td data-col="number">{r.payment ? <Link href={`/payables/payments/${r.payment.id}`}>{r.payment.number}</Link> : "—"}</td>
                     <td data-col="number">{r.bill?.billNumber ?? "—"}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
-                    <td>{(Number(r.rate) * 100).toFixed(2)}%</td>
+                    <td className="col-tab-hide">{(Number(r.rate) * 100).toFixed(2)}%</td>
                     <td data-col="atc">{r.atcCode ?? "—"}</td>
                     <td data-col="status">
                       <Supplier2307StatusChip status={r.status} />
                     </td>
-                    <td data-col="date">{day(r.issuedAt)}</td>
-                    <td>
+                    <td data-col="date" className="col-tab-hide">{day(r.issuedAt)}</td>
+                    <td data-col="action">
                       {canManage && r.status === "TO_ISSUE" && (
                         <Mark2307IssuedForm action={markSupplier2307IssuedAction.bind(null, r.id)} defaultDate={today} />
                       )}

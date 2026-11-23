@@ -50,8 +50,8 @@ export default async function Withholding2307Page({
                 <th>Customer</th>
                 <th>Billing</th>
                 <th className="col-phone-hide">Collection</th>
-                <th>ATC</th>
-                <th className="num">Rate</th>
+                <th className="col-phone-hide">ATC</th>
+                <th className="num col-phone-hide">Rate</th>
                 <th className="num">Amount</th>
                 <th>Status</th>
                 <th className="col-phone-hide">Received</th>
@@ -83,8 +83,8 @@ export default async function Withholding2307Page({
                     <td data-col="number" className="col-phone-hide">
                       {r.collection ? <Link href={`/billing/collections/${r.collection.id}`}>{r.collection.number}</Link> : "—"}
                     </td>
-                    <td data-col="atc">{r.atcCode ?? "—"}</td>
-                    <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
+                    <td data-col="atc" className="col-phone-hide">{r.atcCode ?? "—"}</td>
+                    <td className="num col-phone-hide">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td data-col="status">
                       <Chip tone={r.status === "RECEIVED" ? "green" : "blue"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
