@@ -11,6 +11,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
+import { pickerKeyIntent } from "@/lib/picker-keys";
 import {
   COST_NOT_SET_LABEL,
   approvalReasons,
@@ -850,22 +851,37 @@ export function QuoteEditor({
   /** Picker keyboard flow: ↑/↓ move the highlight, Enter picks, Esc closes. */
   function onDescKeyDown(line: EditorItem, ev: KeyboardEvent<HTMLTextAreaElement>) {
     if (line.itemId || pickerFor !== line.key) return;
-    if (ev.key === "Escape") {
-      ev.preventDefault();
+    const intent = pickerKeyIntent(ev.key, pickerResults.length, pickerActive);
+    if (!intent) return;
+    ev.preventDefault();
+    if (intent.kind === "close") {
       closePicker();
-      return;
-    }
-    if (pickerResults.length === 0) return;
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      setPickerActive((a) => (a + 1) % pickerResults.length);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      setPickerActive((a) => (a - 1 + pickerResults.length) % pickerResults.length);
-    } else if (ev.key === "Enter") {
-      ev.preventDefault();
-      const r = pickerResults[pickerActive] ?? pickerResults[0];
+    } else if (intent.kind === "highlight") {
+      setPickerActive(intent.index);
+    } else {
+      const r = pickerResults[intent.index];
       if (r) applyCatalogPick(line, r);
+    }
+  }
+
+  /** Lot-component picker keyboard flow -- the same shared picker keys
+   *  (finding 1119). Before this, the component box carried the ARIA
+   *  wiring (PR #289) but no key handler at all: options committed on
+   *  click only and blur closed the panel in 150 ms, so a keyboard-only
+   *  user could not link a component to a catalog product. */
+  function onCompKeyDown(line: EditorItem, comp: EditorComponent, ev: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!compPicker || compPicker.lineKey !== line.key || compPicker.compKey !== comp.key) return;
+    const intent = pickerKeyIntent(ev.key, compPicker.results.length, compPicker.active);
+    if (!intent) return;
+    ev.preventDefault();
+    if (intent.kind === "close") {
+      setCompPicker(null);
+    } else if (intent.kind === "highlight") {
+      const ix = intent.index;
+      setCompPicker((p) => (p && p.compKey === comp.key ? { ...p, active: ix } : p));
+    } else {
+      const r = compPicker.results[intent.index];
+      if (r) applyComponentPick(line, comp, r);
     }
   }
 
@@ -1937,6 +1953,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                      onKeyDown={(ev) => onCompKeyDown(i, c, ev)}
                                     ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div id={`comp-listbox-${c.key}`} className="quote-picker" role="listbox" aria-label="Catalog matches">
@@ -1958,7 +1975,7 @@ export function QuoteEditor({
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
                                             return (
                                               <li key={r.id}>
-                                                <button type="button" id={`comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className="quote-picker-opt" onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
+                                                <button type="button" id={`comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className={`quote-picker-opt${ix === Math.min(compPicker.active, compPicker.results.length - 1) ? " is-active" : ""}`} onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
                                                   <span className="quote-picker-name">
                                                     <span>{r.name}</span>
                                                   </span>
@@ -2362,6 +2379,7 @@ export function QuoteEditor({
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                      onKeyDown={(ev) => onCompKeyDown(i, c, ev)}
                                     ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
                                       <div id={`m-comp-listbox-${c.key}`} className="quote-picker" role="listbox" aria-label="Catalog matches">
@@ -2383,7 +2401,7 @@ export function QuoteEditor({
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
                                             return (
                                               <li key={r.id}>
-                                                <button type="button" id={`m-comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className="quote-picker-opt" onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
+                                                <button type="button" id={`m-comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className={`quote-picker-opt${ix === Math.min(compPicker.active, compPicker.results.length - 1) ? " is-active" : ""}`} onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
                                                   <span className="quote-picker-name">
                                                     <span>{r.name}</span>
                                                   </span>

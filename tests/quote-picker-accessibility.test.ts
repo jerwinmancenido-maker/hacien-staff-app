@@ -64,10 +64,12 @@ describe("lot-component pickers carry the same semantics (class-first: all insta
   });
 
   it("the component picker tracks an active option for the announcement", () => {
-    // Aria-only highlight index: starts at the first match (mirrors the
-    // line picker), follows the mouse, clamps when results shrink. It
-    // drives aria-selected / aria-activedescendant only — no visual or
-    // keyboard behaviour hangs off it.
+    // Highlight index: starts at the first match (mirrors the line
+    // picker), follows the mouse, clamps when results shrink. It drives
+    // aria-selected / aria-activedescendant and, since finding 1119,
+    // also the visible is-active highlight and the shared keyboard
+    // commit (pickerKeyIntent) -- the index the user sees highlighted
+    // is the one Enter commits.
     expect(editor).toContain("active: number");
     expect(count("onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))}")).toBe(2);
   });
