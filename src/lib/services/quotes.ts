@@ -31,7 +31,6 @@ import { componentData, itemData, planItems, type PlannedItem } from "../quotes/
 import { preserveLegacyWithholdingOnSave } from "../quotes/legacy-withholding";
 import { parseWithholdingPick } from "../quotes/withholding-defaults";
 import { formatAddress } from "../addresses/format";
-import { blockedPaymentTermsMessage } from "../print/terms-block";
 import { generateUniqueTrackingRef } from "../tracking-ref";
 import {
   QUOTE_ZERO_TOTAL_ERROR,
@@ -427,11 +426,6 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
   });
   if (!original) throw new DocRuleError("Quote not found.");
   if (original.status === "VOID") throw new DocRuleError("A void quote cannot be copied.");
-  // Save-layer notes guard (lawyer ruling 2026-11-23): a copy re-saves the
-  // original's notes verbatim, so notes saved before the guard existed
-  // must not slip past it \u2014 refuse and let staff clean the original first.
-  const copyBlockedNotes = blockedPaymentTermsMessage(original.notes);
-  if (copyBlockedNotes) throw new DocRuleError(copyBlockedNotes, "notes");
   const snap = await getSettingsSnapshot();
   const today = manilaToday();
   const year = today.getUTCFullYear();
@@ -1072,11 +1066,6 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
       if (quote.status !== "DRAFT" && quote.status !== "SENT") {
         throw new DocRuleError("Only a draft or sent quote can be converted to a sales order.");
       }
-      // Save-layer notes guard (lawyer ruling 2026-11-23): conversion writes
-      // the quote's notes onto the new sales order, so a blocked phrase in
-      // notes saved before the guard existed is refused here too.
-      const convertBlockedNotes = blockedPaymentTermsMessage(quote.notes);
-      if (convertBlockedNotes) throw new DocRuleError(convertBlockedNotes, "notes");
       // F13 (Mac run Block 4, S13): revisions are separate rows in one
       // chain, and converting sets only THIS row to WON — a sibling
       // revision stayed convertible, so one deal could produce two SOs.

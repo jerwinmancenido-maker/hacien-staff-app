@@ -3,10 +3,13 @@
 //
 // The validation half lives in tests/notes-payment-guard.test.ts. This
 // file proves the two service paths that copy STORED notes verbatim —
-// quote copy and quote→SO conversion — refuse notes saved before the
-// guard existed when they carry blocked payment phrases (lawyer ruling
-// 2026-11-23), write nothing when they refuse, and never silently
-// rewrite the stored note. Clean notes copy and convert verbatim.
+// quote copy and quote→SO conversion — keep propagating legacy notes
+// exactly as stored (run-79 fix plan, Fix 1 plan correction 2026-11-23):
+// the save-layer guard stands at the validation layer only, so notes
+// saved before the guard existed ride copy/convert untouched and are
+// never silently rewritten — the PRINT layer strips blocked phrases
+// when the document prints (proven by the legacy suites). Clean notes
+// copy and convert verbatim too.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const hasDb = vi.hoisted(() => {
@@ -48,26 +51,26 @@ describe.skipIf(!hasDb)("save-layer notes guard (MySQL)", () => {
     return { customer, quoteId: q.id };
   }
 
-  it("refuses to copy a quote whose stored notes carry blocked phrases — and writes nothing", async () => {
-    const { customer, quoteId } = await legacyQuoteWithNotes(BLOCKED_NOTE);
-    const before = await db.quote.count({ where: { customerId: customer.id } });
-    await expect(copyQuote(quoteId, admin, 1)).rejects.toThrow("Notes can't include payment terms");
-    expect(await db.quote.count({ where: { customerId: customer.id } })).toBe(before);
+  it("copies a quote whose stored notes carry blocked phrases — verbatim (legacy contract)", async () => {
+    const { quoteId } = await legacyQuoteWithNotes(BLOCKED_NOTE);
+    const copy = await copyQuote(quoteId, admin, 1);
+    expect(copy.notes).toBe(BLOCKED_NOTE);
     // The stored note is never silently rewritten.
     const stored = await db.quote.findUnique({ where: { id: quoteId }, select: { notes: true } });
     expect(stored!.notes).toBe(BLOCKED_NOTE);
   });
 
-  it("refuses to convert a quote whose stored notes carry blocked phrases — no SO is created", async () => {
+  it("converts a quote whose stored notes carry blocked phrases — the SO carries them verbatim (legacy contract)", async () => {
     const { customer, quoteId } = await legacyQuoteWithNotes(BLOCKED_NOTE);
     const deliveryAddressId = await customerDeliveryAddressId(customer.id);
-    await expect(
-      convertQuoteToSalesOrder(quoteId, { buyerPoNo: "B-GUARD", deliveryAddressId }, admin),
-    ).rejects.toThrow("Notes can't include payment terms");
-    expect(await db.salesOrder.count({ where: { quoteId } })).toBe(0);
+    await convertQuoteToSalesOrder(quoteId, { buyerPoNo: "B-GUARD", deliveryAddressId }, admin);
+    expect(await db.salesOrder.count({ where: { quoteId } })).toBe(1);
+    const soRow = await db.salesOrder.findFirst({ where: { quoteId }, select: { notes: true } });
+    expect(soRow).not.toBeNull();
+    expect(soRow!.notes).toBe(BLOCKED_NOTE);
     const stored = await db.quote.findUnique({ where: { id: quoteId }, select: { notes: true, status: true } });
     expect(stored!.notes).toBe(BLOCKED_NOTE);
-    expect(stored!.status).toBe("DRAFT");
+    expect(stored!.status).toBe("WON");
   });
 
   it("copies and converts clean notes verbatim (control)", async () => {
