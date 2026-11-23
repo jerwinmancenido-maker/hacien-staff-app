@@ -48,26 +48,32 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
           <div className="card stat">
             <div className="label">Revenue</div>
             <div className="value num">{formatPeso(report.revenue)}</div>
+            <div className="foot">Billings invoiced in {month}</div>
           </div>
           <div className="card stat">
             <div className="label">Customer returns</div>
             <div className="value num">{formatPeso(report.customerReturns)}</div>
+            <div className="foot">Returns posted in {month}</div>
           </div>
           <div className="card stat">
             <div className="label">Supplier bills</div>
             <div className="value num">{formatPeso(report.supplierBills)}</div>
+            <div className="foot">Bills recorded in {month}</div>
           </div>
           <div className="card stat">
             <div className="label">Supplier returns</div>
             <div className="value num">{formatPeso(report.supplierReturns)}</div>
+            <div className="foot">Returns posted in {month}</div>
           </div>
           <div className="card stat">
             <div className="label">Expenses</div>
             <div className="value num">{formatPeso(report.expenses)}</div>
+            <div className="foot">Dated in {month}</div>
           </div>
           <div className="card stat">
             <div className="label">Net profit</div>
             <div className="value num">{formatPeso(report.net)}</div>
+            <div className="foot">Revenue − supplier bills − expenses</div>
           </div>
         </div>
         <h2 style={{ marginTop: 0 }}>Margin by deal</h2>
