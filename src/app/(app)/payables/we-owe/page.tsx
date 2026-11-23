@@ -78,7 +78,7 @@ export default async function WeOwePage() {
                         {r.supplier.name}
                       </Link>
                     </td>
-                    <td>
+                    <td data-col="number">
                       {r.purchaseOrder ? (
                         <Link href={`/purchase-orders/${r.purchaseOrder.id}?tab=bills`}>
                           {r.billNumber}
@@ -87,8 +87,8 @@ export default async function WeOwePage() {
                         r.billNumber
                       )}
                     </td>
-                    <td>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <td data-col="date">
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "nowrap" }}>
                         <span>{day(r.dueDate)}</span>
                         {r.dueLabel === "Overdue" && <Chip tone="red">Overdue</Chip>}
                         {r.dueLabel === "Due this week" && <Chip tone="grey">Due this week</Chip>}

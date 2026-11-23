@@ -152,10 +152,10 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
             label="Quotes"
             columns={[
               { key: "number", label: "QT no.", className: "qcol-number" },
-              { key: "rev", label: "Rev", numeric: true, className: "qcol-rev" },
+              { key: "rev", label: "Rev", numeric: true, className: "qcol-rev col-tab-hide" },
               { key: "customer", label: "Customer", className: "qcol-customer" },
               { key: "total", label: "Total", numeric: true, className: "qcol-total" },
-              ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true, className: "qcol-margin" }] : []),
+              ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true, className: "qcol-margin col-tab-hide" }] : []),
               { key: "status", label: "Status", className: "qcol-status" },
               { key: "valid", label: "Valid until", className: "qcol-valid" },
             ]}

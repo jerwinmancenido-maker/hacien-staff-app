@@ -100,9 +100,9 @@ export default async function CashLedgerPage({
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Type</th>
+                  <th className="col-tab-hide">Type</th>
                   <th>Number</th>
-                  <th>Description</th>
+                  <th className="col-phone-hide">Description</th>
                   <th className="num">In</th>
                   <th className="num">Out</th>
                   <th className="num">Balance</th>
@@ -115,10 +115,10 @@ export default async function CashLedgerPage({
                   const out = signed < 0n ? fromScaled(-signed, 2) : "";
                   return (
                     <tr key={r.id}>
-                      <td>{day(r.date)}</td>
-                      <td>{r.kind.replace(/_/g, " ")}</td>
-                      <td>{r.href ? <Link href={r.href}>{r.number}</Link> : r.number}</td>
-                      <td>{r.description}</td>
+                      <td data-col="date">{day(r.date)}</td>
+                      <td className="col-tab-hide">{r.kind.replace(/_/g, " ")}</td>
+                      <td data-col="number">{r.href ? <Link href={r.href}>{r.number}</Link> : r.number}</td>
+                      <td className="col-phone-hide">{r.description}</td>
                       <td className="num">{inn ? formatPeso(inn) : ""}</td>
                       <td className="num">{out ? formatPeso(out) : ""}</td>
                       <td className="num strong">{formatPeso(r.runningBalance)}</td>

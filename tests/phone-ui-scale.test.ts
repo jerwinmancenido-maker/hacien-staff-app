@@ -27,7 +27,7 @@ describe("phone UI scale", () => {
   it("scales shared lengths with the variable and leaves 1px borders", () => {
     expect(css).toMatch(/html,\s*body\s*\{[^}]*font-size:\s*calc\(14px \* var\(--ui-scale, 1\)\);/);
     expect(css).toMatch(/\.btn\s*\{[^}]*height:\s*calc\(36px \* var\(--ui-scale, 1\)\);/);
-    expect(css).toMatch(/\.table-wrap table\.list\s*\{[^}]*min-width:\s*calc\(640px \* var\(--ui-scale, 1\)\);/);
+    expect(css).toMatch(/\.table-wrap table\.list\s*\{[^}]*min-width:\s*min\(calc\(640px \* var\(--ui-scale, 1\)\),\s*100%\);/);
     expect(css).toMatch(/\.card\s*\{[^}]*border:\s*1px solid var\(--border\);/);
   });
 

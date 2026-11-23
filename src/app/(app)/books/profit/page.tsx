@@ -79,8 +79,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
               <thead>
                 <tr>
                   <th>Deal</th>
-                  <th>Date</th>
-                  <th className="num">Contract price (net)</th>
+                  <th className="col-phone-hide">Date</th>
+                  <th className="num col-phone-hide">Contract price (net)</th>
                   <th className="num col-phone-hide">Returns</th>
                   <th className="num col-phone-hide">Supplier cost</th>
                   <th className="num">Margin</th>
@@ -90,9 +90,9 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
               <tbody>
                 {report.deals.map((d) => (
                   <tr key={d.number}>
-                    <td className="strong">{d.number}</td>
-                    <td>{d.date}</td>
-                    <td className="num">{formatPeso(d.contractPrice)}</td>
+                    <td className="strong" data-col="number">{d.number}</td>
+                    <td data-col="date" className="col-phone-hide">{d.date}</td>
+                    <td className="num col-phone-hide">{formatPeso(d.contractPrice)}</td>
                     <td className="num col-phone-hide">{formatPeso(d.returns)}</td>
                     <td className="num col-phone-hide">{formatPeso(d.supplierCost)}</td>
                     <td className="num">{formatPeso(d.margin)}</td>
@@ -105,7 +105,7 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                   <td className="strong" colSpan={2}>
                     Total — deals dated in {month}
                   </td>
-                  <td className="num strong">{formatPeso(dealTotals.contractPrice)}</td>
+                  <td className="num strong col-phone-hide">{formatPeso(dealTotals.contractPrice)}</td>
                   <td className="num strong col-phone-hide">{formatPeso(dealTotals.returns)}</td>
                   <td className="num strong col-phone-hide">{formatPeso(dealTotals.supplierCost)}</td>
                   <td className="num strong">{formatPeso(dealTotals.margin)}</td>
