@@ -13,7 +13,7 @@ export default async function PayablesAgingPage() {
 
   return (
     <>
-      <PageHeader title="AP aging" subtitle={`Balances by days past due from supplier bill due dates (Manila). As of ${asOf}.`} />
+      <PageHeader title="AP aging" subtitle={`Balances by days past due from supplier bill due dates, using Manila dates. As of ${asOf}.`} />
       <PayablesNav active="aging" />
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">

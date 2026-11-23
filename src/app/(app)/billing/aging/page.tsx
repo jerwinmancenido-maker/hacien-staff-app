@@ -12,7 +12,7 @@ export default async function AgingPage() {
 
   return (
     <>
-      <PageHeader title="AR aging" subtitle={`Balances by days past due (Manila). Grace: ${summary.graceDays} day(s).`} />
+      <PageHeader title="AR aging" subtitle={`Balances by days past due, using Manila dates. Grace period: ${summary.graceDays} days.`} />
       <BillingNav active="aging" />
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
