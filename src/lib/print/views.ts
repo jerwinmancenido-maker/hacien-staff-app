@@ -592,7 +592,7 @@ export async function getPurchaseOrderPrintModel(
   const footer = await baseFooter("supplier_po", letter, { qr: true });
   const doc: ProfessionalPrintModel = {
     kind: "supplier_po",
-    title: "Purchase Order",
+    title: "Purchase order",
     number: po.revision > 1 ? `${po.number} (rev. ${po.revision})` : po.number,
     date: day(ymd(po.date)),
     status: po.status,

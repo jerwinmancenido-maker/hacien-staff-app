@@ -50,7 +50,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageHeader title="Sales Orders" subtitle="Won quotes. Convert a quote to create one." />
+      <PageHeader title="Sales orders" subtitle="Won quotes. Convert a quote to create one." />
       <div className="toolbar">
         <form className="search-pill" action="/sales-orders" role="search">
           <SearchIcon />
