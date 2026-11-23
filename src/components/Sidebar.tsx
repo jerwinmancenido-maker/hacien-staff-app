@@ -197,13 +197,16 @@ const RECORD_ID_SEGMENT = /^[a-z0-9]{20,}$/i;
  * One path segment → its crumb label. A record id reads as the record's own
  * label (number or name) when the page supplies one via RecordBreadcrumbLabel;
  * with no label supplied the segment is dropped, so the trail ends at the
- * section name instead of the generic word "Detail" (finding 1113).
+ * section name instead of the generic word "Detail" (finding 1113). The same
+ * drop covers every other unknown segment — a bad record URL's id segment
+ * (e.g. /quotes/abc, whose page answers notFound()) must not end the trail
+ * in the generic word "Record" either (finding 1289).
  */
 function crumbLabel(segment: string, recordLabel?: string): string | null {
   const known = CRUMB_LABELS[segment];
   if (known) return known;
   if (RECORD_ID_SEGMENT.test(segment)) return recordLabel ?? null;
-  return "Record";
+  return null;
 }
 
 /** Tax calendar pages → "Books / Tax calendar"; worksheet pages → "Books / Tax worksheets". */
