@@ -73,7 +73,7 @@ export default async function CashAccountsPage() {
                       {a.accountHintLast4 && <div className="faint small">···{a.accountHintLast4}{a.bankName ? ` · ${a.bankName}` : ""}</div>}
                     </td>
                     <td>{CASH_ACCOUNT_TYPE_LABELS[a.type]}</td>
-                    <td>
+                    <td data-col="date">
                       {formatPeso(a.openingBalance)}
                       <div className="faint small">{a.openingDate}</div>
                     </td>

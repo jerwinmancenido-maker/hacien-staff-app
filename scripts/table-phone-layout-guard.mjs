@@ -277,9 +277,13 @@ async function openFirstQuote(cdp) {
   const href = await waitFor(
     cdp,
     `(() => {
-      const a = [...document.querySelectorAll('a[href^="/quotes/"]')].find((x) =>
-        /^\\/quotes\\/[a-z0-9]+$/i.test(x.getAttribute('href') || ''),
-      );
+        const a = [...document.querySelectorAll('a[href^="/quotes/"]')].find((x) => {
+          const href = x.getAttribute('href') || '';
+          /* The bare segment must be a record id: "/quotes/new" (the New
+           * quote button) matches the id shape but is the create page,
+           * which has no items table — exclude it explicitly. */
+          return /^\\/quotes\\/[a-z0-9]+$/i.test(href) && href !== '/quotes/new';
+        });
       return a ? a.getAttribute('href') : null;
     })()`,
   );

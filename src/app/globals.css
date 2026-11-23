@@ -7724,6 +7724,16 @@ button.contact-card-add {
   min-width: 6rem;
   color: var(--muted, #667);
 }
+
+/* Phone widths: the reference column's hint is prose — let it wrap
+   instead of inheriting .num's nowrap, which held the hint on one line
+   and pushed the whole column past the card edge at 390px
+   (findings 1026/1045 residue). Desktop keeps the one-line hint. */
+@media (max-width: 640px) {
+  .tax-income-worksheet th.tax-income-ref .faint {
+    white-space: normal;
+  }
+}
 .tax-cal-form .tax-cal-plain {
   margin-top: calc(2px * var(--ui-scale, 1));
   font-weight: 400;
