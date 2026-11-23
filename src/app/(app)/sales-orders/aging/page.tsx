@@ -30,7 +30,7 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader
         title="Sales order aging"
-        subtitle="Open sales orders by days since the order date (Manila). Own-company orders only — fully billed orders sit in AR aging."
+        subtitle="Open sales orders by days since the order date, using Manila dates. Own-company orders only — fully billed orders sit in AR aging."
       />
       <div className="toolbar">
         <Link className="btn secondary" href="/sales-orders">
@@ -106,7 +106,7 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
           </div>
         ))
       )}
-      {summary.orderCount > 0 && (
+      {summary.orderCount > 0 && agingPage.bands.length > 1 && (
         <div className="card band-card">
           <div className="table-wrap">
             <table className="list" aria-label="SO aging grand total">
