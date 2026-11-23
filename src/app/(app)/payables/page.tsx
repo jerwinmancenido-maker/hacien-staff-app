@@ -60,7 +60,7 @@ export default async function PayablesHomePage({
           <Link className="card stat stat-link" href="/payables/2307?status=TO_ISSUE">
             <div className="label">2307 to issue</div>
             <div className="value num">{formatPeso(summary.pending2307ToIssue)}</div>
-            <div className="foot">EWT pending certificate (unverified)</div>
+            <div className="foot">EWT awaiting certificates</div>
           </Link>
         ) : null}
         <Link className="card stat stat-link" href="/payables/payments">
