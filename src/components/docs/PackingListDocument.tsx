@@ -1,5 +1,7 @@
+import { Fragment } from "react";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { printStripCss } from "@/lib/print/strip-style";
+import { PACKING_LIST_DISCLAIMER } from "@/lib/print/tax-wording";
 import type { AttachmentSheet } from "@/lib/print/attachment";
 
 /**
@@ -17,6 +19,9 @@ import type { AttachmentSheet } from "@/lib/print/attachment";
  * Received by is a signatory now, not a meta row: the receiver signs
  * this sheet, and when the receipt is already recorded the printed name
  * and the delivery date stand as the signature, like the other prints.
+ * The block carries the mock v2 fields (printed name, designation,
+ * date & time) plus a condition-of-goods line (2026-11-21 ruling), so
+ * the signed sheet stands as proof of delivery.
  */
 export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
   return (
@@ -37,7 +42,7 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-docnum">
           <div className="pp-docnum-label">Attachment to DR No.</div>
           <div className="pp-docnum-value">{sheet.drNumber}</div>
-          <div className="pp-docnum-sub">SI No. {sheet.siNumbers}</div>
+          <div className="pp-docnum-sub">Sales Invoice No. {sheet.siNumbers}</div>
         </div>
       </div>
 
@@ -56,6 +61,13 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-party-box">
           <div className="pp-label">Customer</div>
           <div className="pp-strong">{sheet.customerName}</div>
+          {sheet.contactName ? (
+            <div>
+              <span className="pp-label-inline">Attn: </span>
+              {sheet.contactName}
+              {sheet.contactPhone ? <span className="pp-party-contact-bits"> · {sheet.contactPhone}</span> : null}
+            </div>
+          ) : null}
         </div>
         <div className="pp-party-box">
           <div className="pp-label">Delivery address</div>
@@ -82,7 +94,21 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
               <td className="pp-n">{i + 1}</td>
               <td className="pp-desc">
                 <div className={item.isLot ? "pp-pre pp-lot-title" : "pp-pre"}>{item.description}</div>
+                {/* D18: catalog identity (SKU · brand · model) as a muted
+                    sub-line, so the receiver can match the physical item
+                    to the catalog. Free-text lines carry no meta. */}
+                {item.meta ? <div className="pp-item-detail">{item.meta}</div> : null}
                 {item.note ? <div className="pp-item-detail pp-pre">{item.note}</div> : null}
+                {item.isLot
+                  ? item.parts.map((p, j) => (
+                      <Fragment key={j}>
+                        <div className="pp-item-detail pp-pre">
+                          {p.description} · {p.qty}
+                        </div>
+                        {p.meta ? <div className="pp-item-detail">{p.meta}</div> : null}
+                      </Fragment>
+                    ))
+                  : null}
               </td>
               <td className="num pp-qty">{item.qty}</td>
               <td>{item.serials.length ? item.serials.join(", ") : "—"}</td>
@@ -114,7 +140,7 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
       ) : null}
 
       <div className="pp-disclaimer">
-        <p>ATTACHMENT ONLY — NOT AN OFFICIAL RECEIPT OR SALES INVOICE.</p>
+        <p>{PACKING_LIST_DISCLAIMER}</p>
         <p>THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.</p>
       </div>
 
@@ -122,11 +148,29 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
         <div className="pp-signatory">
           <div className="pp-sign-role">Received by</div>
           <div className="pp-sign-line" aria-hidden="true" />
-          <div className="pp-sign-name">{sheet.receivedBy ?? " "}</div>
-          <div className="pp-sign-date">Date</div>
-          {sheet.receivedBy ? <div className="pp-sign-date">{sheet.deliveryDate}</div> : null}
+          {/* Mock v2 fields (2026-11-21 ruling): the receiver's printed
+              name, designation and the date & time of receipt are
+              labelled write-in fields, so the sheet stands as proof of
+              delivery. When the receipt is already recorded, the
+              recorded name and the delivery date fill them in. All
+              fields stay optional — this is print layout only. */}
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">Printed name: </span>
+            {sheet.receivedBy ?? ""}
+          </div>
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">Designation: </span>
+          </div>
+          <div className="pp-sign-field">
+            <span className="pp-label-inline">{"Date & time: "}</span>
+            {sheet.receivedBy ? sheet.deliveryDate : ""}
+          </div>
         </div>
       </section>
+
+      <p className="pp-received-condition">
+        Received in good condition unless noted here: <span className="pp-condition-line" aria-hidden="true" />
+      </p>
 
       <footer className="pp-foot">
         <div className="pp-foot-left">

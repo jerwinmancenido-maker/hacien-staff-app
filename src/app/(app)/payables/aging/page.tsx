@@ -10,23 +10,30 @@ export default async function PayablesAgingPage() {
   await requirePagePermission("view");
   const summary = await apAgingSummary();
   const asOf = formatDate(manilaToday());
+  const bandSupplierCounts: Record<string, number> = Object.fromEntries(
+    AGING_BUCKETS.map((b) => [b, summary.bySupplier.filter((r) => Number(r.aging[b]) > 0).length]),
+  );
 
   return (
     <>
-      <PageHeader title="AP aging" subtitle={`Balances by days past due from supplier bill due dates (Manila). As of ${asOf}.`} />
+      <PageHeader title="AP aging" subtitle={`Balances by days past due from supplier bill due dates, using Manila dates. As of ${asOf}.`} />
       <PayablesNav active="aging" />
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
           <div className="label">Total payable</div>
           <div className="value num">{formatPeso(summary.totalPayable)}</div>
-          {summary.otherBusinessPayable !== "0.00" && (
-            <div className="foot">{formatPeso(summary.otherBusinessPayable)} for other businesses</div>
-          )}
+          <div className="foot">
+            Open supplier bill balances
+            {summary.otherBusinessPayable !== "0.00" ? ` · ${formatPeso(summary.otherBusinessPayable)} of it for other businesses` : ""}
+          </div>
         </div>
         {AGING_BUCKETS.map((b) => (
           <div key={b} className="card stat">
             <div className="label">{AGING_BUCKET_LABELS[b]}</div>
             <div className="value num">{formatPeso(summary.totals[b])}</div>
+            <div className="foot">
+              {bandSupplierCounts[b]} supplier{bandSupplierCounts[b] === 1 ? "" : "s"} with a balance
+            </div>
           </div>
         ))}
       </div>

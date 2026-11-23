@@ -137,7 +137,7 @@ describe.skipIf(!env.hasDb)("sales order deliveries and government deals (MySQL)
         },
         admin,
       ),
-    ).rejects.toThrow(/already used \/ marked spoiled/);
+    ).rejects.toThrow(/already used by another delivery/);
 
     const del2 = await recordDelivery(
       so.id,

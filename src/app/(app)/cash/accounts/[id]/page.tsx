@@ -116,8 +116,8 @@ export default async function CashAccountDetailPage({
                 <tbody>
                   {ledger.map((r) => (
                     <tr key={r.id}>
-                      <td>{day(r.date)}</td>
-                      <td>{r.href ? <Link href={r.href}>{r.number}</Link> : r.number}</td>
+                      <td data-col="date">{day(r.date)}</td>
+                      <td data-col="number">{r.href ? <Link href={r.href}>{r.number}</Link> : r.number}</td>
                       <td>{r.description}</td>
                       <td className="num">{formatPeso(r.signedAmount)}</td>
                       <td className={`num${Number(r.runningBalance) < 0 ? " neg" : ""}`}>{formatPeso(r.runningBalance)}</td>

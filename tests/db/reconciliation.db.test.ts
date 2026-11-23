@@ -28,6 +28,7 @@ import {
   setPurchaseOrderGapReason,
   setSalesOrderGapReason,
 } from "@/lib/services/reconciliation";
+import { getMonthlyProfit } from "@/lib/services/profit";
 import { recordSupplierBill } from "@/lib/services/supplier-bills";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { customerDeliveryAddressId, freshYear, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
@@ -369,5 +370,10 @@ describe.skipIf(!env.hasDb)("reconciliation + operational profit (MySQL)", () =>
     // Nothing was billed in this month — the official figure is zero even
     // though recorded sales are 20000. The two views never mix.
     expect(report.officialBilledRevenue).toBe("0.00");
+    // The bridge: Operations also carries the official NET, and it is
+    // exactly Monthly profit's net for the month (0 − 0 − 900 expenses).
+    const official = await getMonthlyProfit(month);
+    expect(report.officialNet).toBe(official.net);
+    expect(report.officialNet).toBe("-900.00");
   });
 });

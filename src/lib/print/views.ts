@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, isoDate, manilaToday } from "@/lib/format";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { money, ymd } from "@/lib/documents/common";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -28,7 +29,11 @@ import {
 } from "./company";
 import { qrSvg, TERMS_URL } from "./qr";
 import { POLICY_VERSION_LINE } from "./policies";
-import { buildQuoteSoTermsPoints } from "./terms-block";
+import {
+  buildQuoteSoTermsPoints,
+  printedTermsLabel,
+  sanitizePrintedNotes,
+} from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintLotPart, PrintMoneyLine, PrintSignatory } from "./types";
@@ -222,6 +227,14 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
   });
   if (!q) return null;
+  // The buyer's PO usually arrives at conversion and is stored on the
+  // sales order only — the quote record stays null. Reprints of the
+  // quotation (the customer's acceptance paper) fall back to the
+  // converted order's number so the reference is not lost.
+  const buyerPoNo =
+    q.buyerPoNo ??
+    (await db.salesOrder.findFirst({ where: { quoteId: q.id }, select: { buyerPoNo: true } }))?.buyerPoNo ??
+    null;
   const letter = await letterhead(q.settingsVersionId);
   const total = money(q.contractPrice);
   const withholding = snapshotList(q.withholding);
@@ -254,7 +267,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     },
     meta: [
       { label: "Valid until", value: day(ymd(q.validUntil)) },
-      ...(q.buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: q.buyerPoNo }] : []),
+      ...(buyerPoNo ? [{ label: "Customer PO / RFQ no.", value: buyerPoNo }] : []),
     ],
     // Full-width above items — not in the narrow right meta column.
     subject: q.subject?.trim() ? q.subject : null,
@@ -278,7 +291,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
       withholding,
     }),
     totalInWords: amountInWords(total),
-    terms: q.terms || letter.print.quoteTerms || null,
+    terms: printedTermsLabel(q.terms) ?? (letter.print.quoteTerms || null),
     // Modular terms (lawyer/CPA sign-off 2026-11-06): point 2 follows the
     // quote's payment terms, point 3 the per-quote lead time, point 5 the
     // goods/services variant, point 6 only for business customers. A quote
@@ -293,7 +306,7 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     versionLine: POLICY_VERSION_LINE,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
-    notes: q.notes,
+    notes: sanitizePrintedNotes(q.notes),
     // S-69: a quote's own delivery/warranty notes win; otherwise the
     // Settings print defaults (the editor shows the same fallback).
     deliveryNotes: q.deliveryNotes?.trim() ? q.deliveryNotes : letter.print.deliveryNotes || null,
@@ -371,7 +384,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       withholding,
     }),
     totalInWords: amountInWords(total),
-    terms: so.terms,
+    terms: printedTermsLabel(so.terms),
     // Modular terms, same as the quote: the SO carries the source quote's
     // validity, lead time and payment terms (terms is copied at conversion).
     termsBlock: buildQuoteSoTermsPoints({
@@ -382,7 +395,7 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
       isIndividual: so.customer.isIndividual,
     }),
     versionLine: POLICY_VERSION_LINE,
-    notes: so.notes,
+    notes: sanitizePrintedNotes(so.notes),
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
     signatories: customerSignatories(so.createdBy.name),
@@ -418,7 +431,13 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
   const doc: ProfessionalPrintModel = {
     kind: "billing",
     title: "BILLING STATEMENT",
-    number: b.number,
+    // Standardized invoice-number presentation (Jerwin 2026-11-21): the
+    // Sales Invoice (booklet) number is the document's primary number —
+    // it headlines the print and the component labels it "Sales Invoice
+    // no." — while the internal billing number rides secondary in the
+    // meta strip as "Billing no.". Same scheme as the packing list and
+    // the collection acknowledgement.
+    number: formatBookletNumber(b.invoiceNo),
     date: day(ymd(b.invoiceDate)),
     status: b.status,
     hideStatus: HIDE_STATUS_ON_PRINT.has("billing"),
@@ -435,7 +454,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
       email: null,
     },
     meta: [
-      { label: "Booklet invoice no.", value: String(b.invoiceNo) },
+      { label: "Billing no.", value: b.number },
       { label: "Due date", value: day(ymd(b.dueDate)) },
       { label: "Sales order", value: b.salesOrder.number },
       ...(b.salesOrder.buyerPoNo ? [{ label: "Customer PO/ref", value: b.salesOrder.buyerPoNo }] : []),
@@ -443,7 +462,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     ],
     items: [
       itemRow({
-        description: `Billing for sales order ${b.salesOrder.number} (booklet #${b.invoiceNo})`,
+        description: `Billing for sales order ${b.salesOrder.number} (Sales Invoice No. ${formatBookletNumber(b.invoiceNo)})`,
         qty: "1.00",
         unit: "lot",
         unitPrice: amount,
@@ -453,8 +472,8 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     totals,
     // Words must equal the Total shown (gross), to the centavo.
     totalInWords: amountInWords(amount),
-    terms: b.salesOrder.terms,
-    notes: b.notes,
+    terms: printedTermsLabel(b.salesOrder.terms),
+    notes: sanitizePrintedNotes(b.notes),
     signatories: customerSignatories(b.createdBy.name),
     ...footer,
     thankYou: true,
@@ -467,9 +486,16 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
     where: { id },
     include: {
       customer: true,
-      cashAccount: { select: { name: true } },
       allocations: {
-        include: { billing: { select: { number: true, invoiceNo: true } } },
+        include: {
+          billing: {
+            select: {
+              number: true,
+              invoiceNo: true,
+              salesOrder: { select: { number: true, buyerPoNo: true } },
+            },
+          },
+        },
       },
       createdBy: { select: { name: true } },
     },
@@ -484,7 +510,15 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   if (Number(whTotal) > 0) totals.unshift({ label: "EWT (2307) applied", amount: whTotal });
   const footer = await baseFooter("collection", letter, { thankYou: true });
   // Billing numbers already carry their "BL-" prefix — do not add another.
-  const refs = c.allocations.map((a) => `${a.billing.number} / booklet #${a.billing.invoiceNo}`);
+  // The booklet number rides under its standardized name (Sales Invoice
+  // No.), the same wording as the billing print and the packing list.
+  const refs = c.allocations.map((a) => `${a.billing.number} / Sales Invoice No. ${formatBookletNumber(a.billing.invoiceNo)}`);
+  // The customer's own filing chain: the order and their PO reference,
+  // the same references the billing print carries.
+  const soRefs = [...new Set(c.allocations.map((a) => a.billing.salesOrder.number))];
+  const poRefs = [
+    ...new Set(c.allocations.map((a) => a.billing.salesOrder.buyerPoNo).filter((v): v is string => Boolean(v))),
+  ];
   const doc: ProfessionalPrintModel = {
     kind: "collection",
     title: "Collection Acknowledgement",
@@ -508,7 +542,8 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
       ...(c.receiptNo ? [{ label: "Receipt no.", value: c.receiptNo }] : []),
       ...(c.reference ? [{ label: "Reference", value: c.reference }] : []),
       ...(refs.length ? [{ label: "Applied to", value: refs.join(", ")}] : []),
-      ...(c.cashAccount ? [{ label: "Deposited to", value: c.cashAccount.name }] : []),
+      ...(soRefs.length ? [{ label: "Sales order", value: soRefs.join(", ") }] : []),
+      ...(poRefs.length ? [{ label: "Customer PO/ref", value: poRefs.join(", ") }] : []),
     ],
     items: [
       itemRow({
@@ -558,7 +593,7 @@ export async function getPurchaseOrderPrintModel(
   const footer = await baseFooter("supplier_po", letter, { qr: true });
   const doc: ProfessionalPrintModel = {
     kind: "supplier_po",
-    title: "Purchase Order",
+    title: "Purchase order",
     number: po.revision > 1 ? `${po.number} (rev. ${po.revision})` : po.number,
     date: day(ymd(po.date)),
     status: po.status,
@@ -860,7 +895,7 @@ export function statementLedgerLines(lines: readonly StatementLedgerInput[]) {
     if (line.kind === "billing") {
       out.push({
         date: day(line.date),
-        description: `Booklet invoice #${line.invoiceNo} · due ${day(line.dueDate)}`,
+        description: `Booklet invoice #${formatBookletNumber(line.invoiceNo)} · due ${day(line.dueDate)}`,
         charges: line.amount,
         credits: null,
         balance: line.runningBalance,

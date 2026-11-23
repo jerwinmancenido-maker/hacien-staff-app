@@ -493,12 +493,12 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-kps\s*\{[^}]*align-items:\s*stretch/s);
     expect(css).toMatch(/\.home-kps\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-kv(?:\.num)?\s*\{[^}]*text-align:\s*left/s);
-    expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisMonth\.amount\)/);
-    expect(sections).toMatch(/formatPesoWhole\(kpis\.owedByCustomers\.amount\)/);
-    expect(sections).toMatch(/formatPesoWhole\(paid\.total\)/);
-    expect(sections).toMatch(/formatPesoWhole\(kpis\.billedThisYear\.amount\)/);
+    expect(sections).toMatch(/formatPeso\(kpis\.billedThisMonth\.amount\)/);
+    expect(sections).toMatch(/formatPeso\(kpis\.owedByCustomers\.amount\)/);
+    expect(sections).toMatch(/formatPeso\(paid\.total\)/);
+    expect(sections).toMatch(/formatPeso\(kpis\.billedThisYear\.amount\)/);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
-    expect(chartSrc).toMatch(/formatPesoWhole\(current\.month\.amount\)/);
+    expect(chartSrc).toMatch(/formatPeso\(current\.month\.amount\)/);
   });
 
   it("aligns mid/bot card rows at desktop and shortens the empty chart plot", () => {

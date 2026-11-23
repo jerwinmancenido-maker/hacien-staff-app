@@ -142,7 +142,7 @@ export default async function ReceivingPage({
               { key: "serials", label: "Serials" },
               { key: "number", label: "PO no." },
               { key: "supplier", label: "Supplier" },
-              { key: "so", label: "Sales order" },
+              { key: "so", label: "Sales order", className: "col-tab-hide" },
             ]}
             rows={rows.map((r) => ({
               id: r.id,
@@ -209,8 +209,8 @@ export default async function ReceivingPage({
           columns={[
             { key: "number", label: "PO no." },
             { key: "supplier", label: "Supplier" },
-            { key: "so", label: "Sales order" },
-            { key: "progress", label: "Received" },
+            { key: "so", label: "Sales order", className: "col-tab-hide" },
+            { key: "progress", label: "Received", className: "col-phone-hide" },
             { key: "status", label: "Status" },
             { key: "expected", label: "Expected" },
           ]}

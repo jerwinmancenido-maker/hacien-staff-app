@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatBookletNumber, formatSerialDisplay } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canDeleteDocument } from "@/lib/permissions";
@@ -46,7 +47,7 @@ export default async function CollectionDetailPage({
             {c.number}
             <CollectionStatusChip status={c.status} />
             {c.isDeposit && <Chip tone="blue">Deposit</Chip>}
-            {c.needsAdminCheck && c.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
+            {c.needsAdminCheck && c.status !== "VOID" && <Chip tone="dark">Needs Admin review</Chip>}
           </>
         }
         subtitle={`${c.customer.name} · ${PRINTABLE_DISCLAIMER}`}
@@ -113,7 +114,7 @@ export default async function CollectionDetailPage({
             </>
           )}
           <dt>Receipt no.</dt>
-          <dd>{c.receiptNo ?? "—"}</dd>
+          <dd>{formatSerialDisplay(c.receiptNo) ?? "—"}</dd>
           <dt>Deposited to</dt>
           <dd>
             {c.cashAccount ? (
@@ -171,7 +172,7 @@ export default async function CollectionDetailPage({
                       <td>
                         <Link href={`/billing/billings/${a.billing.id}`}>{a.billing.number}</Link>
                       </td>
-                      <td>#{a.billing.invoiceNo}</td>
+                      <td>#{formatBookletNumber(a.billing.invoiceNo)}</td>
                       <td className="num">{formatPeso(a.cashApplied)}</td>
                       <td className="num">{formatPeso(a.withholdingApplied)}</td>
                     </tr>

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { BookIcon, BoxIcon, CartIcon, CoinIcon, FileIcon, GearIcon, HomeIcon, ListIcon, TruckIcon, UsersIcon } from "./Icons";
 
 type Item = {
@@ -179,32 +180,87 @@ const CRUMB_LABELS: Record<string, string> = {
   "2307-received": "2307s received",
   "ewt-withheld": "EWT withheld",
   "sales-summary": "Sales summary",
+  operations: "Operations",
+  reconciliation: "Reconciliation",
+  items: "Items",
+  dispatch: "Dispatch",
+  reminders: "Reminders",
+  profit: "Monthly profit",
   new: "New",
   edit: "Edit",
 };
 
-/** One path segment → its crumb label. Record ids (cuids) read as "Detail". */
-function crumbLabel(segment: string): string {
-  return CRUMB_LABELS[segment] ?? (/^[a-z0-9]{20,}$/i.test(segment) ? "Detail" : "Record");
+/** Record-id path segments (cuids) — the segment a record page's own label replaces. */
+const RECORD_ID_SEGMENT = /^[a-z0-9]{20,}$/i;
+
+/**
+ * One path segment → its crumb label. A record id reads as the record's own
+ * label (number or name) when the page supplies one via RecordBreadcrumbLabel;
+ * with no label supplied the segment is dropped, so the trail ends at the
+ * section name instead of the generic word "Detail" (finding 1113). The same
+ * drop covers every other unknown segment — a bad record URL's id segment
+ * (e.g. /quotes/abc, whose page answers notFound()) must not end the trail
+ * in the generic word "Record" either (finding 1289).
+ */
+function crumbLabel(segment: string, recordLabel?: string): string | null {
+  const known = CRUMB_LABELS[segment];
+  if (known) return known;
+  if (RECORD_ID_SEGMENT.test(segment)) return recordLabel ?? null;
+  return null;
 }
 
 /** Tax calendar pages → "Books / Tax calendar"; worksheet pages → "Books / Tax worksheets". */
-export function breadcrumbLabelsForPath(path: string): string[] {
+export function breadcrumbLabelsForPath(path: string, recordLabel?: string): string[] {
   const parts = path.split("/").filter(Boolean);
   if (parts[0] === "books" && parts[1] === "tax" && parts[2] === "calendar") {
     return ["Books", "Tax calendar"];
   }
   if (parts[0] === "books" && parts[1] === "tax") {
-    const rest = parts.slice(2).map(crumbLabel);
+    const rest = parts
+      .slice(2)
+      .map((s) => crumbLabel(s, recordLabel))
+      .filter((l): l is string => l !== null);
     return ["Books", "Tax worksheets", ...rest.filter((l, i) => !(l === "Record" && rest[i - 1] === "Record"))];
   }
-  const labels = parts.length ? parts.map(crumbLabel) : ["Home"];
+  const labels = (parts.length ? parts.map((s) => crumbLabel(s, recordLabel)) : ["Home"]).filter(
+    (l): l is string => l !== null,
+  );
   return labels.filter((l, i) => !(l === "Record" && labels[i - 1] === "Record"));
+}
+
+type RecordCrumbEntry = { path: string; label: string } | null;
+
+const RecordCrumbContext = createContext<{
+  entry: RecordCrumbEntry;
+  setEntry: Dispatch<SetStateAction<RecordCrumbEntry>>;
+}>({ entry: null, setEntry: () => {} });
+
+/** Holds the current record page's own label for the breadcrumb (finding 1113). */
+export function BreadcrumbLabelProvider({ children }: { children: ReactNode }) {
+  const [entry, setEntry] = useState<RecordCrumbEntry>(null);
+  return <RecordCrumbContext.Provider value={{ entry, setEntry }}>{children}</RecordCrumbContext.Provider>;
+}
+
+/**
+ * A record page renders this with its own number or name; the breadcrumb's
+ * record segment then shows that label instead of ending at the section name.
+ */
+export function RecordBreadcrumbLabel({ label }: { label: string }) {
+  const path = usePathname();
+  const { setEntry } = useContext(RecordCrumbContext);
+  useEffect(() => {
+    if (!path) return;
+    setEntry({ path, label });
+    return () => setEntry((cur) => (cur && cur.path === path && cur.label === label ? null : cur));
+  }, [path, label, setEntry]);
+  return null;
 }
 
 export function Breadcrumb() {
   const path = usePathname();
-  const labels = breadcrumbLabelsForPath(path);
+  const { entry } = useContext(RecordCrumbContext);
+  const recordLabel = entry && path && entry.path === path ? entry.label : undefined;
+  const labels = breadcrumbLabelsForPath(path, recordLabel);
   const crumbs = ["HACIEN", "Staff", ...labels];
   return (
     <div className="crumbs">

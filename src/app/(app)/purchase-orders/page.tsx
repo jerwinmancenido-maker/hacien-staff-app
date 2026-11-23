@@ -74,7 +74,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             className={`filter-chip${billedOver ? " active" : ""}`}
             href={href(s, { status: undefined, billedOver: "1" })}
           >
-            Bill higher than PO
+            Bills over PO
           </Link>
         )}
       </div>
@@ -116,12 +116,12 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           columns={[
             { key: "number", label: "PO no." },
             { key: "supplier", label: "Supplier" },
-            { key: "so", label: "Sales order" },
+            { key: "so", label: "Sales order", className: "col-phone-hide col-tab-hide" },
             // Audit F: no Total column for non-cost viewers.
             ...(withCosts ? [{ key: "total", label: "Total", numeric: true } as const] : []),
             { key: "status", label: "Status" },
-            { key: "date", label: "Date" },
-            { key: "expected", label: "Expected" },
+            { key: "date", label: "Date", className: "col-phone-hide col-tab-hide" },
+            { key: "expected", label: "Expected", className: "col-phone-hide col-tab-hide" },
           ]}
           rows={pos.map((o) => ({
             id: o.id,

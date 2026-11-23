@@ -1,11 +1,13 @@
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeTin } from "@/lib/permissions";
 import { getCustomer } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { db } from "@/lib/db";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { ContactCards } from "@/components/ContactCards";
@@ -37,6 +39,9 @@ import { duplicateCustomerAction, saveCustomerAction, setCustomerActiveAction } 
 import { sendStatementReminderAction } from "./statement-actions";
 import { StatementReminderForm } from "@/components/billing/StatementReminderForm";
 import { statementReminderPreview } from "@/lib/services/statement-reminder";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 export default async function CustomerPage({
   params,
@@ -105,6 +110,7 @@ export default async function CustomerPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={customer.name} />
       <PageHeader
         title={
           <>
@@ -294,7 +300,7 @@ async function CustomerPriceHistory({ customerId }: { customerId: string }) {
                         <>
                           {formatPeso(row.lastPrice)}
                           <div className="small faint">
-                            {row.lastPriceRef} · {row.lastPriceDate}
+                            {row.lastPriceRef} · {day(row.lastPriceDate)}
                           </div>
                         </>
                       ) : (
@@ -323,7 +329,7 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
     .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
     .map((b) => ({
       id: b.id,
-      label: `Booklet #${b.invoiceNo} (${b.number})`,
+      label: `Booklet #${formatBookletNumber(b.invoiceNo)} (${b.number})`,
       balance: b.balance,
     }));
   return (
@@ -381,7 +387,7 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
               .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
               .map((b) => (
                 <li key={b.id}>
-                  <Link href={`/billing/billings/${b.id}`}>Booklet #{b.invoiceNo}</Link> · {formatPeso(b.balance)} balance{" "}
+                  <Link href={`/billing/billings/${b.id}`}>Booklet #{formatBookletNumber(b.invoiceNo)}</Link> · {formatPeso(b.balance)} balance{" "}
                   <OverdueBadge label={b.overdue.label} />
                 </li>
               ))}

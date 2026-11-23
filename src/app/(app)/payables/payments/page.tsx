@@ -76,20 +76,20 @@ export default async function PaymentsListPage({ searchParams }: { searchParams:
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td>
+                    <td data-col="number">
                       <Link href={`/payables/payments/${r.id}`}>{r.number}</Link>
                     </td>
-                    <td>{day(r.date)}</td>
+                    <td data-col="date">{day(r.date)}</td>
                     <td>
                       <Link href={`/suppliers/${r.supplier.id}`}>{r.supplier.name}</Link>
                     </td>
-                    <td>
+                    <td data-col="method">
                       <PaymentMethodLabel method={r.method} />
                     </td>
                     <td>{r.reference ?? "—"}</td>
                     <td className="num">{formatPeso(r.amountPaid)}</td>
                     <td className="num">{formatPeso(r.withholdingTotal)}</td>
-                    <td>
+                    <td data-col="status">
                       <PaymentStatusChip status={r.status} />
                     </td>
                   </tr>

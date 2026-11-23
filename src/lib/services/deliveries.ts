@@ -119,9 +119,15 @@ export async function recordDelivery(
         });
         const deliveries = await tx.delivery.findMany({ select: { drNumber: true } });
         const taken = deliveries.some((d) => parseBookletSerial(d.drNumber) === drSerial);
-        if (spoiled || taken) {
+        if (spoiled) {
           throw new DocRuleError(
-            `DR no. ${formatBookletNumber(drSerial)} is already used / marked spoiled.`,
+            `DR no. ${formatBookletNumber(drSerial)} is marked spoiled and cannot be used.`,
+            "drNumber",
+          );
+        }
+        if (taken) {
+          throw new DocRuleError(
+            `DR no. ${formatBookletNumber(drSerial)} is already used by another delivery.`,
             "drNumber",
           );
         }

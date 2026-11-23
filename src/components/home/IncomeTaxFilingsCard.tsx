@@ -114,7 +114,7 @@ function IncomeTaxFilingRow({
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowMark(true)}
               >
-                Record that you filed
+                Mark as filed
               </button>
             ) : null}
             {item.isFiled && !showUndo ? (
@@ -224,7 +224,7 @@ function IncomeTaxFilingRow({
               className="btn btn-primary btn-sm"
               disabled={mark.pending}
             >
-              {mark.pending ? "Recording…" : "Record that you filed"}
+              {mark.pending ? "Saving…" : "Mark as filed"}
             </button>
             <button
               type="button"

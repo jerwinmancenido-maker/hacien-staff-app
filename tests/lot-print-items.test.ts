@@ -1,11 +1,16 @@
-// Lot (bundle) lines on customer prints — BLOCK design (owner 2026-11-09,
-// supersedes the #160 itemized-rows layout and the B1 "components never
-// print" rule): a lot prints NO title row (its name rides on the Subject);
-// each member is one bordered part row — bold title, spec bullets, its OWN
-// qty/unit — while the #, Unit Price and Amount cells merge (rowSpan)
-// across the block. The lot's qty is always 1, so Unit Price and Amount
-// are the same figure (arithmetic, not duplication). Costs and suppliers
-// never reach the print model (PrintLotPart has no such fields by design).
+// Lot (bundle) lines on customer prints. SALES ORDERS keep the BLOCK
+// design (owner 2026-11-09, supersedes the #160 itemized-rows layout and
+// the B1 "components never print" rule): the block leads with the lot's
+// own description row; each member is one bordered part row — bold title,
+// spec bullets, its OWN qty/unit — while the #, Unit Price and Amount
+// cells merge (rowSpan) across the block. QUOTATIONS print a lot as ONE
+// row — the lot's own name, qty "1 lot", the price on the lot alone —
+// and its components never print there (Jerwin's standing lot rule;
+// 2026-11-21 D1 ruling supersedes the block design for quotes; the
+// components belong on the packing list). The lot's qty is always 1, so
+// Unit Price and Amount are the same figure (arithmetic, not
+// duplication). Costs and suppliers never reach the print model
+// (PrintLotPart has no such fields by design).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -59,31 +64,25 @@ function itemsTable(markup: string): string {
 
 const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
-describe("lot lines on the print (block design)", () => {
-  it("prints each member as a part block with title, specs and its own qty/unit — and NO lot title row", () => {
+describe("lot lines on the quotation (one row — Jerwin 2026-11-21)", () => {
+  it("prints the lot as ONE row with its own name, qty 1 lot — and NO member parts", () => {
     const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
-    // The lot's own name never prints in the table (Subject carries it).
-    expect(table).not.toContain("PBRIS ICT Software Subscription");
-    // Parts print in order, before the next numbered line.
-    const gcp = table.indexOf("Google Cloud Platform Services");
-    const claude = table.indexOf("Anthropic Claude Max 5x Plan");
-    const normal = table.indexOf("Support hours");
-    expect(gcp).toBeGreaterThan(-1);
-    expect(claude).toBeGreaterThan(gcp);
-    expect(normal).toBeGreaterThan(claude);
-    // Specs print as bullets under their part's title.
-    expect(table).toContain("• One (1) year subscription under a fixed annual budget ceiling");
-    expect(table).toContain("• Firebase Blaze Plan");
-    // Each part shows its OWN qty and unit.
-    expect(table).toContain("Licenses");
-    expect(occurrences(table, "pp-part-title")).toBe(2);
+    // The lot's own name prints, exactly once, ahead of the next line.
+    expect(occurrences(table, "PBRIS ICT Software Subscription")).toBe(1);
+    expect(table.indexOf("PBRIS ICT Software Subscription")).toBeLessThan(table.indexOf("Support hours"));
+    // The components never print on a quotation (packing list carries them).
+    expect(table).not.toContain("Google Cloud Platform Services");
+    expect(table).not.toContain("Anthropic Claude Max 5x Plan");
+    expect(table).not.toContain("pp-part-title");
+    expect(table).not.toContain("Licenses");
+    // Quantity reads "1 lot": the qty cell is 1, the unit cell is lot.
+    expect(table).toContain('<td class="num pp-qty">1</td>');
+    expect(table).toContain('<td class="pp-unit">lot</td>');
   });
 
-  it("merges #, Unit Price and Amount across the block; qty/unit stay per-part", () => {
+  it("merges nothing on a quote lot row; the lot price prints once as unit price and once as amount", () => {
     const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
-    // 2 parts = span 2, on exactly the 3 merged cells (#, unit price, amount).
-    expect(occurrences(table, 'rowSpan="2"')).toBe(3);
-    // The lot price appears once as unit price and once as amount.
+    expect(table).not.toContain("rowSpan");
     expect(occurrences(table, "₱598,000.00")).toBe(2);
     // The normal line keeps its own unmerged price pair.
     expect(occurrences(table, "₱15,000.00")).toBe(1);
@@ -124,9 +123,9 @@ describe("SO lot prints name the lot (CTO fix 2026-11-09)", () => {
     expect(occurrences(table, "pp-part-title")).toBe(2);
   });
 
-  it("a quote lot block still prints NO lot name row (owner design)", () => {
+  it("a quote lot does NOT use the SO block's name row — it is a plain single row", () => {
     const table = itemsTable(renderToStaticMarkup(createElement(ProfessionalPrintDocument, { doc: lotDoc() })));
     expect(table).not.toContain("pp-lot-name");
-    expect(table).not.toContain("PBRIS ICT Software Subscription");
+    expect(occurrences(table, "PBRIS ICT Software Subscription")).toBe(1);
   });
 });

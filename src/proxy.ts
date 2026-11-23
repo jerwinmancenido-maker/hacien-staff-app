@@ -64,6 +64,14 @@ export function proxy(req: NextRequest) {
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
   if (isMachineApiPath(pathname)) return NextResponse.next();
   if (!req.cookies.has("hacien_session")) {
+    // Server-action submits (F2, finding 1277): a plain redirect makes the
+    // action client follow the POST to /login, choke on the answer, and land
+    // on the generic error page. Answer with the action-redirect transport —
+    // the same header a redirect() inside an action produces — so the
+    // client navigates to /login and the user can sign back in.
+    if (req.method === "POST" && req.headers.has("next-action")) {
+      return new NextResponse(null, { status: 200, headers: { "x-action-redirect": "/login;push" } });
+    }
     // File downloads answer 401 instead of redirecting to the login page.
     if (pathname.startsWith("/files/")) {
       return new NextResponse("Sign in to download this file.", {

@@ -9,6 +9,7 @@ import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_CUSTOMER } from "../docume
 import { ForbiddenError } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
+import { isNameLikeCustomerQuery, rankCustomerNameSuggestions } from "../search/suggest-customers";
 import { listWithholdingRates } from "./withholding";
 
 export class CompanyRuleError extends Error {
@@ -45,6 +46,15 @@ const mainAddress = {
 
 export function listCustomers(f: CustomerFilter) {
   const q = f.q?.trim();
+  // L25 Fix A: a digit-like query (at least 4 digits) also matches contact
+  // phone numbers, so a contact's number finds its customer. The digit gate
+  // keeps the contacts join out of plain name searches and stops a 1–2 digit
+  // query from matching half the phone book. Archived / inactive contacts do
+  // not match: a removed contact's old number stops finding the customer.
+  const phoneClause: Prisma.ContactWhereInput | null =
+    q && q.replace(/\D/g, "").length >= 4
+      ? { phone: { contains: q }, active: true, archivedAt: null }
+      : null;
   return db.customer.findMany({
     where: {
       ...(f.onlyIds ? { id: { in: f.onlyIds } } : {}),
@@ -54,18 +64,49 @@ export function listCustomers(f: CustomerFilter) {
       ...(f.withholdingPick === "NOT_SET" ? { defaultWithholding: { equals: Prisma.DbNull } } : {}),
       ...(q
         ? {
-            OR:
-              f.matchTin === false
+            OR: [
+              ...(f.matchTin === false
                 ? [{ name: { contains: q } }]
-                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }],
+                : [{ name: { contains: q } }, { tin: { contains: q.replace(/\s+/g, "") } }]),
+              ...(phoneClause ? [{ contacts: { some: phoneClause } }] : []),
+            ],
           }
         : {}),
     },
-    include: mainAddress,
+    include: {
+      ...mainAddress,
+      // Only when the phone clause fired: the matching contact rides along so
+      // /search can show WHY the customer matched (see the customers group
+      // there). No contact include — and no join cost — on any other query.
+      ...(phoneClause
+        ? { contacts: { where: phoneClause, select: { name: true, phone: true }, take: 1 } }
+        : {}),
+    },
     orderBy: { name: "asc" },
     ...(f.skip != null ? { skip: f.skip } : {}),
     ...(f.take != null ? { take: f.take } : {}),
   });
+}
+
+/** Hard cap on the candidate scan for name suggestions, so the bound is structural. */
+const SUGGESTION_CANDIDATE_CAP = 5000;
+
+/**
+ * L25 Fix B: "Did you mean" suggestions for a misspelled customer name.
+ * Fallback only — callers invoke this ONLY when the exact search came back
+ * empty, and the hits render as labelled suggestion links, never as results.
+ * Customer names only; the ranking itself lives in the pure, unit-tested
+ * src/lib/search/suggest-customers.ts.
+ */
+export async function suggestCustomersByName(q: string): Promise<{ id: string; name: string }[]> {
+  if (!isNameLikeCustomerQuery(q)) return [];
+  const rows = await db.customer.findMany({
+    where: { active: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+    take: SUGGESTION_CANDIDATE_CAP,
+  });
+  return rankCustomerNameSuggestions(q, rows);
 }
 
 export function getCustomer(id: string) {

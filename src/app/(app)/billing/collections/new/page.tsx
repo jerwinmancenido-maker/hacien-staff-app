@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { money } from "@/lib/documents/common";
 import { billingToday } from "@/lib/billing/dates";
 import { billingBalance } from "@/lib/billing/status";
-import { isoDate } from "@/lib/format";
+import { formatDate, isoDate } from "@/lib/format";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { isCashEnabled } from "@/lib/cash/features";
@@ -72,7 +72,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
           id: b.id,
           invoiceNo: b.invoiceNo,
           number: b.number,
-          dueDate: b.dueDate.toISOString().slice(0, 10),
+          dueDate: formatDate(b.dueDate),
           amount: money(b.amount),
           balance,
           defaultRate: defaultCodes[0]?.rate ?? "0.0000",

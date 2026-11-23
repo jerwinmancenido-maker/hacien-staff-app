@@ -332,7 +332,7 @@ export function PoEditor({
               <div className="hint">Follows the sales order — change it there (Admin).</div>
             </div>
           ) : businesses.length > 0 || h.businessId ? (
-            <div className={`field${e.businessId ? " has-error" : ""}`}>
+            <div className={`field full${e.businessId ? " has-error" : ""}`}>
               <label htmlFor="businessId">Business — whose purchase is this?</label>
               <select
                 id="businessId"

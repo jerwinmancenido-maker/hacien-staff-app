@@ -1,10 +1,9 @@
 import type { ProfessionalPrintModel } from "@/lib/print/types";
 import {
+  BILLING_DISCLAIMER,
   INPUT_TAX_DISCLAIMER,
-  NOT_OFFICIAL_INVOICE,
   QUOTATION_NOT_INVOICE,
   SALES_ORDER_NOT_INVOICE,
-  STATEMENT_NOT_OFFICIAL,
 } from "@/lib/print/tax-wording";
 
 const company = {
@@ -127,10 +126,14 @@ export const billingPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "billing",
     title: "BILLING STATEMENT",
-    number: "BL-2026-0001",
+    // Standardized scheme (2026-11-21): the Sales Invoice (booklet)
+    // number is the primary number; the internal BL number is a
+    // secondary meta cell.
+    number: "001",
+    meta: [{ label: "Billing no.", value: "BL-2026-0001" }],
     hideStatus: true,
     thankYou: true,
-    taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [BILLING_DISCLAIMER, INPUT_TAX_DISCLAIMER],
     paymentInstructions: [
       { kind: "ewallet", label: "GCash", accountName: "HACIEN", accountLast4: "5678", accountPrinted: "****5678" },
     ],
@@ -146,7 +149,7 @@ export const collectionPrintFixture = (): ProfessionalPrintModel =>
     title: "Collection Acknowledgement",
     number: "CR-2026-0001",
     thankYou: true,
-    taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [BILLING_DISCLAIMER, INPUT_TAX_DISCLAIMER],
     // Mirrors views.ts: Prepared by is electronic (no line), Received by
     // keeps its line — someone signs by hand to acknowledge receipt.
     signatories: [
@@ -158,7 +161,7 @@ export const collectionPrintFixture = (): ProfessionalPrintModel =>
 export const poPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "supplier_po",
-    title: "Purchase Order",
+    title: "Purchase order",
     number: "PO-2026-0001",
     party: supplierParty,
     unitPriceLabel: "Unit cost",
@@ -260,14 +263,14 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
     items: undefined,
     totals: undefined,
     thankYou: true,
-    taxLines: [STATEMENT_NOT_OFFICIAL],
+    taxLines: [BILLING_DISCLAIMER],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "10000.00",
       lines: [
         {
           date: "Oct 1, 2026",
-          description: "Booklet invoice #1 · due Oct 31, 2026",
+          description: "Booklet invoice #001 · due Oct 31, 2026",
           charges: "10000.00",
           credits: null,
           balance: "10000.00",
@@ -290,7 +293,7 @@ export const supplierStatementFixture = (): ProfessionalPrintModel =>
     party: supplierParty,
     items: undefined,
     totals: undefined,
-    taxLines: [STATEMENT_NOT_OFFICIAL],
+    taxLines: [BILLING_DISCLAIMER],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "5000.00",

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireActionPermission } from "@/lib/auth/current-user";
-import { assertCanDeleteDocument, assertCanVoid, ForbiddenError } from "@/lib/permissions";
+import { assertCanDeleteDocument, assertCanVoid } from "@/lib/permissions";
 import { runAction } from "@/lib/actions";
 import { db } from "@/lib/db";
 import { createAttachments, discardUploads, prepareUploads } from "@/lib/services/attachments";
@@ -142,7 +142,7 @@ export async function refreshQuoteCompanyDetailsAction(id: string): Promise<Form
 export async function voidQuoteAction(id: string, reason: string): Promise<FormState> {
   return runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     assertCanVoid(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };
@@ -157,7 +157,7 @@ export async function deleteQuoteAction(id: string, reason: string): Promise<For
   let goTo: string | null = null;
   const result = await runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     assertCanDeleteDocument(user);
     const parsed = voidReasonSchema.safeParse(reason);
     if (!parsed.success) return { fieldErrors: { reason: parsed.error.issues[0]?.message ?? "Give a reason." } };

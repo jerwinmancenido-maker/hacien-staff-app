@@ -25,7 +25,7 @@ describe("catalog picker dropdown is anchored to the description input", () => {
   it("both line layouts wrap the textarea and picker in the anchor wrapper", () => {
     const wraps = editor.match(/<div className="quote-ln-descwrap">/g) ?? [];
     expect(wraps.length).toBe(2);
-    expect(editor.match(/\{pickerBox\(i\)\}/g)?.length).toBe(2);
+    expect(editor.match(/\{pickerBox\(i, (""|"m-")\)\}/g)?.length).toBe(2);
   });
 
   it("the wrapper is positioned and the picker is an absolute overlay under it", () => {

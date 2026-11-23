@@ -4,7 +4,7 @@ import { formatPeso } from "@/lib/format";
 import { arAgingSummary } from "@/lib/billing/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { BillingNav } from "@/components/billing/BillingNav";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 
 export default async function AgingPage() {
   await requirePagePermission("view");
@@ -12,24 +12,30 @@ export default async function AgingPage() {
 
   return (
     <>
-      <PageHeader title="AR aging" subtitle={`Balances by days past due (Manila). Grace: ${summary.graceDays} day(s).`} />
+      <PageHeader title="AR aging" subtitle={`Balances by days past due, using Manila dates. Grace period: ${summary.graceDays} days.`} />
       <BillingNav active="aging" />
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
           <div className="label">Total receivable</div>
           <div className="value num">{formatPeso(summary.totalReceivable)}</div>
+          <div className="foot">Open billing balances</div>
         </div>
         <div className={`card stat${Number(summary.overdue) > 0 ? " stat-red" : ""}`}>
           <div className="label">Overdue</div>
           <div className="value num">{formatPeso(summary.overdue)}</div>
+          <div className="foot">Past due + {summary.graceDays} day grace</div>
         </div>
         <div className="card stat">
           <div className="label">Customer credit</div>
           <div className="value num">{formatPeso(summary.credit)}</div>
+          <div className="foot">Unapplied payments</div>
         </div>
       </div>
       <div className="card">
-        <div className="table-wrap">
+        {summary.byCustomer.length === 0 ? (
+          <EmptyState line="Nothing outstanding." />
+        ) : (
+          <div className="table-wrap">
           <table className="list" aria-label="Aging by customer">
             <thead>
               <tr>
@@ -46,14 +52,7 @@ export default async function AgingPage() {
               </tr>
             </thead>
             <tbody>
-              {summary.byCustomer.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="faint">
-                    Nothing outstanding.
-                  </td>
-                </tr>
-              ) : (
-                summary.byCustomer.map((r) => (
+              {summary.byCustomer.map((r) => (
                   <tr key={r.customerId}>
                     <td>
                       <Link href={`/customers/${r.customerId}?tab=balances`}>{r.customerName}</Link>
@@ -76,11 +75,11 @@ export default async function AgingPage() {
                       </Link>
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
       </div>
     </>
   );

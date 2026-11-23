@@ -94,7 +94,7 @@ export function VoidDialog({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-danger solid" disabled={pending || reason.trim().length < 3}>
+          <button type="submit" className="btn btn-danger" disabled={pending || reason.trim().length < 3}>
             {pending ? "Voiding…" : `Void ${docLabel}`}
           </button>
         </div>
@@ -149,7 +149,7 @@ export function DeleteDialog({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-danger solid" disabled={pending || reason.trim().length < 3}>
+          <button type="submit" className="btn btn-danger" disabled={pending || reason.trim().length < 3}>
             {pending ? "Deleting…" : "Delete"}
           </button>
         </div>
@@ -251,6 +251,7 @@ export function ConvertDialog({
             <label htmlFor="buyerPoNo">Buyer PO no.</label>
             <input id="buyerPoNo" type="text" value={v.buyerPoNo} onChange={(ev) => setV({ ...v, buyerPoNo: ev.target.value })} />
             {e.buyerPoNo && <div className="error">{e.buyerPoNo}</div>}
+            <div className="hint">Converting needs acceptance evidence — this buyer PO number, a recorded acceptance, or an uploaded conforme. Any one of the three is enough.</div>
           </div>
           <div className={`field${e.buyerPoDate ? " has-error" : ""}`}>
             <label htmlFor="buyerPoDate">Buyer PO date</label>

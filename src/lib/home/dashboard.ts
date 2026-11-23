@@ -79,6 +79,8 @@ import {
 export type HomeActionRow = {
   kind: HomeActionKind;
   label: string;
+  /** Plain-words sub-line for shorthand a first-time user can't decode. */
+  hint?: string;
   count: number;
   href: string;
 };
@@ -98,7 +100,7 @@ export type HomeTaxDeadline = {
   form: string;
   description: string;
   dueLabel: string;
-  /** e.g. "Due Mon, Nov 16, 2026 · in 16 days" */
+  /** e.g. "Due Nov 16, 2026 · in 16 days" */
   dueDetail: string;
   /**
    * Phone one-line strip, e.g. "NOV 16 · 1701Q due in 16 days".
@@ -264,6 +266,14 @@ const ACTION_LABELS: Record<HomeActionKind, string> = {
 /** Exported for staff-copy / inventory tests. */
 export const HOME_WITHHOLDING_NOT_SET_LABEL = ACTION_LABELS.customersNoWithholding;
 
+/** Plain-words explanations for the shorthand labels above (trainee F4).
+ *  Labels stay exactly as they are — staff-copy tests pin them — so the
+ *  hints are additive, rendered as a small sub-line under the label. */
+const ACTION_HINTS: Partial<Record<HomeActionKind, string>> = {
+  customersNoWithholding: "Customers with no withholding rates on file — set them before billing",
+  pending2307: "Withholding certificates customers owe us — chase the originals",
+};
+
 const BADGE_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
 
 function moneyRow(
@@ -280,7 +290,6 @@ function formatWeekdayLongDate(ymd: string): string {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",
-    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -619,6 +628,7 @@ export async function loadHomeDashboard(
     .map((kind) => ({
       kind,
       label: ACTION_LABELS[kind],
+      ...(ACTION_HINTS[kind] ? { hint: ACTION_HINTS[kind] } : {}),
       count: actionCounts[kind].count,
       href: actionCounts[kind].href,
     }));

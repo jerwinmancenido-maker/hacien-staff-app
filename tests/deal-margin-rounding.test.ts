@@ -22,4 +22,13 @@ describe("dealMargin percent rounding (F23)", () => {
     expect(dealMargin("10000.00", "7500.00").marginPct).toBe("25.00");
     expect(dealMargin("0.00", "0.00").marginPct).toBeNull();
   });
+
+  it("shows no percent when the supplier cost was never set (D8)", () => {
+    // ₱0.00 cost = "not set" (supplierCostMissing): the peso margin stays
+    // the full price, but a 100% percent would print the placeholder as
+    // fact on the Monthly profit page and its CSV.
+    const r = dealMargin("5450.00", "0.00");
+    expect(r.margin).toBe("5450.00");
+    expect(r.marginPct).toBeNull();
+  });
 });

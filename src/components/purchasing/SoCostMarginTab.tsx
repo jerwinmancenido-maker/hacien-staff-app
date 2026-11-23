@@ -105,7 +105,14 @@ export function SoCostMarginTab({ summary }: { summary: CostMarginSummary }) {
           <dt>SO contract total</dt>
           <dd className="num strong">{formatPeso(summary.contractPrice)}</dd>
           <dt>Cost so far</dt>
-          <dd className="num strong">{formatPeso(summary.incurredCost)}</dd>
+          <dd className="num strong">
+            {formatPeso(summary.incurredCost)}
+            {toScaled(summary.totalCost, 2) > toScaled(summary.incurredCost, 2) && (
+              <div className="small faint" style={{ fontWeight: 400 }}>
+                {formatPeso(summary.totalCost)} on order (PO total) — not yet received or billed.
+              </div>
+            )}
+          </dd>
           {summary.linkedExpenses != null && toScaled(summary.linkedExpenses, 2) !== 0n && (
             <>
               <dt>Delivery &amp; linked expenses</dt>

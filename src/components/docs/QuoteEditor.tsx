@@ -11,6 +11,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
+import { pickerKeyIntent } from "@/lib/picker-keys";
 import {
   COST_NOT_SET_LABEL,
   approvalReasons,
@@ -229,11 +230,17 @@ function DescTextarea({
   value,
   onValue,
   onKeyDown,
+  placeholder,
+  combo,
 }: {
   label: string;
   value: string;
   onValue: (v: string) => void;
   onKeyDown?: (ev: KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  /** Combobox wiring (finding 1044) when this box drives a suggestion
+   *  listbox: the popup it controls and, while open, its active option. */
+  combo?: { expanded: boolean; controls: string; activeDescendant?: string };
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -245,8 +252,17 @@ function DescTextarea({
       aria-label={label}
       className="quote-desc"
       rows={1}
+      {...(combo
+        ? {
+            role: "combobox" as const,
+            "aria-expanded": combo.expanded,
+            "aria-controls": combo.controls,
+            "aria-activedescendant": combo.activeDescendant,
+            "aria-autocomplete": "list" as const,
+          }
+        : {})}
       value={value}
-      placeholder="Search by product name or SKU…"
+      placeholder={placeholder ?? "Search by product name or SKU…"}
       onChange={(ev) => {
         onValue(ev.target.value);
         growDesc(ev.target);
@@ -537,7 +553,7 @@ export function QuoteEditor({
   const [pickedMeta, setPickedMeta] = useState<Record<string, { sku: string | null; brand: string | null; model: string | null }>>({});
   const [costHints, setCostHints] = useState<Record<string, string>>({});
   const costCacheRef = useRef<Map<string, SupplierCostRow[]>>(new Map());
-  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[]; failed: boolean; attempt: number } | null>(null);
+  const [compPicker, setCompPicker] = useState<{ lineKey: string; compKey: string; query: string; results: CatalogSearchResult[]; failed: boolean; attempt: number; active: number } | null>(null);
 
   // The effect only fetches (state changes live in the async callback, never
   // in the effect body). Short queries clear their results where the query
@@ -596,9 +612,9 @@ export function QuoteEditor({
         }
         if (pickerSeq.current !== seq) return;
         const outcome = pickerSearchOutcome<CatalogSearchResult>(res.ok, body);
-        setCompPicker((p) => (p ? { ...p, results: outcome.items, failed: outcome.failed } : p));
+        setCompPicker((p) => (p ? { ...p, results: outcome.items, failed: outcome.failed, active: Math.min(p.active, Math.max(outcome.items.length - 1, 0)) } : p));
       } catch {
-        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [], failed: true } : p));
+        if (pickerSeq.current === seq) setCompPicker((p) => (p ? { ...p, results: [], failed: true, active: 0 } : p));
       }
     }, 200);
     return () => clearTimeout(t);
@@ -835,22 +851,37 @@ export function QuoteEditor({
   /** Picker keyboard flow: ↑/↓ move the highlight, Enter picks, Esc closes. */
   function onDescKeyDown(line: EditorItem, ev: KeyboardEvent<HTMLTextAreaElement>) {
     if (line.itemId || pickerFor !== line.key) return;
-    if (ev.key === "Escape") {
-      ev.preventDefault();
+    const intent = pickerKeyIntent(ev.key, pickerResults.length, pickerActive);
+    if (!intent) return;
+    ev.preventDefault();
+    if (intent.kind === "close") {
       closePicker();
-      return;
-    }
-    if (pickerResults.length === 0) return;
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      setPickerActive((a) => (a + 1) % pickerResults.length);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      setPickerActive((a) => (a - 1 + pickerResults.length) % pickerResults.length);
-    } else if (ev.key === "Enter") {
-      ev.preventDefault();
-      const r = pickerResults[pickerActive] ?? pickerResults[0];
+    } else if (intent.kind === "highlight") {
+      setPickerActive(intent.index);
+    } else {
+      const r = pickerResults[intent.index];
       if (r) applyCatalogPick(line, r);
+    }
+  }
+
+  /** Lot-component picker keyboard flow -- the same shared picker keys
+   *  (finding 1119). Before this, the component box carried the ARIA
+   *  wiring (PR #289) but no key handler at all: options committed on
+   *  click only and blur closed the panel in 150 ms, so a keyboard-only
+   *  user could not link a component to a catalog product. */
+  function onCompKeyDown(line: EditorItem, comp: EditorComponent, ev: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!compPicker || compPicker.lineKey !== line.key || compPicker.compKey !== comp.key) return;
+    const intent = pickerKeyIntent(ev.key, compPicker.results.length, compPicker.active);
+    if (!intent) return;
+    ev.preventDefault();
+    if (intent.kind === "close") {
+      setCompPicker(null);
+    } else if (intent.kind === "highlight") {
+      const ix = intent.index;
+      setCompPicker((p) => (p && p.compKey === comp.key ? { ...p, active: ix } : p));
+    } else {
+      const r = compPicker.results[intent.index];
+      if (r) applyComponentPick(line, comp, r);
     }
   }
 
@@ -880,11 +911,11 @@ export function QuoteEditor({
 
   /** The search dropdown under a line's description (desktop + mobile share
    *  it). Two-line results: name + price, then SKU · brand · model · unit. */
-  function pickerBox(line: EditorItem) {
+  function pickerBox(line: EditorItem, idPrefix: "" | "m-") {
     if (pickerFor !== line.key) return null;
     const q = pickerQuery.trim();
     return (
-      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+      <div id={`picker-listbox-${idPrefix}${line.key}`} className="quote-picker" role="listbox" aria-label="Catalog matches">
         {pickerBusy ? (
           <div className="small muted">Searching the catalog…</div>
         ) : pickerFailed ? (
@@ -899,6 +930,7 @@ export function QuoteEditor({
                 <li key={r.id}>
                   <button
                     type="button"
+                    id={`picker-opt-${idPrefix}${line.key}-${r.id}`}
                     className={`quote-picker-opt${ix === pickerActive ? " is-active" : ""}`}
                     role="option"
                     aria-selected={ix === pickerActive}
@@ -1400,6 +1432,18 @@ export function QuoteEditor({
 
   const statusLabel = status === "DRAFT" ? "Draft" : status;
   const metaTitle = isNew ? "New" : quoteNumber ?? "Quote";
+  // VR1 majors-B fix 2: Save draft / Mark as sent disable on the conditions
+  // in the buttons' disabled expression below; name the blocker beside the
+  // buttons so a greyed-out Save is never silent.
+  const saveBlocker = busy
+    ? null
+    : !h.customerId
+      ? "Pick a customer to save"
+      : Object.keys(whPctErrors).length > 0
+        ? "Fix the withholding % errors to save"
+        : hasValidityError
+          ? (validityDaysError ?? validUntilError)
+          : null;
 
   return (
     <>
@@ -1437,6 +1481,11 @@ export function QuoteEditor({
                 Preview print
               </button>
             )}
+            {saveBlocker ? (
+              <span className="small muted" style={{ alignSelf: "center" }}>
+                {saveBlocker}
+              </span>
+            ) : null}
             <button className="btn btn-secondary" type="submit" disabled={busy || !h.customerId || Object.keys(whPctErrors).length > 0 || hasValidityError}>
               {pending ? "Saving…" : "Save draft"}
             </button>
@@ -1485,7 +1534,7 @@ export function QuoteEditor({
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
             {(businesses.length > 0 || businessId) && (
-              <div className={`quote-f field${e.businessId ? " has-error" : ""}`}>
+              <div className={`quote-f field full${e.businessId ? " has-error" : ""}`}>
                 <label htmlFor="businessId">Business — whose sale is this?</label>
                 <select
                   id="businessId"
@@ -1695,9 +1744,32 @@ export function QuoteEditor({
                         <div className="quote-ln-no">{idx + 1}</div>
                         <div className="quote-ln-dsc">
                           <div className="quote-ln-descwrap">
-                            <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
-                            {pickerBox(i)}
+                            <DescTextarea
+                              label={i.isLot ? `Line ${idx + 1} lot name / description` : `Line ${idx + 1} description`}
+                              placeholder={i.isLot ? "Lot name / description — prints as the lot's spec text" : undefined}
+                              value={i.description}
+                              onValue={(v) => onDescription(i, v)}
+                              onKeyDown={(ev) => onDescKeyDown(i, ev)}
+                              combo={
+                                i.itemId || i.isLot
+                                  ? undefined
+                                  : {
+                                      expanded: pickerFor === i.key,
+                                      controls: `picker-listbox-${i.key}`,
+                                      activeDescendant:
+                                        pickerFor === i.key && pickerResults.length > 0
+                                          ? `picker-opt-${i.key}-${(pickerResults[pickerActive] ?? pickerResults[0])!.id}`
+                                          : undefined,
+                                    }
+                              }
+                            />
+                            {pickerBox(i, "")}
                           </div>
+                          {i.isLot ? (
+                            <div className="small muted quote-ln-comp-hint">
+                              This is the lot&apos;s name — required, and it prints as the lot&apos;s spec text. The members below carry the parts and their cost.
+                            </div>
+                          ) : null}
                           {productMeta(i)}
                           <div className="quote-ln-tags">
                             {usePickChips ? (
@@ -1865,21 +1937,26 @@ export function QuoteEditor({
                                       rows={3}
                                       id={`comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
+                                      role="combobox"
+                                      aria-expanded={!!(compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0))}
+                                      aria-controls={`comp-listbox-${c.key}`}
+                                      aria-activedescendant={compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? `comp-opt-${c.key}-${compPicker.results[Math.min(compPicker.active, compPicker.results.length - 1)]!.id}` : undefined}
                                       value={c.description}
                                       placeholder="Product or service inside the lot"
                                       onChange={(ev) => {
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0, active: 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                      onKeyDown={(ev) => onCompKeyDown(i, c, ev)}
                                     ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
-                                      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                      <div id={`comp-listbox-${c.key}`} className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         {compPicker.failed ? (
                                           <div className="small muted">
                                             Search failed, try again.{" "}
@@ -1894,11 +1971,11 @@ export function QuoteEditor({
                                           </div>
                                         ) : (
                                         <ul className="plain-list">
-                                          {compPicker.results.map((r) => {
+                                          {compPicker.results.map((r, ix) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
                                             return (
                                               <li key={r.id}>
-                                                <button type="button" className="quote-picker-opt" onClick={() => applyComponentPick(i, c, r)}>
+                                                <button type="button" id={`comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className={`quote-picker-opt${ix === Math.min(compPicker.active, compPicker.results.length - 1) ? " is-active" : ""}`} onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
                                                   <span className="quote-picker-name">
                                                     <span>{r.name}</span>
                                                   </span>
@@ -2110,9 +2187,32 @@ export function QuoteEditor({
                       </div>
                       <div className="quote-line-card-desc">
                         <div className="quote-ln-descwrap">
-                          <DescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => onDescription(i, v)} onKeyDown={(ev) => onDescKeyDown(i, ev)} />
-                          {pickerBox(i)}
+                          <DescTextarea
+                            label={i.isLot ? `Line ${idx + 1} lot name / description` : `Line ${idx + 1} description`}
+                            placeholder={i.isLot ? "Lot name / description — prints as the lot's spec text" : undefined}
+                            value={i.description}
+                            onValue={(v) => onDescription(i, v)}
+                            onKeyDown={(ev) => onDescKeyDown(i, ev)}
+                            combo={
+                              i.itemId || i.isLot
+                                ? undefined
+                                : {
+                                    expanded: pickerFor === i.key,
+                                    controls: `m-picker-listbox-${i.key}`,
+                                    activeDescendant:
+                                      pickerFor === i.key && pickerResults.length > 0
+                                        ? `m-picker-opt-${i.key}-${(pickerResults[pickerActive] ?? pickerResults[0])!.id}`
+                                        : undefined,
+                                  }
+                            }
+                          />
+                          {pickerBox(i, "m-")}
                         </div>
+                        {i.isLot ? (
+                          <div className="small muted quote-ln-comp-hint">
+                            This is the lot&apos;s name — required, and it prints as the lot&apos;s spec text. The members below carry the parts and their cost.
+                          </div>
+                        ) : null}
                         {productMeta(i)}
                       </div>
                       <div className="quote-line-card-row3">
@@ -2263,21 +2363,26 @@ export function QuoteEditor({
                                       rows={3}
                                       id={`m-comp-desc-${c.key}`}
                                       aria-label={`Line ${idx + 1} component ${cIdx + 1} description`}
+                                      role="combobox"
+                                      aria-expanded={!!(compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0))}
+                                      aria-controls={`m-comp-listbox-${c.key}`}
+                                      aria-activedescendant={compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && compPicker.results.length > 0 ? `m-comp-opt-${c.key}-${compPicker.results[Math.min(compPicker.active, compPicker.results.length - 1)]!.id}` : undefined}
                                       value={c.description}
                                       placeholder="Product or service inside the lot"
                                       onChange={(ev) => {
                                         const v = ev.target.value;
                                         setComponent(i.key, c.key, { description: v, itemId: null });
                                         if (v.trim().length >= 2) {
-                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0 });
+                                          setCompPicker({ lineKey: i.key, compKey: c.key, query: v, results: compPicker && compPicker.compKey === c.key ? compPicker.results : [], failed: false, attempt: compPicker && compPicker.compKey === c.key ? compPicker.attempt : 0, active: 0 });
                                         } else if (compPicker?.compKey === c.key) {
                                           setCompPicker(null);
                                         }
                                       }}
                                       onBlur={() => setTimeout(() => setCompPicker((p) => (p?.compKey === c.key ? null : p)), 150)}
+                                      onKeyDown={(ev) => onCompKeyDown(i, c, ev)}
                                     ></textarea>
                                     {compPicker && compPicker.lineKey === i.key && compPicker.compKey === c.key && (compPicker.failed || compPicker.results.length > 0) ? (
-                                      <div className="quote-picker" role="listbox" aria-label="Catalog matches">
+                                      <div id={`m-comp-listbox-${c.key}`} className="quote-picker" role="listbox" aria-label="Catalog matches">
                                         {compPicker.failed ? (
                                           <div className="small muted">
                                             Search failed, try again.{" "}
@@ -2292,11 +2397,11 @@ export function QuoteEditor({
                                           </div>
                                         ) : (
                                         <ul className="plain-list">
-                                          {compPicker.results.map((r) => {
+                                          {compPicker.results.map((r, ix) => {
                                             const rest = [r.sku ? `SKU ${r.sku}` : null, r.brand, r.model, r.unit].filter(Boolean).join(" · ");
                                             return (
                                               <li key={r.id}>
-                                                <button type="button" className="quote-picker-opt" onClick={() => applyComponentPick(i, c, r)}>
+                                                <button type="button" id={`m-comp-opt-${c.key}-${r.id}`} role="option" aria-selected={ix === Math.min(compPicker.active, compPicker.results.length - 1)} className={`quote-picker-opt${ix === Math.min(compPicker.active, compPicker.results.length - 1) ? " is-active" : ""}`} onMouseEnter={() => setCompPicker((p) => (p && p.compKey === c.key ? { ...p, active: ix } : p))} onClick={() => applyComponentPick(i, c, r)}>
                                                   <span className="quote-picker-name">
                                                     <span>{r.name}</span>
                                                   </span>
@@ -2462,7 +2567,14 @@ export function QuoteEditor({
                           <>
                             {formatPeso(totals.netMargin)}{" "}
                             <span className="muted">
-                              ({Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%)
+                              {/* D8: partial state — the percent prices the
+                                  cost-not-set lines at ₱0, so show "—" for
+                                  it and keep only the peso "Margin so far". */}
+                              (
+                              {totals.supplierCostState === "partial"
+                                ? "—"
+                                : `${Number(totals.netMarginPct).toLocaleString("en-US", { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%`}
+                              )
                             </span>
                           </>
                         )}

@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { canSeeTin } from "@/lib/permissions";
 import { listBillings, BILLING_STATUS_LABELS } from "@/lib/billing/views";
 import { listPurchaseOrdersView, listReceivingView } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS } from "@/lib/purchasing/status";
 import { listQuotesView, listSalesOrdersView } from "@/lib/quotes/views";
-import { listCustomers, listSuppliers } from "@/lib/services/companies";
+import { listCustomers, listSuppliers, suggestCustomersByName } from "@/lib/services/companies";
 import { QUOTE_STATUS_LABELS, SO_STATUS_LABELS } from "@/components/docs/DocParts";
 import { EmptyState, PageHeader } from "@/components/ui";
 import {
@@ -103,13 +104,25 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
       title: "Customers",
       seeAllLabel: "See all in Customers →",
       seeAllHref: topSearchListHref("/customers", q),
-      hits: takeTopSearchHits(customers, (r) => ({
-        id: r.id,
-        href: `/customers/${r.id}`,
-        primary: r.name,
-        secondary: showTin && r.tin ? r.tin : "—",
-        status: r.active ? "Active" : "Inactive",
-      })),
+      hits: takeTopSearchHits(customers, (r) => {
+        // L25 Fix A: when the hit matched ONLY via a contact phone (not name
+        // or TIN), say so — a bare TIN line would read as a false positive.
+        const contact = "contacts" in r ? r.contacts[0] : undefined;
+        const matchedName = r.name.toLowerCase().includes(q.toLowerCase());
+        const matchedTin = !!r.tin && r.tin.includes(q.replace(/\s+/g, ""));
+        return {
+          id: r.id,
+          href: `/customers/${r.id}`,
+          primary: r.name,
+          secondary:
+            contact && !matchedName && !matchedTin
+              ? `Contact: ${contact.name} · ${contact.phone ?? "—"}`
+              : showTin && r.tin
+                ? r.tin
+                : "—",
+          status: r.active ? "Active" : "Inactive",
+        };
+      }),
     },
     {
       key: "suppliers",
@@ -156,19 +169,44 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
       hits: takeTopSearchHits(billings, (r) => ({
         id: r.id,
         href: `/billing/billings/${r.id}`,
-        primary: String(r.invoiceNo),
+        primary: formatBookletNumber(r.invoiceNo),
         secondary: r.customer.name,
         status: BILLING_STATUS_LABELS[r.status] ?? r.status,
       })),
     },
   ].filter((g) => g.hits.length > 0);
 
+  // L25 Fix B: only when the whole search came back empty — offer "Did you
+  // mean" customer-name suggestions as labelled links. Fallback only: exact
+  // results are never joined by guesses, and document numbers never
+  // fuzzy-match.
+  const customerSuggestions = groups.length === 0 ? await suggestCustomersByName(q) : [];
+
   return (
     <>
       <PageHeader title={`Results for “${q}”`} subtitle="Matches from lists you can already open." />
       {groups.length === 0 ? (
         <div className="card">
-          <EmptyState title="No matches" line="Try a number, a name, or a serial." />
+          <EmptyState
+            title="No matches"
+            line="Try a number, a name, or a serial."
+            action={
+              customerSuggestions.length > 0 ? (
+                <span>
+                  Did you mean:{" "}
+                  {customerSuggestions.map((s, i) => (
+                    <span key={s.id}>
+                      {i > 0 ? ", " : ""}
+                      <Link href={`/customers/${s.id}`} className="link">
+                        {s.name}
+                      </Link>
+                    </span>
+                  ))}
+                  ?
+                </span>
+              ) : undefined
+            }
+          />
         </div>
       ) : (
         <div className="top-search-results">

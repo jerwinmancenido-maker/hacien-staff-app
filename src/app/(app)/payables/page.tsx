@@ -60,7 +60,7 @@ export default async function PayablesHomePage({
           <Link className="card stat stat-link" href="/payables/2307?status=TO_ISSUE">
             <div className="label">2307 to issue</div>
             <div className="value num">{formatPeso(summary.pending2307ToIssue)}</div>
-            <div className="foot">EWT pending certificate (unverified)</div>
+            <div className="foot">EWT awaiting certificates</div>
           </Link>
         ) : null}
         <Link className="card stat stat-link" href="/payables/payments">
@@ -144,7 +144,7 @@ export default async function PayablesHomePage({
                 <tr>
                   <th>Supplier</th>
                   {AGING_BUCKETS.map((b) => (
-                    <th key={b} className="num">
+                    <th key={b} className={b === "d1_30" ? "num col-phone-hide" : "num"}>
                       {AGING_BUCKET_LABELS[b]}
                     </th>
                   ))}
@@ -158,7 +158,7 @@ export default async function PayablesHomePage({
                       <Link href={`/suppliers/${r.supplierId}?tab=payments`}>{r.supplierName}</Link>
                     </td>
                     {AGING_BUCKETS.map((b) => (
-                      <td key={b} className="num">
+                      <td key={b} className={b === "d1_30" ? "num col-phone-hide" : "num"}>
                         {formatPeso(r.aging[b])}
                       </td>
                     ))}

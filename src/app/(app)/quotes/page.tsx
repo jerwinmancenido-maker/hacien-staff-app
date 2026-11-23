@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { QuoteStatus } from "@prisma/client";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
-import { listQuotesView, QUOTE_STATUSES } from "@/lib/quotes/views";
+import { listQuotesPageView, QUOTE_STATUSES } from "@/lib/quotes/views";
+import { parsePageParam } from "@/lib/paging";
+import { ListPager } from "@/components/ListPager";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
@@ -11,11 +13,15 @@ import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { QUOTE_STATUS_LABELS, QuoteStatusChip, QuoteWorkflowApprovalChip } from "@/components/docs/DocParts";
 import { QUOTE_APPROVAL_LABELS, quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 
-type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string; business?: string };
+type Search = { q?: string; status?: string; needsApproval?: string; noReply?: string; open?: string; business?: string; page?: string };
 
 function href(s: Search, patch: Partial<Search>) {
+  const merged: Search = { ...s, ...patch };
+  // Filter/search changes restart at page 1 — only a patch that names the
+  // page keeps one.
+  if (!("page" in patch)) delete merged.page;
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries({ ...s, ...patch })) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
   const qs = p.toString();
   return `/quotes${qs ? `?${qs}` : ""}`;
 }
@@ -32,7 +38,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   const businesses = await listBusinesses();
   const business =
     s.business === "own" || businesses.some((b) => b.id === s.business) ? s.business : undefined;
-  const quotes = await listQuotesView(
+  const quotePage = await listQuotesPageView(
     {
       q: s.q,
       status: openOnly ? undefined : status,
@@ -42,7 +48,9 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       businessId: business,
     },
     user,
+    parsePageParam(s.page),
   );
+  const quotes = quotePage.items;
   const withCosts = canSeeCosts(user);
   const filtered = !!(s.q || status || needsApproval || noReplyDays || openOnly || business);
 
@@ -144,10 +152,10 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
             label="Quotes"
             columns={[
               { key: "number", label: "QT no.", className: "qcol-number" },
-              { key: "rev", label: "Rev", numeric: true, className: "qcol-rev" },
+              { key: "rev", label: "Rev", numeric: true, className: "qcol-rev col-tab-hide" },
               { key: "customer", label: "Customer", className: "qcol-customer" },
               { key: "total", label: "Total", numeric: true, className: "qcol-total" },
-              ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true, className: "qcol-margin" }] : []),
+              ...(withCosts ? [{ key: "margin", label: "Margin %", numeric: true, className: "qcol-margin col-tab-hide" }] : []),
               { key: "status", label: "Status", className: "qcol-status" },
               { key: "valid", label: "Valid until", className: "qcol-valid" },
             ]}
@@ -199,6 +207,22 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           />
         </div>
       )}
+      <ListPager
+        page={quotePage.page}
+        totalPages={quotePage.totalPages}
+        total={quotePage.total}
+        noun="quotes"
+        hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
+        jumpAction="/quotes"
+        jumpParams={{
+          q: s.q,
+          status: s.status,
+          needsApproval: s.needsApproval,
+          noReply: s.noReply,
+          open: s.open,
+          business: s.business,
+        }}
+      />
     </>
   );
 }

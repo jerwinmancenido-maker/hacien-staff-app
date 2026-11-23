@@ -41,7 +41,7 @@ export function ConfirmDialog({
             <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel}>
               {cancelLabel}
             </button>
-            <button type="button" className={danger ? "btn btn-danger solid" : "btn"} onClick={onConfirm}>
+            <button type="button" className={danger ? "btn btn-danger" : "btn"} onClick={onConfirm}>
               {confirmLabel}
             </button>
           </div>

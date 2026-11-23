@@ -8,13 +8,19 @@ import { billingCoverageNote, billingPositionNote, receivingCoverageNote } from 
 describe("billingCoverageNote", () => {
   it("partial billing states what is left, neutrally", () => {
     expect(billingCoverageNote({ billedTotal: "400000.00", contractPrice: "598000.00" })).toBe(
-      "Part of this order — billed ₱400000.00 of ₱598000.00 · ₱198000.00 left to bill.",
+      "Part of this order — billed ₱400,000.00 of ₱598,000.00 · ₱198,000.00 left to bill.",
     );
   });
 
   it("fully billed says so", () => {
     expect(billingCoverageNote({ billedTotal: "598000.00", contractPrice: "598000.00" })).toBe(
-      "Fully billed — ₱598000.00 of ₱598000.00 on this order.",
+      "Fully billed — ₱598,000.00 of ₱598,000.00 on this order.",
+    );
+  });
+
+  it("fully billed groups thousands (finding 1110)", () => {
+    expect(billingCoverageNote({ billedTotal: "600000.00", contractPrice: "600000.00" })).toBe(
+      "Fully billed — ₱600,000.00 of ₱600,000.00 on this order.",
     );
   });
 

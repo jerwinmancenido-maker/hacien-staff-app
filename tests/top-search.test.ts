@@ -88,6 +88,14 @@ describe("top search wiring", () => {
     expect(src).toContain('e.key === "Escape"');
   });
 
+  it("F-F (1107): on /search the phone panel starts expanded — that page has no box of its own", () => {
+    const src = read("src/components/TopbarSearch.tsx");
+    expect(src).toContain("usePathname");
+    expect(src).toContain('pathname === "/search"');
+    expect(src).toContain("(max-width: 768px)");
+    expect(src).toContain("useSyncExternalStore");
+  });
+
   it("search page calls each list with q and the same permissions", () => {
     const src = read("src/app/(app)/search/page.tsx");
     expect(src).toContain('requirePagePermission("view")');
@@ -104,5 +112,19 @@ describe("top search wiring", () => {
     expect(src).toContain('title="No matches"');
     expect(src).toContain("Try a number, a name, or a serial.");
     expect(src).not.toMatch(/formatPeso|contractPrice|subtotal|\.amount|\.balance/);
+  });
+
+  it("L25 Fix B: empty /search offers Did-you-mean customer suggestions, fallback only", () => {
+    const src = read("src/app/(app)/search/page.tsx");
+    expect(src).toContain("suggestCustomersByName");
+    expect(src).toContain("groups.length === 0 ? await suggestCustomersByName(q) : []");
+    expect(src).toContain("Did you mean:");
+  });
+
+  it("L25 Fix B: customers list empty state offers the same suggestions", () => {
+    const src = read("src/app/(app)/customers/page.tsx");
+    expect(src).toContain("suggestCustomersByName");
+    expect(src).toContain("customers.length === 0 ? await suggestCustomersByName(s.q) : []");
+    expect(src).toContain("Did you mean:");
   });
 });

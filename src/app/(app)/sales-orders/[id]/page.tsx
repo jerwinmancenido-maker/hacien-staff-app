@@ -1,11 +1,13 @@
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
+import { formatSerialDisplay } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
 import { getSalesOrderView } from "@/lib/quotes/views";
 import { getSoCostMargin, getSoPurchasing } from "@/lib/purchasing/views";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listBillings, listSalesOrderCollections } from "@/lib/billing/views";
+import { getBookletView, listBillings, listSalesOrderCollections } from "@/lib/billing/views";
 import { creditLimitWarningText, customerExposure } from "@/lib/billing/customer-exposure";
 import { db } from "@/lib/db";
 import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
@@ -83,6 +85,7 @@ export default async function SalesOrderPage({
       ])
     : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
+  const canCollect = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.unpaidBilled, 2) > 0n;
   // Business entity: Admins get the reclassify form; everyone sees the label.
   const allBusinesses = user.isAdmin ? await listBusinesses() : [];
   const { settings } = await getSettingsSnapshot();
@@ -96,11 +99,15 @@ export default async function SalesOrderPage({
   // Documents is for everyone; Cost & margin stays cost-users only.
   const tab: Tab =
     rawTab === "cost-margin" ? (so.canSeeCosts ? "cost-margin" : "overview") : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+  // DR booklet state for the delivery form's next-free hint — the same view
+  // the booklet page prints, so the hint can never disagree with it.
+  const drBooklet = tab === "deliveries" ? await getBookletView("DR") : null;
   const base = `/sales-orders/${id}`;
   const costWarnings = costMargin?.warnings.length ?? 0;
 
   return (
     <>
+      <RecordBreadcrumbLabel label={so.number} />
       <PageHeader
         title={
           <>
@@ -115,7 +122,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} />
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} />
         }
       />
       {created && (
@@ -265,7 +272,7 @@ export default async function SalesOrderPage({
                       Delivery receipt
                     </td>
                     <td className="strong">
-                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{d.drNumber}</Link>
+                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{formatSerialDisplay(d.drNumber)}</Link>
                     </td>
                     <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
                     <td className="num">—</td>
@@ -303,6 +310,9 @@ export default async function SalesOrderPage({
       )}
       {tab === "deliveries" && (
           <DeliverySection
+            nextDrNo={drBooklet?.nextFree ?? null}
+            drSeriesFrom={drBooklet?.range.seriesFrom ?? null}
+            drSeriesTo={drBooklet?.range.seriesTo ?? null}
             status={so.status}
             items={so.items.map((i) => ({
               id: i.id,

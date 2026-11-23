@@ -1,4 +1,5 @@
 import { Chip, type ChipTone } from "@/components/ui";
+import { BILLING_DISCLAIMER } from "@/lib/print/tax-wording";
 import type { BillingStatus, CollectionStatus } from "@prisma/client";
 import { BILLING_STATUS_LABELS, COLLECTION_STATUS_LABELS } from "@/lib/billing/views";
 import { COLLECTION_METHOD_LABELS, type CollectionMethodInput } from "@/lib/validation/billing";
@@ -28,4 +29,7 @@ export function OverdueBadge({ label }: { label: string | null | undefined }) {
   return <Chip tone="red">{label}</Chip>;
 }
 
-export const PRINTABLE_DISCLAIMER = "Billing summary / Statement of account — not an official invoice";
+/** On-screen billing disclaimer — the ONE canonical billing text
+ * (BILLING_DISCLAIMER, BIR-WORDING.md rule 2), shared with the print
+ * surfaces. Kept under this name for the billing / collection pages. */
+export const PRINTABLE_DISCLAIMER = BILLING_DISCLAIMER;

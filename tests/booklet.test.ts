@@ -6,6 +6,7 @@ import {
   bookletLowStockWarning,
   bookletRangeError,
   formatBookletNumber,
+  formatSerialDisplay,
   inBookletRange,
   parseBookletSerial,
   type BookletRange,
@@ -55,6 +56,27 @@ describe("BIR pre-printed booklet (ATP) tracking", () => {
       expect(formatBookletNumber(50)).toBe("050");
       expect(formatBookletNumber(500)).toBe("500");
       expect(formatBookletNumber(501)).toBe("501");
+    });
+  });
+
+  describe("entered-serial display (F3, finding 1287)", () => {
+    it("pads only the trailing number, prefix untouched", () => {
+      expect(formatSerialDisplay("5")).toBe("005");
+      expect(formatSerialDisplay("DR-5")).toBe("DR-005");
+      expect(formatSerialDisplay("DR 12")).toBe("DR 012");
+      expect(formatSerialDisplay("CR-500")).toBe("CR-500");
+    });
+
+    it("renders already-padded and non-serial entered refs unchanged", () => {
+      expect(formatSerialDisplay("VR1-COLL-001")).toBe("VR1-COLL-001");
+      expect(formatSerialDisplay("OR-2026-0005")).toBe("OR-2026-0005");
+      expect(formatSerialDisplay("CASH")).toBe("CASH");
+      expect(formatSerialDisplay("")).toBe("");
+    });
+
+    it("passes nullish values through as null", () => {
+      expect(formatSerialDisplay(null)).toBeNull();
+      expect(formatSerialDisplay(undefined)).toBeNull();
     });
   });
 

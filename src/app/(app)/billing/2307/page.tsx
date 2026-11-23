@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -49,12 +50,12 @@ export default async function Withholding2307Page({
               <tr>
                 <th>Customer</th>
                 <th>Billing</th>
-                <th>Collection</th>
-                <th>ATC</th>
-                <th className="num">Rate</th>
+                <th className="col-phone-hide">Collection</th>
+                <th className="col-phone-hide">ATC</th>
+                <th className="num col-phone-hide">Rate</th>
                 <th className="num">Amount</th>
                 <th>Status</th>
-                <th>Received</th>
+                <th className="col-phone-hide">Received</th>
                 <th />
               </tr>
             </thead>
@@ -74,22 +75,22 @@ export default async function Withholding2307Page({
                     <td data-col="number">
                       {r.billing ? (
                         <Link href={`/billing/billings/${r.billing.id}`}>
-                          #{r.billing.invoiceNo} · {r.billing.number}
+                          #{formatBookletNumber(r.billing.invoiceNo)} · {r.billing.number}
                         </Link>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td data-col="number">
+                    <td data-col="number" className="col-phone-hide">
                       {r.collection ? <Link href={`/billing/collections/${r.collection.id}`}>{r.collection.number}</Link> : "—"}
                     </td>
-                    <td className="col-atc">{r.atcCode ?? "—"}</td>
-                    <td className="num">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
+                    <td data-col="atc" className="col-phone-hide">{r.atcCode ?? "—"}</td>
+                    <td className="num col-phone-hide">{ratePctLabel(Number(r.rate).toFixed(4))}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td data-col="status">
                       <Chip tone={r.status === "RECEIVED" ? "green" : "blue"}>{r.status === "RECEIVED" ? "Received" : "Pending"}</Chip>
                     </td>
-                    <td data-col="date">{day(r.receivedAt)}</td>
+                    <td data-col="date" className="col-phone-hide">{day(r.receivedAt)}</td>
                     <td data-col="action">
                       {r.status === "PENDING" && canManage && r.markId && <Mark2307Form id={r.markId} />}
                       {r.markId &&

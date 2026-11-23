@@ -11,7 +11,8 @@ import { getOperationalProfit } from "@/lib/services/reconciliation";
 // Operational profit (PR-C): every recorded order, billed or not, grouped
 // by business. A management view over the same single set of records — it
 // is NOT the Books figure and never feeds tax. The official billed
-// revenue (Monthly profit) is shown at the bottom for comparison.
+// revenue and net profit (Monthly profit) are shown at the bottom for
+// comparison, so the two profit figures can be reconciled.
 export default async function OperationsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const user = await requirePagePermission("view_books");
   const sp = await searchParams;
@@ -46,7 +47,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
                 <th>Business</th>
                 <th className="num">Orders</th>
                 <th className="num">Recorded sales</th>
-                <th className="num">Supplier costs</th>
+                <th className="num col-phone-hide col-tab-hide">Supplier costs</th>
                 <th className="num">Expenses</th>
                 <th className="num">Profit</th>
               </tr>
@@ -57,7 +58,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
                   <td>{r.label}</td>
                   <td className="num">{r.orderCount}</td>
                   <td className="num">{formatPeso(r.sales)}</td>
-                  <td className="num">{formatPeso(r.supplierCosts)}</td>
+                  <td className="num col-phone-hide col-tab-hide">{formatPeso(r.supplierCosts)}</td>
                   <td className="num">{formatPeso(r.expenses)}</td>
                   <td className="num">{formatPeso(r.profit)}</td>
                 </tr>
@@ -67,8 +68,8 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
         </div>
         <p className="faint small" style={{ marginBottom: 0 }}>
           For comparison: official billed revenue for {month} (Books, own company only) is{" "}
-          {formatPeso(report.officialBilledRevenue)}. That is the figure the Books and tax worksheets use — this page
-          never feeds it.
+          {formatPeso(report.officialBilledRevenue)}, and the official net profit is {formatPeso(report.officialNet)}.
+          Those are the figures the Books and tax worksheets use — this page never feeds them.
         </p>
       </div>
     </>

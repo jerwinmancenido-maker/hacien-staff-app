@@ -11,10 +11,11 @@ import { describe, expect, it } from "vitest";
 const editor = readFileSync(path.join(process.cwd(), "src/components/docs/QuoteEditor.tsx"), "utf8");
 const css = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
 const search = readFileSync(path.join(process.cwd(), "src/lib/items/search.ts"), "utf8");
+const pickerKeys = readFileSync(path.join(process.cwd(), "src/lib/picker-keys.ts"), "utf8");
 
 describe("compact quote line: search box and dropdown", () => {
   it("the description box carries the search placeholder", () => {
-    expect(editor).toContain('placeholder="Search by product name or SKU…"');
+    expect(editor).toContain('placeholder={placeholder ?? "Search by product name or SKU…"}');
     expect(editor).toContain("<span>Product — search by name or SKU</span>");
   });
 
@@ -64,9 +65,13 @@ describe("compact quote line: collapsed details behind More", () => {
 describe("compact quote line: keyboard flow", () => {
   it("the description handles arrows, Enter and Escape for the picker", () => {
     expect(editor).toContain("function onDescKeyDown");
-    expect(editor).toContain('ev.key === "ArrowDown"');
-    expect(editor).toContain('ev.key === "ArrowUp"');
-    expect(editor).toContain('ev.key === "Escape"');
+    // Since finding 1119 the key math is the shared pickerKeyIntent --
+    // the editor routes through it; the keys themselves live there.
+    expect(editor).toContain("pickerKeyIntent(ev.key, pickerResults.length, pickerActive)");
+    expect(pickerKeys).toContain('key === "ArrowDown"');
+    expect(pickerKeys).toContain('key === "ArrowUp"');
+    expect(pickerKeys).toContain('key === "Escape"');
+    expect(pickerKeys).toContain('key === "Enter"');
     expect(editor.match(/onKeyDown=\{\(ev\) => onDescKeyDown\(i, ev\)\}/g)?.length).toBe(2);
   });
 

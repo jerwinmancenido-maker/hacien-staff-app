@@ -3,7 +3,7 @@
 
 import type { QuoteStatus, SalesOrderStatus } from "@prisma/client";
 import { remainingToBill } from "../billing/status";
-import { formatPesoWhole } from "../format";
+import { formatPeso } from "../format";
 import { can, type PermissionUser } from "../permissions";
 import { toScaled } from "../quotes/calc";
 import { openQuotesHref, openSalesOrdersHref } from "./hrefs";
@@ -44,10 +44,10 @@ export function soUnbilledAmount(
   return toScaled(remaining, 2) > 0n ? remaining : "0.00";
 }
 
-/** Row caption: "3 open · ₱450,000" (whole pesos). */
+/** Row caption: "3 open · ₱450,000.00" (centavos shown, wording item 18). */
 export function pipelineOpenCaption(count: number, amount: string | number): string {
   const n = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
-  return `${n} open · ${formatPesoWhole(amount)}`;
+  return `${n} open · ${formatPeso(amount)}`;
 }
 
 /** Quotes + SOs lists both require `view` (same as their list pages). */

@@ -51,8 +51,8 @@ export default async function ReconciliationPage({
     },
     {
       key: "grni",
-      title: "Received, not invoiced (GRNI)",
-      explain: "Goods were received on these purchase orders, but the supplier bills recorded are below the received value. The amount is the uninvoiced remainder.",
+      title: "Received, not invoiced",
+      explain: "Goods were received on these purchase orders, but the supplier bills (payables) recorded are below the received value. The amount is the uninvoiced remainder.",
       list: recon.receivedNotInvoiced,
     },
     {
@@ -65,7 +65,7 @@ export default async function ReconciliationPage({
 
   return (
     <>
-      <PageHeader title="Reconciliation" subtitle={`Admin only · Read-only — no document flow changes here · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title="Reconciliation" subtitle={`Admin only — no document flow changes here · ${BOOKS_DISCLAIMER}`} />
       <BooksNav active="reconciliation" />
       <BooksBanner />
       {businesses.length > 0 && (
@@ -101,13 +101,13 @@ export default async function ReconciliationPage({
                     <tr>
                       <th>Document</th>
                       <th>Party</th>
-                      {businesses.length > 0 && <th>Business</th>}
-                      <th>Gap opened</th>
+                      {businesses.length > 0 && <th className="col-phone-hide">Business</th>}
+                      <th className="col-phone-hide">Gap opened</th>
                       <th>Days open</th>
                       <th>Aging</th>
                       <th className="num">Amount</th>
-                      <th>Detail</th>
-                      <th>Reason</th>
+                      <th className="col-phone-hide">Detail</th>
+                      <th className="col-phone-hide">Reason</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -117,13 +117,13 @@ export default async function ReconciliationPage({
                           <Link href={r.href}>{r.number}</Link>
                         </td>
                         <td>{r.party}</td>
-                        {businesses.length > 0 && <td>{r.businessLabel ?? "—"}</td>}
-                        <td data-col="date">{formatDate(new Date(`${r.openedYmd}T00:00:00.000Z`))}</td>
+                        {businesses.length > 0 && <td className="col-phone-hide">{r.businessLabel ?? "—"}</td>}
+                        <td data-col="date" className="col-phone-hide">{formatDate(new Date(`${r.openedYmd}T00:00:00.000Z`))}</td>
                         <td className="num">{r.daysOpen}</td>
                         <td>{r.bucket}</td>
                         <td className="num">{formatPeso(r.amount)}</td>
-                        <td>{r.detail}</td>
-                        <td>
+                        <td className="col-phone-hide">{r.detail}</td>
+                        <td className="col-phone-hide">
                           {r.gapReason ?? "—"}
                           {r.gapNote ? <div className="faint small">{r.gapNote}</div> : null}
                         </td>

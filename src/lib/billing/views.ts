@@ -7,12 +7,14 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, formatBookletNumber, formatSerialDisplay, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
 import { billingCoverageNote, billingPositionNote } from "./coverage";
+import { billingPageWindow } from "./paging";
 import { getNonVatMeter } from "../services/non-vat";
+import { BILLING_DISCLAIMER } from "../print/tax-wording";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
@@ -53,7 +55,7 @@ type BillingListFilters = {
   toYmd?: string;
 };
 
-/** Shared where-clause for list + uncapped sum (list pages still page with take:200). */
+/** Shared where-clause for list + uncapped sum (listBillingsPage pages with it; listBillings keeps take:200). */
 function billingsWhere(filters: BillingListFilters) {
   const where: {
     customerId?: string;
@@ -97,13 +99,13 @@ export async function sumBillingsAmount(filters: BillingListFilters = {}): Promi
   return money(agg._sum.amount ?? 0);
 }
 
-export async function listBillings(filters: BillingListFilters = {}) {
+async function billingsList(filters: BillingListFilters, window: { skip: number; take: number }) {
   const snap = await getSettingsSnapshot();
   const grace = snap.settings.collections.overdueGraceDays;
   const today = billingToday();
   const overdueOnly = filters.status === "OVERDUE";
   const where = billingsWhere(filters);
-  // OVERDUE: exclude voids up front; filter overdue before take:200 so recent
+  // OVERDUE: exclude voids up front; filter overdue before paging so recent
   // current invoices cannot crowd overdue rows off the page.
   if (overdueOnly) where.status = { not: "VOID" };
 
@@ -118,8 +120,8 @@ export async function listBillings(filters: BillingListFilters = {}) {
       creditApplications: { where: { customerCredit: { customerReturn: { status: "POSTED" } } } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    // Page after overdue filter (below). Other statuses keep the DB take.
-    ...(overdueOnly ? {} : { take: 200 }),
+    // Page after overdue filter (below). Other statuses page in the DB query.
+    ...(overdueOnly ? {} : { skip: window.skip, take: window.take }),
   });
   const mapped = rows.map((b) => {
     const isGov = b.customer.withholdingType === "GOVERNMENT";
@@ -145,8 +147,49 @@ export async function listBillings(filters: BillingListFilters = {}) {
       aging: agingBucket(b.dueDate, today, isGov) as AgingBucket,
     };
   });
-  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(0, 200);
+  if (overdueOnly) return mapped.filter((r) => r.overdue.overdue).slice(window.skip, window.skip + window.take);
   return mapped;
+}
+
+/** First 200 matching rows — the long-standing shape for detail/search/home callers. */
+export async function listBillings(filters: BillingListFilters = {}) {
+  return billingsList(filters, { skip: 0, take: 200 });
+}
+
+export type BillingListPage = {
+  rows: Awaited<ReturnType<typeof listBillings>>;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+/**
+ * One page of the billings list plus the full filtered count (finding 1023:
+ * the plain list capped at take:200, so billings past 200 were unreachable).
+ * The money totals elsewhere (arAgingSummary, taxYearBillingMeter,
+ * sumBillingsAmount) are separate uncapped aggregations, untouched by paging.
+ */
+export async function listBillingsPage(
+  filters: BillingListFilters & { page?: number; pageSize?: number } = {},
+): Promise<BillingListPage> {
+  const { page, pageSize, ...listFilters } = filters;
+  if (listFilters.status === "OVERDUE") {
+    // Overdue is decided in memory, so count and page the mapped list itself.
+    const all = await billingsList(listFilters, { skip: 0, take: Number.MAX_SAFE_INTEGER });
+    const win = billingPageWindow(all.length, page, pageSize);
+    return {
+      rows: all.slice(win.skip, win.skip + win.take),
+      total: all.length,
+      page: win.page,
+      pageSize: win.pageSize,
+      totalPages: win.totalPages,
+    };
+  }
+  const total = await db.billing.count({ where: billingsWhere(listFilters) });
+  const win = billingPageWindow(total, page, pageSize);
+  const rows = await billingsList(listFilters, { skip: win.skip, take: win.pageSize });
+  return { rows, total, page: win.page, pageSize: win.pageSize, totalPages: win.totalPages };
 }
 
 export async function getBillingView(id: string) {
@@ -463,7 +506,7 @@ export async function listNeedsAdminCheck() {
     billings: billings.map((b) => ({
       id: b.id,
       number: b.number,
-      label: `Booklet #${b.invoiceNo}`,
+      label: `Booklet #${formatBookletNumber(b.invoiceNo)}`,
       customer: b.customer.name,
       amount: money(b.amount),
       href: `/billing/billings/${b.id}`,
@@ -727,7 +770,7 @@ export async function getBookletView(docType: BookletType = "SI") {
       return [{
         invoiceNo: n,
         id: d.id,
-        number: `DR #${d.drNumber}`,
+        number: `DR #${formatSerialDisplay(d.drNumber)}`,
         status: d.voidedAt ? "VOID" : "RECORDED",
       }];
     });
@@ -742,7 +785,7 @@ export async function getBookletView(docType: BookletType = "SI") {
       return [{
         invoiceNo: n,
         id: c.id,
-        number: c.receiptNo!,
+        number: formatSerialDisplay(c.receiptNo)!,
         status: c.status,
       }];
     });
@@ -819,10 +862,12 @@ export async function customerArSnapshot(customerId: string) {
   // Audit E: deposits held — unapplied cash on isDeposit collections.
   const deposits = await customerDepositBalance(customerId);
   const anyOverdue = rows.some((r) => r.overdue);
-  return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total };
+  // D33: "ever billed" is separate from "still owed" — a customer whose
+  // billings are all paid has an aging total of 0 but was billed.
+  return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total, hasBillings: billings.length > 0 };
 }
 
-/** Statement of account data (printable). Title must say it's not an official invoice. */
+/** Statement of account data (printable). The document title stays in the header; the disclaimer field carries the one shared BIR reference-only text (BILLING_DISCLAIMER). */
 export async function getStatement(customerId: string, from?: Date | null, to?: Date | null) {
   const snap = await getSettingsSnapshot();
   const customer = await db.customer.findUnique({
@@ -1003,7 +1048,7 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
   const billingAddress = customer.addresses[0] ? formatAddress(customer.addresses[0]) : customer.address;
 
   return {
-    disclaimer: "Statement of account — not an official invoice. System-generated, no signature required.",
+    disclaimer: BILLING_DISCLAIMER,
     company: snap.settings.company,
     customer: { id: customer.id, name: customer.name, tin: customer.tin, address: billingAddress },
     from: from ? ymd(from) : null,

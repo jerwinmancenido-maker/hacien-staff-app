@@ -1,6 +1,9 @@
 // HIGH CARE: all tax / legal print wording for HACIEN documents lives here.
 // HACIEN is NON-VAT on the 8% option. Do not add VAT lines anywhere.
 // The official BIR invoice is the pre-printed booklet — system prints are not.
+// Governing policy: BIR-WORDING.md (repo root). The disclaimer constants
+// below are that file's approved texts — wording changes need Jerwin's
+// approval and updated legal verification (see BIR-WORDING.md rule 3).
 
 /** Registration status shown on every printable document letterhead. */
 export const NON_VAT_LABEL = "NON-VAT" as const;
@@ -11,13 +14,24 @@ export const NON_VAT_LABEL = "NON-VAT" as const;
  */
 export const INPUT_TAX_DISCLAIMER = "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX." as const;
 
-/** Required on billing and collection prints. */
-export const NOT_OFFICIAL_INVOICE =
-  "This is not an official invoice/receipt" as const;
+/**
+ * The ONE billing disclaimer for every billing / statement surface:
+ * billing + collection prints, statement prints, the statement data's
+ * disclaimer field, statement reminder emails, and the on-screen billing
+ * pages (BIR-WORDING.md rule 2). Document titles stay in the document
+ * headers — this text never carries a title. Approved by Jerwin
+ * 2026-11-23 on the OpenBot lawyer ruling (Primary text: HACIEN holds
+ * ATP Collection Receipts and ATP Delivery Receipts).
+ */
+export const BILLING_DISCLAIMER =
+  "For reference only — NOT a BIR-registered Sales Invoice or Collection/Official Receipt, and NOT valid for claiming input tax. Official BIR-registered Non-VAT Sales Invoices (and Collection Receipts, where applicable) are issued separately." as const;
 
-/** Customer / supplier statements of account. */
-export const STATEMENT_NOT_OFFICIAL =
-  "Statement of account — not an official invoice/receipt" as const;
+/**
+ * Packing list attachment sheet only (BIR-WORDING.md rule 2). Never used
+ * on billing surfaces — those use BILLING_DISCLAIMER.
+ */
+export const PACKING_LIST_DISCLAIMER =
+  "PACKING LIST / ATTACHMENT ONLY — NOT A BIR-REGISTERED SALES INVOICE, DELIVERY RECEIPT, OR COLLECTION/OFFICIAL RECEIPT. Not valid for claiming input tax; must accompany the official HACIEN Non-VAT Sales Invoice or BIR-registered Delivery Receipt." as const;
 
 /** Supplier payment voucher: EWT / BIR Form 2307 note (when EWT was applied). */
 export const EWT_2307_NOTE =
@@ -89,10 +103,10 @@ export function taxFooterLines(
     lines.push(SALES_ORDER_NOT_INVOICE);
   }
   if (BILLING_COLLECTION.has(kind)) {
-    lines.push(NOT_OFFICIAL_INVOICE);
+    lines.push(BILLING_DISCLAIMER);
   }
   if (STATEMENT_KINDS.has(kind)) {
-    lines.push(STATEMENT_NOT_OFFICIAL);
+    lines.push(BILLING_DISCLAIMER);
   }
   if (INPUT_TAX_KINDS.has(kind)) {
     lines.push(INPUT_TAX_DISCLAIMER);

@@ -7,7 +7,8 @@ import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { useFormAction } from "@/components/useFormAction";
 import { FileInput } from "@/components/FileInput";
-import { soDeliveryProgress } from "@/lib/sales-orders/delivery";
+import { soDeliveryProgress, soPodIncomplete } from "@/lib/sales-orders/delivery";
+import { formatBookletNumber, formatSerialDisplay } from "@/lib/billing/booklet";
 import type { FormState } from "@/lib/validation/forms";
 
 const day = (d: Date | string | null | undefined) => {
@@ -47,6 +48,9 @@ type DeliveryRecord = {
 };
 
 export function DeliverySection({
+  nextDrNo,
+  drSeriesFrom,
+  drSeriesTo,
   status,
   items,
   deliveries,
@@ -55,6 +59,9 @@ export function DeliverySection({
   action,
   voidAction,
 }: {
+  nextDrNo?: number | null;
+  drSeriesFrom?: number | null;
+  drSeriesTo?: number | null;
   status: string;
   items: DeliveryItemRow[];
   deliveries: DeliveryRecord[];
@@ -67,6 +74,7 @@ export function DeliverySection({
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const [serials, setSerials] = useState<Record<string, string>>({});
   const progress = soDeliveryProgress(items);
+  const podIncomplete = soPodIncomplete(progress, deliveries);
   const todayYmd = isoDate(manilaToday());
 
   const { state, pending, onSubmit } = useFormAction(async (prev, form) => {
@@ -100,6 +108,7 @@ export function DeliverySection({
         <h2>Deliveries</h2>
         <div className="right" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <span className="small muted strong">{progress.label}</span>
+          {podIncomplete && <span className="chip amber">POD incomplete</span>}
           {canEdit && status === "OPEN" && !showForm && (
             <button
               type="button"
@@ -184,9 +193,17 @@ export function DeliverySection({
                 type="text"
                 className="input"
                 placeholder="e.g. 10452"
+                defaultValue={nextDrNo != null ? String(nextDrNo) : ""}
                 required
               />
-              {e.drNumber && <div className="error">{e.drNumber}</div>}
+              {e.drNumber ? (
+                <div className="error">{e.drNumber}</div>
+              ) : drSeriesFrom != null && drSeriesTo != null ? (
+                <div className="hint">
+                  Booklet {formatBookletNumber(drSeriesFrom)}–{formatBookletNumber(drSeriesTo)}
+                  {nextDrNo != null ? ` · next free: ${formatBookletNumber(nextDrNo)}` : ""}. Voided and spoiled numbers are never reused.
+                </div>
+              ) : null}
             </div>
 
             <div className={`field${e.deliveryDate ? " has-error" : ""}`}>
@@ -370,7 +387,7 @@ export function DeliverySection({
                 {deliveries.map((d) => (
                   <tr key={d.id} className={d.voidedAt ? "inactive" : undefined}>
                     <td className="strong">
-                      {d.drNumber}
+                      {formatSerialDisplay(d.drNumber)}
                       {d.notes && <div className="faint" style={{ whiteSpace: "pre-wrap" }}>{d.notes}</div>}
                     </td>
                     <td>{day(d.deliveryDate)}</td>
@@ -422,7 +439,7 @@ export function DeliverySection({
                         canVoid && (
                           <VoidButton
                             label="Void"
-                            docLabel={`delivery receipt DR #${d.drNumber}`}
+                            docLabel={`delivery receipt DR #${formatSerialDisplay(d.drNumber)}`}
                             body="Voiding this delivery reverses its delivered quantities."
                             onVoid={voidAction.bind(null, d.id)}
                           />

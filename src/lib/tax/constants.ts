@@ -17,7 +17,7 @@ export const TAX_WORKSHEET_BANNER =
 
 /** Short disclaimer under page titles. */
 export const TAX_WORKSHEET_DISCLAIMER =
-  "Preparation aid for the owner and accountant. HACIEN is non-VAT — no VAT is shown or computed. Nothing is filed by this app.";
+  "Preparation aid for the owner and accountant. HACIEN is non-VAT — no VAT is shown or computed.";
 
 /**
  * UNVERIFIED: ₱250,000 annual allowance under the 8% income tax option for a
@@ -26,7 +26,7 @@ export const TAX_WORKSHEET_DISCLAIMER =
 export const ALLOWANCE_8PCT_PESOS = "250000.00";
 
 /** Staff-facing label for the allowance line (must stay next to the amount). */
-export const ALLOWANCE_8PCT_LABEL = "for 8% option, sole proprietor — confirm";
+export const ALLOWANCE_8PCT_LABEL = "for 8% option, sole proprietor";
 
 /**
  * UNVERIFIED: 8% income tax rate on taxable receipts (after allowance) under
@@ -69,7 +69,7 @@ export const INCOME_TAX_WORKSHEET_TITLE = "Quarterly income tax worksheet (1701Q
 
 /** One-line hints shown next to each 1701Q worksheet line. */
 export const INCOME_TAX_LINE_HINTS = {
-  a: "Two figures from January to the end of the quarter — not combined, and neither is chosen as the tax basis yet",
+  a: "Two figures from January to the end of the quarter — shown side by side, not combined.",
   invoiced: "Non-void billings by invoice date (sales invoiced)",
   collected: "Non-void collections by collection date (cash and receipts collected)",
   b: "Annual allowance under the 8% option (confirm with your accountant)",

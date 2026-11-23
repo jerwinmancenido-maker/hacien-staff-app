@@ -60,6 +60,10 @@
   --warning-bg: #fffbeb;
   --danger: #b91c1c;
   --danger-bg: #fef2f2;
+  /* Design guide v1.5: the destructive BUTTON outline is this soft
+     red. Scoped to .btn-danger only — the label text keeps --red
+     (readable on white), and error text / alerts keep --danger. */
+  --danger-outline: #f08a8a;
 
   /* Aliases used across the stylesheet (Home / brand-06). */
   --bg: var(--grey-50);
@@ -174,6 +178,39 @@ textarea {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Skip link (run-87 F9-C): first focusable in the app shell, hidden until
+   focused, so keyboard users reach main content in 2 stops instead of 22. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.skip-link:focus {
+  position: fixed;
+  top: calc(8px * var(--ui-scale, 1));
+  left: calc(8px * var(--ui-scale, 1));
+  z-index: 70;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  padding: calc(8px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
+  background: var(--card);
+  color: var(--blue);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+/* The skip target takes focus programmatically; a frame-sized outline
+   around all of main would read as a glitch, not a focus cue. */
+#main-content:focus {
+  outline: none;
 }
 
 /* ---------- App frame ---------- */
@@ -547,10 +584,11 @@ a.tracker-card:hover {
   margin-bottom: calc(4px * var(--ui-scale, 1));
 }
 .page-header h1 {
-  font-family: var(--font-display-stack);
+  /* Round 1 D2: Archivo Black is wordmark-only — page headings use the
+     standard heading font (Inter) at semibold, like .card h2. */
+  font-family: var(--font);
   font-size: calc(30px * var(--ui-scale, 1));
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 600;
   margin: 0;
   display: flex;
   align-items: center;
@@ -579,7 +617,10 @@ a.tracker-card:hover {
   gap: calc(6px * var(--ui-scale, 1));
   height: calc(36px * var(--ui-scale, 1));
   padding: 0 calc(16px * var(--ui-scale, 1));
-  border-radius: var(--radius);
+  /* Round 1 D3 / guidelines §22 ruling (Option C): full pill — radius is
+     half the height — at the current 36px/30px heights. 999px keeps the
+     pill at any --ui-scale, the same value tabs and chips already use. */
+  border-radius: 999px;
   border: 1px solid transparent;
   background: var(--blue);
   color: #fff;
@@ -617,7 +658,7 @@ a.tracker-card:hover {
   background: var(--card);
   color: var(--ink);
   border-color: var(--border);
-  border-radius: var(--radius);
+  border-radius: 999px;
   font-weight: 500;
 }
 .btn-secondary:hover {
@@ -631,6 +672,7 @@ a.tracker-card:hover {
 /* Styled file picker (see src/components/FileInput.tsx). The real input is
    visually hidden but stays in the DOM so form submission is unchanged. */
 .file-input {
+  position: relative; /* contains the absolutely-positioned hidden input — without it the 1px input escapes .table-wrap and widens the whole page (finding 1026) */
   display: flex;
   align-items: center;
   gap: calc(10px * var(--ui-scale, 1));
@@ -692,23 +734,18 @@ a.tracker-card:hover {
   }
 }
 .btn-danger {
+  /* §22 ruling: destructive is red OUTLINE, never solid red — there is no
+     solid variant; confirmation dialogs use this outline style too.
+     Design guide v1.5 retoken: the outline is the soft red
+     (--danger-outline); the label keeps the darker --red for contrast. */
   background: var(--card);
   color: var(--red);
-  border-color: var(--red);
-  border-radius: var(--radius);
+  border-color: var(--danger-outline);
+  border-radius: 999px;
   font-weight: 500;
 }
 .btn-danger:hover {
   background: var(--red-bg);
-}
-.btn-danger.solid {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
-  border-radius: var(--radius);
-}
-.btn-danger.solid:hover {
-  background: #991b1b;
 }
 .btn-sm {
   height: calc(30px * var(--ui-scale, 1));
@@ -755,7 +792,7 @@ a.tracker-card:hover {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(200px * var(--ui-scale, 1)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(220px * var(--ui-scale, 1)), 1fr));
   gap: calc(14px * var(--ui-scale, 1));
   margin-bottom: calc(14px * var(--ui-scale, 1));
   align-items: stretch;
@@ -767,6 +804,15 @@ a.tracker-card:hover {
   height: 100%;
   align-self: stretch;
   box-sizing: border-box;
+}
+.stat {
+  min-width: 0;
+}
+/* A plain stat card's danger signal: the aging/dispatch pages apply stat-red
+   to a .card.stat, but the only pre-existing rule targeted
+   .stat-link.stat-red .foot, so the red never rendered. Wire the value. */
+.card.stat.stat-red .value {
+  color: var(--red);
 }
 .stat .label {
   color: var(--text-2);
@@ -853,7 +899,7 @@ a.tracker-card:hover {
   align-items: center;
   height: calc(32px * var(--ui-scale, 1));
   padding: 0 calc(14px * var(--ui-scale, 1));
-  border-radius: var(--radius);
+  border-radius: calc(999px * var(--ui-scale, 1));
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text-2);
@@ -890,6 +936,22 @@ a.tracker-card:hover {
 }
 .toolbar .btn {
   height: calc(44px * var(--ui-scale, 1));
+}
+/* Shared list pager jump form (ListPager): inline in the pager toolbar,
+   wraps with it on phone widths. */
+.pager-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8px * var(--ui-scale, 1));
+  margin: 0;
+}
+.pager-jump label {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale, 1));
+}
+.pager-jump .input {
+  width: 4.5em;
 }
 .toolbar .filter-chip {
   height: calc(44px * var(--ui-scale, 1));
@@ -931,7 +993,68 @@ a.tracker-card:hover {
   -webkit-overflow-scrolling: touch;
 }
 .table-wrap table.list {
-  min-width: calc(640px * var(--ui-scale, 1)); /* wider than 360px phone so .table-wrap scrolls sideways */
+  min-width: min(calc(640px * var(--ui-scale, 1)), 100%); /* wider than 360px phone so .table-wrap scrolls sideways — but never wider than the wrap itself: the bare floor alone half-cut the last column on narrow phones (finding 1026) */
+}
+/* D12 phone tables (≤640px): a sideways-scrolling table must LOOK scrollable
+   instead of clipped — scroll shadows on the wrap, a sticky first column so a
+   half-scrolled table keeps its row identity, and column-priority classes:
+   .col-phone-hide drops a demoted column, .col-phone-cap caps a long-text
+   column so the money/status columns after it land on screen. */
+@media (max-width: 640px) {
+  .table-wrap {
+    /* Scroll shadows: the two cover layers scroll away with the content
+       (background-attachment: local) while the shadow layers stay put, so a
+       soft shadow shows exactly while more columns wait off that edge. */
+    background-image:
+      linear-gradient(to right, var(--card) 30%, transparent),
+      linear-gradient(to left, var(--card) 30%, transparent),
+      radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.22), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.22), transparent);
+    background-position:
+      0 0,
+      100% 0,
+      0 0,
+      100% 0;
+    background-repeat: no-repeat;
+    background-size:
+      40px 100%,
+      40px 100%,
+      14px 100%,
+      14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .table-wrap table.list th:first-child,
+  .table-wrap table.list td:first-child {
+    position: sticky;
+    left: 0;
+  }
+  .table-wrap table.list td:first-child {
+    background: var(--card);
+    z-index: 1;
+  }
+  .table-wrap table.list th:first-child {
+    z-index: 3; /* above its own top-sticky (2) and the sticky body cells (1) */
+  }
+  table.list .col-phone-hide {
+    display: none;
+  }
+  table.list .col-phone-cap {
+    max-width: 10rem;
+    overflow-wrap: break-word;
+  }
+}
+/* Small-tablet demotions (≤860px, Complete Review 2026-11-22): the same
+   column-priority idea as the D12 phone classes at a wider breakpoint —
+   SO Aging's six columns push "Left to bill" +49px past the edge at
+   768px, and the billing list's customer names crowd its money columns. */
+@media (max-width: 860px) {
+  table.list .col-tab-hide {
+    display: none;
+  }
+  table.list .col-tab-cap {
+    max-width: 10rem;
+    overflow-wrap: break-word;
+  }
 }
 .so-bill-phone {
   display: none;
@@ -972,6 +1095,26 @@ a.tracker-card:hover {
   padding: 0;
   max-height: none;
 }
+/* Aging band cards: the table sits directly on the card surface — no second
+   bordered box inside the card (same treatment as .payments-table-card). */
+.band-card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
+/* Every card: a table-wrap placed directly inside a card sits on the card
+   surface — no second bordered box inside the card (run-87 fix F9-B,
+   findings 1294/1297/1299; the .payments-table-card / .band-card strip
+   above, generalised to .card). Standalone list wraps (quotes /
+   sales-orders / purchase-orders / receiving) have no .card parent and
+   keep their own border — the wrap is their only surface. */
+.card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
 .payments-empty {
   max-width: 100%;
 }
@@ -981,7 +1124,7 @@ a.tracker-card:hover {
   -webkit-overflow-scrolling: touch;
 }
 .table-wrap.cost-margin-purchases table.list {
-  min-width: calc(640px * var(--ui-scale, 1));
+  min-width: min(calc(640px * var(--ui-scale, 1)), 100%);
 }
 .table-wrap.cost-margin-purchases table.list th,
 .table-wrap.cost-margin-purchases table.list td {
@@ -1030,29 +1173,55 @@ table.list td {
   border-top: 1px solid var(--divider);
   vertical-align: middle;
 }
-/* Document numbers (QT/SO/PO/BL/CR...) never wrap mid-number on desktop;
-   the phone card layouts keep their overflow-wrap rules below. Dates and
-   short status cells get the same protection (final-check F6): the listed
-   data-col keys are the DataTable lists' date/status columns (quotes
-   "valid"/"status", audit log "when"/"who"/"record", any list's "date"),
-   and the hand-rolled billings table tags its number/date cells to match. */
-@media (min-width: 769px) {
-  table.list td[data-col="number"],
-  table.list td[data-col="date"],
-  table.list td[data-col="valid"],
-  table.list td[data-col="status"],
-  table.list td[data-col="when"],
-  table.list td[data-col="who"],
-  table.list td[data-col="method"],
-  table.list td[data-col="action"] {
+/* Long names in list tables: cap the cell and ellipsize on desktop (the full
+   name rides the cell's title attribute); at phone width the .col-phone-cap
+   rule above governs instead. */
+@media (min-width: 641px) {
+  table.list td.cell-cap {
+    max-width: calc(16rem * var(--ui-scale, 1));
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Audit log record (F16): the record TYPE stays on one line, but the
-     record label under it wraps — a long label must not push "What
-     happened" off screen the way the F6 blanket nowrap did. */
-  table.list td[data-col="record"] > div:first-child {
-    white-space: nowrap;
-  }
+}
+/* Value columns never wrap mid-value at ANY width (findings 1026/1045 —
+   the class-first table treatment). One rule for the whole family instead
+   of the per-table patches this replaces (the desktop-only data-col rule,
+   the aging-table rule, the SO-list/billing-list rule): money rides the
+   .num class every list already uses, and the other value columns ride
+   the data-col convention — document numbers, dates, statuses and short
+   codes stay whole, while prose columns (customer/supplier names, party,
+   particulars, descriptions) keep wrapping. Below desktop widths the
+   tables scroll sideways inside their .table-wrap by design, so a whole
+   value scrolls with its row instead of breaking. The protected key set
+   is mirrored in scripts/table-phone-layout-guard.mjs, which fails if a
+   list uses a data-col key that is in neither the protected nor the
+   prose set. */
+table.list td.num,
+table.list td[data-col="number"],
+table.list td[data-col="date"],
+table.list td[data-col="valid"],
+table.list td[data-col="status"],
+table.list td[data-col="when"],
+table.list td[data-col="who"],
+table.list td[data-col="method"],
+table.list td[data-col="action"],
+table.list td[data-col="so"],
+table.list td[data-col="po"],
+table.list td[data-col="expected"],
+table.list td[data-col="sku"],
+table.list td[data-col="price"],
+table.list td[data-col="total"],
+table.list td[data-col="margin"],
+table.list td[data-col="rev"],
+table.list td[data-col="atc"] {
+  white-space: nowrap;
+}
+/* Audit log record (F16): the record TYPE stays on one line, but the
+   record label under it wraps — a long label must not push "What
+   happened" off screen the way the F6 blanket nowrap did. */
+table.list td[data-col="record"] > div:first-child {
+  white-space: nowrap;
 }
 table.list td[data-col="record"] > div + div {
   overflow-wrap: break-word;
@@ -1258,16 +1427,16 @@ tr.inactive .cell-primary .sub {
   min-height: calc(40px * var(--ui-scale, 1));
 }
 .input,
-.field input[type="text"],
-.field input[type="email"],
-.field input[type="password"],
-.field input[type="number"],
+.field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]):not([type="color"]),
 .field select,
 .field textarea {
   width: 100%;
   /* Design pass step 5 (2026-11-18): inputs meet the component spec —
      42px editor-input height and the 11px control radius (inputs are
-     controls on the soft radius scale, not "small" 8px elements). */
+     controls on the soft radius scale, not "small" 8px elements).
+     Round 1 D24: the selector covers every text-like/date input type —
+     date, month, search and tel inputs inside .field previously missed
+     the rule and rendered as short native controls. */
   height: calc(42px * var(--ui-scale, 1));
   padding: 0 calc(12px * var(--ui-scale, 1));
   border: 1px solid var(--border);
@@ -1287,6 +1456,23 @@ tr.inactive .cell-primary .sub {
 .input:focus {
   border-color: var(--blue);
   box-shadow: var(--focus-ring);
+}
+/* Round 1 D24 safety net: controls rendered WITHOUT .field/.input (filter
+   bars, inline table editors, simple forms — e.g. the Businesses editor,
+   tax year/quarter selects, books month pickers, items search) otherwise
+   fall back to native 19–26px radius-0 rendering. Zero-specificity
+   :where() means every real component rule (edit tables, compact settings
+   inputs, .field) still wins; this only catches controls nothing else
+   styles. Inputs inside .search-pill keep the pill's borderless look. */
+:where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]):not([type="color"]):not(.search-pill *),
+    select:not(.search-pill *)
+  ) {
+  height: calc(42px * var(--ui-scale, 1));
+  padding: 0 calc(12px * var(--ui-scale, 1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
 }
 .field.has-error input,
 .field.has-error select,
@@ -1340,7 +1526,7 @@ tr.inactive .cell-primary .sub {
   margin-bottom: calc(8px * var(--ui-scale, 1));
 }
 .settings-shell .page-header h1 {
-  font-size: calc(26px * var(--ui-scale, 1));
+  /* Round 1: no size override — Settings H1 matches every other page (30px). */
   line-height: 1.15;
 }
 .settings-shell .page-header .subtitle {
@@ -2171,10 +2357,10 @@ tr.inactive .cell-primary .sub {
   padding: 0 0 calc(22px * var(--ui-scale, 1));
 }
 .auth-card h1 {
-  font-family: var(--font-display-stack);
+  /* Round 1 D2: same heading treatment as .page-header h1 (Inter, not Archivo). */
+  font-family: var(--font);
   font-size: calc(24px * var(--ui-scale, 1));
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 600;
   margin: 0 0 calc(4px * var(--ui-scale, 1));
 }
 .auth-card .subtitle {
@@ -2308,7 +2494,7 @@ pre.json {
   gap: calc(6px * var(--ui-scale, 1));
   padding: calc(7px * var(--ui-scale, 1)) calc(14px * var(--ui-scale, 1));
   min-height: calc(40px * var(--ui-scale, 1));
-  border-radius: calc(9px * var(--ui-scale, 1));
+  border-radius: calc(999px * var(--ui-scale, 1));
   border: none;
   background: transparent;
   color: var(--text-2);
@@ -2334,6 +2520,20 @@ pre.json {
   color: var(--text);
   font-weight: 600;
   box-shadow: var(--shadow-pill);
+}
+/* Books family: section tabs carry the brand-blue active state, and at
+   desktop widths the strip wraps instead of overflowing the viewport
+   (Complete Review 2026-11-22: Books measured zero blue elements and
+   the Operations tab sat +137px inside the scroll track). */
+.books-nav .pill-tab.active {
+  background: var(--blue);
+  color: #fff;
+}
+@media (min-width: 769px) {
+  .books-nav .pill-tabs-track {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
 }
 .pill-tab-count {
   font-size: calc(11px * var(--ui-scale, 1));
@@ -2522,10 +2722,11 @@ pre.json {
   height: calc(18px * var(--ui-scale, 1));
   padding: 0 calc(4px * var(--ui-scale, 1));
   border-radius: calc(9px * var(--ui-scale, 1));
-  background: var(--red, #c00);
-  color: #fff;
+  background: var(--card);
+  border: 1px solid var(--danger-outline);
+  color: var(--red);
   font-size: calc(11px * var(--ui-scale, 1));
-  line-height: calc(18px * var(--ui-scale, 1));
+  line-height: calc(16px * var(--ui-scale, 1));
   text-align: center;
 }
 .notif-panel {
@@ -5625,6 +5826,23 @@ button.contact-card-add {
   font-size: 8pt;
   color: var(--pp-muted);
 }
+/* Packing list Received-by fields (mock v2 enrichment, 2026-11-21):
+   labelled write-in lines under the signature line. */
+.pp-sign-field {
+  color: #555;
+  margin-top: calc(2px * var(--ui-scale, 1));
+  min-height: 1.1em;
+}
+.pp-received-condition {
+  font-size: 9pt;
+  margin-top: calc(10px * var(--ui-scale, 1));
+}
+.pp-condition-line {
+  display: inline-block;
+  width: 55mm;
+  max-width: 60%;
+  border-bottom: 1px solid #0a0a0a;
+}
 .pp-foot {
   /* Sit right after content on short quotes (no flex spacer gap).
      On long/multi-page quotes the footer still follows the closing block
@@ -5848,6 +6066,16 @@ button.contact-card-add {
   border-radius: calc(8px * var(--ui-scale, 1));
   padding: calc(14px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
   background: #fafaf7;
+  /* Paper surface (finding 1286): the preview stands for the printed
+     letterhead, so it keeps the light theme's text tokens in both modes
+     -- the same pin-the-paper idiom as .pp-doc-root / .pp-page above.
+     Without this, dark mode flips --text / --text-2 / --text-3 near-white
+     on the paper background and the company name, address and TIN turn
+     unreadable. */
+  --text: #0a0a0a;
+  --text-2: #525252;
+  --text-3: #a3a3a3;
+  color: var(--text);
   font-size: calc(13px * var(--ui-scale, 1));
   max-width: calc(420px * var(--ui-scale, 1));
 }
@@ -6486,9 +6714,9 @@ button.contact-card-add {
   display: inline-flex;
   align-items: center;
   gap: calc(6px * var(--ui-scale, 1));
-  height: calc(34px * var(--ui-scale, 1));
+  /* Round 1 D3: no local height/radius override — Home header buttons use
+     the standard .btn 36px full pill like every other page header. */
   padding: 0 calc(14px * var(--ui-scale, 1));
-  border-radius: calc(9px * var(--ui-scale, 1));
   font-weight: 600;
 }
 .home-dashboard .card {
@@ -7287,7 +7515,8 @@ button.contact-card-add {
     height: calc(40px * var(--ui-scale, 1));
     min-height: calc(40px * var(--ui-scale, 1));
     padding: 0 calc(10px * var(--ui-scale, 1));
-    border-radius: calc(8px * var(--ui-scale, 1));
+    /* No radius override: the shared .btn full pill holds at phone width
+       too (finding 1104 — the old 8px override rendered 5px @ 32px). */
     font-size: calc(13px * var(--ui-scale, 1));
   }
 
@@ -7550,6 +7779,15 @@ button.contact-card-add {
 .tax-income-worksheet td.tax-income-ref {
   min-width: 6rem;
   color: var(--muted, #667);
+}
+/* Worksheet header stack (finding 1106): header labels align to the first
+   line, and a header annotation wraps inside its own column, stacked under
+   its own label — it never shares a line with a neighbouring header. */
+.tax-income-worksheet thead th {
+  vertical-align: top;
+}
+.tax-income-worksheet thead th .faint {
+  white-space: normal;
 }
 .tax-cal-form .tax-cal-plain {
   margin-top: calc(2px * var(--ui-scale, 1));
@@ -8466,8 +8704,12 @@ button.contact-card-add {
 
   /* 16px field text is larger than the scaled UI, so two columns clip
      long values (customer type, payment terms). One column keeps them
-     inside the phone width. Tablet (641px and up) stays two columns. */
-  .form-grid {
+     inside the phone width. Tablet (641px and up) stays two columns.
+     The quote editor grid .quote-fg joins this rule (finding 1109): it
+     was the one editor grid that kept two columns on a phone, so its
+     Customer and Business values clipped mid-word. */
+  .form-grid,
+  .quote-fg {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -9194,6 +9436,7 @@ button.contact-card-add {
     --warning-bg: #332b18;
     --danger: #de8f8f;
     --danger-bg: #3a2323;
+    --danger-outline: #f08a8a;
     --bg: #0b0e14;
     --focus-ring: 0 0 0 calc(2px * var(--ui-scale, 1)) #0b0e14, 0 0 0 calc(5px * var(--ui-scale, 1)) var(--sky);
   }

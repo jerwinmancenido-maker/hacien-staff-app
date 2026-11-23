@@ -200,10 +200,10 @@ export function RecordList({
             aria-checked={viewMode === "a"}
             className={`view-toggle-btn${viewMode === "a" ? " active" : ""}`}
             onClick={() => changeView("a")}
-            title="A: Card rows"
+            title="Card rows"
           >
             <CardViewIcon size={14} />
-            <span className="view-toggle-text">A Card rows</span>
+            <span className="view-toggle-text">Card rows</span>
           </button>
           <button
             type="button"
@@ -211,10 +211,10 @@ export function RecordList({
             aria-checked={viewMode === "b"}
             className={`view-toggle-btn${viewMode === "b" ? " active" : ""}`}
             onClick={() => changeView("b")}
-            title="B: Compact list"
+            title="Compact list"
           >
             <CompactViewIcon size={14} />
-            <span className="view-toggle-text">B Compact</span>
+            <span className="view-toggle-text">Compact</span>
           </button>
           <button
             type="button"
@@ -222,10 +222,10 @@ export function RecordList({
             aria-checked={viewMode === "c"}
             className={`view-toggle-btn${viewMode === "c" ? " active" : ""}`}
             onClick={() => changeView("c")}
-            title="C: Tile grid"
+            title="Tile grid"
           >
             <GridViewIcon size={14} />
-            <span className="view-toggle-text">C Tile grid</span>
+            <span className="view-toggle-text">Tile grid</span>
           </button>
         </div>
       </div>

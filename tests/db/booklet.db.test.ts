@@ -413,7 +413,7 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
         },
         admin,
       ),
-    ).rejects.toThrow(/already used \/ marked spoiled/);
+    ).rejects.toThrow(/already used by another delivery/);
     await voidDelivery(del.id, "Wrong DR", admin);
     await expect(
       recordDelivery(
@@ -426,7 +426,69 @@ describe.skipIf(!env.hasDb)("BIR booklet tracking & spoiled numbers (MySQL)", ()
         },
         admin,
       ),
-    ).rejects.toThrow(/already used \/ marked spoiled/);
+    ).rejects.toThrow(/already used by another delivery/);
+  });
+
+  it("refuses a spoiled DR with its own message", async () => {
+    const year = await freshYear();
+    const { so } = await openSo(year);
+    const soRow = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    const drNo = nextInvoice();
+    await markBookletNumberSpoiled({ type: "DR", number: drNo, reason: "Torn DR sheet" }, admin, [
+      { name: "torn.png", size: dummyPng.length, bytes: dummyPng },
+    ]);
+    await expect(
+      recordDelivery(
+        so.id,
+        {
+          drNumber: String(drNo),
+          deliveryDate: new Date(Date.UTC(year, 5, 1)),
+          idSightChecked: false,
+          items: [{ salesOrderItemId: soRow.items[0]!.id, qty: "1" }],
+        },
+        admin,
+      ),
+    ).rejects.toThrow(/marked spoiled and cannot be used/);
+  });
+
+  it("DR booklet view: next free points at a free slot; used/voided/spoiled are skipped", async () => {
+    const year = await freshYear();
+    const a = await openSo(year);
+    const soA = await db.salesOrder.findUniqueOrThrow({
+      where: { id: a.so.id },
+      include: { items: { where: { removedAt: null } } },
+    });
+    const drNo = nextInvoice();
+    const del = await recordDelivery(
+      a.so.id,
+      {
+        drNumber: String(drNo),
+        deliveryDate: new Date(Date.UTC(year, 5, 1)),
+        idSightChecked: false,
+        items: [{ salesOrderItemId: soA.items[0]!.id, qty: "1" }],
+      },
+      admin,
+    );
+    let view = await getBookletView("DR");
+    expect(view.slots.find((s) => s.invoiceNo === drNo)?.status).toBe("used");
+    expect(view.nextFree).not.toBe(drNo);
+    await voidDelivery(del.id, "Wrong DR", admin);
+    view = await getBookletView("DR");
+    expect(view.slots.find((s) => s.invoiceNo === drNo)?.status).toBe("voided");
+    expect(view.nextFree).not.toBe(drNo);
+    const spoiledNo = nextInvoice();
+    await markBookletNumberSpoiled({ type: "DR", number: spoiledNo, reason: "Torn DR sheet" }, admin, [
+      { name: "torn.png", size: dummyPng.length, bytes: dummyPng },
+    ]);
+    view = await getBookletView("DR");
+    expect(view.slots.find((s) => s.invoiceNo === spoiledNo)?.status).toBe("spoiled");
+    expect(view.nextFree).not.toBe(spoiledNo);
+    // The property the delivery form's next-free hint relies on.
+    expect(view.nextFree).not.toBeNull();
+    expect(view.slots.find((s) => s.invoiceNo === view.nextFree!)?.status).toBe("free");
   });
 
   it("concurrent spoil and billing of the same SI: exactly one wins", async () => {

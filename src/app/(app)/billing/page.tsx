@@ -6,7 +6,7 @@ import { arAgingSummary, listNeedsAdminCheck, taxYearBillingMeter } from "@/lib/
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { formatNonVatPctLabel } from "@/lib/services/non-vat";
 import { BillingNav } from "@/components/billing/BillingNav";
-import { Chip, PageHeader } from "@/components/ui";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
 export default async function BillingHomePage() {
@@ -18,7 +18,7 @@ export default async function BillingHomePage() {
   return (
     <>
       <PageHeader
-        title="Billing & Collections"
+        title="Billing & collections"
         subtitle="Record hand-written booklet invoices and collections. Nothing here is an official invoice or OR."
         actions={
           canRecord && (
@@ -37,10 +37,10 @@ export default async function BillingHomePage() {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-head">
-          <h2>Needs Admin check</h2>
+          <h2>Needs Admin review</h2>
         </div>
         {waiting.length === 0 ? (
-          <p className="faint">None waiting for a check.</p>
+          <p className="faint">None waiting for review.</p>
         ) : (
           <ul className="plain-list">
             {waiting.map((row) => (
@@ -49,7 +49,7 @@ export default async function BillingHomePage() {
                   {row.number}
                 </Link>
                 <span className="muted"> · {row.label} · {row.customer} · {formatPeso(row.amount)}</span>{" "}
-                <Chip tone="dark">Needs Admin check</Chip>
+                <Chip tone="dark">Needs Admin review</Chip>
               </li>
             ))}
           </ul>
@@ -112,7 +112,7 @@ export default async function BillingHomePage() {
           </div>
         </div>
         {summary.byCustomer.length === 0 ? (
-          <p className="faint">No open receivables yet.</p>
+          <EmptyState line="No open receivables yet." />
         ) : (
           <div className="table-wrap">
             <table className="list" aria-label="AR by customer">
@@ -120,7 +120,7 @@ export default async function BillingHomePage() {
                 <tr>
                   <th>Customer</th>
                   {AGING_BUCKETS.map((b) => (
-                    <th key={b} className="num">
+                    <th key={b} className="num col-phone-hide">
                       {AGING_BUCKET_LABELS[b]}
                     </th>
                   ))}
@@ -135,7 +135,7 @@ export default async function BillingHomePage() {
                       <Link href={`/customers/${r.customerId}?tab=balances`}>{r.customerName}</Link>
                     </td>
                     {AGING_BUCKETS.map((b) => (
-                      <td key={b} className="num">
+                      <td key={b} className="num col-phone-hide">
                         {formatPeso(r.aging[b])}
                       </td>
                     ))}

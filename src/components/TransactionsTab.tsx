@@ -6,6 +6,7 @@
 import Link from "next/link";
 import type { Contact } from "@prisma/client";
 import { formatDate, formatPeso } from "@/lib/format";
+import { COST_NOT_SET_LABEL, supplierCostMissing } from "@/lib/quotes/calc";
 import type { PermissionUser } from "@/lib/permissions";
 import { QUOTE_STATUSES, SALES_ORDER_STATUSES } from "@/lib/quotes/views";
 import {
@@ -144,12 +145,17 @@ export async function TransactionsTab({
 
   const contactName = contacts.find((c) => c.id === filters.contactId)?.name;
   const items: RecordItem[] = list.rows.map((r) => {
+    // D8: a blank/₱0.00 supplier cost means "not set" — show the label
+    // instead of the stored margin pair (which reads as a factual 100%).
+    const costMissing = r.supplierCost !== undefined && supplierCostMissing(r.supplierCost);
     const cost =
       r.supplierCost !== undefined
-        ? [
-            { label: "Supplier cost", value: formatPeso(r.supplierCost) },
-            { label: "Net margin", value: `${formatPeso(r.netMargin!)} (${r.netMarginPct}%)` },
-          ]
+        ? costMissing
+          ? [{ label: "Supplier cost", value: COST_NOT_SET_LABEL }]
+          : [
+              { label: "Supplier cost", value: formatPeso(r.supplierCost) },
+              { label: "Net margin", value: `${formatPeso(r.netMargin!)} (${r.netMarginPct}%)` },
+            ]
         : [];
     return {
       id: `${r.kind}-${r.id}`,
@@ -164,7 +170,14 @@ export async function TransactionsTab({
           {cost.length > 0 && (
             <span className="txn-cost">
               {" "}
-              · Cost {formatPeso(r.supplierCost!)} · Margin {formatPeso(r.netMargin!)} ({r.netMarginPct}%)
+              ·{" "}
+              {costMissing ? (
+                COST_NOT_SET_LABEL
+              ) : (
+                <>
+                  Cost {formatPeso(r.supplierCost!)} · Margin {formatPeso(r.netMargin!)} ({r.netMarginPct}%)
+                </>
+              )}
             </span>
           )}
         </>

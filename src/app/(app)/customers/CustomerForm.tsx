@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Address, Customer } from "@prisma/client";
 import { formatAddress } from "@/lib/addresses/format";
@@ -73,6 +73,18 @@ export function CustomerForm({
   const e = state.fieldErrors ?? {};
   // Duplicate-name soft warning: dismissed per warning text; a fresh warning re-shows.
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  // F38: the duplicate-name confirmation travels in this hidden field, but
+  // only the "Save anyway" button may set it (see the warning block below).
+  // It must never sit in the form pre-set to "1": any other submit — the
+  // main Save button included — would silently confirm the duplicate.
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
+  // Every submit clears the dismissal, so a warning the server re-issues
+  // (e.g. the name is still a duplicate) shows again instead of the
+  // resubmit silently doing nothing.
+  const onFormSubmit = (ev: FormEvent<HTMLFormElement>) => {
+    setDismissedWarning(null);
+    onSubmit(ev);
+  };
   const termOptions = customer?.defaultTerms && !terms.includes(customer.defaultTerms) ? [...terms, customer.defaultTerms] : terms;
   // Blank stays blank. Do not invent the first list item for a customer who has no terms yet.
   const [defaultTerms, setDefaultTerms] = useState(state.values?.defaultTerms ?? customer?.defaultTerms ?? "");
@@ -130,7 +142,7 @@ export function CustomerForm({
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate id="customer-form">
+    <form onSubmit={onFormSubmit} noValidate id="customer-form">
       {customer?.updatedAt && <input type="hidden" name="updatedAt" value={new Date(customer.updatedAt).toISOString()} />}
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
@@ -140,9 +152,20 @@ export function CustomerForm({
       {state.warning && state.warning !== dismissedWarning && (
         <div className="alert warn" role="alert">
           <p>{state.warning}</p>
-          <input type="hidden" name="confirmDuplicateName" value="1" />
+          <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
           <div className="form-actions">
-            <button className="btn" type="submit" disabled={pending}>
+            <button
+              className="btn"
+              type="button"
+              disabled={pending}
+              onClick={(ev) => {
+                // Only this button confirms the duplicate: set the flag,
+                // then submit. The main Save button submits with the flag
+                // still blank, so the server re-issues the warning (F38).
+                if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                ev.currentTarget.form?.requestSubmit();
+              }}
+            >
               Save anyway
             </button>
             <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>

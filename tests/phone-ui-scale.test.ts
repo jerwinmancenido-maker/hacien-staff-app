@@ -27,7 +27,7 @@ describe("phone UI scale", () => {
   it("scales shared lengths with the variable and leaves 1px borders", () => {
     expect(css).toMatch(/html,\s*body\s*\{[^}]*font-size:\s*calc\(14px \* var\(--ui-scale, 1\)\);/);
     expect(css).toMatch(/\.btn\s*\{[^}]*height:\s*calc\(36px \* var\(--ui-scale, 1\)\);/);
-    expect(css).toMatch(/\.table-wrap table\.list\s*\{[^}]*min-width:\s*calc\(640px \* var\(--ui-scale, 1\)\);/);
+    expect(css).toMatch(/\.table-wrap table\.list\s*\{[^}]*min-width:\s*min\(calc\(640px \* var\(--ui-scale, 1\)\),\s*100%\);/);
     expect(css).toMatch(/\.card\s*\{[^}]*border:\s*1px solid var\(--border\);/);
   });
 
@@ -45,7 +45,10 @@ describe("phone UI scale", () => {
     const phone = css.slice(css.indexOf("@media screen and (max-width: 640px)"));
     expect(phone).toMatch(/font-size:\s*16px !important;/);
     expect(phone).toMatch(/min-height:\s*32px;/);
-    expect(phone).toMatch(/\.form-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+    // Finding 1109: the quote editor grid .quote-fg stacks under the same
+    // rule as .form-grid on a phone — it was the one editor grid that kept
+    // two columns, clipping its Customer and Business values mid-word.
+    expect(phone).toMatch(/\.form-grid,\s*\n\s*\.quote-fg\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
     expect(phone).toMatch(/\.page-header \.actions[^}]*flex-wrap:\s*wrap;/);
     expect(phone).toMatch(/\.content,\s*\n\s*\.content:has\(\.home-dashboard\)[\s\S]*padding:\s*8px 0 16px;/);
     expect(phone).toMatch(/\.card \.table-wrap[\s\S]*background:\s*transparent;/);
