@@ -47,7 +47,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
                 <th>Business</th>
                 <th className="num">Orders</th>
                 <th className="num">Recorded sales</th>
-                <th className="num">Supplier costs</th>
+                <th className="num col-phone-hide col-tab-hide">Supplier costs</th>
                 <th className="num">Expenses</th>
                 <th className="num">Profit</th>
               </tr>
@@ -58,7 +58,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
                   <td>{r.label}</td>
                   <td className="num">{r.orderCount}</td>
                   <td className="num">{formatPeso(r.sales)}</td>
-                  <td className="num">{formatPeso(r.supplierCosts)}</td>
+                  <td className="num col-phone-hide col-tab-hide">{formatPeso(r.supplierCosts)}</td>
                   <td className="num">{formatPeso(r.expenses)}</td>
                   <td className="num">{formatPeso(r.profit)}</td>
                 </tr>

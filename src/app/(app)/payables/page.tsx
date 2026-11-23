@@ -144,7 +144,7 @@ export default async function PayablesHomePage({
                 <tr>
                   <th>Supplier</th>
                   {AGING_BUCKETS.map((b) => (
-                    <th key={b} className="num">
+                    <th key={b} className={b === "d1_30" ? "num col-phone-hide" : "num"}>
                       {AGING_BUCKET_LABELS[b]}
                     </th>
                   ))}
@@ -158,7 +158,7 @@ export default async function PayablesHomePage({
                       <Link href={`/suppliers/${r.supplierId}?tab=payments`}>{r.supplierName}</Link>
                     </td>
                     {AGING_BUCKETS.map((b) => (
-                      <td key={b} className="num">
+                      <td key={b} className={b === "d1_30" ? "num col-phone-hide" : "num"}>
                         {formatPeso(r.aging[b])}
                       </td>
                     ))}

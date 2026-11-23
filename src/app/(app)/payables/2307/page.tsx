@@ -86,15 +86,15 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
                     <td>
                       <Link href={`/suppliers/${r.supplier.id}`}>{r.supplier.name}</Link>
                     </td>
-                    <td>{r.payment ? <Link href={`/payables/payments/${r.payment.id}`}>{r.payment.number}</Link> : "—"}</td>
-                    <td>{r.bill?.billNumber ?? "—"}</td>
+                    <td data-col="number">{r.payment ? <Link href={`/payables/payments/${r.payment.id}`}>{r.payment.number}</Link> : "—"}</td>
+                    <td data-col="number">{r.bill?.billNumber ?? "—"}</td>
                     <td className="num">{formatPeso(r.amount)}</td>
                     <td>{(Number(r.rate) * 100).toFixed(2)}%</td>
-                    <td>{r.atcCode ?? "—"}</td>
-                    <td>
+                    <td data-col="atc">{r.atcCode ?? "—"}</td>
+                    <td data-col="status">
                       <Supplier2307StatusChip status={r.status} />
                     </td>
-                    <td>{day(r.issuedAt)}</td>
+                    <td data-col="date">{day(r.issuedAt)}</td>
                     <td>
                       {canManage && r.status === "TO_ISSUE" && (
                         <Mark2307IssuedForm action={markSupplier2307IssuedAction.bind(null, r.id)} defaultDate={today} />
