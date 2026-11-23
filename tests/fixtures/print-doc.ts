@@ -129,7 +129,7 @@ export const billingPrintFixture = (): ProfessionalPrintModel =>
     // Standardized scheme (2026-11-21): the Sales Invoice (booklet)
     // number is the primary number; the internal BL number is a
     // secondary meta cell.
-    number: "1",
+    number: "001",
     meta: [{ label: "Billing no.", value: "BL-2026-0001" }],
     hideStatus: true,
     thankYou: true,
@@ -270,7 +270,7 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
       lines: [
         {
           date: "Oct 1, 2026",
-          description: "Booklet invoice #1 · due Oct 31, 2026",
+          description: "Booklet invoice #001 · due Oct 31, 2026",
           charges: "10000.00",
           credits: null,
           balance: "10000.00",

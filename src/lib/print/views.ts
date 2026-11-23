@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, isoDate, manilaToday } from "@/lib/format";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { money, ymd } from "@/lib/documents/common";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { customerBlockAddress, suggestedDeliveryAddress } from "@/lib/services/addresses";
@@ -436,7 +437,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     // no." — while the internal billing number rides secondary in the
     // meta strip as "Billing no.". Same scheme as the packing list and
     // the collection acknowledgement.
-    number: String(b.invoiceNo),
+    number: formatBookletNumber(b.invoiceNo),
     date: day(ymd(b.invoiceDate)),
     status: b.status,
     hideStatus: HIDE_STATUS_ON_PRINT.has("billing"),
@@ -461,7 +462,7 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     ],
     items: [
       itemRow({
-        description: `Billing for sales order ${b.salesOrder.number} (Sales Invoice No. ${b.invoiceNo})`,
+        description: `Billing for sales order ${b.salesOrder.number} (Sales Invoice No. ${formatBookletNumber(b.invoiceNo)})`,
         qty: "1.00",
         unit: "lot",
         unitPrice: amount,
@@ -511,7 +512,7 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
   // Billing numbers already carry their "BL-" prefix — do not add another.
   // The booklet number rides under its standardized name (Sales Invoice
   // No.), the same wording as the billing print and the packing list.
-  const refs = c.allocations.map((a) => `${a.billing.number} / Sales Invoice No. ${a.billing.invoiceNo}`);
+  const refs = c.allocations.map((a) => `${a.billing.number} / Sales Invoice No. ${formatBookletNumber(a.billing.invoiceNo)}`);
   // The customer's own filing chain: the order and their PO reference,
   // the same references the billing print carries.
   const soRefs = [...new Set(c.allocations.map((a) => a.billing.salesOrder.number))];
@@ -894,7 +895,7 @@ export function statementLedgerLines(lines: readonly StatementLedgerInput[]) {
     if (line.kind === "billing") {
       out.push({
         date: day(line.date),
-        description: `Booklet invoice #${line.invoiceNo} · due ${day(line.dueDate)}`,
+        description: `Booklet invoice #${formatBookletNumber(line.invoiceNo)} · due ${day(line.dueDate)}`,
         charges: line.amount,
         credits: null,
         balance: line.runningBalance,

@@ -28,7 +28,7 @@ describe("standardized invoice numbers — billing print", () => {
   it("headlines the Sales Invoice number under its own label", () => {
     const block = docnumBlock(html);
     expect(block).toContain('<div class="pp-docnum-label">Sales Invoice no.</div>');
-    expect(block).toContain('<div class="pp-docnum-value">1</div>');
+    expect(block).toContain('<div class="pp-docnum-value">001</div>');
     expect(block).not.toContain("BL-2026-0001");
   });
 
@@ -51,7 +51,7 @@ describe("standardized invoice numbers — packing list", () => {
       salesOrderId: "so-1",
       salesOrderNumber: "SO-2026-0001",
       drNumber: "10452",
-      siNumbers: "10, 11",
+      siNumbers: "010, 011",
       deliveryDate: "November 21, 2026",
       receivedBy: null,
       customerName: "Acme Corporation",
@@ -77,7 +77,7 @@ describe("standardized invoice numbers — packing list", () => {
       missing: [],
     };
     const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet }));
-    expect(html).toContain('<div class="pp-docnum-sub">Sales Invoice No. 10, 11</div>');
+    expect(html).toContain('<div class="pp-docnum-sub">Sales Invoice No. 010, 011</div>');
     expect(html).not.toContain("SI No.");
   });
 });

@@ -48,7 +48,7 @@ describe("S-87 print billing statement from the SO", () => {
     // Standardized numbering (Jerwin 2026-11-21): the Sales Invoice
     // (booklet) number is the print's primary number; the internal
     // billing number is a secondary meta cell.
-    expect(model).toContain("number: String(b.invoiceNo)");
+    expect(model).toContain("number: formatBookletNumber(b.invoiceNo)");
     expect(model).toContain('{ label: "Billing no.", value: b.number }');
     // Footer: billing prints carry the shared BIR reference-only disclaimer.
     expect(taxFooterLines("billing")).toContain(BILLING_DISCLAIMER);
