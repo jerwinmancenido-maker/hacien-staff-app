@@ -1,5 +1,6 @@
 import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeTin } from "@/lib/permissions";
@@ -328,7 +329,7 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
     .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
     .map((b) => ({
       id: b.id,
-      label: `Booklet #${b.invoiceNo} (${b.number})`,
+      label: `Booklet #${formatBookletNumber(b.invoiceNo)} (${b.number})`,
       balance: b.balance,
     }));
   return (
@@ -386,7 +387,7 @@ async function CustomerBalances({ customerId, canManage }: { customerId: string;
               .filter((b) => b.status !== "VOID" && Number(b.balance) > 0)
               .map((b) => (
                 <li key={b.id}>
-                  <Link href={`/billing/billings/${b.id}`}>Booklet #{b.invoiceNo}</Link> · {formatPeso(b.balance)} balance{" "}
+                  <Link href={`/billing/billings/${b.id}`}>Booklet #{formatBookletNumber(b.invoiceNo)}</Link> · {formatPeso(b.balance)} balance{" "}
                   <OverdueBadge label={b.overdue.label} />
                 </li>
               ))}
