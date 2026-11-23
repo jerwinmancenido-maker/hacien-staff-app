@@ -166,6 +166,21 @@ export function findBlockedPaymentTerms(text?: string | null): string[] {
 }
 
 /**
+ * The save-layer companion (lawyer ruling 2026-11-23; specced in the
+ * PR #290 build record, built by the run-79 fix plan's Fix 1): the
+ * refusal message for a free-text note carrying a blocked payment-term
+ * phrase, or null when the note is clean. Saves are REFUSED with this
+ * message and nothing is written \u2014 stored notes are never silently
+ * rewritten; sanitizePrintedNotes below is what protects documents
+ * from notes saved before this guard existed.
+ */
+export function blockedPaymentTermsMessage(text?: string | null): string | null {
+  const found = findBlockedPaymentTerms(text);
+  if (!found.length) return null;
+  return `Notes can't include payment terms (${found.join(", ")}). Put payment terms in the Terms field \u2014 they print in the Terms of Sale.`;
+}
+
+/**
  * The notes text as it may print: blocked payment-term phrases removed
  * (the stored notes are never changed). Returns null when nothing
  * printable remains. Applied by every print model that carries the
