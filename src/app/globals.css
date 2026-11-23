@@ -7724,6 +7724,15 @@ button.contact-card-add {
   min-width: 6rem;
   color: var(--muted, #667);
 }
+/* Worksheet header stack (finding 1106): header labels align to the first
+   line, and a header annotation wraps inside its own column, stacked under
+   its own label — it never shares a line with a neighbouring header. */
+.tax-income-worksheet thead th {
+  vertical-align: top;
+}
+.tax-income-worksheet thead th .faint {
+  white-space: normal;
+}
 .tax-cal-form .tax-cal-plain {
   margin-top: calc(2px * var(--ui-scale, 1));
   font-weight: 400;
