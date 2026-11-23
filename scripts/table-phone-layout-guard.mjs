@@ -10,6 +10,7 @@
  * - /sales-orders      SO list: "Total" + "Status" visible; "Buyer PO" +
  *                      "Date" phone-hidden by design (batch-B treatment)
  * - /books/sales       Sales register: "EWT" never half-cut (notcut)
+ * - /books/disbursements  Cash disbursements register: "EWT" notcut
  * - quote detail       Items table: "Total" visible
  * - /billing           AR by customer: "Total" visible; aging buckets hidden
  * - /billing/2307      2307 list: "Status" visible; "Collection" hidden
@@ -37,8 +38,8 @@
  * off it (wide tables scroll by design), never straddling the edge.
  *
  * LIVE, tablet 768px: SO list "Date" visible (Buyer PO hidden), billings
- * "Status" visible with SO + Invoice date hidden, Books sales register
- * "EWT" notcut, Books profit "Margin %" notcut, quotes "Valid until"
+ * "Status" visible with SO + Invoice date hidden, Books sales +
+ * disbursements registers "EWT" notcut, Books profit "Margin %" notcut, quotes "Valid until"
  * visible (Rev + Margin % hidden), receiving "Expected" visible (Sales
  * order hidden), Books journal "EWT" visible (Party hidden), cash
  * ledger "Balance" visible (Type hidden).
@@ -298,6 +299,7 @@ const CHECKS = [
    * last visible column at 390 is Status. */
   { route: "/sales-orders", table: ".table-wrap table.list", visible: ["Total", "Status"], hidden: ["Buyer PO", "Date"] },
   { route: "/books/sales", table: 'table.list[aria-label="Sales register"]', visible: [], hidden: [], notcut: ["EWT"] },
+  { route: "/books/disbursements", table: 'table.list[aria-label="Cash disbursements register"]', visible: [], hidden: [], notcut: ["EWT"] },
   { route: "/billing", table: 'table.list[aria-label="AR by customer"]', visible: ["Total"], hidden: ["Current"] },
   { route: "/billing/2307", table: 'table.list[aria-label="2307s"]', visible: ["Status"], hidden: ["Collection", "Received"] },
   {
@@ -322,6 +324,7 @@ const TABLET_CHECKS = [
   { route: "/sales-orders", table: ".table-wrap table.list", visible: ["Date"], hidden: ["Buyer PO"] },
   { route: "/billing/billings", table: "table.list.billing-list-table", visible: ["Status"], hidden: ["SO", "Invoice date", "Due"] },
   { route: "/books/sales", table: 'table.list[aria-label="Sales register"]', visible: [], hidden: [], notcut: ["EWT"] },
+  { route: "/books/disbursements", table: 'table.list[aria-label="Cash disbursements register"]', visible: [], hidden: [], notcut: ["EWT"] },
   {
     route: "/books/profit",
     table: 'table.list[aria-label="Margin by deal"]',
