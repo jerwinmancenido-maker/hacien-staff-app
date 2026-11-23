@@ -1,3 +1,4 @@
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
@@ -105,6 +106,7 @@ export default async function CustomerPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={customer.name} />
       <PageHeader
         title={
           <>
