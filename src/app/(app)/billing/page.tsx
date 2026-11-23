@@ -18,7 +18,7 @@ export default async function BillingHomePage() {
   return (
     <>
       <PageHeader
-        title="Billing & Collections"
+        title="Billing & collections"
         subtitle="Record hand-written booklet invoices and collections. Nothing here is an official invoice or OR."
         actions={
           canRecord && (
