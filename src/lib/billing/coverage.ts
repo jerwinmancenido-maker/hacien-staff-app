@@ -4,6 +4,7 @@
 // normal states, not errors — these notes state position, never blame.
 // All comparisons at money scale (2dp) via toScaled.
 
+import { formatPeso } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
 
 /** "Billed ₱X of ₱Y on this order · ₱Z left to bill" (or "fully billed"). */
@@ -12,9 +13,9 @@ export function billingCoverageNote(input: { billedTotal: string; contractPrice:
   const total = toScaled(input.contractPrice, 2);
   const left = total - billed;
   if (left <= 0n) {
-    return `Fully billed — ₱${fromScaled(billed, 2)} of ₱${fromScaled(total, 2)} on this order.`;
+    return `Fully billed — ${formatPeso(fromScaled(billed, 2))} of ${formatPeso(fromScaled(total, 2))} on this order.`;
   }
-  return `Part of this order — billed ₱${fromScaled(billed, 2)} of ₱${fromScaled(total, 2)} · ₱${fromScaled(left, 2)} left to bill.`;
+  return `Part of this order — billed ${formatPeso(fromScaled(billed, 2))} of ${formatPeso(fromScaled(total, 2))} · ${formatPeso(fromScaled(left, 2))} left to bill.`;
 }
 
 /** Per-billing position: "Billing 2 of 3 on this order". Null when it is the
