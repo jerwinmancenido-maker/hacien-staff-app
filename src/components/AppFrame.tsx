@@ -37,6 +37,9 @@ export function AppFrame({
 
   return (
     <div className={`frame${open ? " nav-open" : ""}`}>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <button
         type="button"
         className="nav-backdrop"
@@ -62,7 +65,9 @@ export function AppFrame({
           {breadcrumb}
           <div className="right">{topbarRight}</div>
         </header>
-        <main className="content">{children}</main>
+        <main className="content" id="main-content" tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   );

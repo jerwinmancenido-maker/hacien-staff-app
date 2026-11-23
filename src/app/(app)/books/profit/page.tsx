@@ -2,10 +2,13 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { BOOKS_DISCLAIMER } from "@/lib/books/config";
 import { getMonthlyProfit, profitMonth } from "@/lib/services/profit";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
 import { EmptyState, PageHeader } from "@/components/ui";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
 
 // S-53: monthly net profit + margin by deal. Who owes us / who we owe already
 // live on the billing and payables aging pages, linked below.
@@ -91,7 +94,7 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                 {report.deals.map((d) => (
                   <tr key={d.number}>
                     <td className="strong" data-col="number">{d.number}</td>
-                    <td data-col="date" className="col-phone-hide">{d.date}</td>
+                    <td data-col="date" className="col-phone-hide">{day(d.date)}</td>
                     <td className="num col-phone-hide">{formatPeso(d.contractPrice)}</td>
                     <td className="num col-phone-hide col-tab-hide">{formatPeso(d.returns)}</td>
                     <td className="num col-phone-hide col-tab-hide">{formatPeso(d.supplierCost)}</td>

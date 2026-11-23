@@ -6,7 +6,7 @@ import { can, canSeeTin } from "@/lib/permissions";
 import { getCustomer } from "@/lib/services/companies";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { WITHHOLDING_LABELS } from "@/lib/validation/companies";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { db } from "@/lib/db";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { ContactCards } from "@/components/ContactCards";
@@ -38,6 +38,9 @@ import { duplicateCustomerAction, saveCustomerAction, setCustomerActiveAction } 
 import { sendStatementReminderAction } from "./statement-actions";
 import { StatementReminderForm } from "@/components/billing/StatementReminderForm";
 import { statementReminderPreview } from "@/lib/services/statement-reminder";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 export default async function CustomerPage({
   params,
@@ -296,7 +299,7 @@ async function CustomerPriceHistory({ customerId }: { customerId: string }) {
                         <>
                           {formatPeso(row.lastPrice)}
                           <div className="small faint">
-                            {row.lastPriceRef} · {row.lastPriceDate}
+                            {row.lastPriceRef} · {day(row.lastPriceDate)}
                           </div>
                         </>
                       ) : (
