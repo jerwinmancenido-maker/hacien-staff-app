@@ -41,7 +41,7 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
         </form>
         <p className="faint small">
           Revenue is billings invoiced in {month}, less customer returns posted in {month}. Supplier bills are bills recorded in {month}, less supplier
-          returns posted in {month}. Expenses are posted expenses dated in {month}. Net is revenue minus supplier bills minus expenses. Margin by deal is
+          returns posted in {month}. Expenses are posted expenses dated in {month}. Net is revenue minus supplier bills (payables) minus expenses. Margin by deal is
           contract price (less the deal&apos;s returns) minus supplier cost for sales orders dated in {month}.
         </p>
         <div className="stat-grid" style={{ marginBottom: 20 }}>
