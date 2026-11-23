@@ -349,7 +349,7 @@ export function CollectionForm({
                                   next[i] = { ...next[i]!, codes, rate: codes[0]?.rate ?? next[i]!.rate };
                                   setAllocs(next);
                                 }}
-                                style={{ width: 72 }}
+                                style={{ width: 100 }}
                                 title="Rate fraction (Admin)"
                               />
                               <input

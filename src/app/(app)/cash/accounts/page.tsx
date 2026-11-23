@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { money, ymd } from "@/lib/documents/common";
 import { cashAccountBalance, listCashAccounts } from "@/lib/services/cash-accounts";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
@@ -9,6 +9,9 @@ import { AccountActiveChip, CASH_DISCLAIMER } from "@/components/cash/CashParts"
 import { CashNav } from "@/components/cash/CashNav";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string) => formatDate(new Date(`${ymdStr}T00:00:00.000Z`));
 
 export default async function CashAccountsPage() {
   const user = await requirePagePermission("view");
@@ -75,7 +78,7 @@ export default async function CashAccountsPage() {
                     <td>{CASH_ACCOUNT_TYPE_LABELS[a.type]}</td>
                     <td data-col="date">
                       {formatPeso(a.openingBalance)}
-                      <div className="faint small">{a.openingDate}</div>
+                      <div className="faint small">{day(a.openingDate)}</div>
                     </td>
                     <td className={`num strong${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</td>
                     <td>
