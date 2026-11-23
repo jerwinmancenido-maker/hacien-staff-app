@@ -211,6 +211,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
         page={quotePage.page}
         totalPages={quotePage.totalPages}
         total={quotePage.total}
+        noun="quotes"
         hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
         jumpAction="/quotes"
         jumpParams={{

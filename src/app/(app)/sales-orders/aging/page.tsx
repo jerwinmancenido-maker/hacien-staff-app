@@ -134,6 +134,7 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
         page={agingPage.page}
         totalPages={agingPage.totalPages}
         total={agingPage.total}
+        noun="sales orders"
         hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
         jumpAction="/sales-orders/aging"
       />

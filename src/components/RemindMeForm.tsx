@@ -29,7 +29,7 @@ export function RemindMeForm({
           <input id="remindAt" name="remindAt" type="date" required />
         </Field>
         <Field label="Note" name="note" error={e.note} full required>
-          <input id="note" name="note" type="text" maxLength={500} placeholder="e.g. Follow up the buyer PO" />
+          <input id="note" name="note" type="text" maxLength={500} placeholder="e.g. Follow up next week" />
         </Field>
       </div>
       {state.message ? (
