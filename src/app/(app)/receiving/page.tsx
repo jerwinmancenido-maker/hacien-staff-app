@@ -210,7 +210,7 @@ export default async function ReceivingPage({
             { key: "number", label: "PO no." },
             { key: "supplier", label: "Supplier" },
             { key: "so", label: "Sales order", className: "col-tab-hide" },
-            { key: "progress", label: "Received" },
+            { key: "progress", label: "Received", className: "col-phone-hide" },
             { key: "status", label: "Status" },
             { key: "expected", label: "Expected" },
           ]}
