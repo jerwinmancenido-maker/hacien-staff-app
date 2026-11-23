@@ -29,7 +29,10 @@ describe("S-64 attachment sheet", () => {
     expect(doc).toContain("Packing List");
     expect(doc).toContain("&amp; Delivery Details");
     expect(doc).toContain("Attachment to DR No.");
-    expect(doc).toContain("ATTACHMENT ONLY — NOT AN OFFICIAL RECEIPT OR SALES INVOICE.");
+    // The first disclaimer line renders the shared PACKING_LIST_DISCLAIMER
+    // constant (BIR-WORDING.md rule 2); its exact text is pinned in
+    // tests/print-documents.test.ts.
+    expect(doc).toContain("PACKING_LIST_DISCLAIMER");
     expect(doc).toContain("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
     expect(doc).toContain("Computer-generated. Always issued with the manual BIR DR/SI.");
     // The policies URL prints once, inside the version line — the bare

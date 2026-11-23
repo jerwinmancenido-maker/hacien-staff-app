@@ -14,6 +14,7 @@ import { customerCreditBalance, customerDepositBalance } from "../services/colle
 import { billingCoverageNote, billingPositionNote } from "./coverage";
 import { billingPageWindow } from "./paging";
 import { getNonVatMeter } from "../services/non-vat";
+import { BILLING_DISCLAIMER } from "../print/tax-wording";
 
 export const BILLING_STATUSES: BillingStatus[] = ["OPEN", "PARTIALLY_PAID", "PAID", "VOID"];
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
@@ -866,7 +867,7 @@ export async function customerArSnapshot(customerId: string) {
   return { aging, overdue, credit, deposits, anyOverdue, graceDays: grace, balanceDue: aging.total, hasBillings: billings.length > 0 };
 }
 
-/** Statement of account data (printable). Title must say it's not an official invoice. */
+/** Statement of account data (printable). The document title stays in the header; the disclaimer field carries the one shared BIR reference-only text (BILLING_DISCLAIMER). */
 export async function getStatement(customerId: string, from?: Date | null, to?: Date | null) {
   const snap = await getSettingsSnapshot();
   const customer = await db.customer.findUnique({
@@ -1047,7 +1048,7 @@ export async function getStatement(customerId: string, from?: Date | null, to?: 
   const billingAddress = customer.addresses[0] ? formatAddress(customer.addresses[0]) : customer.address;
 
   return {
-    disclaimer: "Statement of account — not an official invoice. System-generated, no signature required.",
+    disclaimer: BILLING_DISCLAIMER,
     company: snap.settings.company,
     customer: { id: customer.id, name: customer.name, tin: customer.tin, address: billingAddress },
     from: from ? ymd(from) : null,

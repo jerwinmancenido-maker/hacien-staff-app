@@ -1,10 +1,9 @@
 import type { ProfessionalPrintModel } from "@/lib/print/types";
 import {
+  BILLING_DISCLAIMER,
   INPUT_TAX_DISCLAIMER,
-  NOT_OFFICIAL_INVOICE,
   QUOTATION_NOT_INVOICE,
   SALES_ORDER_NOT_INVOICE,
-  STATEMENT_NOT_OFFICIAL,
 } from "@/lib/print/tax-wording";
 
 const company = {
@@ -134,7 +133,7 @@ export const billingPrintFixture = (): ProfessionalPrintModel =>
     meta: [{ label: "Billing no.", value: "BL-2026-0001" }],
     hideStatus: true,
     thankYou: true,
-    taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [BILLING_DISCLAIMER, INPUT_TAX_DISCLAIMER],
     paymentInstructions: [
       { kind: "ewallet", label: "GCash", accountName: "HACIEN", accountLast4: "5678", accountPrinted: "****5678" },
     ],
@@ -150,7 +149,7 @@ export const collectionPrintFixture = (): ProfessionalPrintModel =>
     title: "Collection Acknowledgement",
     number: "CR-2026-0001",
     thankYou: true,
-    taxLines: [NOT_OFFICIAL_INVOICE, INPUT_TAX_DISCLAIMER],
+    taxLines: [BILLING_DISCLAIMER, INPUT_TAX_DISCLAIMER],
     // Mirrors views.ts: Prepared by is electronic (no line), Received by
     // keeps its line — someone signs by hand to acknowledge receipt.
     signatories: [
@@ -264,7 +263,7 @@ export const customerStatementFixture = (): ProfessionalPrintModel =>
     items: undefined,
     totals: undefined,
     thankYou: true,
-    taxLines: [STATEMENT_NOT_OFFICIAL],
+    taxLines: [BILLING_DISCLAIMER],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "10000.00",
@@ -294,7 +293,7 @@ export const supplierStatementFixture = (): ProfessionalPrintModel =>
     party: supplierParty,
     items: undefined,
     totals: undefined,
-    taxLines: [STATEMENT_NOT_OFFICIAL],
+    taxLines: [BILLING_DISCLAIMER],
     ledger: {
       openingBalance: "0.00",
       closingBalance: "5000.00",

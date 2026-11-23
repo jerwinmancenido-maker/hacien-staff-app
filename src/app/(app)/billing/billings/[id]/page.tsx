@@ -181,7 +181,7 @@ export default async function BillingDetailPage({
 
       {tab === "overview" && (
         <div className="card">
-          <p className="faint small">{PRINTABLE_DISCLAIMER}. Internal ref {b.number}.</p>
+          <p className="faint small">{PRINTABLE_DISCLAIMER} Internal ref {b.number}.</p>
           {b.withholdings.length > 0 && (
             <>
               <h2>2307s</h2>

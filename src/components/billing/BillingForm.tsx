@@ -84,7 +84,7 @@ export function BillingForm({
         <Link className="btn btn-secondary" href={cancelHref}>
           Cancel
         </Link>
-        <span className="small faint">Printables say “not an official invoice”.</span>
+        <span className="small faint">Printables carry the BIR reference-only disclaimer.</span>
       </div>
       <div className="form-grid">
         <div className="field full">
