@@ -138,7 +138,7 @@ export function incomeTaxWorksheetToCsv(
           ]
         : []),
       csvRow(["a", "Invoiced total (net of returns) / Collected total (Jan 1 to quarter end)", sheet.invoicedTotal, sheet.collectedTotal]),
-      csvRow(["b", "Less allowance (8% option, sole proprietor — confirm)", sheet.invoiced.b, sheet.collected.b]),
+      csvRow(["b", "Less allowance (8% option, sole proprietor)", sheet.invoiced.b, sheet.collected.b]),
       csvRow(["c", "Taxable (max 0, a−b)", sheet.invoiced.c, sheet.collected.c]),
       csvRow(["d", "Tax (c × 8%)", sheet.invoiced.d, sheet.collected.d]),
       csvRow(["e", "Less tax paid in earlier quarters", sheet.invoiced.e, sheet.collected.e]),
