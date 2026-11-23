@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSignedInUser } from "@/lib/auth/current-user";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import { assertCanDeleteDocument } from "@/lib/permissions";
 import { archiveAttachment } from "@/lib/services/attachments";
@@ -14,7 +15,8 @@ import type { FormState } from "@/lib/validation/forms";
  */
 export async function archiveAttachmentAction(attachmentId: string): Promise<FormState> {
   return runAction(async () => {
-    const user = await requireSignedInUser();
+    const user = await getCurrentUser();
+    if (!user) redirect("/login");
     assertCanDeleteDocument(user);
     const att = await archiveAttachment(attachmentId, user);
     if (att.salesOrderId) revalidatePath(`/sales-orders/${att.salesOrderId}`);
