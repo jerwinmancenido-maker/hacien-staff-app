@@ -161,7 +161,7 @@ export const collectionPrintFixture = (): ProfessionalPrintModel =>
 export const poPrintFixture = (): ProfessionalPrintModel =>
   base({
     kind: "supplier_po",
-    title: "Purchase Order",
+    title: "Purchase order",
     number: "PO-2026-0001",
     party: supplierParty,
     unitPriceLabel: "Unit cost",

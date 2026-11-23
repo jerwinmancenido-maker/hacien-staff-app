@@ -51,7 +51,7 @@ export default async function BillingDetailPage({
           <>
             Booklet #{b.invoiceNo}
             <BillingStatusChip status={b.status} />
-            {b.needsAdminCheck && b.status !== "VOID" && <Chip tone="dark">Needs Admin check</Chip>}
+            {b.needsAdminCheck && b.status !== "VOID" && <Chip tone="dark">Needs Admin review</Chip>}
             {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
           </>
         }

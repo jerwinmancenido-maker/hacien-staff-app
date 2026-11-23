@@ -210,7 +210,7 @@ export function staffNeedsAdminCheck(user: { isAdmin: boolean; isApprover: boole
   return !!user && !user.isAdmin && !user.isApprover;
 }
 
-/** Only an active Admin may clear "Needs Admin check". */
+/** Only an active Admin may clear "Needs Admin review". */
 export function assertCanMarkAdminCheck(user: PermissionUser | null | undefined): void {
   if (!user || !user.active || !user.isAdmin) throw new ForbiddenError();
 }
