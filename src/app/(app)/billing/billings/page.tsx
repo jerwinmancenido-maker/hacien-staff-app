@@ -83,8 +83,14 @@ export default async function BillingsListPage({
             </option>
           ))}
         </select>
-        <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From invoice date" />
-        <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To invoice date" />
+        <label className="small faint">
+          From
+          <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From invoice date" />
+        </label>
+        <label className="small faint">
+          To
+          <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To invoice date" />
+        </label>
         {sp.customerId ? <input type="hidden" name="customerId" value={sp.customerId} /> : null}
         <button className="btn btn-secondary" type="submit">
           Filter
@@ -158,6 +164,7 @@ export default async function BillingsListPage({
         page={currentPage}
         totalPages={totalPages}
         total={total}
+        noun="billings"
         hrefFor={pageHref}
         jumpAction="/billing/billings"
         jumpParams={{

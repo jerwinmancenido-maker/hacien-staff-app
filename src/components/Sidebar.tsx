@@ -179,6 +179,12 @@ const CRUMB_LABELS: Record<string, string> = {
   "2307-received": "2307s received",
   "ewt-withheld": "EWT withheld",
   "sales-summary": "Sales summary",
+  operations: "Operations",
+  reconciliation: "Reconciliation",
+  items: "Items",
+  dispatch: "Dispatch",
+  reminders: "Reminders",
+  profit: "Monthly profit",
   new: "New",
   edit: "Edit",
 };

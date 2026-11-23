@@ -6,7 +6,7 @@ import Link from "next/link";
  * rendered its own pager and they diverged (billings said "Previous" in a
  * space-between bar; the rest said "Prev"), and none offered a direct
  * page jump. Every list now renders this exact markup: the same
- * "Page X of Y · N records" sentence, the same Prev/Next links, and the
+ * "Page X of Y · N <noun>" sentence (the noun names what the list counts), the same Prev/Next links, and the
  * same jump form.
  *
  * The jump is a plain GET form back to the list's own URL: the active
@@ -21,6 +21,8 @@ export type ListPagerProps = {
   page: number;
   totalPages: number;
   total: number;
+  /** What the list counts, plural lower case — renders as "{total} {noun}". */
+  noun: string;
   /** URL for a target page with the list's filters/sort preserved. */
   hrefFor: (page: number) => string;
   /** The list's own path — the jump form submits here with method="get". */
@@ -29,13 +31,13 @@ export type ListPagerProps = {
   jumpParams?: Record<string, string | undefined>;
 };
 
-export function ListPager({ page, totalPages, total, hrefFor, jumpAction, jumpParams }: ListPagerProps) {
+export function ListPager({ page, totalPages, total, noun, hrefFor, jumpAction, jumpParams }: ListPagerProps) {
   if (totalPages <= 1) return null;
   const carried = Object.entries(jumpParams ?? {}).filter(([, v]) => v);
   return (
     <div className="toolbar" style={{ marginTop: 10 }}>
       <span className="small faint">
-        Page {page} of {totalPages} · {total} records
+        Page {page} of {totalPages} · {total} {noun}
       </span>
       {page > 1 && (
         <Link className="btn btn-secondary" href={hrefFor(page - 1)}>

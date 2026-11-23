@@ -170,6 +170,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
         page={orderPage.page}
         totalPages={orderPage.totalPages}
         total={orderPage.total}
+        noun="sales orders"
         hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
         jumpAction="/sales-orders"
         jumpParams={{
