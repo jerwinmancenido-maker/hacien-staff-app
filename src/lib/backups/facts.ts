@@ -16,7 +16,7 @@ export const BACKUP_FACTS: readonly BackupFact[] = [
   {
     title: "Manual staging database export before every deploy with a migration",
     detail:
-      "The CTO takes a manual staging database export before every deploy that includes a migration. 6 such exports so far, Oct 31 to Nov 1, 11:56 PM PHT. They are kept on the CTO's box, owner-only, and are not off-site.",
+      "The CTO takes a manual staging database export before every deploy that includes a migration. 6 such exports so far, Oct 31 to Nov 1, 11:56 PM PHT. They are kept on the CTO's computer, owner-only, and are not off-site.",
   },
   {
     title: "Hostinger automatic backup is ON",
