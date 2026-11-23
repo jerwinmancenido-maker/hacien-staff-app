@@ -18,7 +18,7 @@ describe("backups facts (Q14, S-47)", () => {
     const manual = BACKUP_FACTS[0]!.detail;
     expect(manual).toContain("6 such exports");
     expect(manual).toContain("Oct 31 to Nov 1, 11:56 PM PHT");
-    expect(manual).toContain("CTO's box");
+    expect(manual).toContain("CTO's computer");
     expect(manual).toContain("owner-only");
     expect(manual).toContain("not off-site");
     const hostinger = BACKUP_FACTS[1]!.detail;

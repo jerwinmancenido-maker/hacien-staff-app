@@ -42,7 +42,7 @@ export default async function ItemsPage({
         title="Items"
         subtitle={
           activeTab === "catalog"
-            ? "Products staff quote — record each one once, with brand, model and price."
+            ? "Products staff quote from — record each one once, with brand, model and price."
             : "Last price and last cost per item, from quotes, sales orders and supplier POs."
         }
         actions={
