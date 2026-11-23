@@ -5,7 +5,7 @@ import { money } from "@/lib/documents/common";
 import { listDispatchQueue, pageDispatchQueue } from "@/lib/sales-orders/dispatch";
 import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 
 /** Quantities print whole when they are whole ("2 pc", not "2.00 pc") —
  * the same strip the packing list applies. */
@@ -73,9 +73,7 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
       </div>
       {summary.orderCount === 0 ? (
         <div className="card">
-          <p className="faint" style={{ margin: 0 }}>
-            Nothing to dispatch. Every open sales order is fully delivered.
-          </p>
+          <EmptyState title="Nothing to dispatch." line="Every open sales order is fully delivered." />
         </div>
       ) : (
         queuePage.items.map((r) => (

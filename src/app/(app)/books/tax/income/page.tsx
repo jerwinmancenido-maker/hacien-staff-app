@@ -31,10 +31,14 @@ function DualLine({
   collectedHref,
   warnInvoiced,
   warnCollected,
+  invoicedHint,
+  collectedHint,
 }: {
   letter: string;
   label: string;
-  hint: string;
+  hint?: string;
+  invoicedHint?: string;
+  collectedHint?: string;
   invoiced: string;
   collected: string;
   invoicedHref?: string;
@@ -60,13 +64,23 @@ function DualLine({
       </td>
       <td>
         <div>{label}</div>
-        <div className="faint small">{hint}</div>
+        {hint ? <div className="faint small">{hint}</div> : null}
       </td>
       <td className="num tax-income-main" style={{ whiteSpace: "nowrap", fontWeight: 600, fontSize: "1.05em" }}>
         {cell(invoiced, invoicedHref, warnInvoiced)}
+        {invoicedHint ? (
+          <div className="faint small" style={{ fontWeight: 400, whiteSpace: "normal" }}>
+            {invoicedHint}
+          </div>
+        ) : null}
       </td>
       <td className="num tax-income-ref" style={{ whiteSpace: "nowrap", fontSize: "0.9em", opacity: 0.75 }}>
         {cell(collected, collectedHref, warnCollected)}
+        {collectedHint ? (
+          <div className="faint small" style={{ fontWeight: 400, whiteSpace: "normal" }}>
+            {collectedHint}
+          </div>
+        ) : null}
       </td>
     </tr>
   );
@@ -113,7 +127,7 @@ export default async function IncomeTaxWorksheetPage({
         <div className="alert warn" role="status" style={{ marginBottom: 16 }}>
           <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
           <div className="small" style={{ marginTop: 4 }}>
-            {INCOME_TAX_LINE_HINTS.a}. The 8% math is unchanged; Collected is kept only as a reference
+            {INCOME_TAX_LINE_HINTS.a} The 8% math is unchanged; Collected is kept only as a reference
             column.
           </div>
         </div>
@@ -152,7 +166,8 @@ export default async function IncomeTaxWorksheetPage({
             <DualLine
               letter="a"
               label="Cumulative from Jan 1 to quarter end"
-              hint={`${INCOME_TAX_LINE_HINTS.invoiced} · ${INCOME_TAX_LINE_HINTS.collected}`}
+              invoicedHint={INCOME_TAX_LINE_HINTS.invoiced}
+              collectedHint={INCOME_TAX_LINE_HINTS.collected}
               invoiced={sheet.invoicedTotal}
               collected={sheet.collectedTotal}
               invoicedHref={salesHref}

@@ -1,5 +1,6 @@
 import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
+import { formatSerialDisplay } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
@@ -271,7 +272,7 @@ export default async function SalesOrderPage({
                       Delivery receipt
                     </td>
                     <td className="strong">
-                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{d.drNumber}</Link>
+                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{formatSerialDisplay(d.drNumber)}</Link>
                     </td>
                     <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
                     <td className="num">—</td>

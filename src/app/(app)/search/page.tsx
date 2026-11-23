@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { canSeeTin } from "@/lib/permissions";
 import { listBillings, BILLING_STATUS_LABELS } from "@/lib/billing/views";
@@ -168,7 +169,7 @@ export default async function TopSearchPage({ searchParams }: { searchParams: Pr
       hits: takeTopSearchHits(billings, (r) => ({
         id: r.id,
         href: `/billing/billings/${r.id}`,
-        primary: String(r.invoiceNo),
+        primary: formatBookletNumber(r.invoiceNo),
         secondary: r.customer.name,
         status: BILLING_STATUS_LABELS[r.status] ?? r.status,
       })),

@@ -5,7 +5,7 @@ import { listSalesOrderAging, pageSoAging } from "@/lib/sales-orders/aging";
 import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
 import { AGING_BUCKET_LABELS } from "@/lib/billing/aging";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 
 type Search = { page?: string };
 
@@ -60,9 +60,7 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
       </div>
       {summary.orderCount === 0 ? (
         <div className="card">
-          <p className="faint" style={{ margin: 0 }}>
-            Nothing aging. Every open sales order is fully billed.
-          </p>
+          <EmptyState title="Nothing aging." line="Every open sales order is fully billed." />
         </div>
       ) : (
         agingPage.bands.map((band) => (
