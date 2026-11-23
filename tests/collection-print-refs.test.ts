@@ -16,7 +16,7 @@ describe("collection print — Applied to references", () => {
 
   it("still builds the reference from the billing number and booklet no.", () => {
     // The booklet number carries its standardized name (2026-11-21).
-    expect(views).toContain("${a.billing.number} / Sales Invoice No. ${a.billing.invoiceNo}");
+    expect(views).toContain("${a.billing.number} / Sales Invoice No. ${formatBookletNumber(a.billing.invoiceNo)}");
   });
 });
 

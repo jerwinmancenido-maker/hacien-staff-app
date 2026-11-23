@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { money, ymd } from "@/lib/documents/common";
 import { formatDate } from "@/lib/format";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { mergeCompanyLetterhead, paymentInstructionsFromSettings, printCompanyBlock } from "@/lib/print/company";
 import { qrSvg } from "@/lib/print/qr";
 import { POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
@@ -165,7 +166,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     salesOrderId: so.id,
     salesOrderNumber: so.number,
     drNumber: delivery.drNumber,
-    siNumbers: formatSiNumbers(billings.map((b) => String(b.invoiceNo))),
+    siNumbers: formatSiNumbers(billings.map((b) => formatBookletNumber(b.invoiceNo))),
     deliveryDate: formatDate(new Date(ymd(delivery.deliveryDate)!)),
     receivedBy: delivery.receivedBy,
     customerName: so.customer.name,
