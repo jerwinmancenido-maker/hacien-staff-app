@@ -1103,6 +1103,18 @@ a.tracker-card:hover {
   padding: 0;
   max-height: none;
 }
+/* Every card: a table-wrap placed directly inside a card sits on the card
+   surface — no second bordered box inside the card (run-87 fix F9-B,
+   findings 1294/1297/1299; the .payments-table-card / .band-card strip
+   above, generalised to .card). Standalone list wraps (quotes /
+   sales-orders / purchase-orders / receiving) have no .card parent and
+   keep their own border — the wrap is their only surface. */
+.card > .table-wrap {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-height: none;
+}
 .payments-empty {
   max-width: 100%;
 }

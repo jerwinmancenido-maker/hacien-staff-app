@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { addDays, manilaToday } from "@/lib/format";
+import { addDays, formatDate, manilaToday } from "@/lib/format";
 import { can, canSeeCosts, type PermissionUser } from "@/lib/permissions";
 import { accessReviewDue } from "@/lib/access-review";
 import { arAgingSummary } from "@/lib/billing/views";
@@ -93,7 +93,7 @@ export async function getNotifications(user: PermissionUser): Promise<Notificati
       count: dueSoonOpen.length,
       href: "/billing/aging",
       items: dueSoonOpen.slice(0, 5).map((b) => ({
-        label: `${b.number} · ${b.customer.name} · due ${b.dueDate.toISOString().slice(0, 10)}`,
+        label: `${b.number} · ${b.customer.name} · due ${formatDate(b.dueDate)}`,
         href: `/billing/billings/${b.id}`,
       })),
     });
