@@ -70,7 +70,7 @@ export default async function MessagesPage() {
         </a>
       </div>
       {rows.length === 0 ? (
-        <EmptyState title="No messages sent yet" line="Every SMS and email sent through the messaging base is logged here." />
+        <EmptyState title="No messages sent yet" line="Every SMS and email sent through this app is logged here." />
       ) : (
         <DataTable
           label="Message send log"
@@ -111,7 +111,7 @@ export default async function MessagesPage() {
         />
       )}
       <p className="faint small">
-        Nothing is sent until the CTO sets the provider keys. Until then, attempts are logged as
+        Nothing is sent until the messaging provider keys are set. Until then, attempts are logged as
         “not sent: not set up”. Go-live is blocked until the UniSMS DPA, DB location, and HACIEN
         sender ID are in place.
       </p>

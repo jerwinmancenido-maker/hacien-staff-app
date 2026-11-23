@@ -37,7 +37,7 @@ export default async function BillingHomePage() {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-head">
-          <h2>Needs Admin check</h2>
+          <h2>Needs Admin review</h2>
         </div>
         {waiting.length === 0 ? (
           <p className="faint">None waiting for a check.</p>
@@ -49,7 +49,7 @@ export default async function BillingHomePage() {
                   {row.number}
                 </Link>
                 <span className="muted"> · {row.label} · {row.customer} · {formatPeso(row.amount)}</span>{" "}
-                <Chip tone="dark">Needs Admin check</Chip>
+                <Chip tone="dark">Needs Admin review</Chip>
               </li>
             ))}
           </ul>
