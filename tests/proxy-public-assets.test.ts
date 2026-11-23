@@ -173,3 +173,29 @@ describe("proxy public-asset allowlist (security)", () => {
     expect(sessionApi.status).toBe(401);
   });
 });
+
+describe("proxy signed-out server-action submits (F2, finding 1277)", () => {
+  function actionPost(url: string) {
+    return new NextRequest(url, { method: "POST", headers: { "next-action": "test-action-id" } });
+  }
+
+  it("answers a cookie-less action POST with the action-redirect transport to /login (not a plain 307)", () => {
+    const res = proxy(actionPost("http://localhost/cash/expenses/new"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-action-redirect")).toBe("/login;push");
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("a cookie-less POST without the action header still gets the plain page redirect", () => {
+    const res = proxy(new NextRequest("http://localhost/cash/expenses/new", { method: "POST" }));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost/login");
+    expect(res.headers.get("x-action-redirect")).toBeNull();
+  });
+
+  it("a cookie-less /api POST still answers 401 JSON (API calls carry no action header)", () => {
+    const res = proxy(new NextRequest("http://localhost/api/items/search", { method: "POST" }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("x-action-redirect")).toBeNull();
+  });
+});

@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { groupItemDocuments, groupItemHistory, listItemDetailEntries, listSupplierPriceComparison } from "@/lib/items/history";
 import type { ItemTab } from "@/lib/items/tabs";
 
 /** Document type label for the where-used list. */
 const DOC_LABELS = { quote: "Quotation", sales_order: "Sales order", purchase_order: "Purchase order" } as const;
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 function docHref(kind: "quote" | "sales_order" | "purchase_order", id: string): string {
   return kind === "quote" ? `/quotes/${id}` : kind === "sales_order" ? `/sales-orders/${id}` : `/purchase-orders/${id}`;
@@ -68,7 +71,7 @@ export default async function ItemHistoryDetail({
                 <tbody>
                   {priceEntries.map((e, i) => (
                     <tr key={`${e.docKind}:${e.docId}:${i}`}>
-                      <td>{e.date}</td>
+                      <td>{day(e.date)}</td>
                       <td>
                         <Link href={docHref(e.docKind, e.docId)}>{e.ref}</Link>
                         <div className="small faint">{DOC_LABELS[e.docKind]}</div>
@@ -114,7 +117,7 @@ export default async function ItemHistoryDetail({
                       </td>
                       <td className="num">{formatPeso(row.lastCost)}</td>
                       <td>{row.poNumber}</td>
-                      <td>{row.lastCostDate}</td>
+                      <td>{day(row.lastCostDate)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -148,7 +151,7 @@ export default async function ItemHistoryDetail({
                 <tbody>
                   {docs.map((d) => (
                     <tr key={`${d.docKind}:${d.docId}`}>
-                      <td>{d.date}</td>
+                      <td>{day(d.date)}</td>
                       <td>
                         <Link href={docHref(d.docKind, d.docId)}>{d.docNumber}</Link>
                       </td>
@@ -190,7 +193,7 @@ export default async function ItemHistoryDetail({
                       <>
                         {formatPeso(last.lastPrice)}
                         <div className="small faint">
-                          {last.lastPriceRef} · {last.lastPriceDate}
+                          {last.lastPriceRef} · {day(last.lastPriceDate)}
                         </div>
                       </>
                     ) : (
@@ -203,7 +206,7 @@ export default async function ItemHistoryDetail({
                         <>
                           {formatPeso(last.lastCost)}
                           <div className="small faint">
-                            {last.lastCostRef} · {last.lastCostDate}
+                            {last.lastCostRef} · {day(last.lastCostDate)}
                           </div>
                         </>
                       ) : (

@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { requireCostPage } from "@/lib/auth/current-user";
 import { listSupplierPriceComparison } from "@/lib/items/history";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
 
 /** S-56: supplier price compare — cheapest first, for one item description. Costs only. */
 export default async function ItemComparePage({ searchParams }: { searchParams: Promise<{ item?: string }> }) {
@@ -56,7 +59,7 @@ export default async function ItemComparePage({ searchParams }: { searchParams: 
                   </td>
                   <td className="num">{formatPeso(row.lastCost)}</td>
                   <td>{row.poNumber}</td>
-                  <td>{row.lastCostDate}</td>
+                  <td>{day(row.lastCostDate)}</td>
                 </tr>
               ))}
             </tbody>

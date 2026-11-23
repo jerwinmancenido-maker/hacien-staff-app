@@ -5,11 +5,14 @@ import { listItemHistory } from "@/lib/items/history";
 import { isItemsImportEnabled } from "@/lib/items/import-enabled";
 import { listItems } from "@/lib/services/items";
 import { ITEM_KIND_LABELS } from "@/lib/validation/items";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { Chip, PageHeader } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
 import { PillTabs } from "@/components/PillTabs";
 import { SearchIcon } from "@/components/Icons";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 /**
  * S-55: item list with last cost and price, from document lines.
@@ -188,7 +191,7 @@ export default async function ItemsPage({
                           <>
                             {formatPeso(row.lastPrice)}
                             <div className="small faint">
-                              {row.lastPriceRef} · {row.lastPriceDate}
+                              {row.lastPriceRef} · {day(row.lastPriceDate)}
                             </div>
                           </>
                         ) : (
@@ -201,7 +204,7 @@ export default async function ItemsPage({
                             <>
                               {formatPeso(row.lastCost)}
                               <div className="small faint">
-                                {row.lastCostRef} · {row.lastCostDate}
+                                {row.lastCostRef} · {day(row.lastCostDate)}
                               </div>
                             </>
                           ) : (
