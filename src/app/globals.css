@@ -8648,8 +8648,12 @@ button.contact-card-add {
 
   /* 16px field text is larger than the scaled UI, so two columns clip
      long values (customer type, payment terms). One column keeps them
-     inside the phone width. Tablet (641px and up) stays two columns. */
-  .form-grid {
+     inside the phone width. Tablet (641px and up) stays two columns.
+     The quote editor grid .quote-fg joins this rule (finding 1109): it
+     was the one editor grid that kept two columns on a phone, so its
+     Customer and Business values clipped mid-word. */
+  .form-grid,
+  .quote-fg {
     grid-template-columns: minmax(0, 1fr);
   }
 

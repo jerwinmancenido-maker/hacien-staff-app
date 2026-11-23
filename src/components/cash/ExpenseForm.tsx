@@ -221,7 +221,7 @@ export function ExpenseForm({
           {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
         </div>
         {businesses.length > 0 && !isLinked && (
-          <div className={`field${e.businessId ? " has-error" : ""}`}>
+          <div className={`field full${e.businessId ? " has-error" : ""}`}>
             <label htmlFor="businessId">Business (unlinked expenses only)</label>
             <select id="businessId" name="businessId" defaultValue={state.values?.businessId ?? ""}>
               <option value="">{ownCompanyName} (own company)</option>
