@@ -88,6 +88,14 @@ describe("top search wiring", () => {
     expect(src).toContain('e.key === "Escape"');
   });
 
+  it("F-F (1107): on /search the phone panel starts expanded — that page has no box of its own", () => {
+    const src = read("src/components/TopbarSearch.tsx");
+    expect(src).toContain("usePathname");
+    expect(src).toContain('pathname === "/search"');
+    expect(src).toContain("(max-width: 768px)");
+    expect(src).toContain("useSyncExternalStore");
+  });
+
   it("search page calls each list with q and the same permissions", () => {
     const src = read("src/app/(app)/search/page.tsx");
     expect(src).toContain('requirePagePermission("view")');
