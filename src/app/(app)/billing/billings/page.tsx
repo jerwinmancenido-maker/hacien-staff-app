@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -130,7 +131,7 @@ export default async function BillingsListPage({
                   <tr key={r.id} className="clickable row-has-link">
                     <td data-col="number">
                       <a href={`/billing/billings/${r.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      <Link href={`/billing/billings/${r.id}`}>{r.invoiceNo}</Link>
+                      <Link href={`/billing/billings/${r.id}`}>{formatBookletNumber(r.invoiceNo)}</Link>
                       <div className="small faint">{r.number}</div>
                     </td>
                     <td className="col-tab-cap">

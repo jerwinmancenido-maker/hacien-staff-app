@@ -15,6 +15,7 @@ import { BillingStatusChip, MethodLabel, OverdueBadge, PRINTABLE_DISCLAIMER } fr
 import { DeleteButton, VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
 import { PageHeader } from "@/components/ui";
+import { formatBookletNumber, formatSerialDisplay } from "@/lib/billing/booklet";
 import { customerCreditBalance } from "@/lib/services/collections";
 import { deleteBillingAction, markBillingCheckedAction, updateBillingExpectedDateFormAction, voidBillingAction } from "../../actions";
 
@@ -49,7 +50,7 @@ export default async function BillingDetailPage({
       <PageHeader
         title={
           <>
-            Booklet #{b.invoiceNo}
+            Booklet #{formatBookletNumber(b.invoiceNo)}
             <BillingStatusChip status={b.status} />
             {b.needsAdminCheck && b.status !== "VOID" && <Chip tone="dark">Needs Admin review</Chip>}
             {!b.isGovernment && <OverdueBadge label={b.overdue.label} />}
@@ -76,7 +77,7 @@ export default async function BillingDetailPage({
             {canVoid && (
               <VoidButton
                 label="Void"
-                docLabel={`billing ${b.number} (booklet #${b.invoiceNo})`}
+                docLabel={`billing ${b.number} (booklet #${formatBookletNumber(b.invoiceNo)})`}
                 body="The booklet invoice number stays used and will never be reused."
                 onVoid={voidBillingAction.bind(null, id)}
               />
@@ -84,7 +85,7 @@ export default async function BillingDetailPage({
             {canDeleteDocument(user) && b.status === "VOID" && !deleteBlocked && (
               <DeleteButton
                 number={b.number}
-                body={`${b.number} (SI no. ${b.invoiceNo}) will be deleted. This cannot be undone, and its number will not be reused.`}
+                body={`${b.number} (SI no. ${formatBookletNumber(b.invoiceNo)}) will be deleted. This cannot be undone, and its number will not be reused.`}
                 onDelete={deleteBillingAction.bind(null, id)}
               />
             )}
@@ -113,7 +114,7 @@ export default async function BillingDetailPage({
             <Link href={`/sales-orders/${b.salesOrder.id}`}>{b.salesOrder.number}</Link>
           </dd>
           <dt>Booklet invoice no.</dt>
-          <dd className="num strong">{b.invoiceNo}</dd>
+          <dd className="num strong">{formatBookletNumber(b.invoiceNo)}</dd>
           <dt>Invoice date</dt>
           <dd>{day(b.invoiceDate)}</dd>
           {b.expectedPaymentLabel ? (
@@ -214,7 +215,7 @@ export default async function BillingDetailPage({
               customerId={b.customer.id}
               availableCredit={credit}
               lockedBillingId={b.id}
-              billings={[{ id: b.id, label: `Booklet #${b.invoiceNo}`, balance: b.balance }]}
+              billings={[{ id: b.id, label: `Booklet #${formatBookletNumber(b.invoiceNo)}`, balance: b.balance }]}
             />
           )}
         </div>
@@ -247,7 +248,7 @@ export default async function BillingDetailPage({
                       <td>
                         <MethodLabel method={a.collection.method} />
                       </td>
-                      <td>{a.collection.receiptNo ?? "—"}</td>
+                      <td>{formatSerialDisplay(a.collection.receiptNo) ?? "—"}</td>
                       <td className="num">{formatPeso(a.cashApplied)}</td>
                       <td className="num">{formatPeso(a.withholdingApplied)}</td>
                     </tr>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -74,7 +75,7 @@ export default async function Withholding2307Page({
                     <td data-col="number">
                       {r.billing ? (
                         <Link href={`/billing/billings/${r.billing.id}`}>
-                          #{r.billing.invoiceNo} · {r.billing.number}
+                          #{formatBookletNumber(r.billing.invoiceNo)} · {r.billing.number}
                         </Link>
                       ) : (
                         "—"

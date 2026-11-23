@@ -8,7 +8,7 @@ import { VoidButton } from "@/components/purchasing/DocButtons";
 import { useFormAction } from "@/components/useFormAction";
 import { FileInput } from "@/components/FileInput";
 import { soDeliveryProgress, soPodIncomplete } from "@/lib/sales-orders/delivery";
-import { formatBookletNumber } from "@/lib/billing/booklet";
+import { formatBookletNumber, formatSerialDisplay } from "@/lib/billing/booklet";
 import type { FormState } from "@/lib/validation/forms";
 
 const day = (d: Date | string | null | undefined) => {
@@ -387,7 +387,7 @@ export function DeliverySection({
                 {deliveries.map((d) => (
                   <tr key={d.id} className={d.voidedAt ? "inactive" : undefined}>
                     <td className="strong">
-                      {d.drNumber}
+                      {formatSerialDisplay(d.drNumber)}
                       {d.notes && <div className="faint" style={{ whiteSpace: "pre-wrap" }}>{d.notes}</div>}
                     </td>
                     <td>{day(d.deliveryDate)}</td>
@@ -439,7 +439,7 @@ export function DeliverySection({
                         canVoid && (
                           <VoidButton
                             label="Void"
-                            docLabel={`delivery receipt DR #${d.drNumber}`}
+                            docLabel={`delivery receipt DR #${formatSerialDisplay(d.drNumber)}`}
                             body="Voiding this delivery reverses its delivered quantities."
                             onVoid={voidAction.bind(null, d.id)}
                           />

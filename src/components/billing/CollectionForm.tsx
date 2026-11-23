@@ -7,6 +7,7 @@ import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { formatPeso } from "@/lib/format";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
 import { FileInput } from "@/components/FileInput";
@@ -304,7 +305,7 @@ export function CollectionForm({
                     <input type="hidden" name="allocWithholding" value={allocs[i]?.withholding ?? ""} />
                     <input type="hidden" name="allocRate" value={allocs[i]?.rate ?? ""} />
                     <input type="hidden" name="allocAtc" value={allocs[i]?.atc ?? ""} />
-                    #{b.invoiceNo}
+                    #{formatBookletNumber(b.invoiceNo)}
                     <div className="faint small">{b.number}</div>
                   </td>
                   <td>{b.dueDate}</td>

@@ -57,6 +57,21 @@ export function formatBookletNumber(invoiceNo: number): string {
 }
 
 /**
+ * Display form for a staff-entered booklet serial (DR/CR numbers are stored
+ * as the exact string staff typed). The entered text is kept verbatim except
+ * its trailing number, which is padded to the print width: "DR-5" renders
+ * "DR-005", while "VR1-COLL-001" (already padded) renders unchanged. A value
+ * with no trailing number renders exactly as entered. Display only — the
+ * stored string is never rewritten.
+ */
+export function formatSerialDisplay(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const m = String(raw).match(/^(.*?)(\d+)$/);
+  if (!m) return String(raw);
+  return `${m[1]!}${m[2]!.padStart(3, "0")}`;
+}
+
+/**
  * Parse a staff-entered booklet serial. Accepts plain digits (optional leading
  * zeros) or an optional SI/DR/CR prefix. Rejects mixed OR text and patterns
  * like "12-3" that would otherwise collapse onto the wrong serial.

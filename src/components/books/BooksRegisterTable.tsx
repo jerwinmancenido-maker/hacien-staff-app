@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatDate, formatPeso } from "@/lib/format";
+import { formatBookletNumber } from "@/lib/billing/booklet";
 import type { RegisterConfig } from "@/lib/books/config";
 import {
   CASH_COLLECTED_TOTAL_LABEL,
@@ -11,16 +12,22 @@ import { EmptyState } from "@/components/ui";
 
 const day = (ymdStr: string) => formatDate(new Date(`${ymdStr}T00:00:00.000Z`));
 
+// F3 (finding 1287): the registers' shared documentNumber value stays raw in
+// services/books.ts (it also feeds the print register + CSV, whose bytes must
+// not change), so the screen pads the booklet INV- serial at display only.
+const padInv = (s: string): string =>
+  s.replace(/\bINV-(\d+)\b/g, (_m, n: string) => `INV-${formatBookletNumber(Number(n))}`);
+
 function cell(row: BookRegister["rows"][number], key: RegisterConfig["columns"][number]["key"]): string {
   switch (key) {
     case "date":
       return day(row.date);
     case "documentNumber":
-      return row.documentNumber;
+      return padInv(row.documentNumber);
     case "party":
       return row.party;
     case "particulars":
-      return row.particulars;
+      return padInv(row.particulars);
     case "amount":
       return formatPeso(row.amount);
     case "ewt":
@@ -106,7 +113,7 @@ export function BooksRegisterTable({
                   if (c.key === "documentNumber") {
                     return (
                       <td key={c.key} data-col="number">
-                        {r.href ? <Link href={r.href}>{r.documentNumber}</Link> : r.documentNumber}
+                        {r.href ? <Link href={r.href}>{value}</Link> : value}
                       </td>
                     );
                   }

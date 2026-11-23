@@ -7,7 +7,7 @@ import { formatAddress } from "../addresses/format";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { agingBucket, emptyAging, sumAging, type AgingAmounts, type AgingBucket } from "./aging";
-import { bookletGrid, BOOKLET_DOC_TYPES, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
+import { bookletGrid, BOOKLET_DOC_TYPES, formatBookletNumber, formatSerialDisplay, parseBookletSerial, type BookletType, type UsedDocSlot } from "./booklet";
 import { billingToday, daysPastDue, expectedPaymentDateFromIar, formatExpectedPaymentLabel, isOverdue } from "./dates";
 import { billingBalance, openingCreditAsOf, unappliedCash } from "./status";
 import { customerCreditBalance, customerDepositBalance } from "../services/collections";
@@ -506,7 +506,7 @@ export async function listNeedsAdminCheck() {
     billings: billings.map((b) => ({
       id: b.id,
       number: b.number,
-      label: `Booklet #${b.invoiceNo}`,
+      label: `Booklet #${formatBookletNumber(b.invoiceNo)}`,
       customer: b.customer.name,
       amount: money(b.amount),
       href: `/billing/billings/${b.id}`,
@@ -770,7 +770,7 @@ export async function getBookletView(docType: BookletType = "SI") {
       return [{
         invoiceNo: n,
         id: d.id,
-        number: `DR #${d.drNumber}`,
+        number: `DR #${formatSerialDisplay(d.drNumber)}`,
         status: d.voidedAt ? "VOID" : "RECORDED",
       }];
     });
@@ -785,7 +785,7 @@ export async function getBookletView(docType: BookletType = "SI") {
       return [{
         invoiceNo: n,
         id: c.id,
-        number: c.receiptNo!,
+        number: formatSerialDisplay(c.receiptNo)!,
         status: c.status,
       }];
     });

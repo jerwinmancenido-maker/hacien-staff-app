@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatSerialDisplay } from "@/lib/billing/booklet";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
@@ -100,7 +101,7 @@ export default async function CollectionsListPage({
                     <td data-col="method">
                       <MethodLabel method={r.method} />
                     </td>
-                    <td data-col="number">{r.receiptNo ?? "—"}</td>
+                    <td data-col="number">{formatSerialDisplay(r.receiptNo) ?? "—"}</td>
                     <td className="num">{formatPeso(r.amountReceived)}</td>
                     <td className="num">{formatPeso(r.cashApplied)}</td>
                     <td className="num">{formatPeso(r.unappliedCredit)}</td>
