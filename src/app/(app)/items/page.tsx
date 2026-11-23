@@ -6,7 +6,7 @@ import { isItemsImportEnabled } from "@/lib/items/import-enabled";
 import { listItems } from "@/lib/services/items";
 import { ITEM_KIND_LABELS } from "@/lib/validation/items";
 import { formatPeso } from "@/lib/format";
-import { Chip, PageHeader } from "@/components/ui";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
 import { PillTabs } from "@/components/PillTabs";
 import { SearchIcon } from "@/components/Icons";
@@ -90,9 +90,7 @@ export default async function ItemsPage({
             ) : null}
           </form>
           {items.length === 0 ? (
-            <p className="faint">
-              No items in the catalog{cq ? ` for “${cq}”.` : " yet — add the first one with + New item."}
-            </p>
+            <EmptyState line={`No items in the catalog${cq ? ` for “${cq}”.` : " yet — add the first one with + New item."}`} />
           ) : (
             <DataTable
               label="Item catalog"
@@ -160,7 +158,7 @@ export default async function ItemsPage({
             ) : null}
           </form>
           {rows.length === 0 ? (
-            <p className="faint">No items found{q ? ` for “${q}”.` : " yet — items appear here once a quote, sales order or PO has a line."}</p>
+            <EmptyState line={`No items found${q ? ` for “${q}”.` : " yet — items appear here once a quote, sales order or PO has a line."}`} />
           ) : (
             <div className="table-wrap">
               <table className="list" aria-label="Items with last price and cost">

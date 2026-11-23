@@ -6,7 +6,7 @@ import { arAgingSummary, listNeedsAdminCheck, taxYearBillingMeter } from "@/lib/
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { formatNonVatPctLabel } from "@/lib/services/non-vat";
 import { BillingNav } from "@/components/billing/BillingNav";
-import { Chip, PageHeader } from "@/components/ui";
+import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
 
 export default async function BillingHomePage() {
@@ -112,7 +112,7 @@ export default async function BillingHomePage() {
           </div>
         </div>
         {summary.byCustomer.length === 0 ? (
-          <p className="faint">No open receivables yet.</p>
+          <EmptyState line="No open receivables yet." />
         ) : (
           <div className="table-wrap">
             <table className="list" aria-label="AR by customer">

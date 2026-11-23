@@ -4,7 +4,7 @@ import { formatPeso } from "@/lib/format";
 import { arAgingSummary } from "@/lib/billing/views";
 import { AGING_BUCKET_LABELS, AGING_BUCKETS } from "@/lib/billing/aging";
 import { BillingNav } from "@/components/billing/BillingNav";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 
 export default async function AgingPage() {
   await requirePagePermission("view");
@@ -29,7 +29,10 @@ export default async function AgingPage() {
         </div>
       </div>
       <div className="card">
-        <div className="table-wrap">
+        {summary.byCustomer.length === 0 ? (
+          <EmptyState line="Nothing outstanding." />
+        ) : (
+          <div className="table-wrap">
           <table className="list" aria-label="Aging by customer">
             <thead>
               <tr>
@@ -46,14 +49,7 @@ export default async function AgingPage() {
               </tr>
             </thead>
             <tbody>
-              {summary.byCustomer.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="faint">
-                    Nothing outstanding.
-                  </td>
-                </tr>
-              ) : (
-                summary.byCustomer.map((r) => (
+              {summary.byCustomer.map((r) => (
                   <tr key={r.customerId}>
                     <td>
                       <Link href={`/customers/${r.customerId}?tab=balances`}>{r.customerName}</Link>
@@ -76,11 +72,11 @@ export default async function AgingPage() {
                       </Link>
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
       </div>
     </>
   );
