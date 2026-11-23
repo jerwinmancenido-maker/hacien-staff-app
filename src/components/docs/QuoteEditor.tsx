@@ -1518,7 +1518,7 @@ export function QuoteEditor({
               {e.customerId && <div className="error">{e.customerId}</div>}
             </div>
             {(businesses.length > 0 || businessId) && (
-              <div className={`quote-f field${e.businessId ? " has-error" : ""}`}>
+              <div className={`quote-f field full${e.businessId ? " has-error" : ""}`}>
                 <label htmlFor="businessId">Business — whose sale is this?</label>
                 <select
                   id="businessId"
