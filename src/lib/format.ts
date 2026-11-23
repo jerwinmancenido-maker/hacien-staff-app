@@ -53,8 +53,9 @@ export function formatMoneyInput(raw: string): string {
 }
 
 /**
- * Always whole pesos (no centavos), e.g. ₱274,000. Used on Home KPI cards and
- * the Sales chart tooltip; elsewhere keep {@link formatPeso} with cents.
+ * Always whole pesos (no centavos), e.g. ₱274,000. Home KPI cards and the
+ * Sales chart tooltip now use {@link formatPeso} with cents (wording item 18);
+ * this helper has no remaining display callers.
  */
 export function formatPesoWhole(amount: number | string | { toString(): string }): string {
   const n = typeof amount === "number" ? amount : Number(amount.toString());
