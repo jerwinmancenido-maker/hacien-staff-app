@@ -6066,6 +6066,16 @@ button.contact-card-add {
   border-radius: calc(8px * var(--ui-scale, 1));
   padding: calc(14px * var(--ui-scale, 1)) calc(16px * var(--ui-scale, 1));
   background: #fafaf7;
+  /* Paper surface (finding 1286): the preview stands for the printed
+     letterhead, so it keeps the light theme's text tokens in both modes
+     -- the same pin-the-paper idiom as .pp-doc-root / .pp-page above.
+     Without this, dark mode flips --text / --text-2 / --text-3 near-white
+     on the paper background and the company name, address and TIN turn
+     unreadable. */
+  --text: #0a0a0a;
+  --text-2: #525252;
+  --text-3: #a3a3a3;
+  color: var(--text);
   font-size: calc(13px * var(--ui-scale, 1));
   max-width: calc(420px * var(--ui-scale, 1));
 }
