@@ -160,7 +160,7 @@ export default async function ReceivingPoPage({ params, searchParams }: { params
                 ))}
               </div>
             ))}
-          {!canEdit && <p className="small faint">You need edit rights to file or update claims. Serials on file: {po.receivingReports.flatMap((r) => r.items.flatMap((x) => splitSerialNumbers(x.serialNumbers))).join(", ") || "none"}.</p>}
+          {!canEdit && <p className="small faint">You need edit rights to file or update claims. Serials on file: {po.receivingReports.flatMap((r) => r.items.flatMap((x) => splitSerialNumbers(x.serialNumbers))).join(", ") || "None"}.</p>}
         </div>
       )}
     </>
