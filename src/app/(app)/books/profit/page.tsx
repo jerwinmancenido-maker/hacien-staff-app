@@ -2,10 +2,13 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { BOOKS_DISCLAIMER } from "@/lib/books/config";
 import { getMonthlyProfit, profitMonth } from "@/lib/services/profit";
-import { formatPeso } from "@/lib/format";
+import { formatDate, formatPeso } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
 import { EmptyState, PageHeader } from "@/components/ui";
+
+/** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
+const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
 
 // S-53: monthly net profit + margin by deal. Who owes us / who we owe already
 // live on the billing and payables aging pages, linked below.
@@ -81,8 +84,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                   <th>Deal</th>
                   <th className="col-phone-hide">Date</th>
                   <th className="num col-phone-hide">Contract price (net)</th>
-                  <th className="num col-phone-hide">Returns</th>
-                  <th className="num col-phone-hide">Supplier cost</th>
+                  <th className="num col-phone-hide col-tab-hide">Returns</th>
+                  <th className="num col-phone-hide col-tab-hide">Supplier cost</th>
                   <th className="num">Margin</th>
                   <th className="num">Margin %</th>
                 </tr>
@@ -91,10 +94,10 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                 {report.deals.map((d) => (
                   <tr key={d.number}>
                     <td className="strong" data-col="number">{d.number}</td>
-                    <td data-col="date" className="col-phone-hide">{d.date}</td>
+                    <td data-col="date" className="col-phone-hide">{day(d.date)}</td>
                     <td className="num col-phone-hide">{formatPeso(d.contractPrice)}</td>
-                    <td className="num col-phone-hide">{formatPeso(d.returns)}</td>
-                    <td className="num col-phone-hide">{formatPeso(d.supplierCost)}</td>
+                    <td className="num col-phone-hide col-tab-hide">{formatPeso(d.returns)}</td>
+                    <td className="num col-phone-hide col-tab-hide">{formatPeso(d.supplierCost)}</td>
                     <td className="num">{formatPeso(d.margin)}</td>
                     <td className="num">{d.marginPct === null ? "—" : `${d.marginPct}%`}</td>
                   </tr>
@@ -106,8 +109,8 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
                     Total — deals dated in {month}
                   </td>
                   <td className="num strong col-phone-hide">{formatPeso(dealTotals.contractPrice)}</td>
-                  <td className="num strong col-phone-hide">{formatPeso(dealTotals.returns)}</td>
-                  <td className="num strong col-phone-hide">{formatPeso(dealTotals.supplierCost)}</td>
+                  <td className="num strong col-phone-hide col-tab-hide">{formatPeso(dealTotals.returns)}</td>
+                  <td className="num strong col-phone-hide col-tab-hide">{formatPeso(dealTotals.supplierCost)}</td>
                   <td className="num strong">{formatPeso(dealTotals.margin)}</td>
                   <td className="num" />
                 </tr>

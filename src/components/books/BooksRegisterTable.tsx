@@ -11,6 +11,21 @@ import { EmptyState } from "@/components/ui";
 
 const day = (ymdStr: string) => formatDate(new Date(`${ymdStr}T00:00:00.000Z`));
 
+// Column-priority classes for the register tables (the shared demotion layer
+// in globals.css). F1 (finding 1279): on the sales register only, Date and
+// Particulars demote off at phone width so Amount + EWT land on screen at
+// 390px; every other register keeps its exact previous classes.
+function colClass(config: RegisterConfig, c: RegisterConfig["columns"][number]): string | undefined {
+  if (c.key === "particulars") {
+    return config.key === "journal" || config.key === "sales" ? "col-phone-hide" : "col-phone-cap";
+  }
+  if (c.key === "date" && config.key === "sales") return "col-phone-hide";
+  if (c.key === "source") return "col-tab-hide";
+  if (c.key === "party" && config.key === "journal") return "col-tab-hide";
+  if (c.align === "right") return "num";
+  return undefined;
+}
+
 function cell(row: BookRegister["rows"][number], key: RegisterConfig["columns"][number]["key"]): string {
   switch (key) {
     case "date":
@@ -60,7 +75,7 @@ function TotalRow({
         }
         if (c.key === "particulars") {
           return (
-            <td key={c.key} className="strong col-phone-cap">
+            <td key={c.key} className={config.key === "sales" ? "strong col-phone-hide" : "strong col-phone-cap"}>
               {label}
             </td>
           );
@@ -92,7 +107,7 @@ export function BooksRegisterTable({
           <thead>
             <tr>
               {config.columns.map((c) => (
-                <th key={c.key} className={c.key === "particulars" ? (config.key === "journal" ? "col-phone-hide" : "col-phone-cap") : c.key === "source" ? "col-tab-hide" : c.key === "party" && config.key === "journal" ? "col-tab-hide" : c.align === "right" ? "num" : undefined}>
+                <th key={c.key} className={colClass(config, c)}>
                   {c.label}
                 </th>
               ))}
@@ -113,7 +128,7 @@ export function BooksRegisterTable({
                   return (
                     <td
                       key={c.key}
-                      className={c.key === "particulars" ? (config.key === "journal" ? "col-phone-hide" : "col-phone-cap") : c.key === "source" ? "col-tab-hide" : c.key === "party" && config.key === "journal" ? "col-tab-hide" : c.align === "right" ? "num" : undefined}
+                      className={colClass(config, c)}
                       data-col={c.key === "date" ? "date" : undefined}
                     >
                       {value}
