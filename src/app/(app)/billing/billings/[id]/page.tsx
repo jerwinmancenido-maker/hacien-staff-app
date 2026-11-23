@@ -1,3 +1,4 @@
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
@@ -44,6 +45,7 @@ export default async function BillingDetailPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={b.number} />
       <PageHeader
         title={
           <>

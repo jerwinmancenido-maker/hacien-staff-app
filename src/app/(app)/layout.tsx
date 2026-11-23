@@ -15,7 +15,7 @@ import { idleRemainingMs, signOut } from "../auth-actions";
 import { AccountMenu } from "@/components/AccountMenu";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
-import { Breadcrumb, SidebarNav } from "@/components/Sidebar";
+import { Breadcrumb, BreadcrumbLabelProvider, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { getNotifications } from "@/lib/notifications";
@@ -125,9 +125,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb />} topbarRight={topbarRight}>
-      <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
-      {children}
-    </AppFrame>
+    <BreadcrumbLabelProvider>
+      <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb />} topbarRight={topbarRight}>
+        <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
+        {children}
+      </AppFrame>
+    </BreadcrumbLabelProvider>
   );
 }

@@ -5,11 +5,17 @@ import { readableDiffValue } from "@/components/DiffView";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 
 describe("breadcrumb labels", () => {
-  it("reads a record id segment as Detail, not Record", async () => {
+  it("ends the trail at the section name for a record id with no supplied label (finding 1113)", async () => {
     const { breadcrumbLabelsForPath } = await import("@/components/Sidebar");
-    expect(breadcrumbLabelsForPath("/quotes/cmwl1hxt000073ytuboqn00gz")).toEqual(["Quotes", "Detail"]);
-    expect(breadcrumbLabelsForPath("/customers/cmwl1ea7d00003ytuknnigyx1/edit")).toEqual(["Customers", "Detail", "Edit"]);
+    expect(breadcrumbLabelsForPath("/quotes/cmwl1hxt000073ytuboqn00gz")).toEqual(["Quotes"]);
+    expect(breadcrumbLabelsForPath("/customers/cmwl1ea7d00003ytuknnigyx1/edit")).toEqual(["Customers", "Edit"]);
     expect(breadcrumbLabelsForPath("/quotes")).toEqual(["Quotes"]);
+  });
+
+  it("shows the record's own label when the page supplies one (finding 1113)", async () => {
+    const { breadcrumbLabelsForPath } = await import("@/components/Sidebar");
+    expect(breadcrumbLabelsForPath("/quotes/cmwl1hxt000073ytuboqn00gz", "QT-2026-0038")).toEqual(["Quotes", "QT-2026-0038"]);
+    expect(breadcrumbLabelsForPath("/customers/cmwl1ea7d00003ytuknnigyx1", "Juan Dela Cruz")).toEqual(["Customers", "Juan Dela Cruz"]);
   });
 
   it("keeps the Record fallback for short unknown segments", async () => {
