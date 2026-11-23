@@ -74,7 +74,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             className={`filter-chip${billedOver ? " active" : ""}`}
             href={href(s, { status: undefined, billedOver: "1" })}
           >
-            Bill higher than PO
+            Bills over PO
           </Link>
         )}
       </div>

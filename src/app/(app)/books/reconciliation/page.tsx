@@ -52,7 +52,7 @@ export default async function ReconciliationPage({
     {
       key: "grni",
       title: "Received, not invoiced (GRNI)",
-      explain: "Goods were received on these purchase orders, but the supplier bills recorded are below the received value. The amount is the uninvoiced remainder.",
+      explain: "Goods were received on these purchase orders, but the supplier bills (payables) recorded are below the received value. The amount is the uninvoiced remainder.",
       list: recon.receivedNotInvoiced,
     },
     {
@@ -65,7 +65,7 @@ export default async function ReconciliationPage({
 
   return (
     <>
-      <PageHeader title="Reconciliation" subtitle={`Admin only · Read-only — no document flow changes here · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title="Reconciliation" subtitle={`Admin only — no document flow changes here · ${BOOKS_DISCLAIMER}`} />
       <BooksNav active="reconciliation" />
       <BooksBanner />
       {businesses.length > 0 && (

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blockedPaymentTermsMessage } from "../print/terms-block";
 
 const moneyStr = z
   .string()
@@ -33,10 +34,17 @@ export const billingInputSchema = z.object({
   invoiceNo: z.coerce.number().int("Enter a whole number.").min(1, "Enter a booklet invoice number."),
   invoiceDate: ymd,
   dueDate: ymd,
+  // Billing notes print on the document \u2014 same save-layer guard as the
+  // quote/SO notes (lawyer ruling 2026-11-23): payment-term phrases are
+  // refused at save; the printed Terms of Sale is the single source.
   notes: z
     .string()
     .trim()
     .max(5000)
+    .superRefine((v, ctx) => {
+      const message = blockedPaymentTermsMessage(v);
+      if (message) ctx.addIssue({ code: "custom", message });
+    })
     .transform((v) => v || null),
 });
 

@@ -12,7 +12,7 @@ describe("purchasing visible to non-cost users", () => {
     expect(src).toContain('requirePagePermission("view")');
     expect(src).not.toContain("requireCostPage");
     expect(src).toContain("withCosts");
-    expect(src).toContain("Bill higher than PO");
+    expect(src).toContain("Bills over PO");
     expect(src).toContain("withCosts && (");
     expect(src).toContain('...(withCosts ? [{ key: "total"');
   });

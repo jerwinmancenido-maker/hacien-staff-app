@@ -121,6 +121,7 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
         page={queuePage.page}
         totalPages={queuePage.totalPages}
         total={queuePage.total}
+        noun="sales orders"
         hrefFor={(target) => href(s, { page: target > 1 ? String(target) : undefined })}
         jumpAction="/sales-orders/dispatch"
       />

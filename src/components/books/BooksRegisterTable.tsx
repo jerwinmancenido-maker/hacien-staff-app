@@ -157,7 +157,7 @@ export function BooksRegisterTable({
         </p>
       )}
       <p className="faint small" style={{ marginTop: 12 }}>
-        {register.rowCount} row{register.rowCount === 1 ? "" : "s"} · voided records are left out · each document no. opens
+        {register.rowCount} row{register.rowCount === 1 ? "" : "s"} · Voided records are shown at ₱0.00 and left out of the totals. · each document no. opens
         the source record
         {hasEwt ? " · EWT is expanded withholding tax where recorded" : ""}.
       </p>
