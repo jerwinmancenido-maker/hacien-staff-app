@@ -6,6 +6,7 @@ import {
 } from "../quotes/withholding-percent";
 import { isUnchangedLegacyQuoteValidity, validityDaysFromDates } from "../quotes/validity";
 import { docTotals, toScaled } from "../quotes/calc";
+import { blockedPaymentTermsMessage } from "../print/terms-block";
 
 /** Shown when a quote total is ₱0 or less — on save and on mark-as-sent. */
 export const QUOTE_ZERO_TOTAL_ERROR = "A quote total must be more than ₱0.";
@@ -23,6 +24,23 @@ const optionalText = (max: number) =>
     .string()
     .trim()
     .max(max, `Keep this under ${max} characters.`)
+    .transform((v) => (v ? v : null));
+
+/** Customer notes \u2014 these print on the document, so payment-term phrases
+ * are refused at save (lawyer ruling 2026-11-23): the printed Terms of
+ * Sale is the single source of truth and a note can never carry wording
+ * that contradicts it. Same blocked set as the print layer's strip
+ * (findBlockedPaymentTerms); staff-only fields (internalNotes) are NOT
+ * guarded \u2014 they never print. */
+const customerNotes = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Keep this under ${max} characters.`)
+    .superRefine((v, ctx) => {
+      const message = blockedPaymentTermsMessage(v);
+      if (message) ctx.addIssue({ code: "custom", message });
+    })
     .transform((v) => (v ? v : null));
 
 const optionalId = z
@@ -168,7 +186,7 @@ const quoteInputObject = z.object({
       .optional(),
     terms: optionalText(100),
     /** Customer notes — print on the quote. Existing data maps here. */
-    notes: optionalText(5000),
+    notes: customerNotes(5000),
     /** S-69: per-quote delivery / warranty notes. Empty = Settings default. */
     deliveryNotes: optionalText(1000)
       .optional()
@@ -301,7 +319,7 @@ export type AcceptanceInput = z.infer<typeof acceptanceInputSchema>;
 export const salesOrderInputSchema = convertInputSchema.extend({
   contactId: optionalId,
   terms: optionalText(100),
-  notes: optionalText(5000),
+  notes: customerNotes(5000),
   philgepsRef: optionalText(64).optional(),
   bidNo: optionalText(64).optional(),
   noaDate: z
