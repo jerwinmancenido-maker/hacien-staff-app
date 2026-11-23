@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/actions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { verifyPassword } from "@/lib/auth/password";
-import { ForbiddenError } from "@/lib/permissions";
 import { encryptTotpSecret, verifyTotpCode } from "@/lib/auth/totp";
 import { str, type FormState } from "@/lib/validation/forms";
 
@@ -13,7 +13,7 @@ import { str, type FormState } from "@/lib/validation/forms";
 export async function setupTwoFactorAction(_prev: FormState, form: FormData): Promise<FormState> {
   return runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     const secret = str(form, "secret").trim().toUpperCase();
     const code = str(form, "code").trim();
     if (!secret || !verifyTotpCode(secret, code)) {
@@ -29,7 +29,7 @@ export async function setupTwoFactorAction(_prev: FormState, form: FormData): Pr
 export async function disableTwoFactorAction(_prev: FormState, form: FormData): Promise<FormState> {
   return runAction(async () => {
     const user = await getCurrentUser();
-    if (!user) throw new ForbiddenError();
+    if (!user) redirect("/login");
     const record = await db.user.findUnique({ where: { id: user.id } });
     if (!record || !(await verifyPassword(str(form, "password"), record.passwordHash))) {
       return { fieldErrors: { password: "That password is not right." } };
