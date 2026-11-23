@@ -40,7 +40,7 @@ import { StatementReminderForm } from "@/components/billing/StatementReminderFor
 import { statementReminderPreview } from "@/lib/services/statement-reminder";
 
 /** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
-const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 export default async function CustomerPage({
   params,

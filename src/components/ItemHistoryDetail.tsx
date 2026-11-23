@@ -7,7 +7,7 @@ import type { ItemTab } from "@/lib/items/tabs";
 const DOC_LABELS = { quote: "Quotation", sales_order: "Sales order", purchase_order: "Purchase order" } as const;
 
 /** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
-const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 function docHref(kind: "quote" | "sales_order" | "purchase_order", id: string): string {
   return kind === "quote" ? `/quotes/${id}` : kind === "sales_order" ? `/sales-orders/${id}` : `/purchase-orders/${id}`;

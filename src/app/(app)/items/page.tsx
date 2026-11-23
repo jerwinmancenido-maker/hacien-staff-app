@@ -12,7 +12,7 @@ import { PillTabs } from "@/components/PillTabs";
 import { SearchIcon } from "@/components/Icons";
 
 /** YMD string -> settled date style, via the shared formatDate() (the local day() wrapper pattern). */
-const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : ymdStr);
+const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "");
 
 /**
  * S-55: item list with last cost and price, from document lines.
