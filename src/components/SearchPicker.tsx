@@ -11,6 +11,7 @@
 // in the quote and PO editors.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { pickerKeyIntent } from "@/lib/picker-keys";
 
 export type SearchPickerOption = { id: string; label: string; meta?: string };
 
@@ -108,15 +109,17 @@ export function SearchPicker({ id, ariaLabel, value, options, placeholder, empty
     if (ev.key === "Escape") {
       ev.preventDefault();
       closePanel();
-    } else if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      if (rows.length) setActive((a) => (a + 1) % rows.length);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      if (rows.length) setActive((a) => (a - 1 + rows.length) % rows.length);
-    } else if (ev.key === "Enter") {
-      ev.preventDefault();
-      const row = rows[active] ?? rows[0];
+      return;
+    }
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Enter") return;
+    // The navigation/commit math is the shared picker logic (finding
+    // 1119) -- the same function the quote editor catalog pickers run.
+    ev.preventDefault();
+    const intent = pickerKeyIntent(ev.key, rows.length, active);
+    if (intent?.kind === "highlight") {
+      setActive(intent.index);
+    } else if (intent?.kind === "commit") {
+      const row = rows[intent.index];
       if (row) pick(row);
     }
   }
