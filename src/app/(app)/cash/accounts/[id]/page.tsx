@@ -13,6 +13,7 @@ import { AccountForm } from "@/components/cash/AccountForm";
 import { AccountActiveChip, CASH_DISCLAIMER } from "@/components/cash/CashParts";
 import { CashNav } from "@/components/cash/CashNav";
 import { PillTabs } from "@/components/PillTabs";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { PageHeader } from "@/components/ui";
 import { updateCashAccountAction } from "../../actions";
 
@@ -42,6 +43,7 @@ export default async function CashAccountDetailPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={account.name} />
       <PageHeader
         title={
           <>

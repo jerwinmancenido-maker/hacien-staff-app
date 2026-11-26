@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts, canVoid } from "@/lib/permissions";
 import { getReceivingView } from "@/lib/purchasing/views";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { day, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
 import { RrTable } from "@/components/purchasing/RrTable";
@@ -24,6 +25,7 @@ export default async function ReceivingPoPage({ params, searchParams }: { params
 
   return (
     <>
+      <RecordBreadcrumbLabel label={po.number} />
       <PageHeader
         title={
           <>
