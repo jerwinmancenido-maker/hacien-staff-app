@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { notificationBadgeTotal } from "@/lib/notification-types";
+import { formatDate } from "@/lib/format";
 
 const root = process.cwd();
 const src = (p: string) => readFileSync(join(root, p), "utf8");
@@ -43,5 +44,19 @@ describe("S-57 notifications bell", () => {
     const bell = src("src/components/NotificationsBell.tsx");
     expect(bell).toContain("notif-badge");
     expect(bell).toContain("Nothing needs attention right now.");
+  });
+
+  it("1306 renders the warranty end date formatted, never as raw ISO", () => {
+    const lib = src("src/lib/notifications.ts");
+    expect(lib).toContain(
+      "ends ${formatDate(new Date(`${r.warrantyEndDate}T00:00:00.000Z`))}",
+    );
+    expect(lib).not.toContain("ends ${r.warrantyEndDate}`");
+
+    const rendered = formatDate(new Date(`${"2026-12-05"}T00:00:00.000Z`));
+    expect(rendered).toBe("Dec 5, 2026");
+    const label = `${"PO-2026-0001"} · ${"Supplier"} · ends ${rendered}`;
+    expect(label).toContain("ends Dec 5, 2026");
+    expect(label).not.toContain("2026-12-05");
   });
 });
