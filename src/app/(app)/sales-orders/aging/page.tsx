@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate, formatPeso } from "@/lib/format";
-import { listSalesOrderAging, pageSoAging } from "@/lib/sales-orders/aging";
+import { filterSoAging, listSalesOrderAging, pageSoAging } from "@/lib/sales-orders/aging";
 import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
-import { AGING_BUCKET_LABELS } from "@/lib/billing/aging";
+import { AGING_BUCKETS, AGING_BUCKET_LABELS, type AgingBucket } from "@/lib/billing/aging";
+import { SearchIcon } from "@/components/Icons";
 import { EmptyState, PageHeader } from "@/components/ui";
 
-type Search = { page?: string };
+type Search = { q?: string; band?: string; page?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const merged: Search = { ...s, ...patch };
@@ -23,8 +24,10 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
   await requirePagePermission("view");
   const s = await searchParams;
   const summary = await listSalesOrderAging();
-  const agingPage = pageSoAging(summary, parsePageParam(s.page));
-  const oldestBand = summary.bands.find((b) => b.bucket === "d90_plus");
+  const bandFilter = AGING_BUCKETS.includes(s.band as AgingBucket) ? (s.band as AgingBucket) : undefined;
+  const view = filterSoAging(summary, s.q, bandFilter);
+  const agingPage = pageSoAging(view, parsePageParam(s.page));
+  const oldestBand = view.bands.find((b) => b.bucket === "d90_plus");
 
   return (
     <>
@@ -36,18 +39,34 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
         <Link className="btn secondary" href="/sales-orders">
           ← All sales orders
         </Link>
+        <form className="search-pill" action="/sales-orders/aging" role="search">
+          <SearchIcon />
+          <label htmlFor="q" className="sr-only">
+            Search by SO number or customer
+          </label>
+          <input id="q" name="q" defaultValue={s.q} placeholder="Search SO no. or customer" />
+          {bandFilter && <input type="hidden" name="band" value={bandFilter} />}
+        </form>
+        <Link className={`filter-chip${!bandFilter ? " active" : ""}`} href={href(s, { band: undefined })}>
+          All bands
+        </Link>
+        {AGING_BUCKETS.map((b) => (
+          <Link key={b} className={`filter-chip${bandFilter === b ? " active" : ""}`} href={href(s, { band: b })}>
+            {AGING_BUCKET_LABELS[b]}
+          </Link>
+        ))}
       </div>
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
           <div className="label">Total left to bill</div>
-          <div className="value num">{formatPeso(summary.totalLeftToBill)}</div>
+          <div className="value num">{formatPeso(view.totalLeftToBill)}</div>
           <div className="foot">
-            {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}
+            {view.orderCount} open order{view.orderCount === 1 ? "" : "s"}
           </div>
         </div>
         <div className="card stat">
           <div className="label">Orders left to bill</div>
-          <div className="value num">{summary.orderCount}</div>
+          <div className="value num">{view.orderCount}</div>
           <div className="foot">Fully billed orders sit in AR aging</div>
         </div>
         <div className={`card stat${oldestBand ? " stat-red" : ""}`}>
@@ -61,6 +80,10 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
       {summary.orderCount === 0 ? (
         <div className="card">
           <EmptyState title="Nothing aging." line="Every open sales order is fully billed." />
+        </div>
+      ) : view.orderCount === 0 ? (
+        <div className="card">
+          <EmptyState title="No matches" line="Try another number or customer, or clear the filter." />
         </div>
       ) : (
         agingPage.bands.map((band) => (
@@ -111,7 +134,7 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
           </div>
         ))
       )}
-      {summary.orderCount > 0 && agingPage.bands.length > 1 && (
+      {view.orderCount > 0 && agingPage.bands.length > 1 && (
         <div className="card band-card">
           <div className="table-wrap">
             <table className="list" aria-label="SO aging grand total">
@@ -125,10 +148,10 @@ export default async function SoAgingPage({ searchParams }: { searchParams: Prom
               </thead>
               <tbody>
                 <tr>
-                  <td className="strong">Grand total — left to bill across {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}</td>
-                  <td className="num strong col-phone-hide">{formatPeso(summary.totalContractPrice)}</td>
-                  <td className="num strong col-phone-hide col-tab-hide">{formatPeso(summary.totalBilled)}</td>
-                  <td className="num strong">{formatPeso(summary.totalLeftToBill)}</td>
+                  <td className="strong">Grand total — left to bill across {view.orderCount} open order{view.orderCount === 1 ? "" : "s"}</td>
+                  <td className="num strong col-phone-hide">{formatPeso(view.totalContractPrice)}</td>
+                  <td className="num strong col-phone-hide col-tab-hide">{formatPeso(view.totalBilled)}</td>
+                  <td className="num strong">{formatPeso(view.totalLeftToBill)}</td>
                 </tr>
               </tbody>
             </table>
