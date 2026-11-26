@@ -2,16 +2,18 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/format";
 import { money } from "@/lib/documents/common";
-import { listDispatchQueue, pageDispatchQueue } from "@/lib/sales-orders/dispatch";
+import { filterDispatchQueue, listDispatchQueue, pageDispatchQueue } from "@/lib/sales-orders/dispatch";
 import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
+import { AGING_BUCKETS, AGING_BUCKET_LABELS, type AgingBucket } from "@/lib/billing/aging";
+import { SearchIcon } from "@/components/Icons";
 import { EmptyState, PageHeader } from "@/components/ui";
 
 /** Quantities print whole when they are whole ("2 pc", not "2.00 pc") —
  * the same strip the packing list applies. */
 const qtyText = (qty: string, unit: string) => `${money(qty).replace(/\.00$/, "")} ${unit}`;
 
-type Search = { page?: string };
+type Search = { q?: string; band?: string; page?: string };
 
 function href(s: Search, patch: Partial<Search>) {
   const merged: Search = { ...s, ...patch };
@@ -27,8 +29,10 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
   await requirePagePermission("view");
   const s = await searchParams;
   const summary = await listDispatchQueue();
-  const queuePage = pageDispatchQueue(summary, parsePageParam(s.page));
-  const oldest = summary.rows[0];
+  const bandFilter = AGING_BUCKETS.includes(s.band as AgingBucket) ? (s.band as AgingBucket) : undefined;
+  const view = filterDispatchQueue(summary, s.q, bandFilter);
+  const queuePage = pageDispatchQueue(view, parsePageParam(s.page));
+  const oldest = view.rows[0];
 
   return (
     <>
@@ -40,22 +44,38 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
         <Link className="btn secondary" href="/sales-orders">
           ← All sales orders
         </Link>
+        <form className="search-pill" action="/sales-orders/dispatch" role="search">
+          <SearchIcon />
+          <label htmlFor="q" className="sr-only">
+            Search by SO number or customer
+          </label>
+          <input id="q" name="q" defaultValue={s.q} placeholder="Search SO no. or customer" />
+          {bandFilter && <input type="hidden" name="band" value={bandFilter} />}
+        </form>
+        <Link className={`filter-chip${!bandFilter ? " active" : ""}`} href={href(s, { band: undefined })}>
+          All bands
+        </Link>
+        {AGING_BUCKETS.map((b) => (
+          <Link key={b} className={`filter-chip${bandFilter === b ? " active" : ""}`} href={href(s, { band: b })}>
+            {AGING_BUCKET_LABELS[b]}
+          </Link>
+        ))}
       </div>
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
           <div className="label">Orders to dispatch</div>
-          <div className="value num">{summary.orderCount}</div>
+          <div className="value num">{view.orderCount}</div>
           <div className="foot">Oldest first</div>
         </div>
         <div className="card stat">
           <div className="label">Quantity still to deliver</div>
           <div className="value num">
-            {summary.totalByUnit.length > 0
-              ? summary.totalByUnit.map((p) => qtyText(p.qty, p.unit)).join(" · ")
+            {view.totalByUnit.length > 0
+              ? view.totalByUnit.map((p) => qtyText(p.qty, p.unit)).join(" · ")
               : "0"}
           </div>
           <div className="foot">
-            Across {summary.orderCount} open order{summary.orderCount === 1 ? "" : "s"}
+            Across {view.orderCount} open order{view.orderCount === 1 ? "" : "s"}
           </div>
         </div>
         <div className={`card stat${oldest && oldest.daysOpen > 30 ? " stat-red" : ""}`}>
@@ -74,6 +94,10 @@ export default async function DispatchQueuePage({ searchParams }: { searchParams
       {summary.orderCount === 0 ? (
         <div className="card">
           <EmptyState title="Nothing to dispatch." line="Every open sales order is fully delivered." />
+        </div>
+      ) : view.orderCount === 0 ? (
+        <div className="card">
+          <EmptyState title="No matches" line="Try another number or customer, or clear the filter." />
         </div>
       ) : (
         queuePage.items.map((r) => (

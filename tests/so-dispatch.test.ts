@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDispatchQueue, pageDispatchQueue, type DispatchInputRow } from "@/lib/sales-orders/dispatch";
+import { buildDispatchQueue, filterDispatchQueue, pageDispatchQueue, type DispatchInputRow } from "@/lib/sales-orders/dispatch";
 
 /**
  * Dispatch queue rules (VR1 Dispatcher finding: "no dispatch queue").
@@ -184,5 +184,63 @@ describe("dispatch queue paging", () => {
     const p1 = pageDispatchQueue(s);
     expect(p1.totalPages).toBe(1);
     expect(p1.items).toEqual(s.rows);
+  });
+});
+
+describe("dispatch queue search + band filter (finding 1300)", () => {
+  function filteredSummary() {
+    return buildDispatchQueue(
+      [
+        row({
+          number: "SO-2026-0201",
+          customerName: "Alpha Trading",
+          date: daysAgo(5),
+          lines: [{ description: "Widget", qty: "10.00", deliveredQty: "0.00", unit: "pc" }],
+        }),
+        row({
+          number: "SO-2026-0202",
+          customerName: "Beta Corp",
+          date: daysAgo(45),
+          lines: [{ description: "Cable", qty: "3.00", deliveredQty: "1.00", unit: "m" }],
+        }),
+        row({
+          number: "SO-2026-0203",
+          customerName: "Alpha Trading",
+          date: daysAgo(100),
+          lines: [{ description: "Widget", qty: "2.00", deliveredQty: "0.00", unit: "pc" }],
+        }),
+      ],
+      TODAY,
+    );
+  }
+
+  it("narrows by customer name, case-insensitive, and recomputes the totals", () => {
+    const view = filterDispatchQueue(filteredSummary(), "ALPHA");
+    expect(view.orderCount).toBe(2);
+    expect(view.rows.map((r) => r.number)).toEqual(["SO-2026-0203", "SO-2026-0201"]);
+    expect(view.totalUnitsRemaining).toBe("12.00");
+    expect(view.totalByUnit).toEqual([{ unit: "pc", qty: "12.00" }]);
+  });
+
+  it("narrows by SO number fragment", () => {
+    const view = filterDispatchQueue(filteredSummary(), "0202");
+    expect(view.orderCount).toBe(1);
+    expect(view.rows[0]!.customerName).toBe("Beta Corp");
+    expect(view.totalByUnit).toEqual([{ unit: "m", qty: "2.00" }]);
+  });
+
+  it("band filter keeps only orders whose days open fall in the band", () => {
+    const s = filteredSummary();
+    expect(filterDispatchQueue(s, undefined, "d31_60").rows.map((r) => r.number)).toEqual(["SO-2026-0202"]);
+    expect(filterDispatchQueue(s, undefined, "d90_plus").orderCount).toBe(1);
+    expect(filterDispatchQueue(s, "alpha", "d31_60").orderCount).toBe(0);
+  });
+
+  it("no query and no band returns the summary unchanged; a no-match query empties only the view", () => {
+    const s = filteredSummary();
+    expect(filterDispatchQueue(s)).toBe(s);
+    expect(filterDispatchQueue(s, "")).toBe(s);
+    expect(filterDispatchQueue(s, "no-such-customer").orderCount).toBe(0);
+    expect(s.orderCount).toBe(3);
   });
 });
