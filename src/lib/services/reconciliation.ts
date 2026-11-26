@@ -364,12 +364,33 @@ export type OperationalProfitRow = {
   orderCount: number;
 };
 
+export type OperationalProfitBridge = {
+  /** Own-company recorded sales (the report's own-company row). */
+  recordedSales: string;
+  /** Own-company recorded profit — the bridge starts here. */
+  recordedProfit: string;
+  /** Recorded sales not in official billed revenue: recordedSales - officialBilledRevenue. */
+  unbilled: string;
+  /** Own-company recorded supplier costs (the report's own-company row). */
+  recordedCosts: string;
+  /** Supplier bills recorded in the month (Books, own company) — Monthly profit's own figure. */
+  supplierBills: string;
+  /** recordedCosts - supplierBills. */
+  costsVsBills: string;
+};
+
 export type OperationalProfit = {
   month: string;
   rows: OperationalProfitRow[];
   combined: OperationalProfitRow;
   officialBilledRevenue: string;
   officialNet: string;
+  /** Display-only walk from the own-company recorded profit to the
+   *  official net (finding 1028, proposal P-A): recordedProfit - unbilled
+   *  + costsVsBills = officialNet, exactly, in scaled centavos. Every
+   *  input is a value this function or Monthly profit already computes —
+   *  no new queries, no changed totals. */
+  bridge: OperationalProfitBridge;
 };
 
 export async function getOperationalProfit(actor: PermissionUser, month: string): Promise<OperationalProfit> {
@@ -434,7 +455,16 @@ export async function getOperationalProfit(actor: PermissionUser, month: string)
     total.expenses += acc.expenses;
     total.count += acc.count;
   }
-  return { month, rows, combined: toRow(null, "All businesses", total), officialBilledRevenue: official.revenue, officialNet: official.net };
+  const ownAcc = byKey.get("__own__") ?? blank();
+  const bridge: OperationalProfitBridge = {
+    recordedSales: fromScaled(ownAcc.sales, 2),
+    recordedProfit: fromScaled(ownAcc.sales - ownAcc.costs - ownAcc.expenses, 2),
+    unbilled: fromScaled(ownAcc.sales - toScaled(official.revenue, 2), 2),
+    recordedCosts: fromScaled(ownAcc.costs, 2),
+    supplierBills: official.supplierBills,
+    costsVsBills: fromScaled(ownAcc.costs - toScaled(official.supplierBills, 2), 2),
+  };
+  return { month, rows, combined: toRow(null, "All businesses", total), officialBilledRevenue: official.revenue, officialNet: official.net, bridge };
 }
 
 export function operationalProfitToCsv(report: OperationalProfit): string {
@@ -448,5 +478,10 @@ export function operationalProfitToCsv(report: OperationalProfit): string {
   out += row([]);
   out += row(["Official billed revenue (Books, HACIEN only)", report.officialBilledRevenue]);
   out += row(["Official net profit (Books, HACIEN only)", report.officialNet]);
+  out += row([]);
+  out += row(["Bridge - recorded profit (own company)", report.bridge.recordedProfit]);
+  out += row(["Bridge - less recorded sales not in official billed revenue", report.bridge.unbilled]);
+  out += row(["Bridge - add supplier costs above supplier bills recorded", report.bridge.costsVsBills]);
+  out += row(["Bridge - supplier bills recorded (Books, HACIEN only)", report.bridge.supplierBills]);
   return out;
 }
