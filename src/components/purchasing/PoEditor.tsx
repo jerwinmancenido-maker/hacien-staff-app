@@ -13,6 +13,7 @@ import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
 import { overOrder, type SoPickerRow } from "@/lib/purchasing/picker";
 import type { FormState } from "@/lib/validation/forms";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export type PoEditorSupplier = { id: string; name: string; defaultTerms: string | null; address: string | null; contacts: { id: string; name: string; isMain: boolean }[] };
 
@@ -139,7 +140,7 @@ export function PoEditor({
   cancelHref,
   soPicker,
   businesses = [],
-  ownCompanyName = "HACIEN",
+  ownCompanyName = FALLBACK_SHORT_NAME,
   canTagBusiness = false,
   businessLockedLabel = null,
 }: {

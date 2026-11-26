@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { BOOKS_DISCLAIMER } from "@/lib/books/config";
+import { booksDisclaimer } from "@/lib/books/config";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
@@ -15,13 +16,14 @@ import { getOperationalProfit } from "@/lib/services/reconciliation";
 // comparison, so the two profit figures can be reconciled.
 export default async function OperationsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const month = profitMonth(sp.month);
   const report = await getOperationalProfit(user, month);
   const rows = [...report.rows, report.combined];
   return (
     <>
-      <PageHeader title="Operations — sales & profit by business" subtitle={`Management view, not a BIR book. · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title="Operations — sales & profit by business" subtitle={`Management view, not a BIR book. · ${booksDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)}`} />
       <BooksNav active="operations" />
       <BooksBanner />
       <div className="card">

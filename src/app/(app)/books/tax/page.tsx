@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { TAX_WORKSHEET_DISCLAIMER, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { taxWorksheetDisclaimer, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { currentQuarter, parseTaxQuarter, quarterLabel } from "@/lib/tax/quarters";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxNav } from "@/components/books/TaxNav";
@@ -20,6 +21,7 @@ export default async function TaxWorksheetsHomePage({
   searchParams: Promise<{ year?: string; quarter?: string }>;
 }) {
   await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const period = parseTaxQuarter(sp.year, sp.quarter);
   const current = currentQuarter();
@@ -27,7 +29,7 @@ export default async function TaxWorksheetsHomePage({
 
   return (
     <>
-      <PageHeader title={TAX_WORKSHEET_PAGES.home.title} subtitle={TAX_WORKSHEET_DISCLAIMER} />
+      <PageHeader title={TAX_WORKSHEET_PAGES.home.title} subtitle={taxWorksheetDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)} />
       <BooksNav active="tax" />
       <TaxNav active="home" />
       <TaxWorksheetBanner />

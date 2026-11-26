@@ -1,9 +1,11 @@
 import { requirePagePermission } from "@/lib/auth/current-user";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { BACKUP_FACTS, BACKUP_FACTS_AS_OF, BACKUP_NOT_IN_PLACE } from "@/lib/backups/facts";
 import { PageHeader } from "@/components/ui";
 
 export default async function BackupsPage() {
   await requirePagePermission("manage_settings");
+  const { settings } = await getSettingsSnapshot();
 
   return (
     <>
@@ -14,7 +16,7 @@ export default async function BackupsPage() {
       <div className="card">
         <p style={{ marginTop: 0 }}>
           This page is not a live backup check. It lists only the backup facts verified in the
-          HACIEN Ops Task Tracker, as of {BACKUP_FACTS_AS_OF}. If a migration deploy has happened
+          {settings.identity.appShortName} Ops Task Tracker, as of {BACKUP_FACTS_AS_OF}. If a migration deploy has happened
           since then, the manual-export count below may be higher — do not assume it is current.
         </p>
       </div>

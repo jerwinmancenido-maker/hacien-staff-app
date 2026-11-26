@@ -13,6 +13,7 @@
 //   cost was never set (₱0.00 — a 100% figure would print the bookkeeping
 //   placeholder as fact, D8).
 import { db } from "../db";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import { money, ymd } from "../documents/common";
 import { divRound, fromScaled, toScaled } from "../quotes/calc";
 import { manilaToday, isoDate } from "../format";
@@ -146,10 +147,10 @@ export async function getMonthlyProfit(month: string): Promise<MonthlyProfit> {
 }
 
 /** CSV for the profit report: summary rows, then one row per deal. */
-export function profitToCsv(report: MonthlyProfit): string {
+export function profitToCsv(report: MonthlyProfit, shortName: string = DEFAULT_SETTINGS.identity.appShortName): string {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const row = (xs: string[]) => xs.map(esc).join(",") + "\n";
-  let out = row(["HACIEN monthly profit", report.month]);
+  let out = row([`${shortName} monthly profit`, report.month]);
   out += row(["Revenue (billings invoiced, less customer returns)", report.revenue]);
   out += row(["Customer returns posted", report.customerReturns]);
   out += row(["Supplier bills recorded (less supplier returns)", report.supplierBills]);

@@ -345,7 +345,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Enable Payables 2307 to issue (withholding agent)",
                 kind: "checkbox",
                 value: s.features.payables2307Enabled,
-                hint: "OFF by default. Leave OFF — HACIEN does not withhold tax from suppliers unless tagged by BIR as a withholding agent.",
+                hint: `OFF by default. Leave OFF — ${s.identity.appShortName} does not withhold tax from suppliers unless tagged by BIR as a withholding agent.`,
               },
               {
                 name: "itemsImportEnabled",

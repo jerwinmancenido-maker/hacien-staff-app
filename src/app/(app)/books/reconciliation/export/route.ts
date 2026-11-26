@@ -4,6 +4,8 @@ import { isBooksEnabled } from "@/lib/books/features";
 import { isoDate, manilaToday } from "@/lib/format";
 import { listBusinesses } from "@/lib/services/businesses";
 import { getReconciliation, reconciliationToCsv, type Reconciliation } from "@/lib/services/reconciliation";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { csvDownloadName } from "@/lib/settings/identity";
 
 const LISTS: Record<string, { title: string; pick: (r: Reconciliation) => Reconciliation["deliveredNotBilled"] }> = {
   delivered: { title: "Delivered, not billed", pick: (r) => r.deliveredNotBilled },
@@ -27,11 +29,12 @@ export async function GET(req: Request) {
   const raw = url.searchParams.get("business") ?? "all";
   const filter = raw === "own" || businesses.some((b) => b.id === raw) ? raw : "all";
   const recon = await getReconciliation(user, filter);
+  const { settings } = await getSettingsSnapshot();
   const csv = reconciliationToCsv(entry.title, entry.pick(recon));
   // E12: name the file for the business filter + the Manila date.
   const businessSlug =
     filter === "all" ? "all-businesses" : filter === "own" ? "own-company" : (businesses.find((b) => b.id === filter)?.shortLabel ?? "business").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const fileName = `hacien-reconciliation-${url.searchParams.get("list")}-${businessSlug}-${isoDate(manilaToday())}.csv`;
+  const fileName = csvDownloadName(settings.identity.csvFilePrefix, `reconciliation-${url.searchParams.get("list")}-${businessSlug}-${isoDate(manilaToday())}.csv`);
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

@@ -487,6 +487,7 @@ export default async function SalesOrderPage({
                 overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
               }))}
               showCosts={so.canSeeCosts}
+              shortName={settings.identity.appShortName}
             />
             <div className="totals-wrap">
               <TotalsBox totals={so.totals} showCosts={so.canSeeCosts} />
