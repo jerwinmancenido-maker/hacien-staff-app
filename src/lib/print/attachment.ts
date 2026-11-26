@@ -3,9 +3,13 @@ import { getSettingsSnapshot, getSettingsVersion } from "@/lib/settings";
 import { money, ymd } from "@/lib/documents/common";
 import { formatDate } from "@/lib/format";
 import { formatBookletNumber } from "@/lib/billing/booklet";
-import { mergeCompanyLetterhead, paymentInstructionsFromSettings, printCompanyBlock } from "@/lib/print/company";
+import {
+  mergeCompanyLetterhead,
+  paymentInstructionsFromSettings,
+  printCompanyBlock,
+  printFooterIdentity,
+} from "@/lib/print/company";
 import { qrSvg } from "@/lib/print/qr";
-import { POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
 
 /**
  * S-64: packing list & delivery details attachment sheet.
@@ -55,6 +59,14 @@ export type AttachmentSheet = {
   qrSvg: string;
   policiesUrl: string;
   versionLine: string;
+  /** Print wording from the pinned Settings (Company Profile slice 2). */
+  packingDisclaimer: string;
+  inputTaxDisclaimer: string;
+  /** "<short name> bank details" — the payment block's label, from Settings identity. */
+  bankLabel: string;
+  /** @page footer identity from the pinned Settings (slice 2, census F1). */
+  footerLine: string;
+  footerMark: string;
   missing: string[];
 };
 
@@ -161,6 +173,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     orderBy: { invoiceDate: "asc" },
   });
   const warrantyNotes = so.quote.warrantyNotes?.trim() || settings.print.warrantyNotes?.trim() || null;
+  const footerIdentity = printFooterIdentity(company, settings.identity);
   return {
     deliveryId: delivery.id,
     salesOrderId: so.id,
@@ -193,10 +206,15 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     })),
     warrantyNotes,
     banks: paymentInstructionsFromSettings(settings.print).filter((p) => p.kind === "bank"),
-    company: printCompanyBlock(company),
-    qrSvg: await qrSvg(),
-    policiesUrl: POLICIES_URL,
-    versionLine: POLICY_VERSION_LINE,
+    company: printCompanyBlock(company, settings.wording),
+    qrSvg: await qrSvg(settings.identity.policiesUrl),
+    policiesUrl: settings.identity.policiesUrl,
+    versionLine: settings.identity.policyVersionLine,
+    packingDisclaimer: settings.wording.packingListDisclaimer,
+    inputTaxDisclaimer: settings.wording.inputTaxDisclaimer,
+    bankLabel: `${settings.identity.appShortName} bank details`,
+    footerLine: footerIdentity.line,
+    footerMark: footerIdentity.mark,
     missing: [],
   };
 }

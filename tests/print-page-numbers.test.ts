@@ -22,7 +22,13 @@ describe("Page X of Y CSS", () => {
     // together with the footer contact line, so nothing prints twice.
     expect(css).toContain(".pp-doc-root");
     expect(css).toMatch(/\.pp-doc-root\s*\{\s*page:\s*pp-doc/);
-    expect(css).toMatch(/@page pp-doc\s*\{[\s\S]*?@top-left\s*\{\s*content: "■ HACIEN"/);
+    // Company Profile slice 2: the strip/footer identity CONTENT is no
+    // longer a globals.css literal — each print emits it from Settings
+    // (printFooterCss in lib/print/strip-style.ts, covered by
+    // tests/print-settings-wording.test.ts). globals.css keeps the
+    // margin-box font styling and the :first suppressions below.
+    expect(css).not.toContain('content: "■ HACIEN"');
+    expect(css).toMatch(/@page pp-doc\s*\{[\s\S]*?@top-left\s*\{\s*font-size: 7.5pt/);
     expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@top-left\s*\{\s*content: none/);
     expect(css).toMatch(/@page pp-doc:first\s*\{[\s\S]*?@bottom-left\s*\{\s*content: none/);
     // The v8 in-flow thead strip is gone (it duplicated page 1's title block).
@@ -32,8 +38,12 @@ describe("Page X of Y CSS", () => {
   it("puts Page x of y in @page margin boxes; never paints in-flow Page 0 of 0", () => {
     // Margin boxes resolve counter(pages) in browser print and headless PDF.
     expect(css).toMatch(/@page\s*\{[\s\S]*?@bottom-right\s*\{[\s\S]*?content:\s*"Page " counter\(page\) " of " counter\(pages\)/);
-    // Letterhead Template v3 footer: contact line lower-left.
-    expect(css).toMatch(/@bottom-left\s*\{[\s\S]*?content:\s*"HACIEN Information Technology Solutions/);
+    // Letterhead Template v3 footer: contact line lower-left — since
+    // Company Profile slice 2 the line itself is emitted per print from
+    // Settings (printGenericFooterCss / printFooterCss); globals.css
+    // must not carry the hard-coded identity any more.
+    expect(css).not.toContain("HACIEN Information Technology Solutions · sales@haciensolutions.com");
+    expect(css).toMatch(/@bottom-left\s*\{\s*font-size: 8pt/);
     // In-flow ::after with counter(pages) becomes "Page 0 of 0" in headless --print-to-pdf.
     expect(css).toMatch(/\.pp-page-num::after\s*\{[^}]*content:\s*none/s);
     expect(css).not.toMatch(

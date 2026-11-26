@@ -74,6 +74,11 @@ describe("standardized invoice numbers — packing list", () => {
       qrSvg: "",
       policiesUrl: "https://haciensolutions.com/policies",
       versionLine: "Policies v2.2",
+      packingDisclaimer: "PACKING LIST / ATTACHMENT ONLY — NOT A BIR-REGISTERED SALES INVOICE, DELIVERY RECEIPT, OR COLLECTION/OFFICIAL RECEIPT. Not valid for claiming input tax; must accompany the official HACIEN Non-VAT Sales Invoice or BIR-registered Delivery Receipt.",
+      inputTaxDisclaimer: "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.",
+      bankLabel: "HACIEN bank details",
+      footerLine: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com",
+      footerMark: "■ HACIEN",
       missing: [],
     };
     const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet }));

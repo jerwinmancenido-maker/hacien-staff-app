@@ -6,6 +6,10 @@ export type PaperSize = "A4" | "Letter";
 
 export type PrintCompanyBlock = {
   registeredName: string;
+  /** Letterhead NON-VAT label from the settings wording section, when the
+   * builder had a snapshot; the letterhead falls back to the settled
+   * constant without one. */
+  nonVatLabel?: string;
   tradeName: string;
   tin: string;
   address: string;
@@ -145,6 +149,14 @@ export type ProfessionalPrintModel = {
   /** S-70: line printed under the signatures (quote approval note). */
   generatedNote?: string | null;
   thankYou?: boolean;
+  /** Thank-you line text from the settings wording section (thankYou stays the on/off toggle). */
+  thankYouText?: string | null;
+  /** Terms heading from the settings wording section (quote / SO prints). */
+  termsHeading?: string | null;
+  /** @page footer identity from the pinned Settings (Company Profile
+   * slice 2): bottom-left line + top-left mark for the emitted @page rules. */
+  pageFooterLine?: string | null;
+  pageFooterMark?: string | null;
   /** Extra legal / tax lines (from tax-wording module). */
   taxLines: string[];
   /** Optional EWT/2307 note on supplier payment vouchers. */

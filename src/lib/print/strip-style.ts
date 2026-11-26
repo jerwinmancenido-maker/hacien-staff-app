@@ -18,6 +18,37 @@ export function cssContentString(value: string): string {
 }
 
 /**
+ * Company Profile slice 2 (census F1): the @page margin-box FOOTER
+ * identity — the bottom-left contact line and the top-left short-name
+ * mark of the pp-doc pages. Until this slice both were literals in
+ * globals.css, so a Settings rename never reached the page footer. Each
+ * print document now emits them from its pinned Settings snapshot (see
+ * printFooterIdentity in lib/print/company.ts). The :first suppressions
+ * live in the SAME style element, after the base rules, for the same
+ * reason as the strip rules below. Font/size/color stay in globals.css —
+ * only the identity content moves.
+ */
+export function printFooterCss(line: string, mark: string): string {
+  const boxes = (page: string) =>
+    `@page ${page} { @top-left { content: ${cssContentString(mark)}; } ` +
+    `@bottom-left { content: ${cssContentString(line)}; } }\n` +
+    `@page ${page}:first { @top-left { content: none; } @bottom-left { content: none; } }`;
+  return boxes("pp-doc") + "\n" + boxes("pp-doc-letter");
+}
+
+/**
+ * The generic @page twin for the book/tax prints, which run on the
+ * unnamed page and its Letter variant: only the bottom-left footer line
+ * (those pages carry no top-left mark in globals.css).
+ */
+export function printGenericFooterCss(line: string): string {
+  return (
+    `@page { @bottom-left { content: ${cssContentString(line)}; } }\n` +
+    `@page letter { @bottom-left { content: ${cssContentString(line)}; } }`
+  );
+}
+
+/**
  * The @page rules a print document emits for its margin-box strip.
  * `stripText` is the already-composed identity line (e.g.
  * "QUOTATION · QT-2026-0019"); it prints on page 2+ only.

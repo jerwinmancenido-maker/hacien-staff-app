@@ -20,28 +20,71 @@
 // Locking the printed Terms of Sale as v3.1 still awaits Jerwin's separate
 // retained-lawyer confirmation — do not bump the printed version line.
 
+import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import type { Settings } from "@/lib/settings/schema";
+
 export const TERMS_AND_CONDITIONS_HEADING = "TERMS AND CONDITIONS" as const;
 
-export const DEFAULT_QUOTE_VALIDITY_DAYS = 15;
+/**
+ * The wording fields the terms builders read (Company Profile slice 2,
+ * census F4). Print callers pass the document snapshot's
+ * settings.wording; the fallback is assembled from this module's own
+ * constants, which the settings seed copies verbatim (pinned by tests),
+ * so snapshot-less callers render exactly what they did before.
+ */
+export type TermsWording = Pick<
+  Settings["wording"],
+  | "termsHeading"
+  | "termsPoint1ValidityDefault"
+  | "termsPoint1ValidityCustom"
+  | "termsPoint1Body"
+  | "termsPoint2Upfront"
+  | "termsPoint2FiftyFifty"
+  | "termsPoint2Net30"
+  | "termsPoint2Cod"
+  | "termsPaymentAntiFraud"
+  | "termsCustomTermsAntiFraud"
+  | "termsPoint3WithLeadTime"
+  | "termsPoint3NoLeadTime"
+  | "termsPoint4"
+  | "termsPoint5Goods"
+  | "termsPoint5Services"
+  | "termsPoint6"
+  | "termsPoint7"
+>;
 
 /**
  * Builds Point 1's validity sentence:
- * - If default (15 days or null/undefined): "This quotation is valid for 15 days unless the quote states otherwise."
+ * - If default (the settings seed's 15 days, or null/undefined): "This quotation is valid for 15 days unless the quote states otherwise."
  * - If custom N days: "This quotation is valid for N days."
  */
-export function quoteValiditySentence(validityDays?: number | null): string {
-  if (validityDays == null || validityDays === DEFAULT_QUOTE_VALIDITY_DAYS) {
-    return "This quotation is valid for 15 days unless the quote states otherwise.";
+export function quoteValiditySentence(
+  validityDays?: number | null,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string {
+  // The default branch is the lawyer's standard-validity sentence. Its
+  // comparator is the settings SEED's standard validity
+  // (DEFAULT_SETTINGS.quotes.defaultValidityDays, 15 — the collapsed
+  // duplicate of this module's old private constant, pinned equal by
+  // tests) — NOT a document snapshot's configured value: seed snapshots
+  // configure 30 there while every seeded quote/SO also spans 30 days,
+  // so keying off the configured value would print the 15-day sentence
+  // on quotes whose stated validity is 30 days.
+  if (validityDays == null || validityDays === DEFAULT_SETTINGS.quotes.defaultValidityDays) {
+    return wording.termsPoint1ValidityDefault;
   }
-  return `This quotation is valid for ${validityDays} days.`;
+  return wording.termsPoint1ValidityCustom.replace("{days}", String(validityDays));
 }
 
 /**
  * Point 1 with the validity sentence substituted verbatim per legal specs.
  */
-export function quoteSoTermsPoint1(validityDays?: number | null): string {
-  const sentence = quoteValiditySentence(validityDays);
-  return `${sentence} Prices are in PHP. HACIEN is NON-VAT registered. The delivery fee is quoted separately. Prices of imported items may change if the exchange rate moves before we order. If they do, we will send a revised quotation first.`;
+export function quoteSoTermsPoint1(
+  validityDays?: number | null,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string {
+  const sentence = quoteValiditySentence(validityDays, wording);
+  return `${sentence} ${wording.termsPoint1Body}`;
 }
 
 /** The anti-fraud sentence that ends every standard Point 2 variant. */
@@ -108,23 +151,26 @@ export function resolvePaymentTerm(
  * quote with no terms recorded prints the anti-fraud sentence alone (no
  * payment schedule is asserted for it).
  */
-export function quoteSoTermsPoint2(paymentTerms?: string | null): string {
+export function quoteSoTermsPoint2(
+  paymentTerms?: string | null,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string {
   const term = resolvePaymentTerm(paymentTerms);
   switch (term.kind) {
     case "UPFRONT":
-      return `Payment: 100% payment upon order confirmation, before we place the supplier or license order. ${PAYMENT_ANTI_FRAUD}`;
+      return `${wording.termsPoint2Upfront} ${wording.termsPaymentAntiFraud}`;
     case "FIFTY_FIFTY":
-      return `Payment: 50% down payment upon order confirmation (before we place the supplier order), and 50% on delivery. ${PAYMENT_ANTI_FRAUD}`;
+      return `${wording.termsPoint2FiftyFifty} ${wording.termsPaymentAntiFraud}`;
     case "NET30":
-      return `Payment: Net 30 calendar days from delivery and invoice date (for approved corporate and government accounts). ${PAYMENT_ANTI_FRAUD}`;
+      return `${wording.termsPoint2Net30} ${wording.termsPaymentAntiFraud}`;
     case "COD":
-      return COD_POINT2_TEXT;
+      return wording.termsPoint2Cod;
     case "CUSTOM": {
       const text = (term.customText ?? "").replace(/\.\s*$/, "");
-      return `Payment: ${text}. ${CUSTOM_TERMS_ANTI_FRAUD}`;
+      return `Payment: ${text}. ${wording.termsCustomTermsAntiFraud}`;
     }
     case "NONE":
-      return `Payment: ${PAYMENT_ANTI_FRAUD}`;
+      return `Payment: ${wording.termsPaymentAntiFraud}`;
   }
 }
 
@@ -213,11 +259,14 @@ export function sanitizePrintedNotes(notes?: string | null): string | null {
  * down payment, subject to supplier stock. Without a figure, the no-figure
  * variant prints.
  */
-export function quoteSoTermsPoint3(leadTimeDays?: number | null): string {
+export function quoteSoTermsPoint3(
+  leadTimeDays?: number | null,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string {
   if (leadTimeDays != null) {
-    return `Estimated lead time: ${leadTimeDays} business days from our order confirmation and receipt of required down payment, subject to supplier stock. Lead times are estimates, not fixed deadlines. Every item is ordered for you, so an order can't be cancelled once we place the supplier order, and we don't accept change-of-mind returns. Defective, damaged or wrong items are repaired, replaced or refunded as the law requires.`;
+    return wording.termsPoint3WithLeadTime.replace("{days}", String(leadTimeDays));
   }
-  return `Lead times are estimates, not fixed deadlines, and are subject to supplier stock. Every item is ordered for you, so an order can't be cancelled once we place the supplier order, and we don't accept change-of-mind returns. Defective, damaged or wrong items are repaired, replaced or refunded as the law requires.`;
+  return wording.termsPoint3NoLeadTime;
 }
 
 /** Point 4 — delivery inspection & problem reporting (physical delivery only). */
@@ -229,11 +278,14 @@ export const QUOTE_SO_TERMS_POINT_4 =
  * services-only quotes. Both open with the override phrase so any custom
  * warranty notes written on the quotation prevail.
  */
-export function quoteSoTermsPoint5(isServicesOnly?: boolean): string {
+export function quoteSoTermsPoint5(
+  isServicesOnly?: boolean,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string {
   if (isServicesOnly) {
-    return "Unless specific warranty notes on this quotation state otherwise, services are performed in line with the agreed scope on this quotation; report any workmanship issue within 7 days of completion so we can inspect and remedy the affected work.";
+    return wording.termsPoint5Services;
   }
-  return "Unless specific warranty notes on this quotation state otherwise, warranty is the manufacturer's or distributor's, and we handle the claim for you. If a hardware item is dead on arrival, report it within 7 days and return shipping is free.";
+  return wording.termsPoint5Goods;
 }
 
 /** Point 6 — withholding tax (business/government customers only). */
@@ -243,6 +295,37 @@ export const QUOTE_SO_TERMS_POINT_6 =
 /** Point 7 — ownership, late payment & court venue (always prints). */
 export const QUOTE_SO_TERMS_POINT_7 =
   "HACIEN keeps ownership of the goods until they are fully paid. Accounts unpaid past their due date are charged 24% interest a year, plus 25% attorney's fees if we must go to court. Any case is filed in the proper courts of Pasig City. Full Terms of Sale apply: haciensolutions.com/terms-of-sale.";
+
+/** Fallback wording for snapshot-less callers, assembled from the settled
+ * constants above (the settings seed copies them verbatim). */
+const FALLBACK_TERMS_WORDING: TermsWording = {
+  termsHeading: TERMS_AND_CONDITIONS_HEADING,
+  termsPoint1ValidityDefault:
+    "This quotation is valid for 15 days unless the quote states otherwise.",
+  termsPoint1ValidityCustom: "This quotation is valid for {days} days.",
+  termsPoint1Body:
+    "Prices are in PHP. HACIEN is NON-VAT registered. The delivery fee is quoted separately. Prices of imported items may change if the exchange rate moves before we order. If they do, we will send a revised quotation first.",
+  termsPoint2Upfront:
+    "Payment: 100% payment upon order confirmation, before we place the supplier or license order.",
+  termsPoint2FiftyFifty:
+    "Payment: 50% down payment upon order confirmation (before we place the supplier order), and 50% on delivery.",
+  termsPoint2Net30:
+    "Payment: Net 30 calendar days from delivery and invoice date (for approved corporate and government accounts).",
+  termsPoint2Cod: COD_POINT2_TEXT,
+  termsPaymentAntiFraud: PAYMENT_ANTI_FRAUD,
+  termsCustomTermsAntiFraud: CUSTOM_TERMS_ANTI_FRAUD,
+  termsPoint3WithLeadTime:
+    "Estimated lead time: {days} business days from our order confirmation and receipt of required down payment, subject to supplier stock. Lead times are estimates, not fixed deadlines. Every item is ordered for you, so an order can't be cancelled once we place the supplier order, and we don't accept change-of-mind returns. Defective, damaged or wrong items are repaired, replaced or refunded as the law requires.",
+  termsPoint3NoLeadTime:
+    "Lead times are estimates, not fixed deadlines, and are subject to supplier stock. Every item is ordered for you, so an order can't be cancelled once we place the supplier order, and we don't accept change-of-mind returns. Defective, damaged or wrong items are repaired, replaced or refunded as the law requires.",
+  termsPoint4: QUOTE_SO_TERMS_POINT_4,
+  termsPoint5Goods:
+    "Unless specific warranty notes on this quotation state otherwise, warranty is the manufacturer's or distributor's, and we handle the claim for you. If a hardware item is dead on arrival, report it within 7 days and return shipping is free.",
+  termsPoint5Services:
+    "Unless specific warranty notes on this quotation state otherwise, services are performed in line with the agreed scope on this quotation; report any workmanship issue within 7 days of completion so we can inspect and remedy the affected work.",
+  termsPoint6: QUOTE_SO_TERMS_POINT_6,
+  termsPoint7: QUOTE_SO_TERMS_POINT_7,
+};
 
 export type TermsBlockInput = {
   validityDays?: number | null;
@@ -262,20 +345,23 @@ export type TermsBlockInput = {
  * services-only quotes (no physical delivery), point 6 is skipped for
  * private individuals — the remaining points are NOT renumbered.
  */
-export function buildQuoteSoTermsPoints(input: TermsBlockInput = {}): string[] {
+export function buildQuoteSoTermsPoints(
+  input: TermsBlockInput = {},
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string[] {
   const points: string[] = [
-    `1. ${quoteSoTermsPoint1(input.validityDays)}`,
-    `2. ${quoteSoTermsPoint2(input.paymentTerms)}`,
-    `3. ${quoteSoTermsPoint3(input.leadTimeDays)}`,
+    `1. ${quoteSoTermsPoint1(input.validityDays, wording)}`,
+    `2. ${quoteSoTermsPoint2(input.paymentTerms, wording)}`,
+    `3. ${quoteSoTermsPoint3(input.leadTimeDays, wording)}`,
   ];
   if (!input.isServicesOnly) {
-    points.push(`4. ${QUOTE_SO_TERMS_POINT_4}`);
+    points.push(`4. ${wording.termsPoint4}`);
   }
-  points.push(`5. ${quoteSoTermsPoint5(input.isServicesOnly)}`);
+  points.push(`5. ${quoteSoTermsPoint5(input.isServicesOnly, wording)}`);
   if (!input.isIndividual) {
-    points.push(`6. ${QUOTE_SO_TERMS_POINT_6}`);
+    points.push(`6. ${wording.termsPoint6}`);
   }
-  points.push(`7. ${QUOTE_SO_TERMS_POINT_7}`);
+  points.push(`7. ${wording.termsPoint7}`);
   return points;
 }
 
@@ -284,9 +370,14 @@ export function buildQuoteSoTermsPoints(input: TermsBlockInput = {}): string[] {
  * caller (no payment terms, no lead time, goods, business customer).
  * Kept for the print fallback and existing callers.
  */
-export function getQuoteSoTermsPoints(validityDays?: number | null): string[] {
-  return buildQuoteSoTermsPoints({ validityDays });
+export function getQuoteSoTermsPoints(
+  validityDays?: number | null,
+  wording: TermsWording = FALLBACK_TERMS_WORDING,
+): string[] {
+  return buildQuoteSoTermsPoints({ validityDays }, wording);
 }
 
 /** Default 7-point terms block for quotes using the standard 15-day validity or sales orders. */
-export const QUOTE_SO_TERMS_BLOCK = getQuoteSoTermsPoints(DEFAULT_QUOTE_VALIDITY_DAYS);
+export const QUOTE_SO_TERMS_BLOCK = getQuoteSoTermsPoints(
+  DEFAULT_SETTINGS.quotes.defaultValidityDays,
+);

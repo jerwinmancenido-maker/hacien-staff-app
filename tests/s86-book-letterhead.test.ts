@@ -20,7 +20,7 @@ describe("S-86 shared letterhead on book/tax prints", () => {
     for (const rel of BOOK_PAGES) {
       const src = readFileSync(join(process.cwd(), rel), "utf8");
       expect(src).toContain('import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead"');
-      expect(src).toContain("<CompanyLetterhead company={printCompanyBlock(company)} />");
+      expect(src).toContain("<CompanyLetterhead company={printCompanyBlock(company, settings.wording)} />");
       // Old per-page brand block is gone (the shared component renders it now).
       expect(src).not.toContain('className="print-brand"');
       expect(src).not.toContain("NON-VAT · TIN {company.tin");
@@ -43,7 +43,7 @@ describe("S-86 shared letterhead on book/tax prints", () => {
       join(process.cwd(), "src/components/docs/CompanyLetterhead.tsx"),
       "utf8",
     );
-    expect(src).toContain("{NON_VAT_LABEL}");
+    expect(src).toContain("{company.nonVatLabel ?? NON_VAT_LABEL}");
     expect(src).toContain("BRAND_LETTERHEAD_LOGO");
     expect(src).toContain("pp-letterhead");
   });

@@ -44,6 +44,9 @@ describe("collection print — customer filing references, no internal account n
 
   it("leaves the EWT-applied line exactly as established", () => {
     expect(model).toContain('"EWT (2307) applied"');
-    expect(model).toContain("EWT_2307_NOTE");
+    // Company Profile slice 2: the note text comes from the pinned
+    // snapshot's Settings wording (seeded verbatim from EWT_2307_NOTE,
+    // pinned in tests/settings.test.ts) — the model reads it there.
+    expect(model).toContain("letter.wording.ewt2307Note");
   });
 });

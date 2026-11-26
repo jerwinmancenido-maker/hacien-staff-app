@@ -101,9 +101,15 @@ describe("letterhead Template v3 layout", () => {
     // @page pp-doc-letter (F25).
     expect((css.match(/@bottom-right \{/g) || []).length).toBe(4);
     expect((css.match(/@bottom-center \{/g) || []).length).toBe(0);
-    expect(css).toContain(
-      '@bottom-left {\n    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";',
+    // Company Profile slice 2: the footer identity content no longer
+    // lives in globals.css — each print emits it from its Settings
+    // snapshot (printFooterCss / printGenericFooterCss in
+    // lib/print/strip-style.ts); globals.css keeps only the font styling.
+    expect(css).not.toContain(
+      "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com",
     );
+    expect(css).not.toContain('content: "■ HACIEN"');
+    expect(css).toContain("@bottom-left {\n    font-size: 8pt;");
   });
 
   it("letterhead address wraps in balanced lines, not one long line plus a short tail", () => {

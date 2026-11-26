@@ -6,6 +6,8 @@ import type { PaperSize, PrintCompanyBlock, PrintPaymentInstruction } from "./ty
 
 export type CompanySettings = Settings["company"];
 export type PrintSettings = Settings["print"];
+export type IdentitySettings = Settings["identity"];
+export type WordingSettings = Settings["wording"];
 
 export function missingCompanyPrintFields(company: CompanySettings): string[] {
   const missing: string[] = [];
@@ -71,9 +73,10 @@ export function mergeCompanyLetterhead(
   return merged;
 }
 
-export function printCompanyBlock(company: CompanySettings): PrintCompanyBlock {
+export function printCompanyBlock(company: CompanySettings, wording?: WordingSettings): PrintCompanyBlock {
   return {
     registeredName: company.name,
+    nonVatLabel: wording?.nonVatLabel,
     tradeName: company.tradeName?.trim() || "",
     tin: company.tin?.trim() || "",
     address: company.address?.trim() || "",
@@ -105,6 +108,26 @@ export function paymentInstructionsFromSettings(print: PrintSettings): PrintPaym
 
 export function paperSizeFromSettings(print: PrintSettings): PaperSize {
   return print.paperSize === "Letter" ? "Letter" : "A4";
+}
+
+/**
+ * The @page margin-box identity (Company Profile slice 2, census F1),
+ * derived from Settings — never stored, so it cannot disagree with the
+ * profile. `line` is the bottom-left footer on every printed page
+ * (registered name, email, website — blank parts skipped); `mark` is the
+ * pp-doc top-left strip mark: the black square plus the short name from
+ * the identity section. Until this slice the line and mark were literals
+ * in globals.css, stamped identically on every page regardless of
+ * Settings.
+ */
+export function printFooterIdentity(
+  company: CompanySettings,
+  identity: IdentitySettings,
+): { line: string; mark: string } {
+  const displayName = company.name?.trim() || company.tradeName?.trim() || "";
+  const bits = [displayName, company.email?.trim(), company.website?.trim()].filter(Boolean);
+  const short = identity.appShortName?.trim();
+  return { line: bits.join(" · "), mark: short ? `■ ${short}` : "" };
 }
 
 /** Short contact line under the thank-you footer. */

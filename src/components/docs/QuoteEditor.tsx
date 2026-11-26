@@ -11,6 +11,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
+import { POLICIES_DISPLAY_HOST, POLICIES_URL } from "@/lib/print/policies";
 import { pickerKeyIntent } from "@/lib/picker-keys";
 import {
   COST_NOT_SET_LABEL,
@@ -117,6 +118,11 @@ export type QuoteEditorProps = {
    * renders only when a business exists or the quote already carries one. */
   businesses?: { id: string; name: string; shortLabel: string }[];
   ownCompanyName?: string;
+  /** Policies link for the terms note (Company Profile slice 2, census
+   * F2): the parent page passes Settings identity; the settled constants
+   * are the fallback. */
+  policiesUrl?: string;
+  policiesDisplayHost?: string;
   canTagBusiness?: boolean;
   initialBusinessId?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -324,6 +330,8 @@ export function QuoteEditor({
   approvalLimits,
   businesses = [],
   ownCompanyName = "HACIEN",
+  policiesUrl = POLICIES_URL,
+  policiesDisplayHost = POLICIES_DISPLAY_HOST,
   canTagBusiness = false,
   initialBusinessId = null,
 }: QuoteEditorProps) {
@@ -2729,7 +2737,7 @@ export function QuoteEditor({
               <div className="quote-f field full">
                 <span className="label">Full terms</span>
                 <div>
-                  See the full terms at <a href="https://haciensolutions.com/policies" target="_blank" rel="noopener noreferrer">haciensolutions.com/policies</a> — the printed quote also carries them as a QR code.
+                  See the full terms at <a href={policiesUrl} target="_blank" rel="noopener noreferrer">{policiesDisplayHost}</a> — the printed quote also carries them as a QR code.
                 </div>
               </div>
 

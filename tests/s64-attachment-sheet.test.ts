@@ -29,11 +29,13 @@ describe("S-64 attachment sheet", () => {
     expect(doc).toContain("Packing List");
     expect(doc).toContain("&amp; Delivery Details");
     expect(doc).toContain("Attachment to DR No.");
-    // The first disclaimer line renders the shared PACKING_LIST_DISCLAIMER
-    // constant (BIR-WORDING.md rule 2); its exact text is pinned in
-    // tests/print-documents.test.ts.
-    expect(doc).toContain("PACKING_LIST_DISCLAIMER");
-    expect(doc).toContain("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.");
+    // The disclaimer lines render the sheet's wording fields, sourced
+    // from Settings wording (Company Profile slice 2) seeded verbatim
+    // from the PACKING_LIST_DISCLAIMER / INPUT_TAX_DISCLAIMER constants
+    // (BIR-WORDING.md rule 2); the exact texts are pinned in
+    // tests/settings.test.ts and tests/print-documents.test.ts.
+    expect(doc).toContain("sheet.packingDisclaimer");
+    expect(doc).toContain("sheet.inputTaxDisclaimer");
     expect(doc).toContain("Computer-generated. Always issued with the manual BIR DR/SI.");
     // The policies URL prints once, inside the version line — the bare
     // policiesUrl line duplicated it (owner-approved redesign 2026-11-09,
@@ -140,6 +142,11 @@ describe("S-64 attachment sheet — lot parts, contact, whole quantities", () =>
       qrSvg: "",
       policiesUrl: "https://haciensolutions.com/policies",
       versionLine: "Policies v2.2",
+      packingDisclaimer: "PACKING LIST / ATTACHMENT ONLY — NOT A BIR-REGISTERED SALES INVOICE, DELIVERY RECEIPT, OR COLLECTION/OFFICIAL RECEIPT. Not valid for claiming input tax; must accompany the official HACIEN Non-VAT Sales Invoice or BIR-registered Delivery Receipt.",
+      inputTaxDisclaimer: "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.",
+      bankLabel: "HACIEN bank details",
+      footerLine: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com",
+      footerMark: "■ HACIEN",
       missing: [],
       ...overrides,
     };
@@ -245,6 +252,11 @@ describe("S-64 attachment sheet — catalog identity (D18)", () => {
       qrSvg: "",
       policiesUrl: "https://haciensolutions.com/policies",
       versionLine: "Policies v2.2",
+      packingDisclaimer: "PACKING LIST / ATTACHMENT ONLY — NOT A BIR-REGISTERED SALES INVOICE, DELIVERY RECEIPT, OR COLLECTION/OFFICIAL RECEIPT. Not valid for claiming input tax; must accompany the official HACIEN Non-VAT Sales Invoice or BIR-registered Delivery Receipt.",
+      inputTaxDisclaimer: "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.",
+      bankLabel: "HACIEN bank details",
+      footerLine: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com",
+      footerMark: "■ HACIEN",
       missing: [],
     };
     const html = renderToStaticMarkup(createElement(PackingListDocument, { sheet }));
@@ -291,6 +303,11 @@ describe("S-64 attachment sheet — Received by block (mock v2 fields)", () => {
       qrSvg: "",
       policiesUrl: "https://haciensolutions.com/policies",
       versionLine: "Policies v2.2",
+      packingDisclaimer: "PACKING LIST / ATTACHMENT ONLY — NOT A BIR-REGISTERED SALES INVOICE, DELIVERY RECEIPT, OR COLLECTION/OFFICIAL RECEIPT. Not valid for claiming input tax; must accompany the official HACIEN Non-VAT Sales Invoice or BIR-registered Delivery Receipt.",
+      inputTaxDisclaimer: "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.",
+      bankLabel: "HACIEN bank details",
+      footerLine: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com",
+      footerMark: "■ HACIEN",
       missing: [],
     };
   }
