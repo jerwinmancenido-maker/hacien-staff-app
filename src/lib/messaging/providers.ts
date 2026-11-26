@@ -3,14 +3,41 @@
 // Nothing is sent until the CTO sets the keys: without them, the provider
 // returns "not sent: not set up" and no request is made.
 //
-// UniSMS sender ID: env UNISMS_SENDER_ID, default "Hacien ITS" — the
-// approved sender ID (owner-confirmed 2026-11-10).
+// UniSMS sender ID: env UNISMS_SENDER_ID overrides at send time;
+// otherwise the Settings → Company Profile sender ID (whose seed is
+// the approved sender ID "Hacien ITS", owner-confirmed 2026-11-10).
 
-export const DEFAULT_SMS_SENDER_ID = "Hacien ITS";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
+import { emailIdentity } from "../settings/identity";
+import type { Settings } from "../settings/schema";
 
-/** The sender ID every SMS goes out under. Read at send time. */
+/** Seed fallback for the SMS sender ID — its one source is the settings seed. */
+export const DEFAULT_SMS_SENDER_ID = DEFAULT_SETTINGS.identity.smsSenderId;
+
+/** The sender ID when no settings read is possible: env, else the seed default. */
 export function smsSenderId(): string {
   return process.env.UNISMS_SENDER_ID?.trim() || DEFAULT_SMS_SENDER_ID;
+}
+
+/** Current settings for send-time identity, falling back to the seed profile. */
+async function currentSettings(): Promise<Settings> {
+  try {
+    const { getSettingsSnapshot } = await import("@/lib/settings");
+    return (await getSettingsSnapshot()).settings;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+/**
+ * The sender ID every SMS goes out under, read at send time: the env
+ * override wins, then the current Settings → Company Profile value,
+ * then the seed default.
+ */
+export async function resolveSmsSenderId(): Promise<string> {
+  const env = process.env.UNISMS_SENDER_ID?.trim();
+  if (env) return env;
+  return (await currentSettings()).identity.smsSenderId?.trim() || DEFAULT_SMS_SENDER_ID;
 }
 
 /** Exact reason logged when a channel is not configured. */
@@ -57,7 +84,7 @@ export function fetchProvider(
           "Content-Type": "application/json",
           Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
         },
-        body: JSON.stringify({ recipient: input.to, content: input.body, sender_id: smsSenderId() }),
+        body: JSON.stringify({ recipient: input.to, content: input.body, sender_id: await resolveSmsSenderId() }),
       });
       if (!res.ok) {
         let detail = "";
@@ -102,7 +129,7 @@ export function getEmailProvider(): MessageProvider {
     name: "smtp",
     async send(input) {
       const { getMailer } = await import("@/lib/mailer");
-      await getMailer().send({ to: input.to, subject: "HACIEN update", text: input.body });
+      await getMailer().send({ to: input.to, subject: `${emailIdentity(await currentSettings()).shortName} update`, text: input.body });
       return { ok: true };
     },
   };

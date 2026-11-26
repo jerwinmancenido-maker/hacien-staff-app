@@ -2,6 +2,8 @@ import QRCode from "qrcode";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { newTotpSecret, totpSetupUri } from "@/lib/auth/totp";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 import { PageHeader } from "@/components/ui";
 import { TwoFactorSetupForm, TwoFactorDisableForm } from "./TwoFactorForms";
 
@@ -11,7 +13,8 @@ export default async function TwoStepPage() {
   const record = await db.user.findUnique({ where: { id: user.id }, select: { totpSecret: true, email: true } });
   const enrolled = !!record?.totpSecret;
   const secret = enrolled ? null : newTotpSecret();
-  const qrDataUrl = secret && record ? await QRCode.toDataURL(totpSetupUri(secret, record.email)) : null;
+  const issuer = (await getSettingsSnapshot().catch(() => null))?.settings.identity.appShortName ?? FALLBACK_SHORT_NAME;
+  const qrDataUrl = secret && record ? await QRCode.toDataURL(totpSetupUri(secret, record.email, issuer)) : null;
 
   return (
     <>

@@ -5,6 +5,9 @@ import { API_BOT_EMAIL, isApiBotEmail } from "../api/bot-user";
 import { writeAudit } from "../audit";
 import { appUrl, getMailer } from "../mailer";
 import { accountEmailHtml } from "../email-templates";
+import { getSettingsSnapshot } from "../settings";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
+import { emailIdentity, type EmailIdentity } from "../settings/identity";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { hashToken, randomToken } from "../auth/tokens";
 import { lastRoleGuard, roleFlags, ROLES, type Role } from "../permissions";
@@ -52,21 +55,31 @@ export async function issueToken(tx: Tx, userId: string, purpose: TokenPurpose, 
   return token;
 }
 
+/** Account emails carry the CURRENT company profile — never a pinned version. */
+async function currentEmailIdentity(): Promise<EmailIdentity> {
+  try {
+    return emailIdentity((await getSettingsSnapshot()).settings);
+  } catch {
+    return emailIdentity(DEFAULT_SETTINGS);
+  }
+}
+
 async function sendInvite(email: string, name: string, token: string) {
   const url = appUrl(`/reset-password?token=${token}`);
+  const identity = await currentEmailIdentity();
   await getMailer().send({
     to: email,
-    subject: "You're invited to the HACIEN staff app",
-    text: `Hi ${name},\n\nAn account was made for you in the HACIEN staff app.\nSet your password here (link works for 7 days):\n\n${url}\n`,
+    subject: `You're invited to the ${identity.shortName} staff app`,
+    text: `Hi ${name},\n\nAn account was made for you in the ${identity.shortName} staff app.\nSet your password here (link works for 7 days):\n\n${url}\n`,
     html: accountEmailHtml({
       name,
-      heading: "You're invited to the HACIEN staff app",
-      intro: "An account was made for you in the HACIEN staff app.",
+      heading: `You're invited to the ${identity.shortName} staff app`,
+      intro: `An account was made for you in the ${identity.shortName} staff app.`,
       buttonLabel: "Set your password",
       url,
       expiryLine: "This link works for 7 days.",
       ignoreNote: "If you weren't expecting this invite, ignore this email.",
-    }),
+    }, identity),
   });
 }
 
@@ -162,19 +175,20 @@ export async function requestPasswordReset(email: string) {
   if (!user || !user.active) return;
   const token = await db.$transaction((tx) => issueToken(tx, user.id, "RESET"));
   const url = appUrl(`/reset-password?token=${token}`);
+  const identity = await currentEmailIdentity();
   await getMailer().send({
     to: user.email,
-    subject: "Reset your HACIEN password",
-    text: `Hi ${user.name},\n\nSomeone asked to reset your HACIEN staff app password.\nIf it was you, set a new one here (link works for 1 hour):\n\n${url}\n\nIf it wasn't you, ignore this email.\n`,
+    subject: `Reset your ${identity.shortName} password`,
+    text: `Hi ${user.name},\n\nSomeone asked to reset your ${identity.shortName} staff app password.\nIf it was you, set a new one here (link works for 1 hour):\n\n${url}\n\nIf it wasn't you, ignore this email.\n`,
     html: accountEmailHtml({
       name: user.name,
       heading: "Reset your password",
-      intro: "Someone asked to reset your HACIEN staff app password.",
+      intro: `Someone asked to reset your ${identity.shortName} staff app password.`,
       buttonLabel: "Reset password",
       url,
       expiryLine: "This link works for 1 hour.",
       ignoreNote: "If it wasn't you, ignore this email — your password stays the same.",
-    }),
+    }, identity),
   });
 }
 

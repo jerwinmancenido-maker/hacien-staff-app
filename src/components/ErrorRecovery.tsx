@@ -15,6 +15,8 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
+import { BRAND_BLUE } from "@/lib/brand";
+import { TIME_ZONE } from "@/lib/format";
 import { useEffect, useRef } from "react";
 
 export function ErrorRecovery({
@@ -36,7 +38,7 @@ export function ErrorRecovery({
   useEffect(() => {
     if (timeRef.current) {
       timeRef.current.textContent = new Date().toLocaleString("en-PH", {
-        timeZone: "Asia/Manila",
+        timeZone: TIME_ZONE,
       });
     }
   }, []);
@@ -66,7 +68,7 @@ export function ErrorRecovery({
           type="button"
           onClick={() => recover()}
           style={{
-            background: "#2563EB",
+            background: BRAND_BLUE,
             color: "#fff",
             border: 0,
             borderRadius: 6,

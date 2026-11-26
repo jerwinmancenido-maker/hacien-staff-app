@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, scryptSync } from "node:crypto";
+import { FALLBACK_SHORT_NAME } from "../settings/identity";
 
 /**
  * S-58: two-step sign-in with a standard authenticator app (TOTP, RFC 6238).
@@ -96,6 +97,13 @@ export function decryptTotpSecret(stored: string): string {
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64")), decipher.final()]).toString("utf8");
 }
 
-export function totpSetupUri(secret: string, email: string): string {
-  return `otpauth://totp/HACIEN:${encodeURIComponent(email)}?secret=${secret}&issuer=HACIEN&algorithm=SHA1&digits=6&period=30`;
+/**
+ * Enrollment URI for authenticator apps. The issuer is the profile
+ * short name — a display label only. Verification (verifyTotpCode)
+ * checks the secret and the clock, never the issuer, so a profile
+ * rename never breaks an existing enrollment; it only changes
+ * what NEW enrollments show in the authenticator app.
+ */
+export function totpSetupUri(secret: string, email: string, issuer: string = FALLBACK_SHORT_NAME): string {
+  return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }

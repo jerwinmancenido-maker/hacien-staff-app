@@ -6,6 +6,7 @@
 // callers pass the snapshot (or its sections) they already loaded via
 // getSettingsSnapshot().
 
+import { BRAND_BLUE } from "../brand";
 import { DEFAULT_SETTINGS } from "./defaults";
 import type { Settings } from "./schema";
 
@@ -39,4 +40,34 @@ export function appIdentity(settings: Settings) {
 export function csvDownloadName(csvFilePrefix: string, rest: string): string {
   const prefix = csvFilePrefix.trim();
   return prefix ? `${prefix}-${rest}` : rest;
+}
+
+/**
+ * Email identity derived from one settings snapshot (Company Profile
+ * slice 4, census F10). Account and reminder emails are sent with the
+ * CURRENT profile — never a pinned version — so callers pass the current
+ * snapshot. `footerLine` follows the print derivation (registered name,
+ * then website; blank parts skipped), so with the live profile values
+ * it renders exactly the historical footer.
+ */
+export type EmailIdentity = {
+  /** Header wordmark in the account-email lockup. */
+  wordmark: string;
+  /** Short brand name (subjects, fallback copy). */
+  shortName: string;
+  /** Footer line: registered name · website, blank parts skipped. */
+  footerLine: string;
+  /** The one brand blue (BRAND_BLUE). */
+  accentColor: string;
+};
+
+export function emailIdentity(settings: Settings): EmailIdentity {
+  const displayName = settings.company.name?.trim() || settings.company.tradeName?.trim() || "";
+  const bits = [displayName, settings.company.website?.trim()].filter(Boolean);
+  return {
+    wordmark: settings.identity.appShortName,
+    shortName: settings.identity.appShortName,
+    footerLine: bits.join(" · "),
+    accentColor: BRAND_BLUE,
+  };
 }

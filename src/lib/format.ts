@@ -108,6 +108,34 @@ export function manilaToday(now: Date = new Date()): Date {
   return new Date(`${ymd}T00:00:00.000Z`);
 }
 
+/** Offset of Asia/Manila from UTC at an instant, from the tz database. */
+function manilaOffsetMs(at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const wallAsUtc = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+  return wallAsUtc - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/** Start of Jan 1 of `year` in Manila, as a UTC instant. */
+export function manilaYearStart(year: number): Date {
+  const jan1Utc = Date.UTC(year, 0, 1);
+  let start = new Date(jan1Utc - manilaOffsetMs(new Date(jan1Utc)));
+  // Re-derive at the candidate instant: if the offset differs there
+  // (a zone change at the boundary), land exactly on local midnight.
+  const refined = new Date(jan1Utc - manilaOffsetMs(start));
+  if (refined.getTime() !== start.getTime()) start = refined;
+  return start;
+}
+
 /** A date-only value as YYYY-MM-DD (for <input type="date">). */
 export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
