@@ -8,6 +8,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { CANT_DEACTIVATE_MAIN } from "@/lib/contacts";
 import { Activity } from "@/components/Activity";
 import { ConfirmAction } from "@/components/ConfirmAction";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { Chip, PageHeader } from "@/components/ui";
 import { ContactForm } from "../ContactForm";
 import {
@@ -41,6 +42,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
+      <RecordBreadcrumbLabel label={contact.name} />
       <PageHeader
         title={
           <>
