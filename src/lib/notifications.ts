@@ -149,7 +149,7 @@ export async function getNotifications(user: PermissionUser): Promise<Notificati
       count: warrantySoonCount,
       href: "/receiving?warranty=soon",
       items: warrantySoon.map((r) => ({
-        label: `${r.purchaseOrderNumber} · ${r.supplierName} · ends ${r.warrantyEndDate}`,
+        label: `${r.purchaseOrderNumber} · ${r.supplierName} · ends ${formatDate(new Date(`${r.warrantyEndDate}T00:00:00.000Z`))}`,
         href: `/receiving/${r.purchaseOrderId}`,
       })),
     });
