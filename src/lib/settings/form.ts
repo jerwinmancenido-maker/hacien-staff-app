@@ -108,6 +108,7 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         warnSecondPct: get("warnSecondPct"),
         incomeTaxMethod,
         incomeTaxMethodsByYear,
+        isVatRegistered: checked(get("isVatRegistered")),
         holidays,
         booksType,
       };
@@ -199,6 +200,46 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         ),
       };
     }
+    case "identity":
+      return {
+        policiesUrl: get("policiesUrl") ?? "",
+        policiesDisplayHost: get("policiesDisplayHost") ?? "",
+        policyVersionLine: get("policyVersionLine") ?? "",
+        smsSenderId: get("smsSenderId") ?? "",
+        csvFilePrefix: get("csvFilePrefix") ?? "",
+        appTitle: get("appTitle") ?? "",
+        appShortName: get("appShortName") ?? "",
+      };
+    case "wording":
+      return {
+        nonVatLabel: get("nonVatLabel") ?? "",
+        inputTaxDisclaimer: get("inputTaxDisclaimer") ?? "",
+        billingDisclaimer: get("billingDisclaimer") ?? "",
+        packingListDisclaimer: get("packingListDisclaimer") ?? "",
+        ewt2307Note: get("ewt2307Note") ?? "",
+        thankYou: get("thankYou") ?? "",
+        quotationNotInvoice: get("quotationNotInvoice") ?? "",
+        salesOrderNotInvoice: get("salesOrderNotInvoice") ?? "",
+        termsHeading: get("termsHeading") ?? "",
+        termsPoint1ValidityDefault: get("termsPoint1ValidityDefault") ?? "",
+        termsPoint1ValidityCustom: get("termsPoint1ValidityCustom") ?? "",
+        termsPoint1Body: get("termsPoint1Body") ?? "",
+        termsPoint2Upfront: get("termsPoint2Upfront") ?? "",
+        termsPoint2FiftyFifty: get("termsPoint2FiftyFifty") ?? "",
+        termsPoint2Net30: get("termsPoint2Net30") ?? "",
+        termsPoint2Cod: get("termsPoint2Cod") ?? "",
+        termsPaymentAntiFraud: get("termsPaymentAntiFraud") ?? "",
+        termsCustomTermsAntiFraud: get("termsCustomTermsAntiFraud") ?? "",
+        termsPoint3WithLeadTime: get("termsPoint3WithLeadTime") ?? "",
+        termsPoint3NoLeadTime: get("termsPoint3NoLeadTime") ?? "",
+        termsPoint4: get("termsPoint4") ?? "",
+        termsPoint5Goods: get("termsPoint5Goods") ?? "",
+        termsPoint5Services: get("termsPoint5Services") ?? "",
+        termsPoint6: get("termsPoint6") ?? "",
+        termsPoint7: get("termsPoint7") ?? "",
+        termsLateInterestPctPerYear: get("termsLateInterestPctPerYear"),
+        termsAttorneysFeesPct: get("termsAttorneysFeesPct"),
+      };
     case "print": {
       const bankCount = Math.max(0, Number(get("bankCount") ?? "0") || 0);
       const eWalletCount = Math.max(0, Number(get("eWalletCount") ?? "0") || 0);
