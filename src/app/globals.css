@@ -5146,7 +5146,7 @@ button.contact-card-add {
 .pp-doc-root {
   --pp-ink: var(--ink, #0a0a0a);
   --pp-navy: #0d1526;
-  --pp-accent: var(--blue, #2563eb);
+  --pp-accent: var(--blue);
   --pp-rule: #e5e5e5;
   --pp-rule-soft: #e5e5e5;
   --pp-muted: var(--grey-600, #525252);
@@ -5159,7 +5159,7 @@ button.contact-card-add {
      matching @page margins. Print overrides at end of this section win. */
   --pp-ink: var(--ink, #0a0a0a);
   --pp-navy: #0d1526;
-  --pp-accent: var(--blue, #2563eb);
+  --pp-accent: var(--blue);
   --pp-rule: #e5e5e5;
   --pp-rule-soft: #e5e5e5;
   --pp-muted: var(--grey-600, #525252);
@@ -8443,7 +8443,7 @@ button.contact-card-add {
 /* Lot grouping (2026-11-09): the LOT n badge in the lot bar, the Move-to
    selects on lines/components, and the members hint. */
 .quote-lot-badge {
-  background: #2563eb;
+  background: var(--blue);
   color: #fff;
   font-weight: 700;
   font-size: calc(11px * var(--ui-scale, 1));

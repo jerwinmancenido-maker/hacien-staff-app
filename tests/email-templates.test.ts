@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { accountEmailHtml } from "@/lib/email-templates";
+import { DEFAULT_SETTINGS } from "@/lib/settings/defaults";
+import { emailIdentity } from "@/lib/settings/identity";
+
+// The live profile's values: with them, the derived email identity
+// renders exactly the historical wordmark, blue and footer.
+const identity = emailIdentity({
+  ...DEFAULT_SETTINGS,
+  company: { ...DEFAULT_SETTINGS.company, name: "HACIEN Information Technology Solutions", website: "haciensolutions.com" },
+});
 
 /** HTML reset/invite email: a button staff can tap, with the plain link as fallback. */
 describe("accountEmailHtml", () => {
@@ -11,7 +20,7 @@ describe("accountEmailHtml", () => {
     url: "https://app.haciensolutions.com/reset-password?token=abc123",
     expiryLine: "This link works for 1 hour.",
     ignoreNote: "If it wasn't you, ignore this email — your password stays the same.",
-  });
+  }, identity);
 
   it("has a button linking to the reset page", () => {
     expect(html).toContain('href="https://app.haciensolutions.com/reset-password?token=abc123"');
@@ -51,7 +60,7 @@ describe("accountEmailHtml", () => {
       url: "https://example.com/?a=1&b=2",
       expiryLine: "1 hour.",
       ignoreNote: "ignore.",
-    });
+    }, identity);
     expect(nasty).not.toContain("<script>");
     expect(nasty).toContain("&lt;script&gt;");
     expect(nasty).toContain("?a=1&amp;b=2");

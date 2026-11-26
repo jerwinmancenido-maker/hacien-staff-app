@@ -12,6 +12,7 @@ import {
   TAX_CALENDAR_SHOW_NOT_APPLICABLE,
 } from "@/lib/tax/calendar-constants";
 import { defaultDoneDateYmd, listTaxCalendar } from "@/lib/services/tax-calendar";
+import { TIME_ZONE } from "@/lib/format";
 import type { TaxCalendarRow } from "@/lib/tax/calendar-build";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxCalendarBanner } from "@/components/books/TaxCalendarBanner";
@@ -262,7 +263,7 @@ export default async function TaxCalendarPage({
             {TAX_CALENDAR_SHOW_NOT_APPLICABLE}
           </Link>
           <span className="faint small">
-            Due dates in Asia/Manila (PHT). Mark as done is a staff note only — not a filing.
+            Due dates in {TIME_ZONE} (PHT). Mark as done is a staff note only — not a filing.
           </span>
         </div>
       </div>

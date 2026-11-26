@@ -2,6 +2,7 @@
 
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatPeso } from "@/lib/format";
+import { BRAND_BLUE } from "@/lib/brand";
 import { formatSalesAxisPeso, type HomeSalesMonth } from "@/lib/home/sales";
 
 /** Left gutter for axis labels on screen (px); tight when axis is hidden. */
@@ -142,8 +143,8 @@ export function SalesChart({
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#2563EB" stopOpacity="0.28" />
-              <stop offset="1" stopColor="#2563EB" stopOpacity="0" />
+              <stop offset="0" stopColor={BRAND_BLUE} stopOpacity="0.28" />
+              <stop offset="1" stopColor={BRAND_BLUE} stopOpacity="0" />
             </linearGradient>
           </defs>
 
