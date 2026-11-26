@@ -9,6 +9,7 @@ import { maskBankAccountNumber } from "@/lib/bank-mask";
 import { resolveSupplierBank } from "@/lib/banks";
 import { AlertTriangleIcon, PlusIcon } from "./Icons";
 import { SupplierBankAccount } from "./SupplierBankAccount";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 const TONE: Record<SupplierTaxType, ChipTone> = {
   VAT: "green",
@@ -28,6 +29,7 @@ export async function SupplierOverview({
   docStats,
   warnDays,
   payableBalance = "0.00",
+  ownCompanyName = FALLBACK_SHORT_NAME,
 }: {
   supplier: Supplier;
   /** S-58: false hides the TIN row (view-only users). */
@@ -42,6 +44,8 @@ export async function SupplierOverview({
   warnDays: number;
   /** Unpaid supplier bills (same figure as the Balances tab). */
   payableBalance?: string;
+  /** Own-company name for the tax rule note (Settings → Company). */
+  ownCompanyName?: string;
 }) {
   const basePath = `/suppliers/${supplier.id}`;
   const activeAddresses = addresses.filter((a) => !a.archivedAt);
@@ -98,7 +102,7 @@ export async function SupplierOverview({
                   {supplier.taxType === "VAT"
                     ? "VAT · gives official receipt / invoice"
                     : supplier.taxType === "NON_VAT"
-                    ? "Non-VAT · HACIEN is non-VAT, VAT in price is cost"
+                    ? `Non-VAT · ${ownCompanyName} is non-VAT, VAT in price is cost`
                     : "Usually no receipt"}
                 </div>
               </div>

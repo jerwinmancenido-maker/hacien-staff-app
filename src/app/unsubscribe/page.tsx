@@ -1,4 +1,5 @@
 import { BrandLogo } from "@/components/BrandLogo";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { verifyUnsubscribeToken } from "@/lib/marketing-consent";
 import { unsubscribeAction } from "./actions";
 
@@ -14,6 +15,7 @@ export default async function UnsubscribePage({
 }: {
   searchParams: Promise<{ token?: string; done?: string; error?: string }>;
 }) {
+  const { settings } = await getSettingsSnapshot();
   const s = await searchParams;
   const token = s.token ?? "";
   const valid = token ? verifyUnsubscribeToken(token) !== null : false;
@@ -23,31 +25,31 @@ export default async function UnsubscribePage({
         <div className="brand brand-full">
           <BrandLogo variant="full" />
         </div>
-        <h1>Unsubscribe from HACIEN marketing emails</h1>
+        <h1>Unsubscribe from {settings.identity.appShortName} marketing emails</h1>
         {s.done ? (
           <div className="alert ok" role="status">
-            Done. You will no longer receive marketing emails from HACIEN Team. Your email is kept on
+            Done. You will no longer receive marketing emails from {settings.identity.appShortName} Team. Your email is kept on
             our do-not-email list so it is not added back by mistake.
           </div>
         ) : s.error ? (
           <div className="alert error" role="status">
-            This unsubscribe link is invalid or has expired. Please contact HACIEN Team and ask to be
+            This unsubscribe link is invalid or has expired. Please contact {settings.identity.appShortName} Team and ask to be
             removed from marketing emails.
           </div>
         ) : valid ? (
           <>
             <p className="subtitle">
-              Click below to stop marketing emails from HACIEN Team. This takes effect immediately.
+              Click below to stop marketing emails from {settings.identity.appShortName} Team. This takes effect immediately.
             </p>
             <form action={unsubscribeAction.bind(null, token)}>
               <button type="submit" className="btn">
-                Unsubscribe from HACIEN marketing emails
+                Unsubscribe from {settings.identity.appShortName} marketing emails
               </button>
             </form>
           </>
         ) : (
           <div className="alert error" role="status">
-            This unsubscribe link is invalid or has expired. Please contact HACIEN Team and ask to be
+            This unsubscribe link is invalid or has expired. Please contact {settings.identity.appShortName} Team and ask to be
             removed from marketing emails.
           </div>
         )}

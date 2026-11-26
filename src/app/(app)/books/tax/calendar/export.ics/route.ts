@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { isBooksEnabled } from "@/lib/books/features";
-import { TAX_CALENDAR_ICS_FILENAME } from "@/lib/tax/calendar-constants";
+import { TAX_CALENDAR_ICS_FILENAME, taxCalendarIcsName } from "@/lib/tax/calendar-constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { buildTaxCalendarIcs } from "@/lib/tax/calendar-ics";
 import { listTaxCalendar } from "@/lib/services/tax-calendar";
 
@@ -13,7 +14,8 @@ export async function GET() {
   }
 
   const { rows } = await listTaxCalendar(user, { view: "all" });
-  const body = buildTaxCalendarIcs(rows);
+  const { settings } = await getSettingsSnapshot();
+  const body = buildTaxCalendarIcs(rows, { name: taxCalendarIcsName(settings.identity.appShortName) });
 
   return new NextResponse(body, {
     headers: {

@@ -19,6 +19,7 @@
 // HACIEN (businessId NULL), "all" is every business combined.
 
 import { writeAudit } from "../audit";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import { db } from "../db";
 import { DocRuleError, money } from "../documents/common";
 import { assertCan, ForbiddenError, type PermissionUser } from "../permissions";
@@ -467,7 +468,7 @@ export async function getOperationalProfit(actor: PermissionUser, month: string)
   return { month, rows, combined: toRow(null, "All businesses", total), officialBilledRevenue: official.revenue, officialNet: official.net, bridge };
 }
 
-export function operationalProfitToCsv(report: OperationalProfit): string {
+export function operationalProfitToCsv(report: OperationalProfit, shortName: string = DEFAULT_SETTINGS.identity.appShortName): string {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const row = (xs: string[]) => xs.map(esc).join(",") + "\n";
   let out = row(["Operational profit — all recorded orders (not the official Books figure)", report.month]);
@@ -476,12 +477,12 @@ export function operationalProfitToCsv(report: OperationalProfit): string {
     out += row([r.label, String(r.orderCount), r.sales, r.supplierCosts, r.expenses, r.profit]);
   }
   out += row([]);
-  out += row(["Official billed revenue (Books, HACIEN only)", report.officialBilledRevenue]);
-  out += row(["Official net profit (Books, HACIEN only)", report.officialNet]);
+  out += row([`Official billed revenue (Books, ${shortName} only)`, report.officialBilledRevenue]);
+  out += row([`Official net profit (Books, ${shortName} only)`, report.officialNet]);
   out += row([]);
   out += row(["Bridge - recorded profit (own company)", report.bridge.recordedProfit]);
   out += row(["Bridge - less recorded sales not in official billed revenue", report.bridge.unbilled]);
   out += row(["Bridge - add supplier costs above supplier bills recorded", report.bridge.costsVsBills]);
-  out += row(["Bridge - supplier bills recorded (Books, HACIEN only)", report.bridge.supplierBills]);
+  out += row([`Bridge - supplier bills recorded (Books, ${shortName} only)`, report.bridge.supplierBills]);
   return out;
 }

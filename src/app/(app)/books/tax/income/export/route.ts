@@ -4,6 +4,8 @@ import { isBooksEnabled } from "@/lib/books/features";
 import { parseTaxQuarter } from "@/lib/tax/quarters";
 import { incomeTaxWorksheetToCsv } from "@/lib/tax/csv";
 import { getIncomeTaxWorksheet } from "@/lib/services/tax-worksheets";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { csvDownloadName } from "@/lib/settings/identity";
 
 export async function GET(req: Request) {
   const user = await requirePagePermission("view_books");
@@ -26,7 +28,8 @@ export async function GET(req: Request) {
       label: sheet.bounds.label,
     },
   );
-  const filename = `hacien-1701q-8pct-Q${period.quarter}-${period.year}.csv`;
+  const { settings } = await getSettingsSnapshot();
+  const filename = csvDownloadName(settings.identity.csvFilePrefix, `1701q-8pct-Q${period.quarter}-${period.year}.csv`);
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

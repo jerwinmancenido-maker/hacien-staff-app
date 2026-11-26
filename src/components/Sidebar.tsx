@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { BookIcon, BoxIcon, CartIcon, CoinIcon, FileIcon, GearIcon, HomeIcon, ListIcon, TruckIcon, UsersIcon } from "./Icons";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 type Item = {
   href: string;
@@ -256,12 +257,12 @@ export function RecordBreadcrumbLabel({ label }: { label: string }) {
   return null;
 }
 
-export function Breadcrumb() {
+export function Breadcrumb({ rootLabel = FALLBACK_SHORT_NAME }: { rootLabel?: string }) {
   const path = usePathname();
   const { entry } = useContext(RecordCrumbContext);
   const recordLabel = entry && path && entry.path === path ? entry.label : undefined;
   const labels = breadcrumbLabelsForPath(path, recordLabel);
-  const crumbs = ["HACIEN", "Staff", ...labels];
+  const crumbs = [rootLabel, "Staff", ...labels];
   return (
     <div className="crumbs">
       {crumbs.map((c, i) => (

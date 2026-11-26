@@ -68,6 +68,7 @@ import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } fro
 import { AddAddressDialog, Modal } from "./Dialogs";
 import type { CatalogSearchResult } from "@/lib/items/search";
 import { pickerSearchOutcome } from "@/lib/items/picker-search";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -329,7 +330,7 @@ export function QuoteEditor({
   canApprove = false,
   approvalLimits,
   businesses = [],
-  ownCompanyName = "HACIEN",
+  ownCompanyName = FALLBACK_SHORT_NAME,
   policiesUrl = POLICIES_URL,
   policiesDisplayHost = POLICIES_DISPLAY_HOST,
   canTagBusiness = false,
@@ -1820,7 +1821,7 @@ export function QuoteEditor({
                         </div>
                         <div className="quote-ln-price">
                           <input
-                            aria-label={`Line ${idx + 1} HACIEN unit price`}
+                            aria-label={`Line ${idx + 1} ${ownCompanyName} unit price`}
                             inputMode="decimal"
                             value={i.unitPrice}
                             onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
@@ -2256,7 +2257,7 @@ export function QuoteEditor({
                           </label>
                           <input
                             id={`m-price-${i.key}`}
-                            aria-label={`Line ${idx + 1} HACIEN unit price`}
+                            aria-label={`Line ${idx + 1} ${ownCompanyName} unit price`}
                             inputMode="decimal"
                             value={i.unitPrice}
                             placeholder="Price"

@@ -1,23 +1,40 @@
-// Tax worksheet constants for HACIEN (non-VAT, 8% income tax option).
+// Tax worksheet constants (non-VAT, 8% income tax option).
 //
 // UNVERIFIED — confirm every figure and rule with the accountant / RDO before
 // filing. This app never files returns and never connects to BIR or eBIRForms.
 // Values here are working assumptions for worksheets only.
+//
+// Company Profile slice 3: the company-named / posture strings and the
+// non-VAT threshold are DERIVED from the settings seed (DEFAULT_SETTINGS)
+// or built by the helpers below from a live snapshot — this module keeps
+// no second copy of the ₱3,000,000 limit or the company name. The exported
+// constants are the seeded derivations, so existing importers (incl. the
+// print path) render exactly as before; screens pass their live snapshot
+// values to the helpers instead.
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 
 /**
  * Existing business VAT registration setting. HACIEN is non-VAT (8% option).
  * It no longer gates the Gov VAT 5% withholding option — owner decision
  * 2026-11-06: government contracts deduct 5% R-VAT, staff pick it per job.
  */
-export const BUSINESS_IS_VAT_REGISTERED = false;
+export const BUSINESS_IS_VAT_REGISTERED = DEFAULT_SETTINGS.taxYear.isVatRegistered;
 
 /** Banner on every tax worksheet screen and print/PDF. */
 export const TAX_WORKSHEET_BANNER =
   "Worksheet only — check with your accountant before filing. Not filed by this app.";
 
-/** Short disclaimer under page titles. */
-export const TAX_WORKSHEET_DISCLAIMER =
-  "Preparation aid for the owner and accountant. HACIEN is non-VAT — no VAT is shown or computed.";
+/** Short disclaimer under page titles, derived from the company tax posture. */
+export function taxWorksheetDisclaimer(shortName: string, isVatRegistered: boolean): string {
+  return isVatRegistered
+    ? `Preparation aid for the owner and accountant. ${shortName} is VAT-registered — VAT is shown where it applies.`
+    : `Preparation aid for the owner and accountant. ${shortName} is non-VAT — no VAT is shown or computed.`;
+}
+
+export const TAX_WORKSHEET_DISCLAIMER = taxWorksheetDisclaimer(
+  DEFAULT_SETTINGS.identity.appShortName,
+  DEFAULT_SETTINGS.taxYear.isVatRegistered,
+);
 
 /**
  * UNVERIFIED: ₱250,000 annual allowance under the 8% income tax option for a
@@ -38,11 +55,15 @@ export const INCOME_TAX_RATE_8PCT = "0.0800";
  * UNVERIFIED: ₱3,000,000 VAT threshold / non-VAT ceiling. Crossing it may end
  * both non-VAT status and eligibility for the 8% option — accountant must advise.
  */
-export const NON_VAT_THRESHOLD_PESOS = "3000000.00";
+export const NON_VAT_THRESHOLD_PESOS = DEFAULT_SETTINGS.taxYear.nonVatLimit.toFixed(2);
 
 /** Red warning when invoiced or collected cumulative exceed the non-VAT threshold. */
-export const OVER_THRESHOLD_WARNING =
-  "Cumulative sales exceed ₱3,000,000. The 8% option and non-VAT status may no longer apply — consult your accountant before filing.";
+export function overThresholdWarning(nonVatLimit: number): string {
+  const limit = nonVatLimit.toLocaleString("en-PH", { maximumFractionDigits: 2 });
+  return `Cumulative sales exceed ₱${limit}. The 8% option and non-VAT status may no longer apply — consult your accountant before filing.`;
+}
+
+export const OVER_THRESHOLD_WARNING = overThresholdWarning(DEFAULT_SETTINGS.taxYear.nonVatLimit);
 
 /**
  * 1701Q worksheet basis: Invoiced is the main column (EOPT, RR 3-2024).
@@ -56,9 +77,12 @@ export const INVOICED_TOTAL_LABEL = "Invoiced (main basis)";
 export const COLLECTED_TOTAL_LABEL = "Collected (reference)";
 export const COLLECTED_REFERENCE_HINT = "Reference only — not the filing basis under EOPT / RR 3-2024.";
 
-/** Note on the supplier EWT worksheet (HACIEN may or may not be a withholding agent). */
-export const SUPPLIER_EWT_RDO_NOTE =
-  "Only applies if HACIEN is registered to withhold — confirm with RDO.";
+/** Note on the supplier EWT worksheet (the company may or may not be a withholding agent). */
+export function supplierEwtRdoNote(shortName: string): string {
+  return `Only applies if ${shortName} is registered to withhold — confirm with RDO.`;
+}
+
+export const SUPPLIER_EWT_RDO_NOTE = supplierEwtRdoNote(DEFAULT_SETTINGS.identity.appShortName);
 
 /** CSV format labels — column layouts are UNVERIFIED drafts, not official BIR files. */
 export const SAWT_CSV_FORMAT_LABEL = "UNVERIFIED format";

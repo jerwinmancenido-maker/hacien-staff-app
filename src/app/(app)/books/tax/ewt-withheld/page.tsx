@@ -2,10 +2,11 @@ import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import {
   QAP_CSV_FORMAT_LABEL,
-  SUPPLIER_EWT_RDO_NOTE,
-  TAX_WORKSHEET_DISCLAIMER,
+  supplierEwtRdoNote,
+  taxWorksheetDisclaimer,
   TAX_WORKSHEET_PAGES,
 } from "@/lib/tax/constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { parseTaxQuarter } from "@/lib/tax/quarters";
 import { getSupplierEwtWorksheet } from "@/lib/services/tax-worksheets";
 import { formatPeso } from "@/lib/format";
@@ -21,6 +22,7 @@ export default async function SupplierEwtWorksheetPage({
   searchParams: Promise<{ year?: string; quarter?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const period = parseTaxQuarter(sp.year, sp.quarter);
   const sheet = await getSupplierEwtWorksheet(user, period.year, period.quarter);
@@ -28,7 +30,7 @@ export default async function SupplierEwtWorksheetPage({
 
   return (
     <>
-      <PageHeader title={TAX_WORKSHEET_PAGES.supplierEwt.title} subtitle={TAX_WORKSHEET_DISCLAIMER} />
+      <PageHeader title={TAX_WORKSHEET_PAGES.supplierEwt.title} subtitle={taxWorksheetDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)} />
       <BooksNav active="tax" />
       <TaxNav active="supplierEwt" />
       <TaxWorksheetBanner />
@@ -41,7 +43,7 @@ export default async function SupplierEwtWorksheetPage({
           printHref={`/print/books/tax/ewt-withheld?${q}`}
         />
         <div className="alert warn" role="note" style={{ marginBottom: 12 }}>
-          {SUPPLIER_EWT_RDO_NOTE}
+          {supplierEwtRdoNote(settings.identity.appShortName)}
         </div>
         <p className="faint small">
           CSV export uses QAP-style column order — labelled <b>{QAP_CSV_FORMAT_LABEL}</b>. Period total tax{" "}

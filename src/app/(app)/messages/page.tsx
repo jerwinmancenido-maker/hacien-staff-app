@@ -25,10 +25,10 @@ export default async function MessagesPage() {
           <h2>Order text updates</h2>
         </div>
         <p className="faint small">
-          Short UniSMS texts, sender HACIEN, first name + sales order number only. A template on
+          Short UniSMS texts, sender {settings.identity.appShortName}, first name + sales order number only. A template on
           alone sends nothing while “Order texts on” is off, and nothing is sent until the provider
           keys are set. Default chosen: all off until UniSMS keys, the UniSMS DPA + DB location, and
-          the HACIEN sender ID are confirmed.
+          the {settings.identity.appShortName} sender ID are confirmed.
         </p>
         <div>
           <label>
@@ -112,7 +112,7 @@ export default async function MessagesPage() {
       )}
       <p className="faint small">
         Nothing is sent until the messaging provider keys are set. Until then, attempts are logged as
-        “not sent: not set up”. Go-live is blocked until the UniSMS DPA, DB location, and HACIEN
+        “not sent: not set up”. Go-live is blocked until the UniSMS DPA, DB location, and {settings.identity.appShortName}
         sender ID are in place.
       </p>
     </>

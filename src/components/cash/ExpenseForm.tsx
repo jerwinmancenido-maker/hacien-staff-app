@@ -8,6 +8,7 @@ import { FileInput } from "@/components/FileInput";
 import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export function ExpenseForm({
   action,
@@ -18,7 +19,7 @@ export function ExpenseForm({
   salesOrders = [],
   purchaseOrders = [],
   businesses = [],
-  ownCompanyName = "HACIEN",
+  ownCompanyName = FALLBACK_SHORT_NAME,
   canEdit,
   maxMb,
 }: {
@@ -134,7 +135,7 @@ export function ExpenseForm({
             Amount paid<span className="req"> *</span>
           </label>
           <input id="amount" name="amount" defaultValue={state.values?.amount ?? defaults.amount} inputMode="decimal" />
-          <div className="hint">Cash that left the account (₱). Do not include VAT input tax — HACIEN is non-VAT.</div>
+          <div className="hint">Cash that left the account (₱). Do not include VAT input tax — {ownCompanyName} is non-VAT.</div>
           {e.amount && <div className="error">{e.amount}</div>}
         </div>
         <CashAccountSelect
