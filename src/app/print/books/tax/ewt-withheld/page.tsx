@@ -17,7 +17,8 @@ import { formatPeso } from "@/lib/format";
 import { PrintButton } from "@/components/docs/PrintButton";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
-import { printCompanyBlock } from "@/lib/print/company";
+import { printCompanyBlock, printFooterIdentity } from "@/lib/print/company";
+import { printGenericFooterCss } from "@/lib/print/strip-style";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: TAX_WORKSHEET_PAGES.supplierEwt.title };
@@ -38,6 +39,9 @@ export default async function PrintSupplierEwtPage({
 
   return (
     <div className={`print-shell print-shell-${settings.print.paperSize.toLowerCase()}`}>
+      <style>
+        {printGenericFooterCss(printFooterIdentity(settings.company, settings.identity).line)}
+      </style>
       <div className="print-toolbar no-print">
         <Link className="btn btn-secondary" href={`/books/tax/ewt-withheld?${q}`}>
           Back to worksheet
@@ -48,7 +52,7 @@ export default async function PrintSupplierEwtPage({
         <b>{TAX_WORKSHEET_BANNER}</b>
       </div>
       <article className="print-doc books-register-doc">
-        <PrintHeaderRepeat header={<CompanyLetterhead company={printCompanyBlock(company)} />}>
+        <PrintHeaderRepeat header={<CompanyLetterhead company={printCompanyBlock(company, settings.wording)} />}>
           <div className="print-doc-title">
             <h1>{TAX_WORKSHEET_PAGES.supplierEwt.title}</h1>
             <div className="small muted">{TAX_WORKSHEET_DISCLAIMER}</div>

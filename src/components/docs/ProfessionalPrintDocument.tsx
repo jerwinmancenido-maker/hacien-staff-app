@@ -7,7 +7,8 @@ import { formatPeso } from "@/lib/format";
 import { HIDE_STATUS_ON_PRINT } from "@/lib/print/tax-wording";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
 import { PrintHeaderRepeat } from "@/components/docs/PrintHeaderRepeat";
-import { printStripCss } from "@/lib/print/strip-style";
+import { printFooterCss, printStripCss } from "@/lib/print/strip-style";
+import { THANK_YOU } from "@/lib/print/tax-wording";
 import { printablePersonName, printablePosition } from "@/lib/print/signatory";
 import { POLICY_VERSION_LINE } from "@/lib/print/policies";
 import { getQuoteSoTermsPoints, TERMS_AND_CONDITIONS_HEADING } from "@/lib/print/terms-block";
@@ -192,7 +193,12 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
       aria-label={`${doc.title} ${doc.number}`}
       data-print-kind={doc.kind}
     >
-      <style>{printStripCss(stripText)}</style>
+      <style>
+        {printStripCss(stripText) +
+          (doc.pageFooterLine != null
+            ? "\n" + printFooterCss(doc.pageFooterLine, doc.pageFooterMark ?? "")
+            : "")}
+      </style>
       {doc.watermark && (
         <div className="pp-watermark" aria-hidden="true">
           {doc.watermark}
@@ -454,7 +460,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
 
         {termsBlock && termsBlock.length > 0 && (
           <section className="pp-terms-block" aria-label="Terms and conditions">
-            <div className="pp-label">{TERMS_AND_CONDITIONS_HEADING}</div>
+            <div className="pp-label">{doc.termsHeading ?? TERMS_AND_CONDITIONS_HEADING}</div>
             <div className="pp-terms-list">
               {termsBlock.map((point, i) => (
                 <div key={i} className="pp-terms-item">
@@ -486,7 +492,7 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
 
       <footer className="pp-foot">
         <div className="pp-foot-left">
-          {doc.thankYou && <span className="pp-thank-you">Thank you for your business</span>}
+          {doc.thankYou && <span className="pp-thank-you">{doc.thankYouText ?? THANK_YOU}</span>}
           {versionLine && <div className="pp-version-line pp-faint">{versionLine}</div>}
           {/* The version line already ends with the policies URL — printing
               the Terms URL again under it duplicated the link on every

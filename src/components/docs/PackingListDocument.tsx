@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import { CompanyLetterhead } from "@/components/docs/CompanyLetterhead";
-import { printStripCss } from "@/lib/print/strip-style";
-import { PACKING_LIST_DISCLAIMER } from "@/lib/print/tax-wording";
+import { printFooterCss, printStripCss } from "@/lib/print/strip-style";
 import type { AttachmentSheet } from "@/lib/print/attachment";
 
 /**
@@ -26,7 +25,11 @@ import type { AttachmentSheet } from "@/lib/print/attachment";
 export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
   return (
     <article className="print-page pp-doc-root" aria-label={`Packing list attachment for DR ${sheet.drNumber}`}>
-      <style>{printStripCss(`Packing list · ${sheet.drNumber}`.toUpperCase())}</style>
+      <style>
+        {printStripCss(`Packing list · ${sheet.drNumber}`.toUpperCase()) +
+          "\n" +
+          printFooterCss(sheet.footerLine, sheet.footerMark)}
+      </style>
       <header className="pp-head">
         <CompanyLetterhead company={sheet.company} />
       </header>
@@ -127,8 +130,8 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
       ) : null}
 
       {sheet.banks.length ? (
-        <section className="pp-pay" aria-label="HACIEN bank details">
-          <div className="pp-label">HACIEN bank details</div>
+        <section className="pp-pay" aria-label={sheet.bankLabel}>
+          <div className="pp-label">{sheet.bankLabel}</div>
           <ul>
             {sheet.banks.map((b, i) => (
               <li key={i}>
@@ -140,8 +143,8 @@ export function PackingListDocument({ sheet }: { sheet: AttachmentSheet }) {
       ) : null}
 
       <div className="pp-disclaimer">
-        <p>{PACKING_LIST_DISCLAIMER}</p>
-        <p>THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.</p>
+        <p>{sheet.packingDisclaimer}</p>
+        <p>{sheet.inputTaxDisclaimer}</p>
       </div>
 
       <section className="pp-signatories" aria-label="Signatures">

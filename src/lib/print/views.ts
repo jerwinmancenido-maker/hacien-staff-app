@@ -25,17 +25,17 @@ import {
   paperSizeFromSettings,
   paymentInstructionsFromSettings,
   printCompanyBlock,
+  printFooterIdentity,
   watermarkForStatus,
 } from "./company";
-import { qrSvg, TERMS_URL } from "./qr";
-import { POLICY_VERSION_LINE } from "./policies";
+import { qrSvg } from "./qr";
 import {
   buildQuoteSoTermsPoints,
   printedTermsLabel,
   sanitizePrintedNotes,
 } from "./terms-block";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
-import { EWT_2307_NOTE, HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
+import { HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintLotPart, PrintMoneyLine, PrintSignatory } from "./types";
 
 function assertCosts(viewer: PermissionUser) {
@@ -125,10 +125,14 @@ async function letterhead(settingsVersionId?: string | null) {
   const latest = await getSettingsSnapshot();
   const pinned = settingsVersionId ? await getSettingsVersion(settingsVersionId) : null;
   const company = mergeCompanyLetterhead(pinned?.settings.company, latest.settings.company);
-  const print = (pinned ?? latest).settings.print;
+  const effective = (pinned ?? latest).settings;
+  const print = effective.print;
   return {
-    company: printCompanyBlock(company),
+    company: printCompanyBlock(company, effective.wording),
     print,
+    identity: effective.identity,
+    wording: effective.wording,
+    footerIdentity: printFooterIdentity(company, effective.identity),
     contactLine: companyContactLine(company),
     paperSize: paperSizeFromSettings(print),
     missing: missingCompanyPrintFields(company),
@@ -143,18 +147,30 @@ async function baseFooter(
 ): Promise<
   Pick<
     ProfessionalPrintModel,
-    "taxLines" | "thankYou" | "paymentInstructions" | "contactLine" | "qrSvg" | "termsUrl" | "paperSize"
+    | "taxLines"
+    | "thankYou"
+    | "thankYouText"
+    | "pageFooterLine"
+    | "pageFooterMark"
+    | "paymentInstructions"
+    | "contactLine"
+    | "qrSvg"
+    | "termsUrl"
+    | "paperSize"
   >
 > {
   const showQr = opts.qr === true;
   return {
     paperSize: letter.paperSize,
-    taxLines: taxFooterLines(kind),
+    taxLines: taxFooterLines(kind, { wording: letter.wording }),
     thankYou: opts.thankYou ?? false,
+    thankYouText: opts.thankYou ? letter.wording.thankYou : null,
+    pageFooterLine: letter.footerIdentity.line,
+    pageFooterMark: letter.footerIdentity.mark,
     paymentInstructions: opts.includePayment ? paymentInstructionsFromSettings(letter.print) : undefined,
     contactLine: letter.contactLine,
-    qrSvg: showQr ? await qrSvg(TERMS_URL) : null,
-    termsUrl: showQr ? TERMS_URL : null,
+    qrSvg: showQr ? await qrSvg(letter.identity.policiesUrl) : null,
+    termsUrl: showQr ? letter.identity.policiesUrl : null,
   };
 }
 
@@ -296,14 +312,18 @@ export async function getQuotePrintModel(id: string): Promise<{ doc: Professiona
     // quote's payment terms, point 3 the per-quote lead time, point 5 the
     // goods/services variant, point 6 only for business customers. A quote
     // with lines that are all services has no physical delivery (no point 4).
-    termsBlock: buildQuoteSoTermsPoints({
-      validityDays,
-      paymentTerms: q.terms,
-      leadTimeDays: q.leadTimeDays,
-      isServicesOnly: q.items.length > 0 && q.items.every((i) => i.kind === "SERVICES"),
-      isIndividual: q.customer.isIndividual,
-    }),
-    versionLine: POLICY_VERSION_LINE,
+    termsBlock: buildQuoteSoTermsPoints(
+      {
+        validityDays,
+        paymentTerms: q.terms,
+        leadTimeDays: q.leadTimeDays,
+        isServicesOnly: q.items.length > 0 && q.items.every((i) => i.kind === "SERVICES"),
+        isIndividual: q.customer.isIndividual,
+      },
+      letter.wording,
+    ),
+    termsHeading: letter.wording.termsHeading,
+    versionLine: letter.identity.policyVersionLine,
     validity: day(ymd(q.validUntil)),
     // Customer notes only — Quote.internalNotes must never be passed here.
     notes: sanitizePrintedNotes(q.notes),
@@ -387,14 +407,18 @@ export async function getSalesOrderPrintModel(id: string): Promise<{ doc: Profes
     terms: printedTermsLabel(so.terms),
     // Modular terms, same as the quote: the SO carries the source quote's
     // validity, lead time and payment terms (terms is copied at conversion).
-    termsBlock: buildQuoteSoTermsPoints({
-      validityDays: so.quote ? validityDaysFromDates(so.quote.date, so.quote.validUntil) : null,
-      paymentTerms: so.terms,
-      leadTimeDays: so.quote?.leadTimeDays ?? null,
-      isServicesOnly: so.items.length > 0 && so.items.every((i) => i.kind === "SERVICES"),
-      isIndividual: so.customer.isIndividual,
-    }),
-    versionLine: POLICY_VERSION_LINE,
+    termsBlock: buildQuoteSoTermsPoints(
+      {
+        validityDays: so.quote ? validityDaysFromDates(so.quote.date, so.quote.validUntil) : null,
+        paymentTerms: so.terms,
+        leadTimeDays: so.quote?.leadTimeDays ?? null,
+        isServicesOnly: so.items.length > 0 && so.items.every((i) => i.kind === "SERVICES"),
+        isIndividual: so.customer.isIndividual,
+      },
+      letter.wording,
+    ),
+    termsHeading: letter.wording.termsHeading,
+    versionLine: letter.identity.policyVersionLine,
     notes: sanitizePrintedNotes(so.notes),
     deliveryNotes: letter.print.deliveryNotes || null,
     warrantyNotes: letter.print.warrantyNotes || null,
@@ -557,7 +581,7 @@ export async function getCollectionPrintModel(id: string): Promise<{ doc: Profes
     totals,
     totalInWords: amountInWords(received),
     notes: c.notes,
-    ewtNote: Number(whTotal) > 0 ? EWT_2307_NOTE : null,
+    ewtNote: Number(whTotal) > 0 ? letter.wording.ewt2307Note : null,
     signatories: [
       { role: "Prepared by", name: c.createdBy.name },
       { role: "Received by", name: null },
@@ -790,7 +814,7 @@ export async function getSupplierPaymentPrintModel(
     totals,
     totalInWords: amountInWords(paid),
     notes: p.notes,
-    ewtNote: ewt > 0 ? EWT_2307_NOTE : null,
+    ewtNote: ewt > 0 ? letter.wording.ewt2307Note : null,
     signatories: [
       { role: "Prepared by", name: p.createdBy.name },
       { role: "Approved by", name: null },
@@ -865,7 +889,7 @@ export async function getExpensePrintModel(
     totals,
     totalInWords: amountInWords(amount),
     notes: e.notes,
-    ewtNote: Number(wh) > 0 ? EWT_2307_NOTE : null,
+    ewtNote: Number(wh) > 0 ? letter.wording.ewt2307Note : null,
     signatories: [
       { role: "Prepared by", name: e.createdBy.name },
       { role: "Approved by", name: null },

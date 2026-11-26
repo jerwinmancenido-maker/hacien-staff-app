@@ -48,7 +48,11 @@ describe("S-69 quote Terms tab", () => {
     const tab = termsTab(src);
     expect(tab).toContain('id="termsRemarks"');
     expect(tab).toContain("Prints on the quote");
-    expect(tab).toContain("haciensolutions.com/policies");
+    // Company Profile slice 2: the Full terms link renders the Settings
+    // identity values the parent page passes in (the settled constants
+    // in lib/print/policies.ts are only the editor's fallback defaults).
+    expect(tab).toContain("policiesDisplayHost");
+    expect(tab).toContain("href={policiesUrl}");
   });
 
   it("withholding and Contract price lines are off the Terms tab", () => {

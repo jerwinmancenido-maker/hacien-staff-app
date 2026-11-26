@@ -4690,7 +4690,8 @@ td.has-error input {
   margin: 0.25in 0.39in 0.63in;
   /* Letterhead Template v3 footer: contact line lower-left, page number lower-right. */
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    /* Footer identity content is emitted per print from Settings
+       (printGenericFooterCss / printFooterCss, Company Profile slice 2). */
     font-size: 8pt;
     color: #525252;
   }
@@ -4704,7 +4705,6 @@ td.has-error input {
   size: letter;
   margin: 0.25in 0.39in 0.63in;
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
@@ -5240,13 +5240,11 @@ button.contact-card-add {
   size: A4;
   margin: 15mm 0.39in 0.63in;
   @top-left {
-    content: "■ HACIEN";
     font-size: 7.5pt;
     letter-spacing: 0.09em;
     color: #737373;
   }
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
@@ -5273,13 +5271,11 @@ button.contact-card-add {
   size: letter;
   margin: 15mm 0.39in 0.63in;
   @top-left {
-    content: "■ HACIEN";
     font-size: 7.5pt;
     letter-spacing: 0.09em;
     color: #737373;
   }
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
