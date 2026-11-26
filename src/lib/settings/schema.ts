@@ -53,6 +53,12 @@ const accountLast4 = z
   .regex(/^\d{4}$/, "Enter the last 4 digits only.");
 
 /** Full account number is optional; stored only when staff enter it. Never put in fixtures/logs. */
+
+const legalText = z
+  .string()
+  .trim()
+  .min(1, "Wording can't be blank.")
+  .max(2000);
 const accountNumberFull = z
   .string()
   .trim()
@@ -105,6 +111,12 @@ export const settingsSections = {
     .object({
       year: z.coerce.number().int().min(2000).max(2100),
       nonVatLimit: z.coerce.number().positive("Must be more than 0."),
+      /**
+       * VAT posture in one place (Company Profile slice 1). Seed false —
+       * HACIEN is NON-VAT on the 8% option; mirrors BUSINESS_IS_VAT_REGISTERED
+       * in src/lib/tax/constants.ts until a later slice reads it from here.
+       */
+      isVatRegistered: z.boolean().default(false),
       warnFirstPct: z.coerce.number().min(1).max(100),
       warnSecondPct: z.coerce.number().min(1).max(100),
       /**
@@ -330,6 +342,63 @@ export const settingsSections = {
       inventory_list: taxCalendarObligationSettings,
     }),
   }),
+  // Company identity edges (Company Profile slice 1). Seeded with today's
+  // hard-coded values; surfaces still read the code constants until the
+  // later slices wire them here.
+  identity: z.object({
+    /** Policies page the quote/SO prints link to (QR + link). */
+    policiesUrl: z.string().trim().min(1, "Policies URL is required.").max(191),
+    /** The same link as shown in print footers. */
+    policiesDisplayHost: z.string().trim().min(1, "Policies display host is required.").max(191),
+    /** "Terms of Sale v1.1 · …" footer line on customer-facing prints. */
+    policyVersionLine: z.string().trim().min(1, "Policy version line is required.").max(500),
+    /** Default SMS sender ID; env UNISMS_SENDER_ID still overrides at send time. */
+    smsSenderId: z.string().trim().min(1, "SMS sender ID is required.").max(40),
+    /** Download filename prefix for CSV exports ("" = no prefix). */
+    csvFilePrefix: z.string().trim().max(40),
+    /** Browser tab title; also the installed app's full name. */
+    appTitle: z.string().trim().min(1, "App title is required.").max(100),
+    /** Installed app's short name. */
+    appShortName: z.string().trim().min(1, "App short name is required.").max(50),
+  }),
+  // Settled print legal texts, stored as values (Company Profile slice 1).
+  // Seeded word-for-word from src/lib/print/tax-wording.ts and
+  // src/lib/print/terms-block.ts — the tests pin them against those modules.
+  // Surfaces still read the code constants until slice 2 wires them here.
+  // Lawyer-governed: text changes need Jerwin's approval + legal
+  // verification (BIR-WORDING.md rule 3). The terms templates keep their
+  // {days} placeholder, substituted exactly as the terms-block functions do.
+  wording: z.object({
+    nonVatLabel: legalText,
+    inputTaxDisclaimer: legalText,
+    billingDisclaimer: legalText,
+    packingListDisclaimer: legalText,
+    ewt2307Note: legalText,
+    thankYou: legalText,
+    quotationNotInvoice: legalText,
+    salesOrderNotInvoice: legalText,
+    termsHeading: legalText,
+    termsPoint1ValidityDefault: legalText,
+    termsPoint1ValidityCustom: legalText,
+    termsPoint1Body: legalText,
+    termsPoint2Upfront: legalText,
+    termsPoint2FiftyFifty: legalText,
+    termsPoint2Net30: legalText,
+    termsPoint2Cod: legalText,
+    termsPaymentAntiFraud: legalText,
+    termsCustomTermsAntiFraud: legalText,
+    termsPoint3WithLeadTime: legalText,
+    termsPoint3NoLeadTime: legalText,
+    termsPoint4: legalText,
+    termsPoint5Goods: legalText,
+    termsPoint5Services: legalText,
+    termsPoint6: legalText,
+    termsPoint7: legalText,
+    /** The 24 in point 7's "24% interest a year" (also inside termsPoint7). */
+    termsLateInterestPctPerYear: z.coerce.number().min(0, "0 or more.").max(100, "100 or less."),
+    /** The 25 in point 7's "25% attorney's fees" (also inside termsPoint7). */
+    termsAttorneysFeesPct: z.coerce.number().min(0, "0 or more.").max(100, "100 or less."),
+  }),
   // Print / PDF letterhead, paper size, and payment instructions.
   print: z.object({
     paperSize: z.enum(["A4", "Letter"]),
@@ -370,6 +439,8 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   messaging: "order text updates",
   taxCalendar: "tax calendar",
   print: "print & company details",
+  identity: "app identity",
+  wording: "print wording",
 };
 
 export function isSettingsKey(key: string): key is SettingsKey {
