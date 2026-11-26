@@ -66,11 +66,42 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
             </tbody>
           </table>
         </div>
-        <p className="faint small" style={{ marginBottom: 0 }}>
+        <p className="faint small">
           For comparison: official billed revenue for {month} (Books, own company only) is{" "}
           {formatPeso(report.officialBilledRevenue)}, and the official net profit is {formatPeso(report.officialNet)}.
           Those are the figures the Books and tax worksheets use — this page never feeds them.
         </p>
+        <p className="faint small" style={{ marginBottom: 6 }}>
+          How the recorded profit becomes the official net profit (own company):
+        </p>
+        <div className="table-wrap">
+          <table className="list" aria-label="Bridge from recorded profit to official net profit">
+            <tbody>
+              <tr>
+                <td>Recorded profit</td>
+                <td className="num">{formatPeso(report.bridge.recordedProfit)}</td>
+              </tr>
+              <tr>
+                <td>
+                  Less recorded sales not yet in billed revenue (recorded sales {formatPeso(report.bridge.recordedSales)}{" "}
+                  - billed revenue {formatPeso(report.officialBilledRevenue)})
+                </td>
+                <td className="num">{formatPeso(report.bridge.unbilled)}</td>
+              </tr>
+              <tr>
+                <td>
+                  Add supplier costs above the supplier bills recorded in {month} (supplier costs{" "}
+                  {formatPeso(report.bridge.recordedCosts)} - supplier bills {formatPeso(report.bridge.supplierBills)})
+                </td>
+                <td className="num">{formatPeso(report.bridge.costsVsBills)}</td>
+              </tr>
+              <tr style={{ fontWeight: 600 }}>
+                <td>Official net profit</td>
+                <td className="num">{formatPeso(report.officialNet)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

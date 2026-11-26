@@ -375,5 +375,16 @@ describe.skipIf(!env.hasDb)("reconciliation + operational profit (MySQL)", () =>
     const official = await getMonthlyProfit(month);
     expect(report.officialNet).toBe(official.net);
     expect(report.officialNet).toBe("-900.00");
+    // P-A bridge (finding 1028): every component is a value the report
+    // already computes (supplier bills is Monthly profit's own figure),
+    // and the walk closes exactly on the official net:
+    // 5100.00 - 10000.00 + 4000.00 = -900.00.
+    expect(report.bridge.recordedSales).toBe("10000.00");
+    expect(report.bridge.recordedProfit).toBe("5100.00");
+    expect(report.bridge.unbilled).toBe("10000.00");
+    expect(report.bridge.recordedCosts).toBe("4000.00");
+    expect(report.bridge.supplierBills).toBe(official.supplierBills);
+    expect(report.bridge.supplierBills).toBe("0.00");
+    expect(report.bridge.costsVsBills).toBe("4000.00");
   });
 });
