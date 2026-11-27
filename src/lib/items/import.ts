@@ -18,6 +18,9 @@ export interface ImportRowPreview {
   /** Schema-valid item input, or null when the row failed validation. */
   data: ItemInput | null;
   errors: string[];
+  /** Non-blocking advisories (finding 1364 near-duplicate names): shown in
+   * the preview, never stop the import, recorded on the batch audit row. */
+  warnings: string[];
 }
 
 export interface ParseItemsCsvResult {
@@ -120,7 +123,7 @@ export function parseItemsCsv(text: string): ParseItemsCsvResult {
     } else {
       for (const issue of result.error.issues) errors.push(`${issue.path.join(".") || "row"}: ${issue.message}`);
     }
-    return { line: i + 2, values, data, errors };
+    return { line: i + 2, values, data, errors, warnings: [] };
   });
 
   applyInFileDuplicateChecks(rows);

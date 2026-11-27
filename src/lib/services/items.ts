@@ -1,5 +1,6 @@
 import { writeAudit } from "../audit";
 import { db, type Tx } from "../db";
+import { duplicateConfirmNote, type NameMatch } from "../duplicates";
 import { requireMatchingUpdatedAt, STALE_EDIT_MESSAGE_ITEM } from "../documents/common";
 import type { ItemInput } from "../validation/items";
 
@@ -69,13 +70,22 @@ export function getItem(id: string) {
   return db.item.findUnique({ where: { id } });
 }
 
-export async function saveItem(id: string | null, input: ItemInput, actorId: string) {
+export async function saveItem(id: string | null, input: ItemInput, actorId: string, opts?: { duplicateNameWarningConfirmed?: readonly NameMatch[] | null }) {
   return db.$transaction(async (tx) => {
     await assertSkuFree(tx, input.sku, id);
     const { updatedAt: expectedUpdatedAt, ...data } = input;
     if (!id) {
+      // Finding 1364: a confirmed near-duplicate warning is recorded on
+      // the create audit row (check lives at the entry points).
       const created = await tx.item.create({ data });
-      await writeAudit(tx, { userId: actorId, entityType: "Item", entityId: created.id, action: "create", after: created });
+      const dupeNote = duplicateConfirmNote(opts?.duplicateNameWarningConfirmed ?? []);
+      await writeAudit(tx, {
+        userId: actorId,
+        entityType: "Item",
+        entityId: created.id,
+        action: "create",
+        after: dupeNote ? { ...created, duplicateNameWarningConfirmed: dupeNote } : created,
+      });
       return created;
     }
     const before = await tx.item.findUniqueOrThrow({ where: { id } });

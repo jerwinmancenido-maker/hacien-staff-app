@@ -59,10 +59,11 @@ export function AddSupplierDialog({ open, onClose, termsOptions, onSaved }: Prop
 
   if (!open) return null;
 
-  function submit(ev: React.FormEvent) {
-    ev.preventDefault();
+  function doSubmit(confirmed: boolean) {
     const fd = new FormData();
     for (const [k, val] of Object.entries(v)) fd.set(k, val);
+    // Finding 1364: only the warning's "Save anyway" confirms a duplicate.
+    if (confirmed) fd.set("confirmDuplicateName", "1");
     startTransition(async () => {
       const res = await createInlineSupplierAction({}, fd);
       setState(res);
@@ -71,6 +72,11 @@ export function AddSupplierDialog({ open, onClose, termsOptions, onSaved }: Prop
         onClose();
       }
     });
+  }
+
+  function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    doSubmit(false);
   }
 
   return (
@@ -87,6 +93,19 @@ export function AddSupplierDialog({ open, onClose, termsOptions, onSaved }: Prop
           {state.message && !state.ok && (
             <div className="alert error" role="alert">
               {state.message}
+            </div>
+          )}
+          {state.warning && (
+            <div className="alert warn" role="alert">
+              <p>{state.warning}</p>
+              <div className="form-actions">
+                <button type="button" className="btn" disabled={pending} onClick={() => doSubmit(true)}>
+                  Save anyway
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => setState({})}>
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
           <div className={`field${e.name ? " has-error" : ""}`}>

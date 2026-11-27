@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Supplier } from "@prisma/client";
 import { Field } from "@/components/Field";
@@ -48,6 +48,8 @@ export function SupplierForm({
   // keeps the current number unless an Admin types a replacement.
   const [bankNumber, setBankNumber] = useState(bankNumberDraft(typeof state.values?.bankAccountNumber === "string" ? state.values.bankAccountNumber : ""));
   const e = state.fieldErrors ?? {};
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
   const termOptions = supplier?.defaultTerms && !terms.includes(supplier.defaultTerms) ? [...terms, supplier.defaultTerms] : terms;
   const maskedNumber = (supplier?.bankAccountNumber ?? "").trim();
   const hasNumber = maskedNumber.length > 0;
@@ -58,6 +60,31 @@ export function SupplierForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
+          <div className="form-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={pending}
+              onClick={(ev) => {
+                // Only this button confirms the duplicate: set the flag,
+                // then submit. The main Save button submits with the flag
+                // still blank, so the server re-issues the warning (F38).
+                if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                ev.currentTarget.form?.requestSubmit();
+              }}
+            >
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       {noBank && (

@@ -10,6 +10,7 @@ import { ForbiddenError } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import type { CustomerInput, SupplierInput } from "../validation/companies";
 import { isNameLikeCustomerQuery, rankCustomerNameSuggestions } from "../search/suggest-customers";
+import { duplicateConfirmNote, type NameMatch } from "../duplicates";
 import { listWithholdingRates } from "./withholding";
 
 export class CompanyRuleError extends Error {
@@ -180,7 +181,12 @@ function withholdingPickEqual(a: unknown, b: unknown): boolean {
 
 export type CustomerSaveActor = { id: string; isAdmin?: boolean };
 
-export async function saveCustomer(id: string | null, input: CustomerInput, actor: CustomerSaveActor | string) {
+export async function saveCustomer(
+  id: string | null,
+  input: CustomerInput,
+  actor: CustomerSaveActor | string,
+  opts?: { duplicateNameWarningConfirmed?: readonly NameMatch[] | null },
+) {
   const actorId = typeof actor === "string" ? actor : actor.id;
   // Fail closed: string actor id alone is not Admin (callers must pass isAdmin).
   const isAdmin = typeof actor === "string" ? false : !!actor.isAdmin;
@@ -199,8 +205,19 @@ export async function saveCustomer(id: string | null, input: CustomerInput, acto
   try {
     return await db.$transaction(async (tx) => {
       if (!id) {
+        // Finding 1364: when the entry point's near-duplicate warning was
+        // confirmed, the matches are recorded on this create audit row.
+        // (The warn-and-confirm check itself lives at the entry points —
+        // actions / API — on the shared matcher in lib/duplicates.)
         const created = await tx.customer.create({ data });
-        await writeAudit(tx, { userId: actorId, entityType: "Customer", entityId: created.id, action: "create", after: created });
+        const dupeNote = duplicateConfirmNote(opts?.duplicateNameWarningConfirmed ?? []);
+        await writeAudit(tx, {
+          userId: actorId,
+          entityType: "Customer",
+          entityId: created.id,
+          action: "create",
+          after: dupeNote ? { ...created, duplicateNameWarningConfirmed: dupeNote } : created,
+        });
         await settleApiWrite(tx, created);
         return created;
       }
@@ -343,7 +360,12 @@ export function getSupplier(id: string) {
 
 export type SupplierSaveActor = { id: string; isAdmin?: boolean };
 
-export async function saveSupplier(id: string | null, input: SupplierInput, actor: SupplierSaveActor | string) {
+export async function saveSupplier(
+  id: string | null,
+  input: SupplierInput,
+  actor: SupplierSaveActor | string,
+  opts?: { duplicateNameWarningConfirmed?: readonly NameMatch[] | null },
+) {
   const actorId = typeof actor === "string" ? actor : actor.id;
   const isAdmin = typeof actor === "string" ? false : !!actor.isAdmin;
   await assertTinFree(supplierTinOwner, input.tin, id);
@@ -353,12 +375,16 @@ export async function saveSupplier(id: string | null, input: SupplierInput, acto
         if (!isAdmin && (input.bankName || input.bankAccountName || input.bankAccountNumber || input.bankBranch || input.bankNotes)) {
           throw new CompanyRuleError("Only an Admin can add or edit bank details.", "bankAccountNumber");
         }
+        // Finding 1364: a confirmed near-duplicate warning is recorded on
+        // the create audit row (check lives at the entry points).
         const created = await tx.supplier.create({
           data: { ...input, bankAccountNumber: resolveBankAccountNumber(input.bankAccountNumber, null) },
         });
+        const dupeNote = duplicateConfirmNote(opts?.duplicateNameWarningConfirmed ?? []);
         const auditAfter = {
           ...created,
           bankAccountNumber: maskBankAccountNumber(created.bankAccountNumber),
+          ...(dupeNote ? { duplicateNameWarningConfirmed: dupeNote } : {}),
         };
         await writeAudit(tx, { userId: actorId, entityType: "Supplier", entityId: created.id, action: "create", after: auditAfter });
         return created;

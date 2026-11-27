@@ -30,6 +30,7 @@
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { duplicateConfirmNote, findDuplicateNames } from "../duplicates";
 import { assertCan, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
@@ -199,12 +200,21 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
           select: { id: true, name: true, defaultTerms: true },
         });
         customer = created;
+        // Finding 1364: if the buyer name near-matches existing customers,
+        // the convert dialog's proposal was the warning and choosing "new"
+        // is the confirm — record the matches on the create audit row.
+        const dupes = await findDuplicateNames(tx, "customer", order.buyerName);
+        const dupeNote = duplicateConfirmNote(dupes);
         await writeAudit(tx, {
           userId: actor.id,
           entityType: "Customer",
           entityId: created.id,
           action: "create",
-          after: { name: created.name, source: `Store order ${order.number}` },
+          after: {
+            name: created.name,
+            source: `Store order ${order.number}`,
+            ...(dupeNote ? { duplicateNameWarningConfirmed: dupeNote } : {}),
+          },
         });
       } else {
         const customerId = input.customerMode === "matched" ? order.matchedCustomerId : input.customerId;

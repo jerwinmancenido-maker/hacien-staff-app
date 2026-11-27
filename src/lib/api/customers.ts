@@ -2,6 +2,8 @@ import type { PermissionUser } from "../permissions";
 import { canSeeTin, stripCosts } from "../permissions";
 import { resolveCustomerSavedPick } from "../quotes/withholding-defaults";
 import { CompanyRuleError, getCustomer, listCustomers, loadCustomerWriteOptions, saveCustomer } from "../services/companies";
+import { db } from "../db";
+import { duplicateWarningMessage, findDuplicateNames } from "../duplicates";
 import { customerSchema } from "../validation/companies";
 import { zodFieldErrors } from "../validation/forms";
 import type { ApiActor } from "./keys";
@@ -113,8 +115,16 @@ function schemaInput(merged: Record<string, unknown>) {
   };
 }
 
-/** Create or full/partial update through saveCustomer. id null creates. */
-export async function writeCustomer(id: string | null, body: unknown, actor: ApiActor): Promise<CustomerShape> {
+/** Create or full/partial update through saveCustomer. id null creates.
+ * opts.supersededRecordId: on a re-execution superseding an expired
+ * idempotency claim for the same body, the record that earlier execution
+ * created — excluded from the duplicate check (see below). */
+export async function writeCustomer(
+  id: string | null,
+  body: unknown,
+  actor: ApiActor,
+  opts?: { supersededRecordId?: string },
+): Promise<CustomerShape> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new ApiError(400, "validation", "Send a JSON object.");
   }
@@ -130,8 +140,26 @@ export async function writeCustomer(id: string | null, body: unknown, actor: Api
   if (!parsed.success) {
     throw new ApiError(400, "validation", "Fix the fields marked below.", zodFieldErrors(parsed.error));
   }
+  // Finding 1364: a create whose name near-matches an existing customer is
+  // refused 409 duplicate_name unless the caller confirms with
+  // { "confirmDuplicateName": true } — the API form of warn-and-confirm,
+  // on the shared matcher (lib/duplicates). A confirmed create records the
+  // matches on the create audit row via the service. The one exclusion is
+  // the record an expired idempotency claim's earlier execution of THIS
+  // request created: an expired claim re-executes as a new operation by
+  // contract, and its own earlier product is not a duplicate of itself.
+  const dupes = !id ? await findDuplicateNames(db, "customer", parsed.data.name, opts?.supersededRecordId ?? null) : [];
+  if (dupes.length && raw.confirmDuplicateName !== true) {
+    const message = duplicateWarningMessage("customer", dupes);
+    throw new ApiError(409, "duplicate_name", message, { name: message });
+  }
   try {
-    return await saveCustomer(id, parsed.data, { id: actor.id, isAdmin: actor.isAdmin });
+    return await saveCustomer(
+      id,
+      parsed.data,
+      { id: actor.id, isAdmin: actor.isAdmin },
+      { duplicateNameWarningConfirmed: dupes },
+    );
   } catch (e) {
     if (e instanceof CompanyRuleError) {
       throw new ApiError(409, "rule", e.message, e.field ? { [e.field]: e.message } : undefined);
