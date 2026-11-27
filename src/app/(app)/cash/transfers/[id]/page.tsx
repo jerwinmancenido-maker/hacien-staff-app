@@ -10,6 +10,7 @@ import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER, TransferStatusChip } from "@/components/cash/CashParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PageHeader } from "@/components/ui";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { voidCashTransferAction } from "../../actions";
 
 const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—");
@@ -24,6 +25,7 @@ export default async function TransferDetailPage({ params }: { params: Promise<{
 
   return (
     <>
+      <RecordBreadcrumbLabel label={t.number} />
       <PageHeader
         title={
           <>

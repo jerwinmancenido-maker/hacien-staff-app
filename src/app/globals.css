@@ -6920,6 +6920,9 @@ button.contact-card-add {
   white-space: nowrap;
 }
 .home-lk {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   white-space: nowrap;
   color: var(--blue);
   font-weight: 600;
