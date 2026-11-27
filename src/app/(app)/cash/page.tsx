@@ -3,6 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { formatPeso } from "@/lib/format";
 import { cashPositionSummary } from "@/lib/services/cash-accounts";
+import { fromScaled, toScaled } from "@/lib/quotes/calc";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { CashNav } from "@/components/cash/CashNav";
 import { CASH_DISCLAIMER } from "@/components/cash/CashParts";
@@ -13,6 +14,14 @@ export default async function CashHomePage() {
   const user = await requirePagePermission("view");
   const canManage = can(user, "manage_cash");
   const summary = await cashPositionSummary();
+  // Finding 1037: the headline total is mostly "not assigned" money on real
+  // data, so the stat splits it — in-accounts is the accounts' own balances
+  // summed with the same scaled arithmetic cashPositionSummary uses, and
+  // in-accounts + not assigned always equals the headline total.
+  const inAccounts = fromScaled(
+    summary.accounts.reduce((a, r) => a + toScaled(r.balance, 2), 0n),
+    2,
+  );
 
   return (
     <>
@@ -33,7 +42,7 @@ export default async function CashHomePage() {
         <div className="card stat">
           <div className="label">Cash position</div>
           <div className="value num">{formatPeso(summary.total)}</div>
-          <div className="foot">All active accounts{Number(summary.unassignedNet) !== 0 ? " + not assigned" : ""}</div>
+          <div className="foot">In accounts {formatPeso(inAccounts)} · Not assigned {formatPeso(summary.unassignedNet)}</div>
         </div>
         <Link className="card stat stat-link" href="/cash/accounts">
           <div className="label">Accounts</div>

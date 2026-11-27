@@ -8,6 +8,8 @@ import type { AgingAmounts } from "@/lib/billing/aging";
 import { Avatar, Chip, type ChipTone } from "./ui";
 import { OverdueBadge } from "./billing/BillingParts";
 import { DocumentsCard, OpenDocsCards, type DocCounts, type OpenDocStats } from "./OverviewCards";
+import { creditLimitWarningText, type CustomerExposure } from "@/lib/billing/customer-exposure";
+import { CreditLimitWarning } from "./billing/CreditLimitWarning";
 import { formatAddress } from "@/lib/addresses/format";
 import { PlusIcon } from "./Icons";
 
@@ -34,6 +36,7 @@ export async function CustomerOverview({
   docStats,
   warnDays,
   ar,
+  exposure,
 }: {
   customer: Customer;
   contacts: Contact[];
@@ -44,6 +47,8 @@ export async function CustomerOverview({
   docStats: OpenDocStats;
   warnDays: number;
   ar?: { aging: AgingAmounts; overdue: string; credit: string; anyOverdue: boolean; balanceDue: string; hasBillings?: boolean; overdueLabel?: string | null };
+  /** Finding 1022: exposure from the ONE helper (src/lib/billing/customer-exposure.ts). */
+  exposure: CustomerExposure;
   /** S-58: false hides the TIN row (view-only users). */
   canSeeTin?: boolean;
 }) {
@@ -124,11 +129,10 @@ export async function CustomerOverview({
         </div>
       </div>
 
-      {customer.creditLimit != null && ar && Number(ar.balanceDue) > Number(customer.creditLimit) && (
-        <div className="alert warn" role="status">
-          Over credit limit — balance due {formatPeso(ar.balanceDue)} vs limit {formatPeso(customer.creditLimit)}.
-        </div>
-      )}
+      {/* Finding 1022: the warning is the helper's own sentence (same text as
+          the SO page and billing form) — the old balance-due-only comparison
+          quoted a different figure and is gone, so surfaces cannot drift. */}
+      <CreditLimitWarning text={creditLimitWarningText(exposure)} />
 
       {/* 2. Stat Cards Grid */}
       <div className="stat-grid">
@@ -139,6 +143,14 @@ export async function CustomerOverview({
             {ar && Number(ar.credit) > 0 ? `Credit ${formatPeso(ar.credit)}` : "Gross outstanding"}
           </div>
         </Link>
+        <div className="card stat">
+          <div className="label">Credit exposure</div>
+          <div className="value num">{formatPeso(exposure.totalExposure)}</div>
+          <div className="foot">
+            {exposure.creditLimit != null ? `Limit ${formatPeso(exposure.creditLimit)} · ` : "No limit set · "}
+            Due {formatPeso(exposure.arOutstanding)} + unbilled {formatPeso(exposure.unbilledOpenOrders)}
+          </div>
+        </div>
         <OpenDocsCards stats={docStats} basePath={basePath} showTotals />
         <DocumentsCard counts={docCounts} basePath={basePath} warnDays={warnDays} />
         <div className="card stat">
