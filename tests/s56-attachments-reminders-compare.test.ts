@@ -49,10 +49,16 @@ describe("S-56 surfaces", () => {
     expect(src("src/app/(app)/sales-orders/[id]/page.tsx")).toContain('"attachments"');
     expect(src("src/components/AttachmentsTab.tsx")).toContain("/files/attachments/");
   });
-  it("Remind-me form is on quote, SO and PO pages, and the Reminders page lists them", () => {
-    expect(src("src/app/(app)/quotes/[id]/page.tsx")).toContain('entityType="QUOTE"');
-    expect(src("src/app/(app)/sales-orders/[id]/page.tsx")).toContain('entityType="SALES_ORDER"');
-    expect(src("src/app/(app)/purchase-orders/[id]/page.tsx")).toContain('entityType="PURCHASE_ORDER"');
+  it("Remind-me form is reachable from quote, SO and PO pages, and the Reminders page lists them", () => {
+    // REQ-REMIND-ACTIONS-001: the form moved from the page bodies into the
+    // Actions-menu dialogs — the pages wire the reminder action and gate,
+    // and the menu components hold the form with its entity type.
+    expect(src("src/app/(app)/quotes/[id]/page.tsx")).toContain("reminderAction={createReminderAction}");
+    expect(src("src/app/(app)/sales-orders/[id]/page.tsx")).toContain("reminderAction={createReminderAction}");
+    expect(src("src/app/(app)/purchase-orders/[id]/page.tsx")).toContain("reminderAction={createReminderAction}");
+    expect(src("src/components/docs/QuoteActions.tsx")).toContain('entityType="QUOTE"');
+    expect(src("src/components/docs/QuoteActions.tsx")).toContain('entityType="SALES_ORDER"');
+    expect(src("src/components/purchasing/PoActions.tsx")).toContain('entityType="PURCHASE_ORDER"');
     expect(src("src/app/(app)/reminders/page.tsx")).toContain("Overdue");
     expect(src("src/components/Sidebar.tsx")).toContain('href: "/reminders"');
   });
