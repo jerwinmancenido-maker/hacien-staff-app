@@ -4034,6 +4034,14 @@ table.list.collections-table td {
   padding-left: calc(8px * var(--ui-scale, 1));
   padding-right: calc(8px * var(--ui-scale, 1));
 }
+/* Long descriptions (finding 1029): visual cap only — the full text stays
+   in the DOM and in the description's title attribute; no data is cut. */
+.items-table .items-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .totals-wrap {
   display: flex;
   justify-content: flex-end;
@@ -7799,6 +7807,12 @@ button.contact-card-add {
 }
 .tax-income-worksheet thead th .faint {
   white-space: normal;
+}
+/* 1701Q line labels (finding 1024): balance the wrap so a long label never
+   strands a one-word orphan on its own line (line (f) used to leave "EWT)"
+   alone at every width). */
+.tax-income-worksheet .line-label {
+  text-wrap: balance;
 }
 .tax-cal-form .tax-cal-plain {
   margin-top: calc(2px * var(--ui-scale, 1));
