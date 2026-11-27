@@ -19,12 +19,13 @@
 // buyer is not a withholding agent). The CURRENT settings snapshot is
 // pinned, the way a quote conversion pins the quote's.
 //
-// The gateway fee is NOT expensed here: Expense.cashAccountId is a
-// required relation in the schema, and the fee was withheld from
-// settlement — no cash account was ever paid out of it. The fee stays
-// recorded as data on the store order (plan §10 ABSORB ruling); turning
-// it into an order expense needs the Expense schema question settled
-// first, and is tracked as a follow-up, not improvised in this slice.
+// The gateway fee IS expensed here (Gap 7 follow-up, 2026-11-27):
+// Expense.cashAccountId is nullable, and the fee — withheld from
+// settlement, never paid out of an account — is recorded inside this
+// same transaction as an account-less expense linked to the SO
+// (plan §10 ABSORB ruling: fee = data + an order-linked expense,
+// never a customer-facing line). An account-less expense counts in
+// expense/profit reporting but touches no cash balance or position.
 
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "../db";
@@ -39,6 +40,7 @@ import { netExpected, proRataWithholding } from "../billing/status";
 import { claimBookletSerial, lockSiBookletNumber } from "../services/booklet";
 import { recomputeBillingStatus } from "../services/billings";
 import { assertPeriodOpen } from "../services/period-close";
+import { defaultExpenseCategoryId } from "../services/expenses";
 import { generateUniqueTrackingRef } from "../tracking-ref";
 import { formatAddress } from "../addresses/format";
 import { normalizeDescription } from "../items/history";
@@ -91,7 +93,10 @@ async function lastPoCost(
 export async function convertStoreOrder(id: string, input: ConvertStoreOrderInput, actor: StoreOrderConvertActor) {
   assertCan(actor, "approve");
 
-  const existing = await db.storeOrder.findUnique({ where: { id }, select: { id: true, status: true } });
+  const existing = await db.storeOrder.findUnique({
+    where: { id },
+    select: { id: true, status: true, gatewayFee: true, gatewayName: true },
+  });
   if (!existing) throw new DocRuleError("Store order not found.");
   if (existing.status !== "PAID") {
     throw new DocRuleError("This store order was already converted or is no longer awaiting conversion.");
@@ -108,9 +113,39 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
   const soFormat = snap.settings.numbering.salesOrder;
   const billingFormat = snap.settings.numbering.billing;
   const collectionFormat = snap.settings.numbering.collection;
+  const expenseFormat = snap.settings.numbering.expense;
   await ensureSeries(db, "SALES_ORDER", year, soFormat);
   await ensureSeries(db, "BILLING", year, billingFormat);
   await ensureSeries(db, "COLLECTION", year, collectionFormat);
+  await ensureSeries(db, "EXPENSE", year, expenseFormat);
+
+  // Gateway fee expense category (Gap 7): the category named
+  // "Gateway fees" when an Admin has created one, else the house
+  // default. Resolved before the transaction so a missing category
+  // refuses the conversion cleanly, before anything is written.
+  const gatewayFee = money(existing.gatewayFee);
+  let feeCategory: { id: string; label: string } | null = null;
+  if (gatewayFee !== "0.00") {
+    feeCategory = await db.expenseCategory.findFirst({
+      where: { label: "Gateway fees", active: true },
+      select: { id: true, label: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!feeCategory) {
+      const fallbackId = await defaultExpenseCategoryId();
+      if (fallbackId) {
+        feeCategory = await db.expenseCategory.findUnique({
+          where: { id: fallbackId },
+          select: { id: true, label: true },
+        });
+      }
+    }
+    if (!feeCategory) {
+      throw new DocRuleError(
+        "No active expense category exists, so the gateway fee cannot be expensed. Add an expense category under Cash first.",
+      );
+    }
+  }
 
   const picks = input.lineItemPicks ?? {};
 
@@ -480,6 +515,52 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
       // Flips the billing to PAID and refreshes the SO close state.
       await recomputeBillingStatus(tx, billing.id, actor.id);
 
+      // --- Gateway fee expense (Gap 7): the fee was withheld from
+      // settlement, so the expense is account-less - it counts in
+      // expense/profit reporting but touches no cash balance or
+      // position. Linked to the SO (Slice 3 refund mirror voids it
+      // through voidExpense). Never on any customer document: it is
+      // not an SO line and appears on no billing or print.
+      let feeExpenseNumber: string | null = null;
+      if (feeCategory) {
+        feeExpenseNumber = await allocateDocNumber(tx, "EXPENSE", year, expenseFormat);
+        const feeExpense = await tx.expense.create({
+          data: {
+            number: feeExpenseNumber,
+            date,
+            supplierId: null,
+            payeeText: order.gatewayName,
+            categoryId: feeCategory.id,
+            amount: gatewayFee,
+            withholdingApplied: "0",
+            cashAccountId: null,
+            receiptNo: null,
+            notes: "Gateway fee withheld from settlement - web order " + order.number + ", payment ref " + order.gatewayPaymentRef + ".",
+            salesOrderId: so.id,
+            purchaseOrderId: null,
+            businessId: null,
+            createdById: actor.id,
+          },
+        });
+        await writeAudit(tx, {
+          userId: actor.id,
+          entityType: "Expense",
+          entityId: feeExpense.id,
+          action: "create",
+          after: {
+            number: feeExpenseNumber,
+            date: ymd(date),
+            payee: order.gatewayName,
+            category: feeCategory.label,
+            amount: gatewayFee,
+            withholdingApplied: "0.00",
+            cashAccount: null,
+            salesOrder: soNumber,
+            source: "Store order " + order.number,
+          },
+        });
+      }
+
       // --- Store order → CONFIRMED, with the §10.11 informational
       // figures recorded (margin + total — informational only, never a
       // block, per the settled ruling).
@@ -500,6 +581,7 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
           invoiceNo: input.invoiceNo,
           amountPaid,
           gatewayFee: money(order.gatewayFee),
+          ...(feeExpenseNumber ? { feeExpense: feeExpenseNumber } : {}),
           netMarginPct: totals.netMarginPct,
           conversionPrompts: "informational-only (§10.11)",
         },

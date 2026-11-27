@@ -85,7 +85,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                     <td>{e.supplier?.name ?? e.payeeText ?? "—"}</td>
                     <td>{e.category.label}</td>
                     <td>
-                      <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
+                      {e.cashAccount ? (
+                        <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
+                      ) : (
+                        "Not assigned"
+                      )}
                     </td>
                     <td className="num">{formatPeso(money(e.amount))}</td>
                     <td>

@@ -20,8 +20,8 @@ const MATCH_LABELS = { MAPPED: "Mapped", NO_MATCH: "No match", AMBIGUOUS: "Ambig
 /**
  * Store order detail (store intake Slice 1): everything staff need to see
  * before converting — buyer, delivery address, lines with their SKU match
- * flags, the gateway data (fee shown as data, never on a customer
- * document), and the proposed customer match. The Convert action
+ * flags, the gateway data (the fee is absorbed as an order expense at
+ * conversion, never on a customer document), and the proposed match. The Convert action
  * (Slice 2) shows for approve-permission staff while the order is PAID.
  */
 export default async function StoreOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -146,8 +146,8 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
           <dd>{order.gatewayName}</dd>
           <dt>Payment reference</dt>
           <dd>{order.gatewayPaymentRef}</dd>
-          <dt>Gateway fee (data)</dt>
-          <dd>{formatPeso(order.gatewayFee.toFixed(2))} — recorded as data on this order; never on a customer document.</dd>
+          <dt>Gateway fee</dt>
+          <dd>{formatPeso(order.gatewayFee.toFixed(2))} — absorbed by HACIEN: booked as an expense on the sales order at conversion; never on a customer document.</dd>
           <dt>Received</dt>
           <dd>{formatDateTime(order.createdAt)}</dd>
         </dl>

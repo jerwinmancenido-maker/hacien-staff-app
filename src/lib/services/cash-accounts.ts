@@ -206,11 +206,16 @@ async function accountActivityCount(tx: Tx, id: string) {
 }
 
 /** Ledger source rows for one account (voided flagged, still returned for display filters).
- * Pass null for the unassigned ledger: rows whose cashAccountId is null (collections,
- * supplier payments, expenses). Transfers always have both accounts, so none match. */
+ * Pass null for the unassigned ledger: rows whose cashAccountId is null (collections
+ * and supplier payments only - account-less expenses are not ledger rows; see below).
+ * Transfers always have both accounts, so none match. */
 export async function ledgerEntriesForAccount(accountId: string | null): Promise<LedgerSourceRow[]> {
-  // Expenses and transfers always have an account (required FK), so they can never
-  // be unassigned — and Prisma rejects a null filter on a required field. Only the
+  // Transfers always have both accounts, so none match the null ledger.
+  // Expenses CAN be account-less since the Gap 7 widening (a gateway fee
+  // withheld from settlement), but they are deliberately NOT ledger rows:
+  // the money never moved through cash, so an account-less expense touches
+  // no cash balance or position figure (it still counts in expense/profit
+  // reporting, and shows in the Expenses list as Not assigned). Only the
   // nullable collections / supplier payments take the null directly.
   const [collections, payments, expenses, transfersFrom, transfersTo] = await Promise.all([
     db.collection.findMany({

@@ -19,7 +19,8 @@ import { convertStoreOrder } from "@/lib/store-orders/convert";
 import { getStoreOrderConversionPrep } from "@/lib/store-orders/views";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { getSalesOrderView } from "@/lib/quotes/views";
-import { getSalesOrderPrintModel } from "@/lib/print/views";
+import { getExpensePrintModel, getSalesOrderPrintModel } from "@/lib/print/views";
+import { defaultExpenseCategoryId } from "@/lib/services/expenses";
 import { getCreatePosPreview } from "@/lib/purchasing/views";
 import { makeUser, tag } from "./fixtures";
 
@@ -153,12 +154,37 @@ describe("store-orders conversion", () => {
     });
     expect(audit).not.toBeNull();
 
-    // The gateway fee is NOT expensed by conversion in this slice:
-    // Expense.cashAccountId is a required relation and the fee was
-    // withheld from settlement (no cash account). Follow-up tracked in
-    // the Slice 2 PR; the fee stays recorded as data on the store order.
-    expect(await db.expense.count()).toBe(expenseCountBefore);
+    // The gateway fee IS expensed by conversion (Gap 7 follow-up):
+    // exactly one new expense - account-less, linked to the SO, payee =
+    // the gateway name, amount = the fee to the centavo. It is not an
+    // SO line (the items above are exactly the widget + delivery fee),
+    // and the fee still sits as data on the store order.
+    const feeExpenses = await db.expense.findMany({ where: { salesOrderId: so.id } });
+    expect(feeExpenses).toHaveLength(1);
+    const feeExpense = feeExpenses[0]!;
+    expect(feeExpense.amount.toFixed(2)).toBe("17.25");
+    expect(feeExpense.cashAccountId).toBeNull();
+    expect(feeExpense.payeeText).toBe("TestPay");
+    expect(feeExpense.status).toBe("POSTED");
+    expect(feeExpense.businessId).toBeNull();
+    expect(await db.expense.count()).toBe(expenseCountBefore + 1);
     expect(after.gatewayFee.toFixed(2)).toBe("17.25");
+    // Category: the Gateway fees category when an active one exists,
+    // else the house default - the resolution the service performs.
+    const gatewayCat = await db.expenseCategory.findFirst({
+      where: { label: "Gateway fees", active: true },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(feeExpense.categoryId).toBe(gatewayCat?.id ?? (await defaultExpenseCategoryId()));
+    // The expense voucher renders the account-less expense without a
+    // Paid-from row (the print census fix), and its audit row exists.
+    const feePrint = await getExpensePrintModel(feeExpense.id, admin);
+    expect(feePrint).not.toBeNull();
+    expect(feePrint!.doc.meta.some((m) => m.label === "Paid from")).toBe(false);
+    const feeAudit = await db.auditLog.findFirst({
+      where: { entityType: "Expense", entityId: feeExpense.id, action: "create", userId: admin.id },
+    });
+    expect(feeAudit).not.toBeNull();
 
     // Census legs: the quote-less SO renders on the detail view, the
     // print model and the Create-POs preview without a quote.
@@ -226,6 +252,7 @@ describe("store-orders conversion", () => {
       billing: await db.billing.count(),
       collection: await db.collection.count(),
       customer: await db.customer.count(),
+      expense: await db.expense.count(),
     };
     await expect(
       convertStoreOrder(
@@ -242,6 +269,7 @@ describe("store-orders conversion", () => {
     expect(await db.billing.count()).toBe(counts.billing);
     expect(await db.collection.count()).toBe(counts.collection);
     expect(await db.customer.count()).toBe(counts.customer);
+    expect(await db.expense.count()).toBe(counts.expense);
     const claims = await db.bookletSerialClaim.count({ where: { type: "SI", number: si } });
     expect(claims).toBe(1);
   });
@@ -325,5 +353,38 @@ describe("store-orders conversion", () => {
     const other = await intake(t2);
     const next = await prepSi(other.id);
     expect(next).not.toBe(si);
+  });
+
+  it("creates no fee expense when the gateway fee is zero", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const t = tag();
+    const order = await intake(t, { gatewayFee: "0.00" });
+    const si = await prepSi(order.id);
+    const converted = await convertStoreOrder(
+      order.id,
+      { customerMode: "new", invoiceNo: si, lineItemPicks: { [order.lines[0]!.id]: null } },
+      admin,
+    );
+    expect(await db.expense.count({ where: { salesOrderId: converted.salesOrderId } })).toBe(0);
+  });
+
+  it("books the fee under the Gateway fees category when one exists", async () => {
+    if (!env.hasDb) return;
+    const admin = await makeUser("costs");
+    const t = tag();
+    await db.expenseCategory.create({ data: { code: `GWFEE-${t}`, label: "Gateway fees" } });
+    const order = await intake(t);
+    const si = await prepSi(order.id);
+    const converted = await convertStoreOrder(
+      order.id,
+      { customerMode: "new", invoiceNo: si, lineItemPicks: { [order.lines[0]!.id]: null } },
+      admin,
+    );
+    const feeExpense = await db.expense.findFirstOrThrow({ where: { salesOrderId: converted.salesOrderId } });
+    const category = await db.expenseCategory.findUniqueOrThrow({ where: { id: feeExpense.categoryId } });
+    expect(category.label).toBe("Gateway fees");
+    expect(feeExpense.amount.toFixed(2)).toBe("17.25");
+    expect(feeExpense.cashAccountId).toBeNull();
   });
 });

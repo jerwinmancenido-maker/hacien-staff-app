@@ -873,7 +873,7 @@ export async function getExpensePrintModel(
     },
     meta: [
       { label: "Category", value: e.category.label },
-      { label: "Paid from", value: e.cashAccount.name },
+      ...(e.cashAccount ? [{ label: "Paid from", value: e.cashAccount.name }] : []),
       ...(e.salesOrder ? [{ label: "Sales order", value: e.salesOrder.number }] : []),
       ...(e.receiptNo ? [{ label: "Receipt no.", value: e.receiptNo }] : []),
     ],
