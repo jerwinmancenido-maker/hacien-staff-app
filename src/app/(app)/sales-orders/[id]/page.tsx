@@ -29,7 +29,6 @@ import { AttachmentsTab } from "@/components/AttachmentsTab";
 import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
 import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
 import { SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
-import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
@@ -122,7 +121,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} isAdmin={user.isAdmin} ownCompanyName={settings.company.name} currentBusinessId={so.businessId} businesses={allBusinesses} reclassifyBusinessAction={reclassifySalesOrderBusinessAction.bind(null, so.id)} showGapNote={gapState?.show ?? false} gapPartial={gapState?.partial ?? false} gapReasonCode={so.gapReasonCode} currentGapNote={so.gapNote} setGapReasonAction={setSalesOrderGapReasonAction.bind(null, so.id)} />
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} isAdmin={user.isAdmin} ownCompanyName={settings.company.name} currentBusinessId={so.businessId} businesses={allBusinesses} reclassifyBusinessAction={reclassifySalesOrderBusinessAction.bind(null, so.id)} showGapNote={gapState?.show ?? false} gapPartial={gapState?.partial ?? false} gapReasonCode={so.gapReasonCode} currentGapNote={so.gapNote} setGapReasonAction={setSalesOrderGapReasonAction.bind(null, so.id)} canRemind={can(user, "edit_data")} reminderAction={createReminderAction} />
         }
       />
       {created && (
@@ -564,7 +563,6 @@ export default async function SalesOrderPage({
               </div>
             </div>
           </div>
-          {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>
       )}
     </>
