@@ -12,6 +12,7 @@ import { Chip, PageHeader } from "@/components/ui";
 import { formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
 import { planPoSelection, selectionIssueSummary, type PoSelectionInput } from "@/lib/purchasing/plan";
+import { SearchPicker } from "@/components/SearchPicker";
 import type { FormState } from "@/lib/validation/forms";
 
 export type PreviewPoRef = { id: string; number: string; qty: string };
@@ -298,20 +299,14 @@ export function CreatePosForm({
             row.quoteSupplierName ?? "—"
           ) : (
             <>
-              <select
-                className={`row-select${supplierError ? " has-error" : ""}`}
-                aria-label={`Supplier ${row.description}`}
-                aria-invalid={supplierError ? true : undefined}
+              <SearchPicker
+                ariaLabel={`Supplier ${row.description}`}
                 value={cur.supplierId}
-                onChange={(ev) => setRow(row.key, { supplierId: ev.target.value })}
-              >
-                {!row.quoteSupplierId && <option value="">Select supplier…</option>}
-                {supplierChoices(row, cur.supplierId).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                options={supplierChoices(row, cur.supplierId).map((s) => ({ id: s.id, label: s.name }))}
+                placeholder="Select supplier…"
+                {...(!row.quoteSupplierId ? { emptyOptionLabel: "Select supplier…" } : {})}
+                onPick={(id) => setRow(row.key, { supplierId: id })}
+              />
               {changed && <span className="changed-hint">changed from {row.quoteSupplierName ?? "the quote supplier"}</span>}
               {wasNone && <span className="changed-hint">was: no supplier</span>}
               {changed && <span className="cost-hint">cost stays {formatPeso(row.unitCost)} (quote)</span>}

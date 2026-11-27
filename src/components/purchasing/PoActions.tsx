@@ -6,7 +6,8 @@
 
 import { useState, useTransition } from "react";
 import { ActionsMenu, type MenuItem } from "@/components/docs/ActionsMenu";
-import { EmailDialog, VoidDialog, type EmailDraftView } from "@/components/docs/Dialogs";
+import { EmailDialog, Modal, VoidDialog, type EmailDraftView } from "@/components/docs/Dialogs";
+import { RemindMeForm } from "@/components/RemindMeForm";
 import type { FormState } from "@/lib/validation/forms";
 import { CloseDialog } from "./DocButtons";
 
@@ -24,6 +25,10 @@ type Props = {
   /** S-18: Draft under/at the PO limit may mark sent without approval. */
   canMarkSentFromDraft?: boolean;
   postedReceipts: number;
+  /** REQ-REMIND-ACTIONS-001: the page passes its own edit_data gate (the
+   * same condition the old page-body RemindMeForm card used). */
+  canRemind?: boolean;
+  reminderAction?: (state: FormState, form: FormData) => Promise<FormState>;
   actions: {
     approve: (id: string) => Promise<FormState>;
     markSent: (id: string) => Promise<FormState>;
@@ -44,9 +49,11 @@ export function PoActions({
   approveBlockedReason,
   canMarkSentFromDraft = false,
   postedReceipts,
+  canRemind = false,
+  reminderAction,
   actions,
 }: Props) {
-  const [dialog, setDialog] = useState<"void" | "close" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "close" | "remind" | null>(null);
   const [draft, setDraft] = useState<EmailDraftView | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -62,6 +69,9 @@ export function PoActions({
   const items: MenuItem[] = [];
   if (canMaintain && editable) items.push({ key: "edit", label: status === "APPROVED" ? "Edit (returns to Draft)" : "Edit", href: `/purchase-orders/${id}/edit` });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/purchase-orders/${id}`, newTab: true });
+  // REQ-REMIND-ACTIONS-001: the Remind-me card moved off the page body
+  // into this menu; the dialog holds the existing form unchanged.
+  if (canRemind && reminderAction) items.push({ key: "remind", label: "Set a reminder…", onSelect: () => setDialog("remind") });
   if (canEdit && ((status !== "DRAFT" && status !== "VOID") || canMarkSentFromDraft) && status !== "VOID") {
     items.push({ key: "email", label: "Email draft", onSelect: () => run(() => actions.email(id)) });
   }
@@ -104,6 +114,16 @@ export function PoActions({
       )}
       {dialog === "close" && (
         <CloseDialog number={number} needsReason={status === "PARTIALLY_RECEIVED"} onClose={() => setDialog(null)} onConfirm={(reason) => actions.close(id, reason)} />
+      )}
+      {dialog === "remind" && reminderAction && (
+        <Modal title="Set a reminder" onClose={() => setDialog(null)} labelId="po-remind-title">
+          <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={reminderAction} />
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setDialog(null)}>
+              Close
+            </button>
+          </div>
+        </Modal>
       )}
       {draft && <EmailDialog draft={draft} onClose={() => setDraft(null)} />}
     </>

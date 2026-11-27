@@ -36,12 +36,14 @@ type Row = { id: string; label: string; meta?: string; isEmpty?: boolean };
 
 /**
  * Panel rows for a query: the empty ("None") row first when it matches,
- * then the label-filtered options. Exported for tests — this is the exact
+ * then the options whose label OR meta matches (meta carries the amount
+ * and date on record pickers, so a record can be found by name, number,
+ * amount or date). Exported for tests — this is the exact
  * list Enter picks from.
  */
 export function pickerRows(options: SearchPickerOption[], emptyOptionLabel: string | undefined, queryText: string): Row[] {
   const t = queryText.trim().toLowerCase();
-  const filtered = t ? options.filter((o) => o.label.toLowerCase().includes(t)) : options;
+  const filtered = t ? options.filter((o) => `${o.label} ${o.meta ?? ""}`.toLowerCase().includes(t)) : options;
   return [
     ...(emptyOptionLabel && (!t || emptyOptionLabel.toLowerCase().includes(t)) ? [{ id: "", label: emptyOptionLabel, isEmpty: true }] : []),
     ...filtered,
