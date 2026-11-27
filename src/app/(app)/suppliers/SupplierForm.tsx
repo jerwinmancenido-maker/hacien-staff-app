@@ -6,6 +6,7 @@ import type { Supplier } from "@prisma/client";
 import { Field } from "@/components/Field";
 import { SupplierBankAccount } from "@/components/SupplierBankAccount";
 import { bankNumberDraft } from "@/lib/bank-mask";
+import { SearchPicker } from "@/components/SearchPicker";
 import { isKnownBank, OTHER_BANK, PH_BANKS, resolveSupplierBank } from "@/lib/banks";
 import { SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import type { FormState } from "@/lib/validation/forms";
@@ -103,15 +104,15 @@ export function SupplierForm({
           {isAdmin && (
             <>
               <Field label="Bank" name="bankName" error={e.bankName} hint="The supplier's own bank — where payments to them go.">
-                <select id="bankName" name="bankPick" value={bankPick} onChange={(ev) => setBankPick(ev.target.value)}>
-                  <option value="">Pick a bank</option>
-                  {PH_BANKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                  <option value={OTHER_BANK}>Other — type the name</option>
-                </select>
+                <SearchPicker
+                  id="bankName"
+                  ariaLabel="Bank"
+                  value={bankPick}
+                  options={[...PH_BANKS.map((b) => ({ id: b, label: b })), { id: OTHER_BANK, label: "Other — type the name" }]}
+                  placeholder="Pick a bank"
+                  emptyOptionLabel="Pick a bank"
+                  onPick={setBankPick}
+                />
                 <input type="hidden" name="bankName" value={chosenBank} />
               </Field>
               {bankPick === OTHER_BANK && (
