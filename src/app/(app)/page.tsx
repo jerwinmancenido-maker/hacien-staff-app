@@ -60,7 +60,7 @@ export default async function HomePage() {
     ) : undefined;
 
   return (
-    <>
+    <div className="feel-page feel-home">
       <PageHeader
         className="home-page-header"
         greeting={`${greeting(manilaHour())}, ${first} · ${homeDateLabel()}`}
@@ -118,6 +118,6 @@ export default async function HomePage() {
 
       {/* Permission probe for tests — never rendered visibly. */}
       <span className="sr-only" data-can-edit={can(user, "edit_data") ? "1" : "0"} data-can-billing={can(user, "manage_billing") ? "1" : "0"} />
-    </>
+    </div>
   );
 }

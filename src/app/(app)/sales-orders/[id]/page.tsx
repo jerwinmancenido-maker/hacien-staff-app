@@ -17,6 +17,7 @@ import { toScaled } from "@/lib/quotes/calc";
 import { Activity } from "@/components/Activity";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PillTabs } from "@/components/PillTabs";
+import { FeelPulse } from "@/components/feel/FeelPulse";
 import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
 import { ItemsTable, QuoteStatusChip, SoStatusChip, TotalsBox } from "@/components/docs/DocParts";
@@ -108,8 +109,9 @@ export default async function SalesOrderPage({
   const costWarnings = costMargin?.warnings.length ?? 0;
 
   return (
-    <>
+    <div className="feel-page">
       <RecordBreadcrumbLabel label={so.number} />
+      <FeelPulse />
       <PageHeader
         title={
           <>
@@ -196,6 +198,7 @@ export default async function SalesOrderPage({
           },
         ]}
       />
+      <div className="feel-tabpanel" key={tab}>
 
       {tab === "cost-margin" && costMargin && <SoCostMarginTab summary={costMargin} />}
 
@@ -586,6 +589,7 @@ export default async function SalesOrderPage({
           {can(user, "edit_data") && <RemindMeForm entityType="SALES_ORDER" entityId={so.id} action={createReminderAction} />}
         </>
       )}
-    </>
+      </div>
+    </div>
   );
 }

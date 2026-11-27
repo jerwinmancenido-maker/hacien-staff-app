@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { armFeelSound, feelPlay } from "@/lib/feel/sound";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { FileInput } from "@/components/FileInput";
@@ -49,6 +51,15 @@ export function BillingForm({
   creditWarning?: string | null;
 }) {
   const { state, pending, submit } = useFormAction(action);
+
+  // FEEL PROTOTYPE: success -> chime, a failed save -> soft alert.
+  const feelState = useRef(state);
+  useEffect(() => {
+    if (state === feelState.current) return;
+    feelState.current = state;
+    if (state.ok) feelPlay("chime");
+    else if (state.message || state.fieldErrors) feelPlay("alert");
+  }, [state]);
   const e = state.fieldErrors ?? {};
   const v = (name: keyof typeof defaults) => state.values?.[name] ?? defaults[name];
 
@@ -61,6 +72,7 @@ export function BillingForm({
       noValidate
       onSubmit={(ev) => {
         ev.preventDefault();
+        armFeelSound("chime");
         submit(ev.currentTarget);
       }}
     >

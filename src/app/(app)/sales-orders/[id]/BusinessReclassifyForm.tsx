@@ -5,7 +5,9 @@
 // live billing; the order's POs and linked expenses follow.
 
 import type { FormEvent } from "react";
+import { useEffect, useRef } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { feelPlay, unlockFeelAudio } from "@/lib/feel/sound";
 import type { FormState } from "@/lib/validation/forms";
 
 type Action = (state: FormState, form: FormData) => Promise<FormState>;
@@ -22,6 +24,15 @@ export function BusinessReclassifyForm({
   action: Action;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
+
+  // FEEL PROTOTYPE: success -> pop, a failed save -> soft alert.
+  const feelState = useRef(state);
+  useEffect(() => {
+    if (state === feelState.current) return;
+    feelState.current = state;
+    if (state.ok) feelPlay("pop");
+    else if (state.message || state.fieldErrors) feelPlay("alert");
+  }, [state]);
   // E13: moving an order between businesses moves its POs and expenses in
   // or out of the company's Books — confirm before it happens.
   const confirmSubmit = (ev: FormEvent<HTMLFormElement>) => {
@@ -40,7 +51,14 @@ export function BusinessReclassifyForm({
     onSubmit(ev);
   };
   return (
-    <form onSubmit={confirmSubmit} className="card" style={{ marginTop: 10 }}>
+    <form
+      onSubmit={(e) => {
+        unlockFeelAudio();
+        confirmSubmit(e);
+      }}
+      className="card"
+      style={{ marginTop: 10 }}
+    >
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <label className="small" style={{ flex: "1 1 240px", minWidth: 0 }}>
           Business this order belongs to (Admin only)

@@ -7,6 +7,8 @@
 // no total, no Book entry, no print.
 
 import { useFormAction } from "@/components/useFormAction";
+import { feelPlay, unlockFeelAudio } from "@/lib/feel/sound";
+import { useEffect, useRef } from "react";
 import { PO_GAP_REASONS, SO_GAP_REASONS } from "@/lib/reconciliation-shared";
 import type { FormState } from "@/lib/validation/forms";
 
@@ -27,6 +29,15 @@ export function GapReasonForm({
   partial?: boolean;
 }) {
   const { state, pending, onSubmit } = useFormAction(action);
+
+  // FEEL PROTOTYPE: success -> pop, a failed save -> soft alert.
+  const feelState = useRef(state);
+  useEffect(() => {
+    if (state === feelState.current) return;
+    feelState.current = state;
+    if (state.ok) feelPlay("pop");
+    else if (state.message || state.fieldErrors) feelPlay("alert");
+  }, [state]);
   const reasons = kind === "SO" ? SO_GAP_REASONS : PO_GAP_REASONS;
   const e = state.fieldErrors ?? {};
   const question =
@@ -38,7 +49,14 @@ export function GapReasonForm({
         ? "Why isn't the rest billed by the supplier yet? (reconciliation note)"
         : "Why is there no supplier bill yet? (reconciliation note)";
   return (
-    <form onSubmit={onSubmit} className="card" style={{ marginTop: 10 }}>
+    <form
+      onSubmit={(e) => {
+        unlockFeelAudio();
+        onSubmit(e);
+      }}
+      className="card"
+      style={{ marginTop: 10 }}
+    >
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <label className="small" style={{ flex: "1 1 240px" }}>
           {question}

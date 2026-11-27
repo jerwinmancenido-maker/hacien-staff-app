@@ -18,6 +18,8 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, BreadcrumbLabelProvider, SidebarNav } from "@/components/Sidebar";
 import { Avatar } from "@/components/ui";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { SoundSwitch } from "@/components/feel/SoundSwitch";
+import { FeelListener } from "@/components/feel/FeelListener";
 import { getNotifications } from "@/lib/notifications";
 import { countPaidStoreOrders } from "@/lib/store-orders/views";
 import { TopbarSearch } from "@/components/TopbarSearch";
@@ -119,6 +121,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <TopbarSearch />
       <NotificationsBell sections={notifications} />
+      <SoundSwitch />
       <AccountMenu
         name={user.name}
         role={roleLabel(user)}
@@ -132,6 +135,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <BreadcrumbLabelProvider>
       <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb rootLabel={settings.identity.appShortName} />} topbarRight={topbarRight}>
         <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
+        <FeelListener />
         {children}
       </AppFrame>
     </BreadcrumbLabelProvider>

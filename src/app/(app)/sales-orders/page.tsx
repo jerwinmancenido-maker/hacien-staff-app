@@ -49,7 +49,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
   const filtered = !!(s.q || status || needsPo || openOnly || toDeliver || business);
 
   return (
-    <>
+    <div className="feel-page">
       <PageHeader title="Sales orders" subtitle="Won quotes. Convert a quote to create one." />
       <div className="toolbar">
         <form className="search-pill" action="/sales-orders" role="search">
@@ -182,6 +182,6 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
           business: s.business,
         }}
       />
-    </>
+    </div>
   );
 }

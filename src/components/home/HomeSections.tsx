@@ -10,6 +10,7 @@ import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomePipeline } from "@/lib/home/pipeline";
 import type { HomeSales } from "@/lib/home/sales";
 import { EmptyState } from "@/components/ui";
+import { CountUp } from "@/components/feel/CountUp";
 import { HomeSalesChart } from "@/components/home/HomeSalesChart";
 import {
   AlertTriangleIcon,
@@ -101,7 +102,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CoinIcon size={14} />
           {kpis.billedThisMonth.label}
         </div>
-        <div className="home-kv num">{formatPeso(kpis.billedThisMonth.amount)}</div>
+        <div className="home-kv num"><CountUp value={Number(kpis.billedThisMonth.amount)} /></div>
         <KpiMtdFoot change={kpis.billedThisMonth.change} vsCaption={kpis.billedThisMonth.vsCaption} />
       </div>
 
@@ -110,7 +111,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <InboxIcon size={14} />
           {kpis.owedByCustomers.label}
         </div>
-        <div className="home-kv num">{formatPeso(kpis.owedByCustomers.amount)}</div>
+        <div className="home-kv num"><CountUp value={Number(kpis.owedByCustomers.amount)} /></div>
         <div className="home-ks">
           {kpis.owedByCustomers.overdueChip ? (
             <span className="home-chip home-chip-overdue">{kpis.owedByCustomers.overdueChip.label}</span>
@@ -124,7 +125,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <CartIcon size={14} />
           {kpis.collectedThisMonth.label}
         </div>
-        <div className="home-kv num" aria-label="Total paid">{formatPeso(paid.total)}</div>
+        <div className="home-kv num" aria-label="Total paid"><CountUp value={Number(paid.total)} /></div>
         <div className="home-ks home-ks-paid" aria-label="Cash collected and 2307 received">
           <div>Cash collected <b className="num">{formatPeso(paid.cash)}</b></div>
           <div>2307 received <b className="num">{formatPeso(paid.received2307)}</b></div>

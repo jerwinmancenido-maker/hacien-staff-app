@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
+import { feelPlay, unlockFeelAudio } from "@/lib/feel/sound";
 import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView, type NewAddressFields } from "./Dialogs";
 import type { EditorAddressOption } from "./DocumentEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -439,7 +440,7 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
           docLabel="sales order"
           body={`${number} will be marked Void and its quote goes back to Sent. The number is kept and never reused.`}
           onClose={() => setVoiding(false)}
-          onVoid={(reason) => voidAction(id, reason)}
+          onVoid={async (reason) => { unlockFeelAudio(); const r = await voidAction(id, reason); feelPlay(r.ok ? "pop" : "alert"); return r; }}
         />
       )}
       {deleting && (
@@ -447,7 +448,7 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
           number={number}
           body={`${number} will be deleted. This cannot be undone, and its number will not be reused.`}
           onClose={() => setDeleting(false)}
-          onDelete={(reason) => deleteAction(id, reason)}
+          onDelete={async (reason) => { unlockFeelAudio(); const r = await deleteAction(id, reason); feelPlay(r.ok ? "pop" : "alert"); return r; }}
         />
       )}
     </>

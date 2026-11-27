@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useFormAction } from "@/components/useFormAction";
+import { armFeelSound, feelPlay } from "@/lib/feel/sound";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
@@ -110,6 +111,15 @@ export function CollectionForm({
   canOverrideRates?: boolean;
 }) {
   const { state, pending, submit } = useFormAction(action);
+
+  // FEEL PROTOTYPE: success -> chime, a failed save -> soft alert.
+  const feelState = useRef(state);
+  useEffect(() => {
+    if (state === feelState.current) return;
+    feelState.current = state;
+    if (state.ok) feelPlay("chime");
+    else if (state.message || state.fieldErrors) feelPlay("alert");
+  }, [state]);
   const e = state.fieldErrors ?? {};
   const [method, setMethod] = useState(defaults.method || "CASH");
   const [amount, setAmount] = useState(defaults.amountReceived);
@@ -164,6 +174,7 @@ export function CollectionForm({
       noValidate
       onSubmit={(ev) => {
         ev.preventDefault();
+        armFeelSound("chime");
         submit(ev.currentTarget);
       }}
     >

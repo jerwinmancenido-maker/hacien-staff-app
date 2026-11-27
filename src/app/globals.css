@@ -9716,3 +9716,126 @@ button.contact-card-add {
 .so-picker-controls input {
   border-radius: var(--radius-sm);
 }
+
+
+/* ---------- FEEL PROTOTYPE (Phase 0) ----------
+   Motion vocabulary adopted from the Pasabuy Design Standard v1 §4:
+   CSS only, no library, nothing loops or idles. Applied to the three
+   prototype surfaces (Home, Sales Order detail, Sales Orders list)
+   via .feel-page, plus the app chrome entrance. All of it collapses
+   under prefers-reduced-motion. */
+@keyframes feel-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes feel-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes feel-panel-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes feel-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes feel-topbar-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes feel-sidebar-in {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes feel-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.35); }
+  100% { box-shadow: 0 0 0 14px rgba(37, 99, 235, 0); }
+}
+
+/* App chrome entrance — the layout does not remount on soft
+   navigation, so these effectively play on first load only. */
+.topbar { animation: feel-topbar-in 0.55s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
+@media (min-width: 769px) {
+  .sidebar { animation: feel-sidebar-in 0.6s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
+}
+
+/* Cards and card-like surfaces rise on screen open, staggered
+   within their sibling group. */
+.feel-page .card,
+.feel-page .table-wrap {
+  animation: feel-rise 0.65s cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+.feel-page .card:nth-child(2) { animation-delay: 0.06s; }
+.feel-page .card:nth-child(3) { animation-delay: 0.12s; }
+.feel-page .card:nth-child(4) { animation-delay: 0.18s; }
+.feel-page .card:nth-child(5) { animation-delay: 0.24s; }
+
+/* Tab switches: the panel rises as one block; its cards do not
+   double-animate. */
+.feel-tabpanel { animation: feel-rise 0.65s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
+.feel-tabpanel .card { animation: none; }
+
+/* Form result banners rise in (the app's inline alerts; they stay
+   until navigation — sound is never the only signal). */
+.feel-page .alert { animation: feel-panel-in 0.35s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
+
+/* Dialogs fade + rise; menus fade + drop. */
+.modal { animation: feel-panel-in 0.35s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
+.modal-backdrop { animation: feel-fade-in 0.35s ease both; }
+.menu { animation: feel-menu-in 0.2s ease-out both; }
+
+/* List rows: hover wash + 3px nudge. */
+.feel-page table.list tbody tr {
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+.feel-page table.list tbody tr:hover {
+  transform: translateX(3px);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+/* Won moment: one calm pulse on the page header after a collection. */
+.feel-pulse-once {
+  border-radius: 12px;
+  animation: feel-pulse-ring 1.6s ease-out 1;
+}
+
+/* Top-bar sound switch. */
+.feel-sound-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.feel-sound-switch .feel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.feel-sound-switch .feel-dot.on { background: var(--green); }
+
+/* Press feedback at phone width. */
+@media (max-width: 768px) {
+  .feel-page .btn:active { transform: scale(0.97); }
+  .feel-page table.list tbody tr:active { background: rgba(37, 99, 235, 0.08); }
+}
+
+/* Reduced motion: ALL animation and transitions off (one rule, per
+   the standard). Sounds are unaffected but still obey the switch. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
