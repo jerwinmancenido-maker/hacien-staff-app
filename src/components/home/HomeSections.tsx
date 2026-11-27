@@ -102,9 +102,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           {kpis.salesThisMonth.label}
         </div>
         <div className="home-kv num">{formatPeso(kpis.salesThisMonth.amount)}</div>
-        <div className="home-ks">
-          <span>{kpis.salesThisMonth.orderCountLabel}</span>
-        </div>
+        <div className="home-kpi-sub">{kpis.salesThisMonth.orderCountLabel}</div>
         <KpiMtdFoot change={kpis.salesThisMonth.change} vsCaption={kpis.salesThisMonth.vsCaption} />
         <div className="home-ks muted small">{kpis.salesThisMonth.hint}</div>
       </div>

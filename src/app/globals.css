@@ -6825,6 +6825,14 @@ button.contact-card-add {
 .home-kv.num {
   text-align: left;
 }
+/* Sales “N orders” sits under the amount — not a footer (.home-ks has margin-top:auto). */
+.home-kpi-sub {
+  font-size: calc(11.5px * var(--ui-scale, 1));
+  color: #737373;
+  line-height: 1.2;
+  text-align: left;
+  margin-top: calc(-2px * var(--ui-scale, 1));
+}
 .home-ks {
   font-size: calc(11.5px * var(--ui-scale, 1));
   color: #737373;

@@ -621,6 +621,8 @@ describe("home sales — confirmed sales orders (SO-based)", () => {
     expect(dash).toMatch(/Owed by customers/);
     expect(dash).toMatch(/salesOrderCountLabel/);
     expect(sections).toMatch(/orderCountLabel/);
+    // “N orders” uses home-kpi-sub (not home-ks) so it stays under the amount.
+    expect(sections).toMatch(/home-kpi-sub/);
     // Sales card renders before the Billed card.
     expect(sections.indexOf("kpis.salesThisMonth.label")).toBeLessThan(
       sections.indexOf("kpis.billedThisMonth.label"),
