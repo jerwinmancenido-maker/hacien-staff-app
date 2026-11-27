@@ -22,6 +22,7 @@ import { listAddresses } from "@/lib/services/addresses";
 import { documentExpiryCounts, expiryWarningDays } from "@/lib/services/business-documents";
 import { openDocumentStats } from "@/lib/services/transactions";
 import { customerArSnapshot, listBillings, listCollections } from "@/lib/billing/views";
+import { customerExposure } from "@/lib/billing/customer-exposure";
 import { listItemHistory } from "@/lib/items/history";
 import { ApplyCreditForm } from "@/components/billing/ApplyCreditForm";
 import { OverdueBadge } from "@/components/billing/BillingParts";
@@ -70,11 +71,15 @@ export default async function CustomerPage({
   const main = contacts.find((c) => c.isMain && c.active);
   const owner = { kind: "customer", id } as const;
   const warnDays = await expiryWarningDays();
-  const [addresses, docCounts, docStats, ar] = await Promise.all([
+  const [addresses, docCounts, docStats, ar, exposure] = await Promise.all([
     listAddresses(owner, { includeArchived: true }),
     documentExpiryCounts(owner, warnDays),
     openDocumentStats(owner, user),
     customerArSnapshot(id),
+    // Finding 1022: the overview shows the ONE customerExposure helper figure
+    // (third caller after the SO page and the billing form), so the credit
+    // warning here can never quote a different number than those surfaces.
+    customerExposure(db, id),
   ]);
   const docIds = (await db.businessDocument.findMany({ where: { customerId: id }, select: { id: true } })).map((d) => d.id);
   const overdueLabel = ar.anyOverdue ? `Overdue ${formatPeso(ar.overdue)}` : null;
@@ -215,6 +220,7 @@ export default async function CustomerPage({
           docStats={docStats}
           warnDays={warnDays}
           ar={{ ...ar, overdueLabel }}
+          exposure={exposure}
         />
       )}
 

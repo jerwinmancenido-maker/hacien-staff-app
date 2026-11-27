@@ -101,8 +101,14 @@ describe("S-54 credit limit warning surfaces", () => {
   it("customer form has a credit limit field", () => {
     expect(src("src/app/(app)/customers/CustomerForm.tsx")).toContain('name="creditLimit"');
   });
-  it("customer overview warns when balance due passes the limit", () => {
-    expect(src("src/components/CustomerOverview.tsx")).toContain("Over credit limit");
+  it("customer overview warns via the ONE helper sentence when exposure passes the limit", () => {
+    // Finding 1022: the overview renders the customerExposure helper's own
+    // sentence (the same text as the SO page and billing form) instead of
+    // its old balance-due-only alert, so the surfaces cannot drift.
+    const overview = src("src/components/CustomerOverview.tsx");
+    expect(overview).toContain("creditLimitWarningText(exposure)");
+    expect(overview).toContain("<CreditLimitWarning");
+    expect(src("src/lib/billing/customer-exposure.ts")).toContain("Over credit limit");
   });
   it("new quote page warns for an over-limit preselected customer", () => {
     expect(src("src/app/(app)/quotes/new/page.tsx")).toContain("over their credit limit");
