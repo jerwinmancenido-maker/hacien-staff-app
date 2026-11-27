@@ -167,6 +167,11 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
   // -------------------------------------------------------------------------
   describe("withholding", () => {
     it("new government default pick → 6% stack (1% kind + 5% whole-total), centavo total, no 3%", async () => {
+      // The stack needs GOV_SERVICES_1 (seed-only row, in no migration) and an
+      // active GOV_VAT_5 (the base seed activates it) — seed first, like the
+      // VAT catalog test below, so this never depends on another file having
+      // seeded the shared test DB first.
+      await seedBase(db);
       const pick = defaultWithholdingPickFor("GOVERNMENT");
       expect(pick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
       const customer = await makeCustomer(pick, "GOVERNMENT");
