@@ -22,6 +22,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node --experimental-strip-types prisma/seed.mts",
+    "sweep:withholding-picks": "node scripts/sweep-withholding-picks.mjs",
     "shots:home-a-seed": "ALLOW_SEED_SHOTS=1 node scripts/home-a-seed-shots.mjs",
     "shots:home-sales-07-seed": "ALLOW_SEED_SHOTS=1 node scripts/home-sales-07-seed-shots.mjs",
     "postinstall": "prisma generate"

@@ -112,6 +112,7 @@ export type AtcCode = keyof typeof ATC_LABELS;
 /** Stable Settings → Withholding codes (Pass 3 catalog). */
 export const WITHHOLDING_DEFAULT_CODES = {
   GOV_GOODS_1: "GOV_GOODS_1",
+  GOV_SERVICES_1: "GOV_SERVICES_1",
   GOV_SERVICES_2: "GOV_SERVICES_2",
   GOV_PT_3: "GOV_PT_3",
   GOODS_1: "GOODS_1",
@@ -124,7 +125,11 @@ type DefaultRow = {
   label: string;
   lineKind: WithholdingLineKind;
   rate: string;
-  atcCode: AtcCode;
+  /**
+   * Confirmed BIR ATC, or null when no confirmed ATC exists yet
+   * (GOV_SERVICES_1 only — an ATC is never invented; see that row).
+   */
+  atcCode: AtcCode | null;
   /** When false, Settings seeds the row inactive (staff may turn on later). */
   active: boolean;
   sortOrder: number;
@@ -144,6 +149,21 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     active: true,
     sortOrder: 1,
   },
+  // Owner decision 2026-11-27: withholding is 6% on everything (1% + 5%), so
+  // the standard pick needs a 1% services rate. Its ATC is an open accountant
+  // question: no 1% services ATC exists in the confirmed BIR 2307 list above
+  // (WI157/WI160 are the 2% codes), so atcCode stays null — the schema and the
+  // Settings form both allow a blank ATC — until an accountant supplies it.
+  // Never pair this rate with another rate's ATC.
+  GOV_SERVICES_1: {
+    code: WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_1,
+    label: "Government services 1%",
+    lineKind: "SERVICES",
+    rate: "0.0100",
+    atcCode: null,
+    active: true,
+    sortOrder: 2,
+  },
   GOV_SERVICES_2: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_2,
     label: "Government services 2% (WI157)",
@@ -151,7 +171,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     rate: "0.0200",
     atcCode: "WI157",
     active: true,
-    sortOrder: 2,
+    sortOrder: 3,
   },
   // Catalog only (pickable by hand). S-19: never auto-applied as a customer/quote default.
   GOV_PT_3: {
@@ -161,7 +181,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     rate: "0.0300",
     atcCode: "WB080",
     active: true,
-    sortOrder: 3,
+    sortOrder: 4,
   },
   GOODS_1: {
     code: WITHHOLDING_DEFAULT_CODES.GOODS_1,
@@ -170,7 +190,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     rate: "0.0100",
     atcCode: "WI158",
     active: true,
-    sortOrder: 4,
+    sortOrder: 5,
   },
   SERVICES_2: {
     code: WITHHOLDING_DEFAULT_CODES.SERVICES_2,
@@ -179,7 +199,7 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     rate: "0.0200",
     atcCode: "WI160",
     active: true,
-    sortOrder: 5,
+    sortOrder: 6,
   },
   GOV_VAT_5: {
     code: WITHHOLDING_DEFAULT_CODES.GOV_VAT_5,
@@ -188,15 +208,20 @@ export const WITHHOLDING_DEFAULT_ROWS: Record<keyof typeof WITHHOLDING_DEFAULT_C
     rate: "0.0500",
     atcCode: "WV010/WV020",
     // Owner decision 2026-11-06: government contracts deduct 5% R-VAT even
-    // though HACIEN is Non-VAT — staff pick it per job, never auto-suggested.
+    // though HACIEN is Non-VAT. Owner decision 2026-11-27 (withholding is 6%
+    // on everything: 1% + 5%) supersedes "never auto-suggested" — this rate is
+    // now part of the suggested GOVERNMENT pick (defaultWithholdingPickFor).
+    // A suggestion only pre-ticks a brand-new customer form; saved customers,
+    // quotes, SOs and billings are never rewritten.
     active: true,
-    sortOrder: 6,
+    sortOrder: 7,
   },
 };
 
 /** Ordered list for seed / migration (sortOrder ascending). */
 export const WITHHOLDING_DEFAULT_CATALOG: readonly DefaultRow[] = [
   WITHHOLDING_DEFAULT_ROWS.GOV_GOODS_1,
+  WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1,
   WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_2,
   WITHHOLDING_DEFAULT_ROWS.GOV_PT_3,
   WITHHOLDING_DEFAULT_ROWS.GOODS_1,
@@ -349,11 +374,19 @@ export const GOV_PT_3_HINT = "Only if the agency says so; not usual on the 8% op
 /**
  * Suggested checkbox pick when staff set the type on a brand-new customer.
  * Does not read or write a saved row. GOV_PT_3 is never included.
+ * GOVERNMENT → the standard 6% stack (owner decision 2026-11-27: withholding
+ * is 1% + 5% on everything, superseding the per-type 1%/2% suggestion):
+ * goods 1% and services 1% on their own lines, plus VAT withheld 5% on the
+ * whole total, so every line kind nets 6%.
  * NONE → explicit none ([]). Top withholding agent, blank, and unknown → not set (null).
  */
 export function defaultWithholdingPickFor(customerType: string | null | undefined): string[] | null {
   if (customerType === "GOVERNMENT") {
-    return [WITHHOLDING_DEFAULT_CODES.GOV_GOODS_1, WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_2];
+    return [
+      WITHHOLDING_DEFAULT_CODES.GOV_GOODS_1,
+      WITHHOLDING_DEFAULT_CODES.GOV_SERVICES_1,
+      WITHHOLDING_DEFAULT_CODES.GOV_VAT_5,
+    ];
   }
   if (customerType === "NONE") return [];
   return null;
@@ -399,7 +432,9 @@ export function defaultForItemKind(
  * Whether the Gov VAT 5% option is offered as a pickable rate.
  * Owner decision 2026-11-06: government contracts deduct 5% R-VAT (1% PO /
  * 2% JO plus 5%) even though HACIEN is Non-VAT, so staff pick it per job.
- * It is never part of the suggested pick (see defaultWithholdingPickFor).
+ * Owner decision 2026-11-27 (withholding is 6% on everything) makes it part
+ * of the suggested GOVERNMENT pick (see defaultWithholdingPickFor); it is
+ * still never applied to a saved document automatically.
  * HACIEN's VAT registration itself is unchanged (still Non-VAT).
  */
 export function allowGovVatOption(): boolean {
@@ -491,4 +526,4 @@ export const WITHHOLDING_PICK_FIELD_LABEL = "Withholding";
 
 /** Hint under the multi-select on the customer form. */
 export const WITHHOLDING_PICK_FIELD_HINT =
-  "Tick the rates this agency withholds. You can combine rates (for example Government goods 1% + Government services 2%).";
+  "Tick the rates this agency withholds. You can combine rates (for example Government goods 1% + Government services 1% + VAT withheld 5%).";

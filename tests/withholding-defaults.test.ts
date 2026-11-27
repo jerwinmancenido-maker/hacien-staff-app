@@ -150,9 +150,10 @@ describe("lineWithholdingChipsFromPicks", () => {
 });
 
 describe("Pass 3 Settings catalog", () => {
-  it("lists six rates in order; VAT active and pickable; no Goods 4% / code to confirm", () => {
+  it("lists seven rates in order; VAT active and pickable; no Goods 4% / code to confirm", () => {
     expect(WITHHOLDING_DEFAULT_CATALOG.map((r) => r.code)).toEqual([
       "GOV_GOODS_1",
+      "GOV_SERVICES_1",
       "GOV_SERVICES_2",
       "GOV_PT_3",
       "GOODS_1",
@@ -160,6 +161,13 @@ describe("Pass 3 Settings catalog", () => {
       "GOV_VAT_5",
     ]);
     expect(WITHHOLDING_DEFAULT_ROWS.GOV_GOODS_1.label).toBe("Government goods 1% (WI640)");
+    // 6% stack member (owner decision 2026-11-27): 1% services. Its ATC is an
+    // open accountant question — null, never borrowed from another rate.
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1.label).toBe("Government services 1%");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1.lineKind).toBe("SERVICES");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1.rate).toBe("0.0100");
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1.atcCode).toBeNull();
+    expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_1.active).toBe(true);
     expect(WITHHOLDING_DEFAULT_ROWS.GOV_SERVICES_2.label).toBe("Government services 2% (WI157)");
     expect(WITHHOLDING_DEFAULT_ROWS.GOV_PT_3.label).toBe("Government percentage tax 3% (WB080)");
     expect(WITHHOLDING_DEFAULT_ROWS.GOODS_1.label).toBe("Private top agent goods 1% (WI158)");
@@ -210,12 +218,12 @@ function isChecked(tag: string): boolean {
 const noopAction = async (): Promise<FormState> => ({ ok: true });
 
 describe("defaultWithholdingPickFor (new customer only)", () => {
-  it("government pre-ticks goods 1% and services 2%, never the 3% or the 5%", () => {
-    expect(defaultWithholdingPickFor("GOVERNMENT")).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+  it("government pre-ticks the 6% stack (goods 1% + services 1% + VAT 5%), never the 3% or the old 2%", () => {
+    expect(defaultWithholdingPickFor("GOVERNMENT")).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
     expect(defaultWithholdingPickFor("GOVERNMENT")).not.toContain("GOV_PT_3");
-    expect(defaultWithholdingPickFor("GOVERNMENT")).not.toContain("GOV_VAT_5");
+    expect(defaultWithholdingPickFor("GOVERNMENT")).not.toContain("GOV_SERVICES_2");
     expect(GOV_PT_3_HINT).toBe("Only if the agency says so; not usual on the 8% option");
-    expect(WITHHOLDING_PICK_FIELD_HINT).toContain("for example Government goods 1% + Government services 2%");
+    expect(WITHHOLDING_PICK_FIELD_HINT).toContain("for example Government goods 1% + Government services 1% + VAT withheld 5%");
     expect(WITHHOLDING_PICK_FIELD_HINT).not.toMatch(/3%/);
   });
 
@@ -228,38 +236,78 @@ describe("defaultWithholdingPickFor (new customer only)", () => {
     expect(defaultWithholdingPickFor("NONE")).toEqual([]);
   });
 
-  it("quote lines and totals for a goods/services mix use centavo half-up and skip the 3%", () => {
+  it("quote lines and totals under the 6% stack: every kind nets 6% and the breakdown sums to it", () => {
     const codes = defaultWithholdingPickFor("GOVERNMENT");
-    expect(codes).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(codes).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
     const picks = codes!.map((code) => snap(code as keyof typeof WITHHOLDING_DEFAULT_ROWS));
     const goods = lineWithholdingSnapshotFromPicks(picks, "GOODS");
     const services = lineWithholdingSnapshotFromPicks(picks, "SERVICES");
-    expect(goods).toEqual({ withholdingRate: "0.0100", withholdingAtc: "WI640", withholdingOverride: false });
-    expect(services).toEqual({ withholdingRate: "0.0200", withholdingAtc: "WI157", withholdingOverride: false });
-    expect(lineWithholdingChipsFromPicks(picks, "GOODS").map((c) => c.chipLabel)).toEqual(["WHT 1% WI640"]);
-    expect(lineWithholdingChipsFromPicks(picks, "SERVICES").map((c) => c.chipLabel)).toEqual(["WHT 2% WI157"]);
+    // Each kind sees its own 1% plus the whole-total 5% → a combined 6%, and a
+    // stacked rate is never paired with a single ATC.
+    expect(goods).toEqual({ withholdingRate: "0.0600", withholdingAtc: null, withholdingOverride: false });
+    expect(services).toEqual({ withholdingRate: "0.0600", withholdingAtc: null, withholdingOverride: false });
+    expect(lineWithholdingChipsFromPicks(picks, "GOODS").map((c) => c.chipLabel)).toEqual(["WHT 1% WI640", "WHT 5% WV010/WV020"]);
+    // The 1% services chip carries no ATC — that ATC is not confirmed yet.
+    expect(lineWithholdingChipsFromPicks(picks, "SERVICES").map((c) => c.chipLabel)).toEqual(["WHT 1%", "WHT 5% WV010/WV020"]);
 
-    // 100.50 × 1% = 1.005 → 1.01; 1.25 × 2% = 0.025 → 0.03. No WB080 row.
     const lines = [
-      { kind: "GOODS" as const, qty: "1", unitPrice: "100.50", supplierUnitCost: "0", withholdingRate: goods.withholdingRate, withholdingAtc: goods.withholdingAtc },
-      { kind: "SERVICES" as const, qty: "1", unitPrice: "1.25", supplierUnitCost: "0", withholdingRate: services.withholdingRate, withholdingAtc: services.withholdingAtc },
+      { kind: "GOODS" as const, qty: "1", unitPrice: "100.00", supplierUnitCost: "0", withholdingRate: goods.withholdingRate, withholdingAtc: goods.withholdingAtc },
+      { kind: "SERVICES" as const, qty: "1", unitPrice: "200.00", supplierUnitCost: "0", withholdingRate: services.withholdingRate, withholdingAtc: services.withholdingAtc },
     ];
     const fromLines = docTotals(lines);
+    expect(fromLines.withholdingTotal).toBe("18.00");
     const fromPicks = docTotals(lines, picks);
-    expect(fromLines.withholdingTotal).toBe("1.04");
-    expect(fromLines.netReceived).toBe("100.71");
-    expect(fromLines.contractPrice).toBe("101.75");
-    expect(fromLines.withholding.map((w) => w.atcCode)).toEqual(["WI640", "WI157"]);
-    expect(fromLines.withholding.map((w) => w.amount)).toEqual(["1.01", "0.03"]);
-    expect(fromPicks.withholdingTotal).toBe("1.04");
-    expect(fromPicks.withholding.map((w) => w.code)).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+    expect(fromPicks.contractPrice).toBe("300.00");
+    expect(fromPicks.withholding.map((w) => w.code)).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
+    // 1% of the goods base + 1% of the services base + 5% of the whole contract.
+    expect(fromPicks.withholding.map((w) => w.amount)).toEqual(["1.00", "2.00", "15.00"]);
+    expect(fromPicks.withholdingTotal).toBe("18.00"); // exactly 6% of 300.00
+    expect(fromPicks.netReceived).toBe("282.00");
     expect(JSON.stringify(fromPicks)).not.toContain("GOV_PT_3");
     expect(JSON.stringify(fromPicks)).not.toContain("WB080");
   });
 });
 
+describe("6% stack totals by document shape (owner decision 2026-11-27)", () => {
+  const stack = defaultWithholdingPickFor("GOVERNMENT")!.map((code) =>
+    snap(code as keyof typeof WITHHOLDING_DEFAULT_ROWS),
+  );
+
+  it("goods-only document: withholding is exactly 6% of the total", () => {
+    const lines = [{ kind: "GOODS" as const, qty: "1", unitPrice: "250.00", supplierUnitCost: "0" }];
+    const t = docTotals(lines, stack);
+    expect(t.withholding.map((w) => w.amount)).toEqual(["2.50", "0.00", "12.50"]);
+    expect(t.withholdingTotal).toBe("15.00");
+    expect(t.netReceived).toBe("235.00");
+  });
+
+  it("services-only document: withholding is exactly 6% of the total", () => {
+    const lines = [{ kind: "SERVICES" as const, qty: "1", unitPrice: "250.00", supplierUnitCost: "0" }];
+    const t = docTotals(lines, stack);
+    expect(t.withholding.map((w) => w.amount)).toEqual(["0.00", "2.50", "12.50"]);
+    expect(t.withholdingTotal).toBe("15.00");
+    expect(t.netReceived).toBe("235.00");
+  });
+
+  it("no pick at all still computes 0 (exempt / not-set behaviour intact)", () => {
+    const lines = [
+      { kind: "GOODS" as const, qty: "1", unitPrice: "250.00", supplierUnitCost: "0" },
+      { kind: "SERVICES" as const, qty: "1", unitPrice: "250.00", supplierUnitCost: "0" },
+    ];
+    expect(docTotals(lines).withholdingTotal).toBe("0.00");
+    expect(docTotals(lines, []).withholdingTotal).toBe("0.00");
+    expect(docTotals(lines, []).netReceived).toBe("500.00");
+  });
+
+  it("an old single-code pick is untouched by the new default (snapshot design)", () => {
+    const lines = [{ kind: "GOODS" as const, qty: "1", unitPrice: "250.00", supplierUnitCost: "0" }];
+    const t = docTotals(lines, [snap("GOV_VAT_5")]);
+    expect(t.withholdingTotal).toBe("12.50"); // still 5% alone — re-pick is a staff action
+  });
+});
+
 describe("government withholding checkboxes", () => {
-  it("new-customer default ticks 1% and 2% and leaves 3% unticked with its hint", () => {
+  it("new-customer default ticks the 6% stack and leaves the 3% and the old 2% unticked", () => {
     const html = renderToStaticMarkup(
       createElement(WithholdingPickField, {
         rates: activeRates,
@@ -268,14 +316,16 @@ describe("government withholding checkboxes", () => {
       }),
     );
     expect(isChecked(checkboxTag(html, "GOV_GOODS_1"))).toBe(true);
-    expect(isChecked(checkboxTag(html, "GOV_SERVICES_2"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_SERVICES_1"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_VAT_5"))).toBe(true);
+    expect(isChecked(checkboxTag(html, "GOV_SERVICES_2"))).toBe(false);
     expect(isChecked(checkboxTag(html, "GOV_PT_3"))).toBe(false);
-    expect(isChecked(checkboxTag(html, "GOV_VAT_5"))).toBe(false);
     expect(html).toContain("VAT withheld 5% (WV010/WV020)");
     expect(html).toContain(GOV_PT_3_HINT);
-    expect(html).toContain("for example Government goods 1% + Government services 2%");
+    expect(html).toContain("for example Government goods 1% + Government services 1% + VAT withheld 5%");
     expect(html).not.toContain("Government percentage tax 3%).");
     expect(html).toContain("Government goods 1% (WI640)");
+    expect(html).toContain("Government services 1%");
     expect(html).toContain("Government services 2% (WI157)");
     const labelAt = html.indexOf('class="wh-pick-row"');
     const inputAt = html.indexOf("<input", labelAt);
