@@ -85,6 +85,7 @@ function PreviewPanel({ state, dispatch, pending, onReset }: { state: ItemsImpor
   const [removed, setRemoved] = useState<number[]>([]);
   const kept = rows.filter((r) => !removed.includes(r.line));
   const errorRows = kept.filter((r) => r.errors.length > 0);
+  const warnRows = kept.filter((r) => r.warnings.length > 0);
   const canConfirm = kept.length > 0 && errorRows.length === 0;
   const excluded = [...(state.excludedLines ?? []), ...removed];
 
@@ -110,6 +111,15 @@ function PreviewPanel({ state, dispatch, pending, onReset }: { state: ItemsImpor
         ) : (
           <> · all rows pass the item checks.</>
         )}
+        {warnRows.length > 0 ? (
+          <>
+            {" · "}
+            <strong>
+              {warnRows.length} with duplicate warning{warnRows.length === 1 ? "" : "s"}
+            </strong>{" "}
+            — they still import; check each is not a duplicate of the named product.
+          </>
+        ) : null}
       </p>
 
       <div className="import-rows">
@@ -177,6 +187,13 @@ function PreviewRow({ row, removed, onRemove, onUndo }: { row: ImportRowPreview;
             <Chip tone="red">Error</Chip>
             <span className="small" style={{ display: "block", color: "var(--red)" }}>
               {row.errors.join(" ")}
+            </span>
+          </>
+        ) : row.warnings.length > 0 ? (
+          <>
+            <Chip tone="amber">Check</Chip>
+            <span className="small" style={{ display: "block" }}>
+              {row.warnings.join(" ")}
             </span>
           </>
         ) : (

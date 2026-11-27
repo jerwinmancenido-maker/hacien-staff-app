@@ -7,6 +7,7 @@ import { runAction } from "@/lib/actions";
 import { db } from "@/lib/db";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { CompanyRuleError, revealSupplierBankAccount, saveSupplier, setSupplierActive } from "@/lib/services/companies";
+import { duplicateWarningMessage, findDuplicateNames } from "@/lib/duplicates";
 import { addContact } from "@/lib/services/contacts";
 import { z } from "zod";
 import { supplierSchema } from "@/lib/validation/companies";
@@ -49,7 +50,16 @@ export async function saveSupplierAction(id: string | null, _prev: FormState, fo
 
     const parsed = supplierSchema(allowedTerms).safeParse(input);
     if (!parsed.success) return { values, fieldErrors: zodFieldErrors(parsed.error) };
-    const saved = await saveSupplier(id, parsed.data, { id: user.id, isAdmin: user.isAdmin });
+    // Finding 1364: near-duplicate name warning (create only) — the shared
+    // matcher (lib/duplicates); confirmed matches are audit-noted by the
+    // service on the create row.
+    const dupes = !id ? await findDuplicateNames(db, "supplier", parsed.data.name) : [];
+    if (dupes.length && str(form, "confirmDuplicateName") !== "1") {
+      return { values, warning: duplicateWarningMessage("supplier", dupes) };
+    }
+    const saved = await saveSupplier(id, parsed.data, { id: user.id, isAdmin: user.isAdmin }, {
+      duplicateNameWarningConfirmed: dupes,
+    });
     if (!id) createdId = saved.id;
     revalidatePath("/suppliers");
     revalidatePath(`/suppliers/${saved.id}`);
@@ -137,7 +147,15 @@ export async function createInlineSupplierAction(_prev: CreateInlineSupplierStat
       contactPhone: str(form, "contactPhone"),
     });
     if (!contactParsed.success) return { values, fieldErrors: zodFieldErrors(contactParsed.error) };
-    const saved = await saveSupplier(null, parsed.data, { id: user.id, isAdmin: user.isAdmin });
+    // Finding 1364: near-duplicate name warning — the shared matcher
+    // (lib/duplicates); confirmed matches are audit-noted by the service.
+    const dupes = await findDuplicateNames(db, "supplier", parsed.data.name);
+    if (dupes.length && str(form, "confirmDuplicateName") !== "1") {
+      return { values, warning: duplicateWarningMessage("supplier", dupes) };
+    }
+    const saved = await saveSupplier(null, parsed.data, { id: user.id, isAdmin: user.isAdmin }, {
+      duplicateNameWarningConfirmed: dupes,
+    });
     let contacts: CreatedInlineSupplier["contacts"] = [];
     if (contactParsed.data.contactName) {
       const created = await addContact(

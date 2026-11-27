@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Item } from "@prisma/client";
 import { Field } from "@/components/Field";
@@ -20,6 +20,8 @@ export function ItemForm({
   const v = (k: keyof Item) => state.values?.[k] ?? (item?.[k] as string | null) ?? "";
   const [name, setName] = useState(v("name"));
   const e = state.fieldErrors ?? {};
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
   const priceDefault = state.values?.defaultUnitPrice ?? (item?.defaultUnitPrice ? item.defaultUnitPrice.toString() : "");
 
   return (
@@ -28,6 +30,31 @@ export function ItemForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
+          <div className="form-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={pending}
+              onClick={(ev) => {
+                // Only this button confirms the duplicate: set the flag,
+                // then submit. The main Save button submits with the flag
+                // still blank, so the server re-issues the warning (F38).
+                if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                ev.currentTarget.form?.requestSubmit();
+              }}
+            >
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>

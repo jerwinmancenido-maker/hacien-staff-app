@@ -2,6 +2,8 @@ import type { PermissionUser } from "../permissions";
 import { canSeeTin, stripCosts } from "../permissions";
 import { resolveCustomerSavedPick } from "../quotes/withholding-defaults";
 import { CompanyRuleError, getCustomer, listCustomers, loadCustomerWriteOptions, saveCustomer } from "../services/companies";
+import { db } from "../db";
+import { duplicateWarningMessage, findDuplicateNames } from "../duplicates";
 import { customerSchema } from "../validation/companies";
 import { zodFieldErrors } from "../validation/forms";
 import type { ApiActor } from "./keys";
@@ -130,8 +132,23 @@ export async function writeCustomer(id: string | null, body: unknown, actor: Api
   if (!parsed.success) {
     throw new ApiError(400, "validation", "Fix the fields marked below.", zodFieldErrors(parsed.error));
   }
+  // Finding 1364: a create whose name near-matches an existing customer is
+  // refused 409 duplicate_name unless the caller confirms with
+  // { "confirmDuplicateName": true } — the API form of warn-and-confirm,
+  // on the shared matcher (lib/duplicates). A confirmed create records the
+  // matches on the create audit row via the service.
+  const dupes = !id ? await findDuplicateNames(db, "customer", parsed.data.name) : [];
+  if (dupes.length && raw.confirmDuplicateName !== true) {
+    const message = duplicateWarningMessage("customer", dupes);
+    throw new ApiError(409, "duplicate_name", message, { name: message });
+  }
   try {
-    return await saveCustomer(id, parsed.data, { id: actor.id, isAdmin: actor.isAdmin });
+    return await saveCustomer(
+      id,
+      parsed.data,
+      { id: actor.id, isAdmin: actor.isAdmin },
+      { duplicateNameWarningConfirmed: dupes },
+    );
   } catch (e) {
     if (e instanceof CompanyRuleError) {
       throw new ApiError(409, "rule", e.message, e.field ? { [e.field]: e.message } : undefined);
