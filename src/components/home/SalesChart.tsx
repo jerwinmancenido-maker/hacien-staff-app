@@ -139,7 +139,7 @@ export function SalesChart({
           viewBox={`0 0 ${vbW} ${vbH}`}
           preserveAspectRatio="xMidYMid meet"
           role="img"
-          aria-label="Billed sales for the last 12 months"
+          aria-label="Sales for the last 12 months"
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">

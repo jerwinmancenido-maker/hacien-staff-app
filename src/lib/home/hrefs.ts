@@ -35,6 +35,11 @@ export function salesOrdersNeedsPoHref(): string {
   return `/sales-orders?${HOME_SO_NEEDS_PO}=1`;
 }
 
+/** Sales Orders list (the Home Sales section's header / empty-state link). */
+export function salesOrdersHref(): string {
+  return "/sales-orders";
+}
+
 export function posAwaitingReceiptHref(): string {
   return "/receiving";
 }
