@@ -34,7 +34,7 @@ export function CompanyLetterhead({ company }: { company: ProfessionalPrintModel
           {company.address ? <div className="pp-pre">{company.address}</div> : null}
           <div className="pp-tin-row">
             {company.tin ? <span>TIN {company.tin}</span> : null}
-            <span className="pp-nonvat">{NON_VAT_LABEL}</span>
+            <span className="pp-nonvat">{company.nonVatLabel ?? NON_VAT_LABEL}</span>
           </div>
           {contactBits.length > 0 && <div className="pp-contact-bits">{contactBits.join(" · ")}</div>}
         </div>

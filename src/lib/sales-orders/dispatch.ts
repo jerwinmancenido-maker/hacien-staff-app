@@ -16,6 +16,7 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { billingToday, calendarDaysBetween } from "../billing/dates";
 import { remainingDeliveryQty } from "./delivery";
 import { pagingWindow, type ListPage } from "../paging";
+import type { AgingBucket } from "../billing/aging";
 
 export type DispatchInputLine = {
   description: string;
@@ -181,6 +182,56 @@ export async function listDispatchQueue(today: Date = billingToday()): Promise<D
     })),
     today,
   );
+}
+
+/**
+ * Age band of a built queue row, from its days open — the same day edges
+ * agingBucket() applies in billing/aging.ts (daysOpen is exactly the
+ * calendar-days difference that function buckets), so the dispatch page's
+ * band filter chips read the same way as the aging page's bands.
+ */
+function dispatchRowBucket(r: DispatchRow): AgingBucket {
+  if (r.daysOpen <= 0) return "current";
+  if (r.daysOpen <= 30) return "d1_30";
+  if (r.daysOpen <= 60) return "d31_60";
+  if (r.daysOpen <= 90) return "d61_90";
+  return "d90_plus";
+}
+
+/**
+ * In-page search + band filter for the dispatch page (finding 1300 /
+ * proposal P-B), mirroring the sales-orders list's ?q= search and filter
+ * chips. Narrows a built queue to the orders whose SO number or customer
+ * name contains the query (case-insensitive), optionally to one age band.
+ * The returned summary is recomputed from the kept rows — the order count
+ * and the per-unit totals speak for the filtered set — so the page renders
+ * a filtered queue through the exact same path as an unfiltered one. No
+ * query and no band returns the summary unchanged.
+ */
+export function filterDispatchQueue(
+  summary: DispatchSummary,
+  q?: string,
+  band?: AgingBucket,
+): DispatchSummary {
+  const needle = (q ?? "").trim().toLowerCase();
+  if (!needle && !band) return summary;
+  const rows = summary.rows.filter(
+    (r) =>
+      (!band || dispatchRowBucket(r) === band) &&
+      (!needle || r.number.toLowerCase().includes(needle) || r.customerName.toLowerCase().includes(needle)),
+  );
+  let totalUnits = 0n;
+  const totalByUnitScaled: { unit: string; qty: bigint }[] = [];
+  for (const r of rows) {
+    totalUnits += toScaled(r.unitsRemaining, 2);
+    for (const g of r.unitsByUnit) addUnitQty(totalByUnitScaled, g.unit, toScaled(g.qty, 2));
+  }
+  return {
+    rows,
+    orderCount: rows.length,
+    totalUnitsRemaining: fromScaled(totalUnits, 2),
+    totalByUnit: totalByUnitScaled.map((g) => ({ unit: g.unit, qty: fromScaled(g.qty, 2) })),
+  };
 }
 
 /**

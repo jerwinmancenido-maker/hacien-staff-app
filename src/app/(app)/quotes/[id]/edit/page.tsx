@@ -40,6 +40,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         approvalStatus={quote.approvalStatus}
         canApprove={can(user, "approve")}
         approvalLimits={{ marginBelowPct: settings.approval.marginBelowPct, totalAbove: settings.approval.totalAbove }}
+        policiesUrl={settings.identity.policiesUrl}
+        policiesDisplayHost={settings.identity.policiesDisplayHost}
         customers={customers}
         rates={rates}
         suppliers={suppliers}

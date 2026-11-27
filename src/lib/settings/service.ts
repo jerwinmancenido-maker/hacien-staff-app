@@ -82,6 +82,8 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       messaging: { ...DEFAULT_SETTINGS.messaging, ...(v.data as Partial<Settings>).messaging },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
+      identity: { ...DEFAULT_SETTINGS.identity, ...(v.data as Partial<Settings>).identity },
+      wording: { ...DEFAULT_SETTINGS.wording, ...(v.data as Partial<Settings>).wording },
       taxYear: {
         ...DEFAULT_SETTINGS.taxYear,
         ...(v.data as Partial<Settings>).taxYear,

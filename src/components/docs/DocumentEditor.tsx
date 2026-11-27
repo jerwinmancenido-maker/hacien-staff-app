@@ -45,6 +45,7 @@ import { parseWithholdingPercentInput } from "@/lib/quotes/withholding-percent";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import type { FormState } from "@/lib/validation/forms";
 import { TotalsBox } from "./DocParts";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddContactDialog } from "./AddContactDialog";
 
@@ -181,6 +182,8 @@ type Props = {
   /** Sales order only: first live SI number when the order already has a
    * billing — withholding is frozen (A1), so the header pick renders locked. */
   whFrozenSiNo?: number | null;
+  /** Own-company name for the line price aria label (Settings → Company). */
+  ownCompanyName?: string;
 };
 
 let seq = 0;
@@ -335,7 +338,7 @@ function WhSummaryChips({ docRates }: { docRates: { code: string; label: string;
   );
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock, whFrozenSiNo }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock, whFrozenSiNo, ownCompanyName = FALLBACK_SHORT_NAME }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -928,7 +931,7 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                     )}
                     {withCosts && <td className="num muted col-money" data-label="Supplier total">{formatPeso(a.supplierTotal)}</td>}
                     <td className="num col-money" data-label="Price">
-                      <input aria-label={`Line ${idx + 1} HACIEN unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })} />
+                      <input aria-label={`Line ${idx + 1} ${ownCompanyName} unit price`} inputMode="decimal" className="w-num" value={i.unitPrice} readOnly={pricesLocked} onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })} />
                     </td>
                     <td className="num strong col-money" data-label="Total">{formatPeso(a.total)}</td>
                     {withCosts && (

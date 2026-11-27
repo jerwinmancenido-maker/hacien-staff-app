@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { BOOKS_DISCLAIMER } from "@/lib/books/config";
+import { booksDisclaimer } from "@/lib/books/config";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { formatDate, formatPeso } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
 import { BooksNav } from "@/components/books/BooksNav";
@@ -18,12 +19,14 @@ export default async function ReconciliationPage({
   searchParams: Promise<{ business?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
+  const disclaimer = booksDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered);
   const sp = await searchParams;
 
   if (!user.isAdmin) {
     return (
       <>
-        <PageHeader title="Reconciliation" subtitle={BOOKS_DISCLAIMER} />
+        <PageHeader title="Reconciliation" subtitle={disclaimer} />
         <BooksNav active="reconciliation" />
         <div className="card">
           <p style={{ margin: 0 }}>This page is for Admins only.</p>
@@ -65,7 +68,7 @@ export default async function ReconciliationPage({
 
   return (
     <>
-      <PageHeader title="Reconciliation" subtitle={`Admin only — no document flow changes here · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title="Reconciliation" subtitle={`Admin only — no document flow changes here · ${disclaimer}`} />
       <BooksNav active="reconciliation" />
       <BooksBanner />
       {businesses.length > 0 && (

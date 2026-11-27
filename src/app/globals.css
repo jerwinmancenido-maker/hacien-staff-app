@@ -325,6 +325,21 @@ textarea {
   white-space: nowrap;
 }
 
+.nav-item .nav-badge {
+  margin-left: auto;
+  min-width: calc(18px * var(--ui-scale, 1));
+  height: calc(18px * var(--ui-scale, 1));
+  padding: 0 calc(5px * var(--ui-scale, 1));
+  border-radius: calc(9px * var(--ui-scale, 1));
+  background: var(--card);
+  border: 1px solid var(--danger-outline);
+  color: var(--red);
+  font-size: calc(11px * var(--ui-scale, 1));
+  line-height: calc(16px * var(--ui-scale, 1));
+  text-align: center;
+  white-space: nowrap;
+}
+
 .sidebar-spacer {
   flex: 1;
 }
@@ -4019,6 +4034,14 @@ table.list.collections-table td {
   padding-left: calc(8px * var(--ui-scale, 1));
   padding-right: calc(8px * var(--ui-scale, 1));
 }
+/* Long descriptions (finding 1029): visual cap only — the full text stays
+   in the DOM and in the description's title attribute; no data is cut. */
+.items-table .items-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .totals-wrap {
   display: flex;
   justify-content: flex-end;
@@ -4690,7 +4713,8 @@ td.has-error input {
   margin: 0.25in 0.39in 0.63in;
   /* Letterhead Template v3 footer: contact line lower-left, page number lower-right. */
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
+    /* Footer identity content is emitted per print from Settings
+       (printGenericFooterCss / printFooterCss, Company Profile slice 2). */
     font-size: 8pt;
     color: #525252;
   }
@@ -4704,7 +4728,6 @@ td.has-error input {
   size: letter;
   margin: 0.25in 0.39in 0.63in;
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
@@ -5146,7 +5169,7 @@ button.contact-card-add {
 .pp-doc-root {
   --pp-ink: var(--ink, #0a0a0a);
   --pp-navy: #0d1526;
-  --pp-accent: var(--blue, #2563eb);
+  --pp-accent: var(--blue);
   --pp-rule: #e5e5e5;
   --pp-rule-soft: #e5e5e5;
   --pp-muted: var(--grey-600, #525252);
@@ -5159,7 +5182,7 @@ button.contact-card-add {
      matching @page margins. Print overrides at end of this section win. */
   --pp-ink: var(--ink, #0a0a0a);
   --pp-navy: #0d1526;
-  --pp-accent: var(--blue, #2563eb);
+  --pp-accent: var(--blue);
   --pp-rule: #e5e5e5;
   --pp-rule-soft: #e5e5e5;
   --pp-muted: var(--grey-600, #525252);
@@ -5240,13 +5263,11 @@ button.contact-card-add {
   size: A4;
   margin: 15mm 0.39in 0.63in;
   @top-left {
-    content: "■ HACIEN";
     font-size: 7.5pt;
     letter-spacing: 0.09em;
     color: #737373;
   }
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
@@ -5273,13 +5294,11 @@ button.contact-card-add {
   size: letter;
   margin: 15mm 0.39in 0.63in;
   @top-left {
-    content: "■ HACIEN";
     font-size: 7.5pt;
     letter-spacing: 0.09em;
     color: #737373;
   }
   @bottom-left {
-    content: "HACIEN Information Technology Solutions · sales@haciensolutions.com · haciensolutions.com";
     font-size: 8pt;
     color: #525252;
   }
@@ -7789,6 +7808,12 @@ button.contact-card-add {
 .tax-income-worksheet thead th .faint {
   white-space: normal;
 }
+/* 1701Q line labels (finding 1024): balance the wrap so a long label never
+   strands a one-word orphan on its own line (line (f) used to leave "EWT)"
+   alone at every width). */
+.tax-income-worksheet .line-label {
+  text-wrap: balance;
+}
 .tax-cal-form .tax-cal-plain {
   margin-top: calc(2px * var(--ui-scale, 1));
   font-weight: 400;
@@ -8447,7 +8472,7 @@ button.contact-card-add {
 /* Lot grouping (2026-11-09): the LOT n badge in the lot bar, the Move-to
    selects on lines/components, and the members hint. */
 .quote-lot-badge {
-  background: #2563eb;
+  background: var(--blue);
   color: #fff;
   font-weight: 700;
   font-size: calc(11px * var(--ui-scale, 1));

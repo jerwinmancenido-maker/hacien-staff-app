@@ -24,7 +24,9 @@ export default async function CreatePosPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const so = await getCreatePosPreview(id, user);
   if (!so) notFound();
-  const blocked = so.status !== "OPEN" ? "POs can only be created from an open sales order." : so.quoteStatus !== "WON" ? "The sales order's quote isn't Won." : null;
+  // quoteStatus is null for quote-less SOs (store conversions): no quote
+  // gate applies to them.
+  const blocked = so.status !== "OPEN" ? "POs can only be created from an open sales order." : so.quoteStatus !== null && so.quoteStatus !== "WON" ? "The sales order's quote isn't Won." : null;
   const open = openRowCount(so.lines);
   return (
     <>

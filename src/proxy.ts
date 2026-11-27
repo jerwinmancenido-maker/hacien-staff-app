@@ -12,7 +12,8 @@ const PUBLIC = ["/login", "/forgot-password", "/reset-password", "/unsubscribe"]
  * `/icon.png` and `/apple-icon.png` are the App Router metadata file-convention
  * routes produced by `src/app/icon.png` and `src/app/apple-icon.png` (see
  * `next build` route list: `○ /icon.png`, `○ /apple-icon.png`). `/favicon.ico`
- * and `/site.webmanifest` come from `public/`.
+ * comes from `public/`; `/site.webmanifest` is the settings-served route
+ * handler `src/app/site.webmanifest/route.ts` (Company Profile slice 4).
  */
 export const PUBLIC_ASSET_EXACT = [
   "/favicon.ico",

@@ -8,11 +8,8 @@
 import type { Settings } from "../settings/schema";
 import { db } from "../db";
 import { money } from "../documents/common";
-import { addDays, manilaToday } from "../format";
+import { addDays, manilaToday, manilaYearStart } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
-
-/** Asia/Manila is UTC+8 all year (no daylight saving). */
-const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 export interface GrossSalesSource {
   /** Gross sales (₱, booklet billing totals, not voided) dated in [from, to). */
@@ -46,9 +43,15 @@ export const billingsGrossSales: GrossSalesSource = {
   },
 };
 
-/** Start of Jan 1 of `year` in Manila, as a UTC instant. */
+/**
+ * Start of Jan 1 of `year` in Manila, as a UTC instant. Delegates to
+ * format.ts (the one timezone config point, census F15). Asia/Manila
+ * is UTC+8 year-round in the tz database for every year this meter
+ * can see, so the result equals the old fixed-offset math exactly —
+ * the unit tests pin the equality across 2015–2040.
+ */
 export function taxYearStart(year: number): Date {
-  return new Date(Date.UTC(year, 0, 1) - MANILA_OFFSET_MS);
+  return manilaYearStart(year);
 }
 
 /**

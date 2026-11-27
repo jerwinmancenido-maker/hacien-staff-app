@@ -199,6 +199,7 @@ export default async function SupplierPage({
           docStats={docStats}
           warnDays={warnDays}
           payableBalance={payableBalance}
+          ownCompanyName={settings.identity.appShortName}
         />
       )}
 

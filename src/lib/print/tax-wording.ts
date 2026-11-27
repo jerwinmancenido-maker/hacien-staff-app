@@ -46,6 +46,29 @@ export const QUOTATION_NOT_INVOICE = "This is a quotation, not an invoice." as c
 /** Sales-order footer — not an invoice. Do not put on billing or quote prints. */
 export const SALES_ORDER_NOT_INVOICE = "This is a sales order, not an invoice." as const;
 
+import type { Settings } from "@/lib/settings/schema";
+
+/**
+ * The wording fields the print footer builder reads (Company Profile
+ * slice 2, census F3). Print callers pass the document snapshot's
+ * settings.wording; the fallback below is assembled from this module's
+ * own constants, which the settings seed copies verbatim (pinned by
+ * tests), so snapshot-less callers render exactly what they did before.
+ * Non-print consumers (billing screen parts, statement data and emails)
+ * keep reading the constants directly — only the print path switched.
+ */
+export type TaxWording = Pick<
+  Settings["wording"],
+  "billingDisclaimer" | "inputTaxDisclaimer" | "quotationNotInvoice" | "salesOrderNotInvoice"
+>;
+
+const FALLBACK_TAX_WORDING: TaxWording = {
+  billingDisclaimer: BILLING_DISCLAIMER,
+  inputTaxDisclaimer: INPUT_TAX_DISCLAIMER,
+  quotationNotInvoice: QUOTATION_NOT_INVOICE,
+  salesOrderNotInvoice: SALES_ORDER_NOT_INVOICE,
+};
+
 export type PrintDocKind =
   | "quote"
   | "sales_order"
@@ -92,24 +115,25 @@ const INPUT_TAX_KINDS: ReadonlySet<PrintDocKind> = BILLING_COLLECTION;
  */
 export function taxFooterLines(
   kind: PrintDocKind,
-  opts: { showInputTaxDisclaimer?: boolean } = {},
+  opts: { showInputTaxDisclaimer?: boolean; wording?: TaxWording } = {},
 ): string[] {
-  void opts;
+  void opts.showInputTaxDisclaimer;
+  const wording = opts.wording ?? FALLBACK_TAX_WORDING;
   const lines: string[] = [];
   if (kind === "quote") {
-    lines.push(QUOTATION_NOT_INVOICE);
+    lines.push(wording.quotationNotInvoice);
   }
   if (kind === "sales_order") {
-    lines.push(SALES_ORDER_NOT_INVOICE);
+    lines.push(wording.salesOrderNotInvoice);
   }
   if (BILLING_COLLECTION.has(kind)) {
-    lines.push(BILLING_DISCLAIMER);
+    lines.push(wording.billingDisclaimer);
   }
   if (STATEMENT_KINDS.has(kind)) {
-    lines.push(BILLING_DISCLAIMER);
+    lines.push(wording.billingDisclaimer);
   }
   if (INPUT_TAX_KINDS.has(kind)) {
-    lines.push(INPUT_TAX_DISCLAIMER);
+    lines.push(wording.inputTaxDisclaimer);
   }
   return lines;
 }

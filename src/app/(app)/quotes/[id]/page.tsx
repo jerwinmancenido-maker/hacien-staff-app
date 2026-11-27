@@ -38,11 +38,13 @@ import {
   deleteQuoteAction,
 } from "../actions";
 import { WITHHOLDING_INTERNAL_PANEL_LABEL, WITHHOLDING_NOT_SET_NOTICE, isWithholdingNotSet } from "@/lib/quotes/withholding-defaults";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 const day = (ymd: string) => formatDate(new Date(`${ymd}T00:00:00.000Z`));
 
 export default async function QuotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const user = await requirePagePermission("view");
+  const { settings } = await getSettingsSnapshot();
   const { id } = await params;
   const { tab: raw } = await searchParams;
   const tab = raw === "sales-orders" || raw === "conforme" || raw === "activity" ? raw : "overview";
@@ -264,6 +266,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
                 overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
               }))}
               showCosts={q.canSeeCosts}
+              shortName={settings.identity.appShortName}
             />
             <div className="totals-wrap">
               <div className="wh-internal-panel">

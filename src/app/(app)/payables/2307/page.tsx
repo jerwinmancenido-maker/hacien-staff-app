@@ -12,12 +12,14 @@ import { Mark2307IssuedForm } from "@/components/payables/Mark2307IssuedForm";
 import { PageHeader } from "@/components/ui";
 import type { SupplierWithholding2307Status } from "@prisma/client";
 import { markSupplier2307IssuedAction } from "../actions";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:00.000Z`)) : "—");
 
 export default async function Supplier2307Page({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   if (!(await isPayables2307Enabled())) redirect("/payables");
   const user = await requirePagePermission("view");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const status = (sp.status === "TO_ISSUE" || sp.status === "ISSUED" || sp.status === "ALL" ? sp.status : "TO_ISSUE") as SupplierWithholding2307Status | "ALL";
   const rows = await listSupplier2307({ status });
@@ -28,7 +30,7 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="2307 to issue"
-        subtitle="EWT on supplier payments — record status only. App does not generate BIR Form 2307. UNVERIFIED whether HACIEN must withhold (pending RDO)."
+        subtitle={`EWT on supplier payments — record status only. App does not generate BIR Form 2307. UNVERIFIED whether ${settings.identity.appShortName} must withhold (pending RDO).`}
       />
       <PayablesNav active="2307" />
       <form className="toolbar txn-filters" method="get" action="/payables/2307" style={{ marginBottom: 16 }}>
@@ -68,7 +70,7 @@ export default async function Supplier2307Page({ searchParams }: { searchParams:
                           : "Nothing matches this filter."}
                       </p>
                       <p className="faint small">
-                        2307 rows appear when a payment includes withholding (EWT). Whether HACIEN must withhold is still unverified (pending RDO).
+                        2307 rows appear when a payment includes withholding (EWT). Whether {settings.identity.appShortName} must withhold is still unverified (pending RDO).
                       </p>
                       {canManage && (
                         <p style={{ marginTop: 8 }}>

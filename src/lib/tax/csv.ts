@@ -5,9 +5,11 @@
 // like -500.00 are NOT escaped; =/+/@/tab/CR and non-numeric leading "-" are.
 
 import { csvCell } from "../books/csv";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import {
   QAP_CSV_FORMAT_LABEL,
   SAWT_CSV_FORMAT_LABEL,
+  supplierEwtRdoNote,
   TAX_BASIS_UNVERIFIED_NOTE,
   TAX_WORKSHEET_BANNER,
 } from "./constants";
@@ -72,7 +74,7 @@ export type QapRow = {
  */
 export function supplierEwtToQapCsv(
   rows: readonly QapRow[],
-  meta: { year: number; quarter?: number },
+  meta: { year: number; quarter?: number; shortName?: string },
 ): string {
   const period =
     meta.quarter != null ? `Q${meta.quarter} ${meta.year}` : `Year ${meta.year}`;
@@ -80,7 +82,7 @@ export function supplierEwtToQapCsv(
     `# ${TAX_WORKSHEET_BANNER}`,
     `# Format: QAP-style · ${QAP_CSV_FORMAT_LABEL}`,
     `# Period: ${period}`,
-    `# Note: Only applies if HACIEN is registered to withhold — confirm with RDO.`,
+    `# Note: ${supplierEwtRdoNote(meta.shortName ?? DEFAULT_SETTINGS.identity.appShortName)}`,
     csvRow(["Seq", "TIN", "Payee Name", "ATC", "Tax Base", "Tax Rate", "Tax Withheld", "Month"]),
   ];
   rows.forEach((r, i) => {

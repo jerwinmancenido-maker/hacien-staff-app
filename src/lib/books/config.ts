@@ -5,6 +5,8 @@
 // columns). HACIEN is on the 8% income tax option and is non-VAT — do NOT add
 // VAT or input-tax columns.
 
+import { DEFAULT_SETTINGS } from "../settings/defaults";
+
 export type RegisterKey = "sales" | "disbursements" | "purchases" | "journal";
 
 export type RegisterColumnKey = "date" | "documentNumber" | "party" | "particulars" | "amount" | "ewt" | "source";
@@ -137,8 +139,17 @@ export function isRegisterKey(value: string): value is RegisterKey {
 export const BOOKS_DRAFT_BANNER =
   "Draft format — confirm with accountant/RDO before using as official books";
 
-export const BOOKS_DISCLAIMER =
-  "Read-only export from existing records. HACIEN is non-VAT (8% income tax option) — no VAT or input tax is computed.";
+/** Books posture line, derived from the company tax posture (Company Profile slice 3). */
+export function booksDisclaimer(shortName: string, isVatRegistered: boolean): string {
+  return isVatRegistered
+    ? `Read-only export from existing records. ${shortName} is VAT-registered — VAT is computed where it applies.`
+    : `Read-only export from existing records. ${shortName} is non-VAT (8% income tax option) — no VAT or input tax is computed.`;
+}
+
+export const BOOKS_DISCLAIMER = booksDisclaimer(
+  DEFAULT_SETTINGS.identity.appShortName,
+  DEFAULT_SETTINGS.taxYear.isVatRegistered,
+);
 
 /** Forbidden column / field names — never appear on Books registers (non-VAT). */
 export const BOOKS_FORBIDDEN_VAT_KEYS = [

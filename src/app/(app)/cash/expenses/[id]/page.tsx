@@ -94,7 +94,11 @@ export default async function ExpenseDetailPage({
           )}
           <dt>Paid from</dt>
           <dd>
-            <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
+            {e.cashAccount ? (
+              <Link href={`/cash/accounts/${e.cashAccount.id}`}>{e.cashAccount.name}</Link>
+            ) : (
+              "Not assigned"
+            )}
           </dd>
           <dt>Amount</dt>
           <dd className="num strong">{formatPeso(money(e.amount))}</dd>

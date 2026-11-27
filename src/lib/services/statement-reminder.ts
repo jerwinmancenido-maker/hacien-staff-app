@@ -25,6 +25,7 @@ import { getStatement } from "@/lib/billing/views";
 import { BILLING_DISCLAIMER } from "@/lib/print/tax-wording";
 import { getMailer, type Mailer } from "@/lib/mailer";
 import { formatPeso, formatDate } from "@/lib/format";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 import { isValidEmail } from "@/lib/messaging/phone";
 
 /** Short window in which a repeat send to the same recipient is a duplicate. */
@@ -53,7 +54,7 @@ export function buildStatementReminder(input: {
   asOf: Date;
 }): StatementReminderDraft {
   const customer = sanitizeHeaderValue(input.customerName);
-  const company = sanitizeHeaderValue(input.companyName) || "HACIEN";
+  const company = sanitizeHeaderValue(input.companyName) || FALLBACK_SHORT_NAME;
   const subject = sanitizeHeaderValue(`Statement of account — ${customer}`);
   const period = input.from || input.to ? `${input.from ?? "…"} to ${input.to ?? "…"}` : "All transactions to date";
   const lines = [

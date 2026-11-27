@@ -36,6 +36,7 @@ export const AUDIT_ENTITIES = [
   "SpoiledBookletNumber",
   "EmailSuppression",
   "StatementReminder",
+  "StoreOrder",
 ] as const;
 
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
@@ -67,6 +68,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   SpoiledBookletNumber: "Spoiled booklet no.",
   EmailSuppression: "Email suppression",
   StatementReminder: "Statement reminder",
+  StoreOrder: "Store order",
 };
 
 const PAST: Record<AuditAction, string> = {

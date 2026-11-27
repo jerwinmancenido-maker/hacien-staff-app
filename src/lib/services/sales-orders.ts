@@ -1,5 +1,6 @@
-// Sales orders: created only by converting a quote (see quotes.ts). Open SOs can
-// be edited by Staff+ (audited); voiding returns the quote to Sent.
+// Sales orders: created by converting a quote (see quotes.ts) or by converting
+// a paid store order (see store-orders/convert.ts). Open SOs can be edited by
+// Staff+ (audited); voiding returns the quote to Sent when there is one.
 
 import type { Prisma, SalesOrder, SalesOrderItem, SalesOrderItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
@@ -628,7 +629,8 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
     if (liveDeliveries > 0) throw new DocRuleError("Void the deliveries first.");
     const livePos = await tx.purchaseOrder.count({ where: { salesOrderId: id, status: { not: "VOID" } } });
     if (livePos > 0) throw new DocRuleError("Void the purchase orders first.");
-    await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
+    // Quote-less SOs (store conversions) have no quote row to lock.
+    if (before.quoteId) await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
     const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
     await tx.documentVoid.create({
@@ -651,18 +653,21 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
       after: { status: after.status, voidReason: after.voidReason },
     });
 
-    const quote = await tx.quote.findUniqueOrThrow({ where: { id: before.quoteId } });
-    const otherOpen = await tx.salesOrder.count({ where: { quoteId: quote.id, status: "OPEN" } });
-    if (quote.status === "WON" && otherOpen === 0) {
-      await tx.quote.update({ where: { id: quote.id }, data: { status: "SENT", updatedById: actor.id } });
-      await writeAudit(tx, {
-        userId: actor.id,
-        entityType: "Quote",
-        entityId: quote.id,
-        action: "update",
-        before: { status: "WON" },
-        after: { status: "SENT", reason: `Sales order ${before.number} voided` },
-      });
+    // Quote-less SOs (store conversions) have no quote to revert.
+    if (before.quoteId) {
+      const quote = await tx.quote.findUniqueOrThrow({ where: { id: before.quoteId } });
+      const otherOpen = await tx.salesOrder.count({ where: { quoteId: quote.id, status: "OPEN" } });
+      if (quote.status === "WON" && otherOpen === 0) {
+        await tx.quote.update({ where: { id: quote.id }, data: { status: "SENT", updatedById: actor.id } });
+        await writeAudit(tx, {
+          userId: actor.id,
+          entityType: "Quote",
+          entityId: quote.id,
+          action: "update",
+          before: { status: "WON" },
+          after: { status: "SENT", reason: `Sales order ${before.number} voided` },
+        });
+      }
     }
     return after;
   });

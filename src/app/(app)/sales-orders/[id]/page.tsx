@@ -63,7 +63,9 @@ export default async function SalesOrderPage({
   const purchasing = await getSoPurchasing(so.id, user);
   // Show Create POs while any line still has unordered qty. A partial PO
   // (or a voided one) must not hide the menu.
-  const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && so.quote.status === "WON" && purchasing.needsMorePo;
+  // Quote-less SOs (store conversions) have no quote gate: they are paid
+  // orders awaiting fulfilment, so POs can be raised on them directly.
+  const canCreatePos = user.isAdmin && so.canSeeCosts && so.status === "OPEN" && (so.quote === null || so.quote.status === "WON") && purchasing.needsMorePo;
   const [billingSummary, billings, costMargin, deliveries, collections, returns, gapState] = await Promise.all([
     soBillingSummary(so.id),
     listBillings({ salesOrderId: so.id }),
@@ -214,21 +216,38 @@ export default async function SalesOrderPage({
                 </tr>
               </thead>
               <tbody>
-                <tr className="clickable row-has-link">
-                  <td>
-                    <Link href={`/quotes/${so.quote.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                    Source quote
-                  </td>
-                  <td className="strong">
-                    <Link href={`/quotes/${so.quote.id}`} target="_blank" rel="noopener">{so.quote.number}</Link>
-                  </td>
-                  <td>{day(so.quote.date)}</td>
-                  <td className="num">{formatPeso(so.quote.contractPrice)}</td>
-                  <td>
-                    <QuoteStatusChip status={so.quote.status} />
-                  </td>
-                  <td />
-                </tr>
+                {so.quote && (
+                  <tr className="clickable row-has-link">
+                    <td>
+                      <Link href={`/quotes/${so.quote.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      Source quote
+                    </td>
+                    <td className="strong">
+                      <Link href={`/quotes/${so.quote.id}`} target="_blank" rel="noopener">{so.quote.number}</Link>
+                    </td>
+                    <td>{day(so.quote.date)}</td>
+                    <td className="num">{formatPeso(so.quote.contractPrice)}</td>
+                    <td>
+                      <QuoteStatusChip status={so.quote.status} />
+                    </td>
+                    <td />
+                  </tr>
+                )}
+                {so.storeOrder && (
+                  <tr className="clickable row-has-link">
+                    <td>
+                      <Link href={`/store-orders/${so.storeOrder.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                      Web order
+                    </td>
+                    <td className="strong">
+                      <Link href={`/store-orders/${so.storeOrder.id}`}>{so.storeOrder.number}</Link>
+                    </td>
+                    <td>{day(so.date)}</td>
+                    <td className="num">{formatPeso(so.totals.contractPrice)}</td>
+                    <td>Paid</td>
+                    <td />
+                  </tr>
+                )}
                 {billings.map((b) => (
                   <tr key={b.id} className="clickable row-has-link">
                     <td>
@@ -443,10 +462,26 @@ export default async function SalesOrderPage({
               <dd>
                 <Link href={`/customers/${so.customer.id}`}>{so.customer.name}</Link>
               </dd>
-              <dt>From quote</dt>
-              <dd>
-                <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link> <QuoteStatusChip status={so.quote.status} />
-              </dd>
+              {so.quote ? (
+                <>
+                  <dt>From quote</dt>
+                  <dd>
+                    <Link href={`/quotes/${so.quote.id}`}>{so.quote.number}</Link> <QuoteStatusChip status={so.quote.status} />
+                  </dd>
+                </>
+              ) : so.storeOrder ? (
+                <>
+                  <dt>Web order</dt>
+                  <dd>
+                    <Link href={`/store-orders/${so.storeOrder.id}`}>{so.storeOrder.number}</Link>
+                  </dd>
+                </>
+              ) : (
+                <>
+                  <dt>From quote</dt>
+                  <dd>—</dd>
+                </>
+              )}
               <dt>Buyer PO no.</dt>
               <dd>{so.buyerPoNo ?? "—"}</dd>
               <dt>Buyer PO date</dt>
@@ -487,6 +522,7 @@ export default async function SalesOrderPage({
                 overrideNote: i.withholdingOverride ? OVERRIDE_NOTE : null,
               }))}
               showCosts={so.canSeeCosts}
+              shortName={settings.identity.appShortName}
             />
             <div className="totals-wrap">
               <TotalsBox totals={so.totals} showCosts={so.canSeeCosts} />

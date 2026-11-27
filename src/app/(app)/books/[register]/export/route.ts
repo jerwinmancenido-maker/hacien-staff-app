@@ -5,6 +5,8 @@ import { isRegisterKey, REGISTER_CONFIGS } from "@/lib/books/config";
 import { parseBooksPeriod } from "@/lib/books/period";
 import { registerToCsv } from "@/lib/books/registers";
 import { getBookRegister } from "@/lib/services/books";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { csvDownloadName } from "@/lib/settings/identity";
 
 export async function GET(req: Request, ctx: { params: Promise<{ register: string }> }) {
   const user = await requirePagePermission("view_books");
@@ -19,8 +21,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ register: strin
   const url = new URL(req.url);
   const period = parseBooksPeriod(url.searchParams.get("from"), url.searchParams.get("to"));
   const { register } = await getBookRegister(user, raw, period.fromYmd, period.toYmd);
+  const { settings } = await getSettingsSnapshot();
   const csv = registerToCsv(config, register);
-  const filename = `hacien-${config.path}-${period.fromYmd}_to_${period.toYmd}.csv`;
+  const filename = csvDownloadName(settings.identity.csvFilePrefix, `${config.path}-${period.fromYmd}_to_${period.toYmd}.csv`);
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

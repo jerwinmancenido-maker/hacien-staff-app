@@ -97,6 +97,7 @@ model User {
   spoiledBookletNumbersCreated SpoiledBookletNumber[]    @relation("SpoiledBookletNumberCreatedBy")
   apiKeysActing                ApiKey[]                  @relation("ApiKeyActingUser")
   apiKeysCreated               ApiKey[]                  @relation("ApiKeyCreatedBy")
+  storeOrdersConverted         StoreOrder[]              @relation("StoreOrderConvertedBy")
 }
 
 model Session {
@@ -229,6 +230,7 @@ model Customer {
   withholdings Withholding2307[]
   customerCredits CustomerCredit[]
   statementReminderSends StatementReminderSend[]
+  matchedStoreOrders     StoreOrder[]            @relation("StoreOrderMatchedCustomer")
 
   @@index([name])
 }
@@ -323,6 +325,7 @@ model Contact {
   quotes         Quote[]
   salesOrders    SalesOrder[]
   purchaseOrders PurchaseOrder[]
+  matchedStoreOrders StoreOrder[] @relation("StoreOrderMatchedContact")
 
   @@index([customerId])
   @@index([supplierId])
@@ -702,6 +705,7 @@ enum DocType {
   CASH_TRANSFER
   SUPPLIER_RETURN
   CUSTOMER_RETURN
+  STORE_ORDER
 }
 
 // One counter per document type per year (year 0 = a counter that never resets).
@@ -898,10 +902,12 @@ model Item {
   quoteItems       QuoteItem[]
   quoteItemComponents QuoteItemComponent[]
   salesOrderItemComponents SalesOrderItemComponent[]
+  storeOrderLines    StoreOrderLine[]
 
   @@index([active])
   @@index([name])
   @@index([importBatchId])
+  @@index([sku])
 }
 
 // Items are never deleted: a line removed in the editor gets `removedAt`.
@@ -978,8 +984,9 @@ model SalesOrder {
   // S-93: random tracking reference for new orders (TRK- + 16 base32 chars).
   // Null on orders created before S-93; the SO number keeps working for those.
   trackingRef       String?          @unique @db.VarChar(24)
-  quoteId           String
-  quote             Quote            @relation(fields: [quoteId], references: [id])
+  // Null on store-converted SOs (no source quote — store intake Slice 2, Gap 1).
+  quoteId           String?
+  quote             Quote?           @relation(fields: [quoteId], references: [id])
   // Business entity, copied from the quote at conversion. NULL = HACIEN.
   businessId        String?
   business          Business?        @relation(fields: [businessId], references: [id])
@@ -1034,6 +1041,7 @@ model SalesOrder {
   customerReturns CustomerReturn[]
   attachments    DocumentAttachment[]
   expenses       Expense[]
+  storeOrder     StoreOrder?
 
   @@index([quoteId])
   @@index([businessId])
@@ -1670,6 +1678,7 @@ enum CollectionMethod {
   CHECK
   BANK_TRANSFER
   GCASH
+  GATEWAY
 }
 
 enum Withholding2307Status {
@@ -2107,8 +2116,15 @@ model Expense {
   amount             Decimal        @db.Decimal(15, 2)
   // Optional EWT withheld on this expense (Part 6 already models EWT).
   withholdingApplied Decimal        @default(0) @db.Decimal(15, 2)
-  cashAccountId      String
-  cashAccount        CashAccount    @relation(fields: [cashAccountId], references: [id])
+  // Nullable since the Gap 7 follow-up (2026-11-27): a gateway fee withheld
+  // from settlement is a real expense that never moved through a cash
+  // account, so a store-order conversion records it account-less. The manual
+  // expense form still requires an account (recordExpense asserts one);
+  // only conversion mints account-less expenses. An account-less expense
+  // counts in expense/profit reporting but touches no cash-account balance
+  // and no cash-position figure.
+  cashAccountId      String?
+  cashAccount        CashAccount?   @relation(fields: [cashAccountId], references: [id])
   receiptNo          String?        @db.VarChar(64)
   notes              String?        @db.Text
   // Phase 4 #7 (re-planned): optional link to the order this expense is a
@@ -2229,4 +2245,100 @@ model TaxCalendarCompletion {
   @@index([occurrenceKey, undoneAt])
   @@index([obligationKey])
   @@index([doneDate])
+}
+
+// ---------------------------------------------------------------------------
+// Online store intake (Online Store plan rev 4, Slice 1): a paid web order
+// lands here as its own record and converts to a Sales Order only on a staff
+// click (Slice 2). External events never mint ledger numbers: the WO number
+// is an inbox reference, allocated at intake; SO/BL/CR numbers mint only at
+// conversion. DONE is not a stored status — a converted order reads DONE
+// when its linked SO is CLOSED (derived in src/lib/store-orders/views.ts).
+enum StoreOrderStatus {
+  PAID
+  CONFIRMED
+  PROVISIONING
+  REFUNDED
+  CHARGEBACK
+}
+
+enum StoreOrderLineMatchFlag {
+  MAPPED
+  NO_MATCH
+  AMBIGUOUS
+}
+
+model StoreOrder {
+  id                      String           @id @default(cuid())
+  // WO-2026-0001 — inbox reference from the STORE_ORDER series.
+  number                  String           @unique @db.VarChar(40)
+  status                  StoreOrderStatus @default(PAID)
+  gatewayName             String           @db.VarChar(100)
+  gatewayPaymentRef       String           @db.VarChar(191)
+  // The gateway unique key for this payment. Permanent record-level
+  // dedupe (the /api/v1 transport idempotency only replays for 24 h).
+  gatewayPaymentKey       String           @unique @db.VarChar(191)
+  amountPaid              Decimal          @db.Decimal(15, 2)
+  // The gateway fee: data only, plus an order-linked expense at
+  // conversion. Never on any customer document.
+  gatewayFee              Decimal          @db.Decimal(15, 2)
+  deliveryFee             Decimal          @default(0) @db.Decimal(15, 2)
+  currency                String           @default("PHP") @db.VarChar(3)
+  buyerName               String           @db.VarChar(191)
+  buyerEmail              String           @db.VarChar(191)
+  buyerPhone              String           @db.VarChar(64)
+  // Delivery address as sent (Address shape); the real Address row is
+  // created at conversion.
+  addressLabel            String?          @db.VarChar(100)
+  addressStreet           String           @db.Text
+  addressBarangay         String           @default("") @db.VarChar(120)
+  addressCityMunicipality String           @default("") @db.VarChar(120)
+  addressProvince         String           @default("") @db.VarChar(120)
+  addressZip              String           @default("") @db.VarChar(4)
+  buyerNotes              String?          @db.Text
+  paidAt                  DateTime
+  // Match PROPOSAL from the intake cascade — staff confirm at conversion.
+  matchedCustomerId       String?
+  matchedCustomer         Customer?        @relation("StoreOrderMatchedCustomer", fields: [matchedCustomerId], references: [id])
+  matchedContactId        String?
+  matchedContact          Contact?         @relation("StoreOrderMatchedContact", fields: [matchedContactId], references: [id])
+  // Set at conversion (Slice 2).
+  salesOrderId            String?          @unique
+  salesOrder              SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  convertedById           String?
+  convertedBy             User?            @relation("StoreOrderConvertedBy", fields: [convertedById], references: [id])
+  convertedAt             DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  lines StoreOrderLine[]
+
+  @@index([status])
+  @@index([matchedCustomerId])
+}
+
+model StoreOrderLine {
+  id           String                  @id @default(cuid())
+  storeOrderId String
+  storeOrder   StoreOrder              @relation(fields: [storeOrderId], references: [id], onDelete: Cascade)
+  sortOrder    Int                     @default(0)
+  // The SKU as sent (null when the checkout sent none).
+  sku          String?                 @db.VarChar(60)
+  // Set only when exactly one ACTIVE item carries that SKU.
+  itemId       String?
+  item         Item?                   @relation(fields: [itemId], references: [id])
+  matchFlag    StoreOrderLineMatchFlag
+  // The product title as shown at checkout, kept verbatim.
+  title        String                  @db.Text
+  qty          Decimal                 @db.Decimal(12, 2)
+  unit         String                  @db.VarChar(30)
+  unitPrice    Decimal                 @db.Decimal(15, 2)
+  lineTotal    Decimal                 @db.Decimal(15, 2)
+  // Subscriptions only: feeds the interim renewal list (Slice 3).
+  termEndDate  DateTime?               @db.Date
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([storeOrderId])
+  @@index([itemId])
 }

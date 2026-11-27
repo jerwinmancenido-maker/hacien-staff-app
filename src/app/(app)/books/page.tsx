@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { BOOKS_DISCLAIMER, REGISTER_CONFIGS, REGISTER_KEYS } from "@/lib/books/config";
+import { booksDisclaimer, REGISTER_CONFIGS, REGISTER_KEYS } from "@/lib/books/config";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { parseBooksPeriod } from "@/lib/books/period";
 import { TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
 import { TAX_CALENDAR_PAGE } from "@/lib/tax/calendar-constants";
@@ -23,6 +24,7 @@ export default async function BooksHomePage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const period = parseBooksPeriod(sp.from, sp.to);
   // Phase 4 #10 (P7): the Period close card renders only when the flag
@@ -41,7 +43,7 @@ export default async function BooksHomePage({
     <>
       <PageHeader
         title="Books"
-        subtitle={BOOKS_DISCLAIMER}
+        subtitle={booksDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)}
       />
       <BooksNav active="home" />
       <BooksBanner />
@@ -49,9 +51,9 @@ export default async function BooksHomePage({
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Held for other businesses</h2>
           <p style={{ marginTop: 0 }}>
-            Money recorded in this app for other businesses in this period. It is <b>not</b> in HACIEN&apos;s
+            Money recorded in this app for other businesses in this period. It is <b>not</b> in {settings.identity.appShortName}&apos;s
             registers, profit or tax figures — this card is here so the bank still adds up: bank balance =
-            HACIEN&apos;s books + held for others.
+            {settings.identity.appShortName}&apos;s books + held for others.
           </p>
           <ul className="plain-list" style={{ paddingLeft: 18, marginBottom: 0 }}>
             <li>

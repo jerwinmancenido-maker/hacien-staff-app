@@ -170,6 +170,60 @@ export function pageSoAging(summary: SoAgingSummary, page?: number, pageSize?: n
 }
 
 /**
+ * In-page search + band filter for the aging page (finding 1300 / proposal
+ * P-B), mirroring the sales-orders list's ?q= search and filter chips.
+ * Narrows a built summary to the orders whose SO number or customer name
+ * contains the query (case-insensitive), optionally to one age band. The
+ * returned summary is recomputed from the kept rows — band counts, band
+ * totals, and the grand totals all speak for the filtered set — so the
+ * page renders a filtered summary through the exact same path as an
+ * unfiltered one. No query and no band returns the summary unchanged.
+ */
+export function filterSoAging(summary: SoAgingSummary, q?: string, band?: AgingBucket): SoAgingSummary {
+  const needle = (q ?? "").trim().toLowerCase();
+  if (!needle && !band) return summary;
+  const matches = (r: SoAgingRow) =>
+    (!band || r.bucket === band) &&
+    (!needle || r.number.toLowerCase().includes(needle) || r.customerName.toLowerCase().includes(needle));
+  const bands: SoAgingBand[] = [];
+  let totalContract = 0n;
+  let totalBilled = 0n;
+  let totalLeft = 0n;
+  let orderCount = 0;
+  for (const b of summary.bands) {
+    const rows = b.rows.filter(matches);
+    if (rows.length === 0) continue;
+    let bandContract = 0n;
+    let bandBilled = 0n;
+    let bandLeft = 0n;
+    for (const r of rows) {
+      bandContract += toScaled(r.contractPrice, 2);
+      bandBilled += toScaled(r.billed, 2);
+      bandLeft += toScaled(r.leftToBill, 2);
+    }
+    totalContract += bandContract;
+    totalBilled += bandBilled;
+    totalLeft += bandLeft;
+    orderCount += rows.length;
+    bands.push({
+      bucket: b.bucket,
+      rows,
+      rowCount: rows.length,
+      contractPrice: fromScaled(bandContract, 2),
+      billed: fromScaled(bandBilled, 2),
+      leftToBill: fromScaled(bandLeft, 2),
+    });
+  }
+  return {
+    bands,
+    orderCount,
+    totalContractPrice: fromScaled(totalContract, 2),
+    totalBilled: fromScaled(totalBilled, 2),
+    totalLeftToBill: fromScaled(totalLeft, 2),
+  };
+}
+
+/**
  * DB loader: OPEN, own-company sales orders with their non-void billings.
  *
  * Perf (finding 1040): the builder only ever sums the billing amounts

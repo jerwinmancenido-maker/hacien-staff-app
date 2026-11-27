@@ -174,7 +174,7 @@ export async function listTaxCalendar(
       incomeTaxMethod: taxYear.incomeTaxMethod,
       incomeTaxMethodsByYear: taxYear.incomeTaxMethodsByYear ?? {},
     },
-    isNonVat: true, // HACIEN business setting: non-VAT
+    isNonVat: !taxYear.isVatRegistered, // Company Profile: VAT posture lives in Settings → Tax year
     booksType: taxYear.booksType ?? null,
     showNotApplicable,
     quartersWith2307,

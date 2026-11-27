@@ -10,6 +10,7 @@ import { PayablesNav } from "@/components/payables/PayablesNav";
 import { PAYABLES_DISCLAIMER, PaymentMethodLabel, PaymentStatusChip, Supplier2307StatusChip } from "@/components/payables/PayablesParts";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { PageHeader } from "@/components/ui";
 import { voidSupplierPaymentAction } from "../../actions";
 
@@ -33,6 +34,7 @@ export default async function PaymentDetailPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={p.number} />
       <PageHeader
         title={
           <>

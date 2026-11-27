@@ -4,6 +4,8 @@
 // your accountant if unsure. This app never files, pays, or sends anything to
 // BIR / eBIRForms. Do NOT add the 0605 annual registration fee (abolished).
 
+import { DEFAULT_SETTINGS } from "../settings/defaults";
+
 /** Page banner on every tax calendar view (replaces per-row “Unverified: ask RDO”). */
 export const TAX_CALENDAR_RULES_BANNER =
   "Dates follow BIR rules. Check with your accountant if unsure.";
@@ -108,8 +110,12 @@ export const TAX_CALENDAR_PAGE = {
   subtitle: TAX_CALENDAR_DISCLAIMER,
 } as const;
 
-/** ICS calendar name (no customer data). */
-export const TAX_CALENDAR_ICS_NAME = "HACIEN tax deadlines (provisional)";
+/** ICS calendar name (no customer data), derived from the app short name. */
+export function taxCalendarIcsName(appShortName: string): string {
+  return `${appShortName} tax deadlines (provisional)`;
+}
+
+export const TAX_CALENDAR_ICS_NAME = taxCalendarIcsName(DEFAULT_SETTINGS.identity.appShortName);
 export const TAX_CALENDAR_ICS_FILENAME = "hacien-tax-calendar.ics";
 
 /** Horizon for the default "Upcoming" list (days) — today through today+90 inclusive. */

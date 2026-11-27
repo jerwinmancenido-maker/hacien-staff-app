@@ -304,7 +304,7 @@ export async function createPurchaseOrdersFromSalesOrder(salesOrderId: string, i
         });
         if (!so) throw new DocRuleError("Sales order not found.");
         if (so.status !== "OPEN") throw new DocRuleError("POs can only be created from an open sales order.");
-        if (so.quote.status !== "WON") throw new DocRuleError("The sales order's quote isn't Won.");
+        if (so.quote && so.quote.status !== "WON") throw new DocRuleError("The sales order's quote isn't Won.");
 
         const items = so.items as SoPoItem[];
         const lineIds = items.filter((item) => !item.isLot).map((item) => item.id);

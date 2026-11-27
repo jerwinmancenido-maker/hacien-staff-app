@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { BOOKS_DISCLAIMER, isRegisterKey, REGISTER_CONFIGS } from "@/lib/books/config";
+import { booksDisclaimer, isRegisterKey, REGISTER_CONFIGS } from "@/lib/books/config";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { parseBooksPeriod } from "@/lib/books/period";
 import { getBookRegister } from "@/lib/services/books";
 import { BooksBanner } from "@/components/books/BooksBanner";
@@ -17,6 +18,7 @@ export default async function BooksRegisterPage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const { register: raw } = await params;
   if (!isRegisterKey(raw)) notFound();
   const config = REGISTER_CONFIGS[raw];
@@ -27,7 +29,7 @@ export default async function BooksRegisterPage({
 
   return (
     <>
-      <PageHeader title={config.title} subtitle={`${config.subtitle} · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title={config.title} subtitle={`${config.subtitle} · ${booksDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)}`} />
       <BooksNav active={raw as BooksTab} />
       <BooksBanner />
       <div className="card">

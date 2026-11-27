@@ -171,6 +171,7 @@ describe("v1 route surface", () => {
       "health/route.ts",
       "items/[id]/route.ts",
       "items/route.ts",
+      "store-orders/route.ts",
     ]);
   });
 });

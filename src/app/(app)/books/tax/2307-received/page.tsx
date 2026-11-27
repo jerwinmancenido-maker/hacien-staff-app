@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { SAWT_CSV_FORMAT_LABEL, TAX_WORKSHEET_DISCLAIMER, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { SAWT_CSV_FORMAT_LABEL, taxWorksheetDisclaimer, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { parseTaxQuarter } from "@/lib/tax/quarters";
 import { getCustomer2307Worksheet } from "@/lib/services/tax-worksheets";
 import { formatPeso } from "@/lib/format";
@@ -16,6 +17,7 @@ export default async function Customer2307WorksheetPage({
   searchParams: Promise<{ year?: string; quarter?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const period = parseTaxQuarter(sp.year, sp.quarter);
   const sheet = await getCustomer2307Worksheet(user, period.year, period.quarter);
@@ -23,7 +25,7 @@ export default async function Customer2307WorksheetPage({
 
   return (
     <>
-      <PageHeader title={TAX_WORKSHEET_PAGES.received2307.title} subtitle={TAX_WORKSHEET_DISCLAIMER} />
+      <PageHeader title={TAX_WORKSHEET_PAGES.received2307.title} subtitle={taxWorksheetDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)} />
       <BooksNav active="tax" />
       <TaxNav active="received2307" />
       <TaxWorksheetBanner />

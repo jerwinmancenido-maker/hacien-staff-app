@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSoAging, pageSoAging, type SoAgingInputRow, type SoAgingSummary } from "@/lib/sales-orders/aging";
+import { buildSoAging, filterSoAging, pageSoAging, type SoAgingInputRow, type SoAgingSummary } from "@/lib/sales-orders/aging";
 
 /**
  * SO aging bucketing (VR1 CEO finding: "no aging anywhere" for sales orders).
@@ -192,5 +192,60 @@ describe("SO aging paging", () => {
     expect(p1.totalPages).toBe(1);
     expect(p1.bands).toEqual(s.bands);
     expect(p1.items).toEqual(flat(s));
+  });
+});
+
+describe("SO aging search + band filter (finding 1300)", () => {
+  function filteredSummary() {
+    return buildSoAging(
+      [
+        row({ number: "SO-2026-0101", customerName: "Alpha Trading", date: daysAgo(10), contractPrice: "1000.00" }),
+        row({ number: "SO-2026-0102", customerName: "Beta Corp", date: daysAgo(10), contractPrice: "2000.00", billedAmounts: ["500.00"] }),
+        row({ number: "SO-2026-0103", customerName: "Alpha Trading", date: daysAgo(45), contractPrice: "4000.00" }),
+        row({ number: "SO-2026-0104", customerName: "Gamma LLC", date: daysAgo(100), contractPrice: "8000.00" }),
+      ],
+      TODAY,
+    );
+  }
+
+  it("narrows by customer name, case-insensitive, and recomputes the totals", () => {
+    const view = filterSoAging(filteredSummary(), "alpha");
+    expect(view.orderCount).toBe(2);
+    expect(view.bands.map((b) => b.bucket)).toEqual(["d1_30", "d31_60"]);
+    expect(view.totalLeftToBill).toBe("5000.00");
+    expect(view.totalContractPrice).toBe("5000.00");
+    expect(view.bands[0]!.rowCount).toBe(1);
+  });
+
+  it("narrows by SO number fragment", () => {
+    const view = filterSoAging(filteredSummary(), "0102");
+    expect(view.orderCount).toBe(1);
+    expect(view.bands[0]!.rows[0]!.number).toBe("SO-2026-0102");
+    expect(view.totalLeftToBill).toBe("1500.00");
+  });
+
+  it("band filter keeps only that band, with or without a query", () => {
+    const s = filteredSummary();
+    const bandOnly = filterSoAging(s, undefined, "d90_plus");
+    expect(bandOnly.orderCount).toBe(1);
+    expect(bandOnly.bands).toHaveLength(1);
+    expect(bandOnly.totalLeftToBill).toBe("8000.00");
+    const both = filterSoAging(s, "alpha", "d90_plus");
+    expect(both.orderCount).toBe(0);
+    expect(both.bands).toEqual([]);
+  });
+
+  it("no query and no band returns the summary unchanged; a blank query does too", () => {
+    const s = filteredSummary();
+    expect(filterSoAging(s)).toBe(s);
+    expect(filterSoAging(s, "   ")).toBe(s);
+  });
+
+  it("a query with no matches empties the view but leaves the source intact", () => {
+    const s = filteredSummary();
+    const view = filterSoAging(s, "no-such-customer");
+    expect(view.orderCount).toBe(0);
+    expect(view.totalLeftToBill).toBe("0.00");
+    expect(s.orderCount).toBe(4);
   });
 });

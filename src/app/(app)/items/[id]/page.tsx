@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canSeeCosts } from "@/lib/permissions";
 import { getItem } from "@/lib/services/items";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { Chip, PageHeader } from "@/components/ui";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { ItemForm } from "@/components/ItemForm";
@@ -35,6 +36,7 @@ export default async function ItemPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={item.name} />
       <PageHeader
         title={item.name}
         subtitle={[item.brand, item.model, item.category].filter(Boolean).join(" · ") || "Catalog item"}

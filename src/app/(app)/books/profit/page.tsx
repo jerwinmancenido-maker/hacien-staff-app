@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { BOOKS_DISCLAIMER } from "@/lib/books/config";
+import { booksDisclaimer } from "@/lib/books/config";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { getMonthlyProfit, profitMonth } from "@/lib/services/profit";
 import { formatDate, formatPeso } from "@/lib/format";
 import { BooksBanner } from "@/components/books/BooksBanner";
@@ -14,6 +15,7 @@ const day = (ymdStr: string) => (ymdStr ? formatDate(new Date(`${ymdStr}T00:00:0
 // live on the billing and payables aging pages, linked below.
 export default async function MonthlyProfitPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const month = profitMonth(sp.month);
   const report = await getMonthlyProfit(month);
@@ -28,7 +30,7 @@ export default async function MonthlyProfitPage({ searchParams }: { searchParams
   );
   return (
     <>
-      <PageHeader title="Monthly profit" subtitle={`Management view, not a BIR book. · ${BOOKS_DISCLAIMER}`} />
+      <PageHeader title="Monthly profit" subtitle={`Management view, not a BIR book. · ${booksDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)}`} />
       <BooksNav active="profit" />
       <BooksBanner />
       <div className="card">

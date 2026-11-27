@@ -11,6 +11,29 @@ import {
   type SettingsStore,
   type SettingsVersionRecord,
 } from "@/lib/settings/service";
+import {
+  BILLING_DISCLAIMER,
+  EWT_2307_NOTE,
+  INPUT_TAX_DISCLAIMER,
+  NON_VAT_LABEL,
+  PACKING_LIST_DISCLAIMER,
+  QUOTATION_NOT_INVOICE,
+  SALES_ORDER_NOT_INVOICE,
+  THANK_YOU,
+} from "@/lib/print/tax-wording";
+import {
+  COD_POINT2_TEXT,
+  QUOTE_SO_TERMS_POINT_4,
+  QUOTE_SO_TERMS_POINT_6,
+  QUOTE_SO_TERMS_POINT_7,
+  TERMS_AND_CONDITIONS_HEADING,
+  quoteSoTermsPoint1,
+  quoteSoTermsPoint2,
+  quoteSoTermsPoint3,
+  quoteSoTermsPoint5,
+} from "@/lib/print/terms-block";
+import { POLICIES_DISPLAY_HOST, POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
+import { settingsSections, type Settings } from "@/lib/settings/schema";
 
 /** In-memory store with the same contract as the Prisma one. */
 function memoryStore(): SettingsStore & { rows: SettingsVersionRecord[] } {
@@ -322,5 +345,155 @@ describe("settings forms", () => {
     expect(changedLeaves({ quote: { prefix: "Q", padding: 4 } }, { quote: { prefix: "QT", padding: 4 } })).toEqual([
       { key: "quote.prefix", before: "Q", after: "QT" },
     ]);
+  });
+});
+
+describe("company profile slice 1 — identity & wording defaults", () => {
+  it("seeds identity with today's hard-coded values, verbatim", () => {
+    expect(DEFAULT_SETTINGS.identity).toEqual({
+      policiesUrl: POLICIES_URL,
+      policiesDisplayHost: POLICIES_DISPLAY_HOST,
+      policyVersionLine: POLICY_VERSION_LINE,
+      // src/lib/messaging/providers.ts DEFAULT_SMS_SENDER_ID (env still overrides).
+      smsSenderId: "Hacien ITS",
+      // The "hacien-" download prefix of the nine CSV export routes.
+      csvFilePrefix: "hacien",
+      // src/app/layout.tsx title + public/site.webmanifest name / short_name.
+      appTitle: "HACIEN Staff",
+      appShortName: "HACIEN",
+    });
+    // BUSINESS_IS_VAT_REGISTERED = false in src/lib/tax/constants.ts.
+    expect(DEFAULT_SETTINGS.taxYear.isVatRegistered).toBe(false);
+  });
+
+  it("seeds the wording section word-for-word from the print constants", () => {
+    const w = DEFAULT_SETTINGS.wording;
+    expect(w.nonVatLabel).toBe(NON_VAT_LABEL);
+    expect(w.inputTaxDisclaimer).toBe(INPUT_TAX_DISCLAIMER);
+    expect(w.billingDisclaimer).toBe(BILLING_DISCLAIMER);
+    expect(w.packingListDisclaimer).toBe(PACKING_LIST_DISCLAIMER);
+    expect(w.ewt2307Note).toBe(EWT_2307_NOTE);
+    expect(w.thankYou).toBe(THANK_YOU);
+    expect(w.quotationNotInvoice).toBe(QUOTATION_NOT_INVOICE);
+    expect(w.salesOrderNotInvoice).toBe(SALES_ORDER_NOT_INVOICE);
+    expect(w.termsHeading).toBe(TERMS_AND_CONDITIONS_HEADING);
+    expect(w.termsPoint2Cod).toBe(COD_POINT2_TEXT);
+    expect(w.termsPoint4).toBe(QUOTE_SO_TERMS_POINT_4);
+    expect(w.termsPoint6).toBe(QUOTE_SO_TERMS_POINT_6);
+    expect(w.termsPoint7).toBe(QUOTE_SO_TERMS_POINT_7);
+    expect(w.termsLateInterestPctPerYear).toBe(24);
+    expect(w.termsAttorneysFeesPct).toBe(25);
+  });
+
+  it("rebuilds the printed terms block from the wording values exactly", () => {
+    const w = DEFAULT_SETTINGS.wording;
+    // Point 1: validity sentence + body, default and custom days.
+    expect(`${w.termsPoint1ValidityDefault} ${w.termsPoint1Body}`).toBe(quoteSoTermsPoint1(15));
+    expect(`${w.termsPoint1ValidityCustom.replace("{days}", "30")} ${w.termsPoint1Body}`).toBe(quoteSoTermsPoint1(30));
+    // Point 2: each payment variant is its sentence + the anti-fraud sentence.
+    expect(`${w.termsPoint2Upfront} ${w.termsPaymentAntiFraud}`).toBe(
+      quoteSoTermsPoint2("100% upfront (software and special orders)"),
+    );
+    expect(`${w.termsPoint2FiftyFifty} ${w.termsPaymentAntiFraud}`).toBe(quoteSoTermsPoint2("50% down, 50% on delivery"));
+    expect(`${w.termsPoint2Net30} ${w.termsPaymentAntiFraud}`).toBe(quoteSoTermsPoint2("Net 30 (approved accounts only)"));
+    expect(w.termsPoint2Cod).toBe(quoteSoTermsPoint2("COD"));
+    expect(`Payment: Pay on signing. ${w.termsCustomTermsAntiFraud}`).toBe(quoteSoTermsPoint2("Pay on signing"));
+    expect(`Payment: ${w.termsPaymentAntiFraud}`).toBe(quoteSoTermsPoint2(null));
+    // Point 3: lead-time template and the no-figure variant.
+    expect(w.termsPoint3WithLeadTime.replace("{days}", "9")).toBe(quoteSoTermsPoint3(9));
+    expect(w.termsPoint3NoLeadTime).toBe(quoteSoTermsPoint3(null));
+    // Point 5: goods and services-only variants.
+    expect(w.termsPoint5Goods).toBe(quoteSoTermsPoint5(false));
+    expect(w.termsPoint5Services).toBe(quoteSoTermsPoint5(true));
+    // The stored figures are the figures inside point 7's text.
+    expect(w.termsPoint7).toContain(`${w.termsLateInterestPctPerYear}% interest a year`);
+    expect(w.termsPoint7).toContain(`${w.termsAttorneysFeesPct}% attorney's fees`);
+  });
+});
+
+describe("company profile slice 1 — pre-fill on read (no data migration)", () => {
+  it("an old snapshot without identity/wording/isVatRegistered reads back with the seeded values", async () => {
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    // Simulate a pre-slice-1 stored snapshot: the new sections/field absent.
+    const oldData = structuredClone(v1.settings) as unknown as Record<string, unknown>;
+    delete oldData.identity;
+    delete oldData.wording;
+    delete (oldData.taxYear as Record<string, unknown>).isVatRegistered;
+    await store.create({
+      version: 2,
+      data: oldData as unknown as Settings,
+      changedKey: null,
+      before: null,
+      after: null,
+      createdById: null,
+    });
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.version).toBe(2);
+    expect(snap.settings.identity).toEqual(DEFAULT_SETTINGS.identity);
+    expect(snap.settings.wording).toEqual(DEFAULT_SETTINGS.wording);
+    expect(snap.settings.taxYear.isVatRegistered).toBe(false);
+    // Pinned reads (documents created under that version) take the same path.
+    const pinned = await getSettingsVersion(store, snap.versionId);
+    expect(pinned?.settings.identity).toEqual(DEFAULT_SETTINGS.identity);
+    expect(pinned?.settings.wording).toEqual(DEFAULT_SETTINGS.wording);
+  });
+
+  it("saves identity and wording sections as new versions", async () => {
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    const res = await saveSettingsSection(store, {
+      key: "identity",
+      value: { ...v1.settings.identity, smsSenderId: "ACME Corp" },
+      userId: "a",
+      baseVersionId: v1.versionId,
+    });
+    expect(res.ok && res.changed).toBe(true);
+    const snap = await getSettingsSnapshot(store);
+    expect(snap.settings.identity.smsSenderId).toBe("ACME Corp");
+    expect(snap.settings.identity.policiesUrl).toBe(POLICIES_URL);
+
+    const res2 = await saveSettingsSection(store, {
+      key: "wording",
+      value: { ...snap.settings.wording, thankYou: "Thank you" },
+      userId: "a",
+      baseVersionId: snap.versionId,
+    });
+    expect(res2.ok && res2.changed).toBe(true);
+    const snap2 = await getSettingsSnapshot(store);
+    expect(snap2.settings.wording.thankYou).toBe("Thank you");
+    // The rest of the wording section carried through untouched.
+    expect(snap2.settings.wording.billingDisclaimer).toBe(BILLING_DISCLAIMER);
+  });
+
+  it("rejects a blanked legal text and saves nothing", async () => {
+    const store = memoryStore();
+    const v1 = await getSettingsSnapshot(store);
+    const res = await saveSettingsSection(store, {
+      key: "wording",
+      value: { ...v1.settings.wording, billingDisclaimer: "  " },
+      userId: "a",
+      baseVersionId: v1.versionId,
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected errors");
+    expect(res.fieldErrors.billingDisclaimer).toMatch(/blank/);
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("reads identity, wording and the VAT flag from submitted forms", () => {
+    const strings: Record<string, string> = {
+      ...DEFAULT_SETTINGS.identity,
+      ...Object.fromEntries(Object.entries(DEFAULT_SETTINGS.wording).map(([k, v]) => [k, String(v)])),
+    };
+    const get = (n: string) => strings[n] ?? null;
+    expect(settingsValueFromForm("identity", get)).toEqual(DEFAULT_SETTINGS.identity);
+    // Form values are strings; the section schema coerces the two figures.
+    expect(settingsSections.wording.parse(settingsValueFromForm("wording", get))).toEqual(DEFAULT_SETTINGS.wording);
+
+    const taxYear = settingsValueFromForm("taxYear", (n) =>
+      n === "isVatRegistered" ? "true" : null,
+    ) as { isVatRegistered: boolean };
+    expect(taxYear.isVatRegistered).toBe(true);
   });
 });

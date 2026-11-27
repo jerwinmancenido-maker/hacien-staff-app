@@ -19,6 +19,7 @@ import { Breadcrumb, BreadcrumbLabelProvider, SidebarNav } from "@/components/Si
 import { Avatar } from "@/components/ui";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { getNotifications } from "@/lib/notifications";
+import { countPaidStoreOrders } from "@/lib/store-orders/views";
 import { TopbarSearch } from "@/components/TopbarSearch";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     payablesEnabled,
     meter,
     booksEnabled,
+    settings,
   } = await withConnectionRetry(async () => {
     const sessionLimits = await currentSessionLimits();
     const { settings } = await getSettingsSnapshot();
@@ -42,16 +44,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
     const meter = await getNonVatMeter(settings.taxYear);
     const booksEnabled = await isBooksEnabled();
-    return { sessionLimits, cashEnabled, payablesEnabled, meter, booksEnabled };
+    return { sessionLimits, cashEnabled, payablesEnabled, meter, booksEnabled, settings };
   });
   const milestoneMessage = NON_VAT_MESSAGES[meter.level];
   const milestoneTitle = homeNonVatTitle();
   const canOpenSettings = can(user, "manage_settings");
+  const storeOrdersPaidCount = can(user, "edit_data") ? await countPaidStoreOrders() : 0;
 
   const sidebar = (
     <>
       <div className="brand">
-        <Link href="/" className="brand-link" aria-label="HACIEN home">
+        <Link href="/" className="brand-link" aria-label={`${settings.identity.appShortName} home`}>
           <BrandLogo variant="wordmark" />
         </Link>
       </div>
@@ -63,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         booksEnabled={booksEnabled}
         cashEnabled={cashEnabled}
         payablesEnabled={payablesEnabled}
+        storeOrdersPaidCount={storeOrdersPaidCount}
       />
       <div className="sidebar-spacer" />
       <a
@@ -126,7 +130,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <BreadcrumbLabelProvider>
-      <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb />} topbarRight={topbarRight}>
+      <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb rootLabel={settings.identity.appShortName} />} topbarRight={topbarRight}>
         <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
         {children}
       </AppFrame>

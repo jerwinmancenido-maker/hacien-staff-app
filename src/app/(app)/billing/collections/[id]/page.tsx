@@ -12,6 +12,7 @@ import { BillingNav } from "@/components/billing/BillingNav";
 import { CollectionStatusChip, MethodLabel, PRINTABLE_DISCLAIMER } from "@/components/billing/BillingParts";
 import { DeleteButton, VoidButton } from "@/components/purchasing/DocButtons";
 import { PillTabs } from "@/components/PillTabs";
+import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { Chip, PageHeader } from "@/components/ui";
 import { deleteCollectionAction, markCollectionCheckedAction, voidCollectionAction } from "../../actions";
 
@@ -41,6 +42,7 @@ export default async function CollectionDetailPage({
 
   return (
     <>
+      <RecordBreadcrumbLabel label={c.number} />
       <PageHeader
         title={
           <>

@@ -6,18 +6,19 @@ import {
   COLLECTED_TOTAL_LABEL,
   INCOME_TAX_LINE_HINTS,
   INVOICED_TOTAL_LABEL,
-  OVER_THRESHOLD_WARNING,
+  overThresholdWarning,
   TAX_BASIS_UNVERIFIED_NOTE,
-  TAX_WORKSHEET_DISCLAIMER,
+  TAX_WORKSHEET_BANNER,
+  taxWorksheetDisclaimer,
   TAX_WORKSHEET_PAGES,
 } from "@/lib/tax/constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { parseTaxQuarter } from "@/lib/tax/quarters";
 import { getIncomeTaxWorksheet } from "@/lib/services/tax-worksheets";
 import { formatPeso } from "@/lib/format";
 import { BooksNav } from "@/components/books/BooksNav";
 import { TaxNav } from "@/components/books/TaxNav";
 import { TaxQuarterFilters } from "@/components/books/TaxQuarterFilters";
-import { TaxWorksheetBanner } from "@/components/books/TaxWorksheetBanner";
 import { TaxPaidForm } from "@/components/books/TaxPaidForm";
 import { EmptyState, PageHeader } from "@/components/ui";
 
@@ -63,7 +64,7 @@ function DualLine({
         <b>({letter})</b>
       </td>
       <td>
-        <div>{label}</div>
+        <div className="line-label">{label}</div>
         {hint ? <div className="faint small">{hint}</div> : null}
       </td>
       <td className="num tax-income-main" style={{ whiteSpace: "nowrap", fontWeight: 600, fontSize: "1.05em" }}>
@@ -92,6 +93,7 @@ export default async function IncomeTaxWorksheetPage({
   searchParams: Promise<{ year?: string; quarter?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const period = parseTaxQuarter(sp.year, sp.quarter);
   const sheet = await getIncomeTaxWorksheet(user, period.year, period.quarter);
@@ -108,10 +110,9 @@ export default async function IncomeTaxWorksheetPage({
 
   return (
     <>
-      <PageHeader title={TAX_WORKSHEET_PAGES.income.title} subtitle={TAX_WORKSHEET_DISCLAIMER} />
+      <PageHeader title={TAX_WORKSHEET_PAGES.income.title} subtitle={taxWorksheetDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)} />
       <BooksNav active="tax" />
       <TaxNav active="income" />
-      <TaxWorksheetBanner />
       <div className="card">
         <TaxQuarterFilters
           basePath="/books/tax/income"
@@ -124,29 +125,34 @@ export default async function IncomeTaxWorksheetPage({
           <p className="faint small">Showing the latest finished quarter ({bounds.label}).</p>
         ) : null}
 
+        {/* Finding 1024: ONE consolidated pre-table notice block — the worksheet
+            banner, the basis note with its line-(a) hint, and the line-(a) prose,
+            moved together verbatim (governed wording is moved, never reworded). */}
         <div className="alert warn" role="status" style={{ marginBottom: 16 }}>
-          <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
+          <b>{TAX_WORKSHEET_BANNER}</b>
+          <div style={{ marginTop: 4 }}>
+            <b>{TAX_BASIS_UNVERIFIED_NOTE}</b>
+          </div>
           <div className="small" style={{ marginTop: 4 }}>
             {INCOME_TAX_LINE_HINTS.a} The 8% math is unchanged; Collected is kept only as a reference
             column.
+          </div>
+          <div className="small" style={{ marginTop: 4 }}>
+            Invoiced basis (line a): gross billings {formatPeso(sheet.invoicedGrossTotal)}, less customer returns{" "}
+            {formatPeso(sheet.invoicedReturnsTotal)}, net {formatPeso(sheet.invoicedTotal)}. Returns count in the
+            period they were posted; the collected column is not reduced by returns.
           </div>
         </div>
 
         {sheet.overThreshold ? (
           <div className="alert error" role="alert" style={{ marginBottom: 16 }}>
-            <b>{OVER_THRESHOLD_WARNING}</b>
+            <b>{overThresholdWarning(settings.taxYear.nonVatLimit)}</b>
           </div>
         ) : null}
 
         {empty ? (
           <EmptyState title="No figures yet" line={TAX_WORKSHEET_PAGES.income.empty} />
         ) : null}
-
-        <p className="small" style={{ marginBottom: 12 }}>
-          Invoiced basis (line a): gross billings {formatPeso(sheet.invoicedGrossTotal)}, less customer returns{" "}
-          {formatPeso(sheet.invoicedReturnsTotal)}, net {formatPeso(sheet.invoicedTotal)}. Returns count in the
-          period they were posted; the collected column is not reduced by returns.
-        </p>
 
         <table className="data-table tax-income-worksheet" style={{ marginTop: empty ? 16 : 0 }}>
           <thead>

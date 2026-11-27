@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { TAX_WORKSHEET_DISCLAIMER, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { taxWorksheetDisclaimer, TAX_WORKSHEET_PAGES } from "@/lib/tax/constants";
+import { getSettingsSnapshot } from "@/lib/settings";
 import { latestFinishedQuarter } from "@/lib/tax/quarters";
 import { getSalesSummaryWorksheet } from "@/lib/services/tax-worksheets";
 import { formatPeso } from "@/lib/format";
@@ -16,6 +17,7 @@ export default async function SalesSummaryWorksheetPage({
   searchParams: Promise<{ year?: string }>;
 }) {
   const user = await requirePagePermission("view_books");
+  const { settings } = await getSettingsSnapshot();
   const sp = await searchParams;
   const finished = latestFinishedQuarter();
   const yearNum = sp.year ? Number(sp.year) : finished.year;
@@ -24,7 +26,7 @@ export default async function SalesSummaryWorksheetPage({
 
   return (
     <>
-      <PageHeader title={TAX_WORKSHEET_PAGES.salesSummary.title} subtitle={TAX_WORKSHEET_DISCLAIMER} />
+      <PageHeader title={TAX_WORKSHEET_PAGES.salesSummary.title} subtitle={taxWorksheetDisclaimer(settings.identity.appShortName, settings.taxYear.isVatRegistered)} />
       <BooksNav active="tax" />
       <TaxNav active="salesSummary" />
       <TaxWorksheetBanner />

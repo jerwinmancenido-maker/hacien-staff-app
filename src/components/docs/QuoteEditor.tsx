@@ -11,6 +11,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WithholdingPickField } from "@/components/WithholdingPickField";
 import { amountInWords } from "@/lib/print/amount-in-words";
+import { POLICIES_DISPLAY_HOST, POLICIES_URL } from "@/lib/print/policies";
 import { pickerKeyIntent } from "@/lib/picker-keys";
 import {
   COST_NOT_SET_LABEL,
@@ -67,6 +68,7 @@ import { parseTypedValidityDays, validUntilFromDays, validityDaysFromDates } fro
 import { AddAddressDialog, Modal } from "./Dialogs";
 import type { CatalogSearchResult } from "@/lib/items/search";
 import { pickerSearchOutcome } from "@/lib/items/picker-search";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export type { EditorCustomer, EditorInitial, EditorItem };
 
@@ -117,6 +119,11 @@ export type QuoteEditorProps = {
    * renders only when a business exists or the quote already carries one. */
   businesses?: { id: string; name: string; shortLabel: string }[];
   ownCompanyName?: string;
+  /** Policies link for the terms note (Company Profile slice 2, census
+   * F2): the parent page passes Settings identity; the settled constants
+   * are the fallback. */
+  policiesUrl?: string;
+  policiesDisplayHost?: string;
   canTagBusiness?: boolean;
   initialBusinessId?: string | null;
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -323,7 +330,9 @@ export function QuoteEditor({
   canApprove = false,
   approvalLimits,
   businesses = [],
-  ownCompanyName = "HACIEN",
+  ownCompanyName = FALLBACK_SHORT_NAME,
+  policiesUrl = POLICIES_URL,
+  policiesDisplayHost = POLICIES_DISPLAY_HOST,
   canTagBusiness = false,
   initialBusinessId = null,
 }: QuoteEditorProps) {
@@ -1812,7 +1821,7 @@ export function QuoteEditor({
                         </div>
                         <div className="quote-ln-price">
                           <input
-                            aria-label={`Line ${idx + 1} HACIEN unit price`}
+                            aria-label={`Line ${idx + 1} ${ownCompanyName} unit price`}
                             inputMode="decimal"
                             value={i.unitPrice}
                             onChange={(ev) => setItem(i.key, { unitPrice: formatMoneyInput(ev.target.value) })}
@@ -2248,7 +2257,7 @@ export function QuoteEditor({
                           </label>
                           <input
                             id={`m-price-${i.key}`}
-                            aria-label={`Line ${idx + 1} HACIEN unit price`}
+                            aria-label={`Line ${idx + 1} ${ownCompanyName} unit price`}
                             inputMode="decimal"
                             value={i.unitPrice}
                             placeholder="Price"
@@ -2729,7 +2738,7 @@ export function QuoteEditor({
               <div className="quote-f field full">
                 <span className="label">Full terms</span>
                 <div>
-                  See the full terms at <a href="https://haciensolutions.com/policies" target="_blank" rel="noopener noreferrer">haciensolutions.com/policies</a> — the printed quote also carries them as a QR code.
+                  See the full terms at <a href={policiesUrl} target="_blank" rel="noopener noreferrer">{policiesDisplayHost}</a> — the printed quote also carries them as a QR code.
                 </div>
               </div>
 

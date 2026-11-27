@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { formatPeso } from "@/lib/format";
 import { Chip, type ChipTone } from "@/components/ui";
 import { COST_NOT_SET_LABEL, lineCostMissing, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
+import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
 const QUOTE_TONES: Record<string, ChipTone> = { DRAFT: "grey", SENT: "blue", WON: "green", LOST: "red", VOID: "red" };
@@ -76,7 +77,16 @@ export type ItemsTableRow = {
 
 const qtyText = (q: string) => q.replace(/\.00$/, "");
 
-export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showCosts: boolean }) {
+export function ItemsTable({
+  items,
+  showCosts,
+  shortName = FALLBACK_SHORT_NAME,
+}: {
+  items: ItemsTableRow[];
+  showCosts: boolean;
+  /** Own-company name for the price column header (Settings → Company). */
+  shortName?: string;
+}) {
   return (
     <div className="table-wrap items-table">
       <table className="list" aria-label="Items">
@@ -88,8 +98,8 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
             <th className="col-tab-hide">Unit</th>
             {showCosts && <th className="col-phone-hide">Supplier</th>}
             {showCosts && <th className="num col-phone-hide">Supplier unit</th>}
-            {showCosts && <th className="num">Supplier total</th>}
-            <th className="num">HACIEN price</th>
+            {showCosts && <th className="num" style={{ whiteSpace: "nowrap" }}>Supplier total</th>}
+            <th className="num" style={{ whiteSpace: "nowrap" }}>{shortName} price</th>
             <th className="num">Total</th>
             {showCosts && <th className="num">Margin</th>}
           </tr>
@@ -99,7 +109,7 @@ export function ItemsTable({ items, showCosts }: { items: ItemsTableRow[]; showC
             <tr key={i.id}>
               <td className="faint">{n + 1}</td>
               <td>
-                <div className="strong" style={{ whiteSpace: "pre-wrap" }}>
+                <div className="strong items-desc" title={i.description} style={{ whiteSpace: "pre-wrap" }}>
                   {i.description}
                 </div>
                 <div className="small muted">{i.kind === "SERVICES" ? "Services" : "Goods"}</div>

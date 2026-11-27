@@ -56,6 +56,8 @@ const SECTION_BY_TAB: Record<string, Section> = {
   company: "company",
   print: "company",
   features: "company",
+  identity: "company",
+  wording: "company",
   documents: "documents",
   numbering: "documents",
   "quote-terms": "quote-terms",
@@ -216,6 +218,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 ],
                 hint: "Loose-leaf due Jan 15; computerized due Jan 30 — both rolled to the next working day when they fall on a weekend or holiday.",
               },
+              {
+                name: "isVatRegistered",
+                label: "Company is VAT-registered",
+                kind: "checkbox",
+                value: s.taxYear.isVatRegistered,
+                hint: "Off today — the company is NON-VAT on the 8% income-tax option. This records the tax posture in one place; check with your accountant before changing it.",
+              },
               { name: "nonVatLimit", label: "Non-VAT sales limit", kind: "number", value: s.taxYear.nonVatLimit, prefix: "₱", hint: `Now ${formatPeso(s.taxYear.nonVatLimit)}` },
               { name: "warnFirstPct", label: "First warning at", kind: "number", value: s.taxYear.warnFirstPct, suffix: "% of the limit" },
               { name: "warnSecondPct", label: "Second warning at", kind: "number", value: s.taxYear.warnSecondPct, suffix: "% of the limit" },
@@ -336,7 +345,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 label: "Enable Payables 2307 to issue (withholding agent)",
                 kind: "checkbox",
                 value: s.features.payables2307Enabled,
-                hint: "OFF by default. Leave OFF — HACIEN does not withhold tax from suppliers unless tagged by BIR as a withholding agent.",
+                hint: `OFF by default. Leave OFF — ${s.identity.appShortName} does not withhold tax from suppliers unless tagged by BIR as a withholding agent.`,
               },
               {
                 name: "itemsImportEnabled",
@@ -371,6 +380,68 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             action={savePrintCompanyAction}
             maxMb={uploadMaxMb()}
           />
+        )}
+
+        {section === "company" && (
+          <SettingsForm
+            title="App identity"
+            label={SETTINGS_LABELS.identity}
+            versionId={snap.versionId}
+            action={save("identity")}
+            fields={[
+              { name: "policiesUrl", label: "Policies page URL", kind: "text", value: s.identity.policiesUrl, hint: "Printed as a QR code and link on quote and sales-order prints.", full: true },
+              { name: "policiesDisplayHost", label: "Policies link, shown as text", kind: "text", value: s.identity.policiesDisplayHost },
+              { name: "policyVersionLine", label: "Policy version line", kind: "text", value: s.identity.policyVersionLine, hint: "Footer line on customer-facing prints. Bumping a version waits for the retained lawyer's confirmation.", full: true },
+              { name: "smsSenderId", label: "SMS sender ID (default)", kind: "text", value: s.identity.smsSenderId, hint: "The UNISMS_SENDER_ID environment setting still overrides this at send time." },
+              { name: "csvFilePrefix", label: "CSV export filename prefix", kind: "text", value: s.identity.csvFilePrefix, hint: "Downloads are named <prefix>-<register>-…. Leave blank for no prefix." },
+              { name: "appTitle", label: "App title", kind: "text", value: s.identity.appTitle, hint: "Browser tab title, and the installed app's full name." },
+              { name: "appShortName", label: "App short name", kind: "text", value: s.identity.appShortName, hint: "The installed app's short name." },
+            ]}
+          />
+        )}
+
+        {section === "company" && (
+          <>
+            <p className="faint small settings-tab-link">
+              Lawyer-governed texts (BIR-WORDING.md): the wording below is the settled legal text printed on
+              documents. Changing any of it needs Jerwin&apos;s approval and legal verification first.
+            </p>
+            <SettingsForm
+              title="Print wording (lawyer-governed)"
+              label={SETTINGS_LABELS.wording}
+              versionId={snap.versionId}
+              action={save("wording")}
+              fields={[
+                { group: "Document wording", name: "nonVatLabel", label: "Registration label on letterheads", kind: "text", value: s.wording.nonVatLabel },
+                { group: "Document wording", name: "inputTaxDisclaimer", label: "Input-tax disclaimer (billing & collection)", kind: "textarea", value: s.wording.inputTaxDisclaimer },
+                { group: "Document wording", name: "billingDisclaimer", label: "Billing disclaimer (the one disclaimer)", kind: "textarea", value: s.wording.billingDisclaimer },
+                { group: "Document wording", name: "packingListDisclaimer", label: "Packing list disclaimer", kind: "textarea", value: s.wording.packingListDisclaimer },
+                { group: "Document wording", name: "ewt2307Note", label: "2307 note (supplier payment voucher)", kind: "textarea", value: s.wording.ewt2307Note },
+                { group: "Document wording", name: "thankYou", label: "Thank-you line", kind: "text", value: s.wording.thankYou },
+                { group: "Document wording", name: "quotationNotInvoice", label: "Quotation footer line", kind: "text", value: s.wording.quotationNotInvoice },
+                { group: "Document wording", name: "salesOrderNotInvoice", label: "Sales order footer line", kind: "text", value: s.wording.salesOrderNotInvoice },
+                { group: "Terms of Sale — points 1 to 3", name: "termsHeading", label: "Terms heading", kind: "text", value: s.wording.termsHeading },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint1ValidityDefault", label: "Point 1 — validity sentence (default)", kind: "textarea", value: s.wording.termsPoint1ValidityDefault },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint1ValidityCustom", label: "Point 1 — validity sentence (custom days; keep {days})", kind: "text", value: s.wording.termsPoint1ValidityCustom },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint1Body", label: "Point 1 — body", kind: "textarea", value: s.wording.termsPoint1Body },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint2Upfront", label: "Point 2 — 100% upfront", kind: "textarea", value: s.wording.termsPoint2Upfront },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint2FiftyFifty", label: "Point 2 — 50% down, 50% on delivery", kind: "textarea", value: s.wording.termsPoint2FiftyFifty },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint2Net30", label: "Point 2 — Net 30", kind: "textarea", value: s.wording.termsPoint2Net30 },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint2Cod", label: "Point 2 — COD (Option 1A)", kind: "textarea", value: s.wording.termsPoint2Cod },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPaymentAntiFraud", label: "Point 2 — anti-fraud sentence (standard)", kind: "textarea", value: s.wording.termsPaymentAntiFraud },
+                { group: "Terms of Sale — points 1 to 3", name: "termsCustomTermsAntiFraud", label: "Point 2 — anti-fraud sentence (custom terms, Option 3A)", kind: "textarea", value: s.wording.termsCustomTermsAntiFraud },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint3WithLeadTime", label: "Point 3 — with lead time (keep {days})", kind: "textarea", value: s.wording.termsPoint3WithLeadTime },
+                { group: "Terms of Sale — points 1 to 3", name: "termsPoint3NoLeadTime", label: "Point 3 — no lead time", kind: "textarea", value: s.wording.termsPoint3NoLeadTime },
+                { group: "Terms of Sale — points 4 to 7", name: "termsPoint4", label: "Point 4 — delivery & damage reporting", kind: "textarea", value: s.wording.termsPoint4 },
+                { group: "Terms of Sale — points 4 to 7", name: "termsPoint5Goods", label: "Point 5A — warranty (goods)", kind: "textarea", value: s.wording.termsPoint5Goods },
+                { group: "Terms of Sale — points 4 to 7", name: "termsPoint5Services", label: "Point 5B — warranty (services only)", kind: "textarea", value: s.wording.termsPoint5Services },
+                { group: "Terms of Sale — points 4 to 7", name: "termsPoint6", label: "Point 6 — withholding tax", kind: "textarea", value: s.wording.termsPoint6 },
+                { group: "Terms of Sale — points 4 to 7", name: "termsPoint7", label: "Point 7 — ownership, late payment & venue", kind: "textarea", value: s.wording.termsPoint7 },
+                { group: "Terms figures", name: "termsLateInterestPctPerYear", label: "Late-payment interest (point 7)", kind: "number", value: s.wording.termsLateInterestPctPerYear, suffix: "% a year" },
+                { group: "Terms figures", name: "termsAttorneysFeesPct", label: "Attorney's fees (point 7)", kind: "number", value: s.wording.termsAttorneysFeesPct, suffix: "%" },
+              ]}
+            />
+          </>
         )}
 
         {section === "quote-terms" && (
