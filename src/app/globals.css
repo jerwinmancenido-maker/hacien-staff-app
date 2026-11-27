@@ -325,6 +325,21 @@ textarea {
   white-space: nowrap;
 }
 
+.nav-item .nav-badge {
+  margin-left: auto;
+  min-width: calc(18px * var(--ui-scale, 1));
+  height: calc(18px * var(--ui-scale, 1));
+  padding: 0 calc(5px * var(--ui-scale, 1));
+  border-radius: calc(9px * var(--ui-scale, 1));
+  background: var(--card);
+  border: 1px solid var(--danger-outline);
+  color: var(--red);
+  font-size: calc(11px * var(--ui-scale, 1));
+  line-height: calc(16px * var(--ui-scale, 1));
+  text-align: center;
+  white-space: nowrap;
+}
+
 .sidebar-spacer {
   flex: 1;
 }
