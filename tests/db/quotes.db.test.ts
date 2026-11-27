@@ -166,9 +166,9 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
 
   // -------------------------------------------------------------------------
   describe("withholding", () => {
-    it("new government default pick → goods WI640 1%, services WI157 2%, centavo total, no 3%", async () => {
+    it("new government default pick → 6% stack (1% kind + 5% whole-total), centavo total, no 3%", async () => {
       const pick = defaultWithholdingPickFor("GOVERNMENT");
-      expect(pick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+      expect(pick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
       const customer = await makeCustomer(pick, "GOVERNMENT");
       const q = await createQuote(
         quoteInput(customer.id, await freshYear(), {
@@ -181,17 +181,21 @@ describe.skipIf(!hasDb)("quotes and sales orders (MySQL)", () => {
       );
       const goods = q.items.find((i) => i.kind === "GOODS")!;
       const services = q.items.find((i) => i.kind === "SERVICES")!;
-      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0100");
-      expect(goods.withholdingAtc).toBe("WI640");
-      expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0200");
-      expect(services.withholdingAtc).toBe("WI157");
-      // 100.50 × 1% = 1.01; 1.25 × 2% = 0.03
-      expect(q.withholdingTotal.toFixed(2)).toBe("1.04");
+      // Each line stacks its kind's 1% with the whole-total 5% → combined 6%,
+      // stored with no single ATC (a stacked rate never borrows one ATC).
+      expect(Number(goods.withholdingRate).toFixed(4)).toBe("0.0600");
+      expect(goods.withholdingAtc).toBeNull();
+      expect(Number(services.withholdingRate).toFixed(4)).toBe("0.0600");
+      expect(services.withholdingAtc).toBeNull();
+      // Parts (half-up each): goods 100.50 × 1% = 1.01; services 1.25 × 1% = 0.01;
+      // whole contract 101.75 × 5% = 5.09. Total 6.11 on a 101.75 contract.
+      expect(q.withholdingTotal.toFixed(2)).toBe("6.11");
       expect(q.contractPrice.toFixed(2)).toBe("101.75");
-      expect(q.netReceived.toFixed(2)).toBe("100.71");
-      expect(q.withholdingPick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_2"]);
+      expect(q.netReceived.toFixed(2)).toBe("95.64");
+      expect(q.withholdingPick).toEqual(["GOV_GOODS_1", "GOV_SERVICES_1", "GOV_VAT_5"]);
       expect(JSON.stringify(q.withholding)).not.toContain("WB080");
       expect(JSON.stringify(q.withholding)).not.toContain("GOV_PT_3");
+      expect(JSON.stringify(q.withholding)).not.toContain("WI157");
     });
 
     it("an old government customer's saved 3% pick is not replaced on save or on a new quote", async () => {
