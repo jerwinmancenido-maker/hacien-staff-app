@@ -17,6 +17,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
+import { BusinessReclassifyForm } from "@/app/(app)/sales-orders/[id]/BusinessReclassifyForm";
+import { GapReasonForm } from "./GapReasonForm";
 import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView, type NewAddressFields } from "./Dialogs";
 import type { EditorAddressOption } from "./DocumentEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -408,9 +410,11 @@ type SoProps = {
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string }) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId, isAdmin = false, ownCompanyName, currentBusinessId = null, businesses = [], reclassifyBusinessAction, showGapNote = false, gapPartial = false, gapReasonCode = null, currentGapNote = null, setGapReasonAction }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string; isAdmin?: boolean; ownCompanyName?: string; currentBusinessId?: string | null; businesses?: { id: string; name: string; active: boolean }[]; reclassifyBusinessAction?: (state: FormState, form: FormData) => Promise<FormState>; showGapNote?: boolean; gapPartial?: boolean; gapReasonCode?: string | null; currentGapNote?: string | null; setGapReasonAction?: (state: FormState, form: FormData) => Promise<FormState> }) {
   const [voiding, setVoiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [businessOpen, setBusinessOpen] = useState(false);
+  const [gapNoteOpen, setGapNoteOpen] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
   // S-66: Record billing and Create POs used to sit beside the menu as
@@ -418,6 +422,11 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
   if (canBill) items.push({ key: "record-billing", label: "Record billing", href: `/billing/billings/new?salesOrderId=${id}` });
   if (canCollect && customerId) items.push({ key: "record-collection", label: "Record collection", href: `/billing/collections/new?customerId=${customerId}` });
   if (canCreatePos) items.push({ key: "create-pos", label: "Create POs", href: `/sales-orders/${id}/purchase-orders` });
+  // REQ-SO-ACTIONS-MOVE-001: the Business card and the billing gap-note
+  // card moved off the page body into this menu; each item opens the
+  // existing form in a dialog, under the same conditions as the cards.
+  if (isAdmin && reclassifyBusinessAction) items.push({ key: "change-business", label: "Change business…", onSelect: () => setBusinessOpen(true) });
+  if (showGapNote && setGapReasonAction) items.push({ key: "billing-gap-note", label: "Billing gap note…", onSelect: () => setGapNoteOpen(true) });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
   // S-87: one "Print billing statement" entry per billing, opening the
   // existing billing-statement print (never a sales invoice — the official
@@ -449,6 +458,26 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
           onClose={() => setDeleting(false)}
           onDelete={(reason) => deleteAction(id, reason)}
         />
+      )}
+      {businessOpen && reclassifyBusinessAction && ownCompanyName !== undefined && (
+        <Modal title="Change business" onClose={() => setBusinessOpen(false)} labelId="so-change-business-title">
+          <BusinessReclassifyForm ownCompanyName={ownCompanyName} currentBusinessId={currentBusinessId} businesses={businesses} action={reclassifyBusinessAction} />
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setBusinessOpen(false)}>
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
+      {gapNoteOpen && setGapReasonAction && (
+        <Modal title="Billing gap note" onClose={() => setGapNoteOpen(false)} labelId="so-gap-note-title">
+          <GapReasonForm kind="SO" currentCode={gapReasonCode} currentNote={currentGapNote} action={setGapReasonAction} partial={gapPartial} />
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setGapNoteOpen(false)}>
+              Close
+            </button>
+          </div>
+        </Modal>
       )}
     </>
   );
