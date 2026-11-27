@@ -2550,6 +2550,25 @@ pre.json {
     overflow: visible;
   }
 }
+/* Phone and tablet widths: wrap the rail instead of sideways-scrolling
+   it. With a non-first tab active the scrolled first tab rested cut
+   mid-word under the edge fade (finding 1352). Fades are off at this
+   width; the desktop scroll behaviour above 768px is unchanged. */
+@media (max-width: 768px) {
+  .pill-tabs-track {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .pill-tabs-wrap.has-overflow.fade-left .pill-tabs-track,
+  .pill-tabs-wrap.has-overflow.fade-right .pill-tabs-track,
+  .pill-tabs-wrap.has-overflow.fade-left.fade-right .pill-tabs-track {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+  .toolbar .pill-tabs-track {
+    height: auto;
+  }
+}
 .pill-tab-count {
   font-size: calc(11px * var(--ui-scale, 1));
   font-weight: 600;
