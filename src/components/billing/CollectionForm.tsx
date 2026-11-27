@@ -207,6 +207,21 @@ export function CollectionForm({
           />
           {e.amountReceived && <div className="error">{e.amountReceived}</div>}
         </div>
+        <div className={`field${e.feeAmount ? " has-error" : ""}`}>
+          <label htmlFor="feeAmount">Collection fee (optional)</label>
+          <input
+            id="feeAmount"
+            name="feeAmount"
+            defaultValue={state.values?.feeAmount ?? ""}
+            inputMode="decimal"
+            placeholder="0.00"
+          />
+          <div className="hint">
+            Fee the bank or channel kept out of this payment. The billing is still settled by the full amount
+            received; the fee is recorded as an expense, so the account lands the amount minus the fee.
+          </div>
+          {e.feeAmount && <div className="error">{e.feeAmount}</div>}
+        </div>
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>
           <label htmlFor="receiptNo">OR / acknowledgment receipt no.</label>
           <input id="receiptNo" name="receiptNo" defaultValue={state.values?.receiptNo ?? defaults.receiptNo} />
