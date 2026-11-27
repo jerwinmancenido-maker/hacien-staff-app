@@ -91,3 +91,32 @@ describe("the highlighted row stays visible (Bugbot PR #175)", () => {
     expect(src).toContain("ref={listRef}");
   });
 });
+
+describe("picker matches meta as well as label (search by amount / date)", () => {
+  const recordOptions: SearchPickerOption[] = [
+    { id: "so-1", label: "SO-2026-0005 — TESDA", meta: "₱155,965.00 · Nov 10, 2026" },
+    { id: "so-2", label: "SO-2026-0004 — ARTA", meta: "₱598,000.00 · Nov 11, 2026" },
+  ];
+
+  it("finds a record by an amount fragment in its meta", () => {
+    expect(pickerRows(recordOptions, "No linked order", "598").map((r) => r.id)).toEqual(["so-2"]);
+    expect(pickerRows(recordOptions, "No linked order", "155,965").map((r) => r.id)).toEqual(["so-1"]);
+  });
+
+  it("finds a record by a date fragment in its meta", () => {
+    expect(pickerRows(recordOptions, "No linked order", "nov 10").map((r) => r.id)).toEqual(["so-1"]);
+  });
+
+  it("still finds records by name and number fragments in the label", () => {
+    expect(pickerRows(recordOptions, "No linked order", "tesda").map((r) => r.id)).toEqual(["so-1"]);
+    expect(pickerRows(recordOptions, "No linked order", "0004").map((r) => r.id)).toEqual(["so-2"]);
+  });
+
+  it("a query matching nothing yields no rows, not even the empty row", () => {
+    expect(pickerRows(recordOptions, "No linked order", "zzz")).toEqual([]);
+  });
+
+  it("options without meta still filter on the label alone", () => {
+    expect(pickerRows(options, "—", "metro").map((r) => r.id)).toEqual(["sup-b"]);
+  });
+});

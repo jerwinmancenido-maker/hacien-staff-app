@@ -8,6 +8,7 @@ import { FileInput } from "@/components/FileInput";
 import { clientUploadSizeError } from "@/lib/business-docs/sniff";
 import type { FormState } from "@/lib/validation/forms";
 import { CashAccountSelect, type CashAccountOption } from "./CashAccountSelect";
+import { SearchPicker } from "@/components/SearchPicker";
 import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export function ExpenseForm({
@@ -40,8 +41,8 @@ export function ExpenseForm({
   accounts: CashAccountOption[];
   categories: { id: string; label: string }[];
   suppliers: { id: string; name: string }[];
-  salesOrders?: { id: string; label: string }[];
-  purchaseOrders?: { id: string; label: string }[];
+  salesOrders?: { id: string; label: string; meta?: string }[];
+  purchaseOrders?: { id: string; label: string; meta?: string }[];
   /** Business entity (2026-11-19): for UNLINKED expenses; linked ones follow their order. */
   businesses?: { id: string; name: string }[];
   ownCompanyName?: string;
@@ -52,6 +53,7 @@ export function ExpenseForm({
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   const e = state.fieldErrors ?? {};
   const [useSupplier, setUseSupplier] = useState(!!defaults.supplierId);
+  const [supplierId, setSupplierId] = useState(state.values?.supplierId ?? defaults.supplierId);
   const [showWh, setShowWh] = useState(!!defaults.withholdingApplied && defaults.withholdingApplied !== "0" && defaults.withholdingApplied !== "0.00");
   const [fileError, setFileError] = useState<string | null>(null);
   // E4: the Business pick applies only to UNLINKED expenses — track the
@@ -161,14 +163,16 @@ export function ExpenseForm({
           </div>
           {useSupplier ? (
             <div className={`field${e.supplierId ? " has-error" : ""}`} style={{ margin: 0 }}>
-              <select id="supplierId" name="supplierId" defaultValue={state.values?.supplierId ?? defaults.supplierId}>
-                <option value="">Pick a supplier…</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <SearchPicker
+                id="supplierId"
+                ariaLabel="Supplier"
+                value={supplierId}
+                options={suppliers.map((s) => ({ id: s.id, label: s.name }))}
+                placeholder="Pick a supplier…"
+                emptyOptionLabel="Pick a supplier…"
+                onPick={setSupplierId}
+              />
+              <input type="hidden" name="supplierId" value={supplierId} />
               <input type="hidden" name="payeeText" value="" />
               {e.supplierId && <div className="error">{e.supplierId}</div>}
               {e.payeeText && <div className="error">{e.payeeText}</div>}
@@ -188,37 +192,31 @@ export function ExpenseForm({
         </div>
         <div className={`field${e.salesOrderId ? " has-error" : ""}`}>
           <label htmlFor="salesOrderId">Linked sales order (optional)</label>
-          <select
+          <SearchPicker
             id="salesOrderId"
-            name="salesOrderId"
+            ariaLabel="Linked sales order"
             value={linkedSoId}
-            onChange={(ev) => setLinkedSoId(ev.target.value)}
-          >
-            <option value="">No linked order</option>
-            {salesOrders.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            options={salesOrders}
+            placeholder="Pick a sales order…"
+            emptyOptionLabel="No linked order"
+            onPick={setLinkedSoId}
+          />
+          <input type="hidden" name="salesOrderId" value={linkedSoId} />
           <div className="hint">Delivery fee for this order (e.g. Lalamove)? Pick Transport and link the order.</div>
           {e.salesOrderId && <div className="error">{e.salesOrderId}</div>}
         </div>
         <div className={`field${e.purchaseOrderId ? " has-error" : ""}`}>
           <label htmlFor="purchaseOrderId">Linked purchase order (optional)</label>
-          <select
+          <SearchPicker
             id="purchaseOrderId"
-            name="purchaseOrderId"
+            ariaLabel="Linked purchase order"
             value={linkedPoId}
-            onChange={(ev) => setLinkedPoId(ev.target.value)}
-          >
-            <option value="">No linked order</option>
-            {purchaseOrders.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            options={purchaseOrders}
+            placeholder="Pick a purchase order…"
+            emptyOptionLabel="No linked order"
+            onPick={setLinkedPoId}
+          />
+          <input type="hidden" name="purchaseOrderId" value={linkedPoId} />
           {e.purchaseOrderId && <div className="error">{e.purchaseOrderId}</div>}
         </div>
         {businesses.length > 0 && !isLinked && (

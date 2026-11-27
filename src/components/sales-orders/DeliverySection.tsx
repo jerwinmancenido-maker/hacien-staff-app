@@ -71,8 +71,11 @@ export function DeliverySection({
   voidAction: (deliveryId: string, reason: string) => Promise<FormState>;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [mode, setMode] = useState<"all" | "some">("all");
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const [serials, setSerials] = useState<Record<string, string>>({});
+  const [drNumber, setDrNumber] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
   const progress = soDeliveryProgress(items);
   const podIncomplete = soPodIncomplete(progress, deliveries);
   const todayYmd = isoDate(manilaToday());
@@ -91,14 +94,48 @@ export function DeliverySection({
     return Number.isInteger(r) ? String(r) : r.toFixed(2);
   };
 
-  const fillAllRemaining = () => {
+  const remainingMap = () => {
     const next: Record<string, string> = {};
     for (const item of items) {
       const rem = remaining(item.qty, item.deliveredQty);
       if (Number(rem) > 0) next[item.id] = rem;
     }
-    setQtys(next);
+    return next;
   };
+
+  const fillAllRemaining = () => {
+    setQtys(remainingMap());
+  };
+
+  const openForm = () => {
+    setMode("all");
+    setQtys(remainingMap());
+    setDrNumber(nextDrNo != null ? String(nextDrNo) : "");
+    setDeliveryDate(todayYmd);
+    setShowForm(true);
+  };
+
+  const chooseMode = (next: "all" | "some") => {
+    setMode(next);
+    if (next === "all") setQtys(remainingMap());
+  };
+
+  // Live summary math — reads the same qty state the form posts, so the
+  // summary can never disagree with what will be submitted.
+  const activeLines = items.filter((i) => Number(remaining(i.qty, i.deliveredQty)) > 0);
+  const qtyOf = (id: string) => {
+    const n = Number((qtys[id] ?? "").replace(/,/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const chosenLines = activeLines.filter((i) => qtyOf(i.id) > 0);
+  const totalPieces = activeLines.reduce((sum, i) => sum + qtyOf(i.id), 0);
+  const stillAfter = activeLines.filter(
+    (i) => Number(remaining(i.qty, i.deliveredQty)) - qtyOf(i.id) > 0.0001,
+  ).length;
+  const fmtPieces = (n: number) => String(Math.round(n * 100) / 100);
+  const drDigits = drNumber.replace(/\D/g, "");
+  const drLabel = drDigits ? formatBookletNumber(Number(drDigits)) : "—";
+  const nothingChosen = totalPieces <= 0;
 
   const e = state.fieldErrors ?? {};
 
@@ -113,7 +150,7 @@ export function DeliverySection({
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => setShowForm(true)}
+              onClick={openForm}
             >
               Add delivery
             </button>
@@ -182,6 +219,30 @@ export function DeliverySection({
             </div>
           )}
 
+          <fieldset style={{ border: "none", padding: 0, margin: "0 0 16px" }}>
+            <legend className="small strong" style={{ marginBottom: "8px" }}>
+              What is going out in this delivery?
+            </legend>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={mode === "all" ? "btn btn-sm" : "btn btn-secondary btn-sm"}
+                aria-pressed={mode === "all"}
+                onClick={() => chooseMode("all")}
+              >
+                Deliver everything that is left
+              </button>
+              <button
+                type="button"
+                className={mode === "some" ? "btn btn-sm" : "btn btn-secondary btn-sm"}
+                aria-pressed={mode === "some"}
+                onClick={() => chooseMode("some")}
+              >
+                Deliver only some items
+              </button>
+            </div>
+          </fieldset>
+
           <div className="form-grid" style={{ marginBottom: "16px" }}>
             <div className={`field${e.drNumber ? " has-error" : ""}`}>
               <label htmlFor="drNumber">
@@ -193,7 +254,8 @@ export function DeliverySection({
                 type="text"
                 className="input"
                 placeholder="e.g. 10452"
-                defaultValue={nextDrNo != null ? String(nextDrNo) : ""}
+                value={drNumber}
+                onChange={(ev) => setDrNumber(ev.target.value)}
                 required
               />
               {e.drNumber ? (
@@ -215,7 +277,8 @@ export function DeliverySection({
                 name="deliveryDate"
                 type="date"
                 className="input"
-                defaultValue={todayYmd}
+                value={deliveryDate}
+                onChange={(ev) => setDeliveryDate(ev.target.value)}
                 required
               />
               {e.deliveryDate && <div className="error">{e.deliveryDate}</div>}
@@ -251,74 +314,153 @@ export function DeliverySection({
             {e.notes && <div className="error">{e.notes}</div>}
           </div>
 
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <h4>Items delivered</h4>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={fillAllRemaining}>
-                Deliver all remaining
-              </button>
+          {mode === "all" ? (
+            <div style={{ marginBottom: "16px" }}>
+              <p style={{ margin: 0 }}>
+                <strong>
+                  All {activeLines.length} item{activeLines.length === 1 ? "" : "s"} will be delivered
+                </strong>
+                {activeLines.length > 0 && (
+                  <>
+                    {" — "}
+                    {activeLines
+                      .map(
+                        (i) =>
+                          `${qtyText(remaining(i.qty, i.deliveredQty))} ${i.unit} ${i.description.split("\n")[0]}`,
+                      )
+                      .join(" · ")}
+                  </>
+                )}
+              </p>
+              {/* Same payload as the grid posts: every item row, quantities = remaining. */}
+              {items.map((i) => (
+                <span key={i.id}>
+                  <input type="hidden" name="itemId" value={i.id} />
+                  <input type="hidden" name="itemQty" value={qtys[i.id] ?? ""} />
+                  <input type="hidden" name="itemSerials" value={serials[i.id] ?? ""} />
+                </span>
+              ))}
             </div>
-            <div className="table-wrap items-table">
-              <table className="list" aria-label="Items delivered in this batch">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th className="num">Ordered</th>
-                    <th className="num">Delivered</th>
-                    <th className="num">Remaining</th>
-                    <th className="num">Deliver now</th>
-                    <th>Serial numbers</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((i) => {
-                    const rem = remaining(i.qty, i.deliveredQty);
-                    const done = Number(rem) <= 0;
-                    const err = e[`items.${i.id}`];
-                    return (
-                      <tr key={i.id} className={done ? "inactive" : undefined}>
-                        <td>
-                          {i.description.split("\n")[0]}
-                          {err && <div className="error small">{err}</div>}
-                        </td>
-                        <td className="num">
-                          {qtyText(i.qty)} {i.unit}
-                        </td>
-                        <td className="num">{qtyText(i.deliveredQty)}</td>
-                        <td className="num strong">{rem}</td>
-                        <td className={`num${err ? " has-error" : ""}`}>
-                          <input type="hidden" name="itemId" value={i.id} />
-                          {/* readOnly (not disabled) so itemQty still posts and stays aligned with itemId */}
-                          <input
-                            name="itemQty"
-                            type="text"
-                            inputMode="decimal"
-                            className="w-num-s input"
-                            placeholder="0"
-                            readOnly={done}
-                            value={done ? "" : (qtys[i.id] ?? "")}
-                            onChange={(ev) => setQtys({ ...qtys, [i.id]: ev.target.value })}
-                          />
-                        </td>
-                        <td>
-                          {/* readOnly (not disabled) so itemSerials stays aligned with itemId */}
-                          <input
-                            name="itemSerials"
-                            type="text"
-                            className="input"
-                            placeholder="Comma-separated, if any"
-                            readOnly={done}
-                            value={done ? "" : (serials[i.id] ?? "")}
-                            onChange={(ev) => setSerials({ ...serials, [i.id]: ev.target.value })}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          ) : (
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <h4>Items delivered</h4>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={fillAllRemaining}>
+                    Fill in everything left
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setQtys({})}
+                  >
+                    Clear all
+                  </button>
+                </div>
+              </div>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Type how many of each item went out in this delivery. Leave 0 for items that did
+                not go — you can deliver them later; nothing is lost.
+              </p>
+              <div className="table-wrap items-table">
+                <table className="list" aria-label="Items delivered in this batch">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th className="num">Ordered</th>
+                      <th className="num">Delivered</th>
+                      <th className="num">Left to deliver</th>
+                      <th className="num">Deliver now</th>
+                      <th>Serial numbers</th>
+                      <th aria-label="Row actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((i) => {
+                      const rem = remaining(i.qty, i.deliveredQty);
+                      const done = Number(rem) <= 0;
+                      const err = e[`items.${i.id}`];
+                      const over = !done && qtyOf(i.id) > Number(rem);
+                      const notThisTime =
+                        !done && (qtys[i.id] ?? "") !== "" && qtyOf(i.id) === 0;
+                      return (
+                        <tr
+                          key={i.id}
+                          className={done ? "inactive" : undefined}
+                          style={notThisTime ? { opacity: 0.55 } : undefined}
+                        >
+                          <td>
+                            {i.description.split("\n")[0]}
+                            {notThisTime && (
+                              <>
+                                {" "}
+                                <span className="chip faint">Not in this delivery</span>
+                              </>
+                            )}
+                            {err && <div className="error small">{err}</div>}
+                            {over && (
+                              <div className="error small">Only {rem} left to deliver</div>
+                            )}
+                          </td>
+                          <td className="num">
+                            {qtyText(i.qty)} {i.unit}
+                          </td>
+                          <td className="num">{qtyText(i.deliveredQty)}</td>
+                          <td className="num strong">{rem}</td>
+                          <td className={`num${err || over ? " has-error" : ""}`}>
+                            <input type="hidden" name="itemId" value={i.id} />
+                            {/* readOnly (not disabled) so itemQty still posts and stays aligned with itemId */}
+                            <input
+                              name="itemQty"
+                              type="text"
+                              inputMode="decimal"
+                              className="w-num-s input"
+                              placeholder="0"
+                              readOnly={done}
+                              value={done ? "" : (qtys[i.id] ?? "")}
+                              onChange={(ev) => setQtys({ ...qtys, [i.id]: ev.target.value })}
+                            />
+                          </td>
+                          <td>
+                            {/* readOnly (not disabled) so itemSerials stays aligned with itemId */}
+                            <input
+                              name="itemSerials"
+                              type="text"
+                              className="input"
+                              placeholder="Comma-separated, if any"
+                              readOnly={done}
+                              value={done ? "" : (serials[i.id] ?? "")}
+                              onChange={(ev) => setSerials({ ...serials, [i.id]: ev.target.value })}
+                            />
+                          </td>
+                          <td>
+                            {!done &&
+                              (notThisTime ? (
+                                <button
+                                  type="button"
+                                  className="btn-link small"
+                                  onClick={() => setQtys({ ...qtys, [i.id]: rem })}
+                                >
+                                  Include it
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-link small"
+                                  onClick={() => setQtys({ ...qtys, [i.id]: "0" })}
+                                >
+                                  Not this time
+                                </button>
+                              ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="form-grid" style={{ marginBottom: "16px" }}>
             <div className="field full">
@@ -348,9 +490,26 @@ export function DeliverySection({
             </div>
           </div>
 
+          {nothingChosen ? (
+            <p className="small muted" role="status" style={{ marginBottom: "12px" }}>
+              Nothing is in this delivery yet — type how many of each item went out, or switch to
+              “Deliver everything that is left”.
+            </p>
+          ) : (
+            <p className="small" role="status" style={{ marginBottom: "12px" }}>
+              <strong>This delivery:</strong> {chosenLines.length} of {activeLines.length} items ·{" "}
+              {fmtPieces(totalPieces)} pieces · DR {drLabel} · {day(deliveryDate)} — Still to
+              deliver after this: {stillAfter} item{stillAfter === 1 ? "" : "s"}
+            </p>
+          )}
+
           <div className="form-actions">
-            <button className="btn" type="submit" disabled={pending}>
-              {pending ? "Recording…" : "Record delivery"}
+            <button className="btn" type="submit" disabled={pending || nothingChosen}>
+              {pending
+                ? "Recording…"
+                : mode === "all"
+                  ? "Record delivery — everything that is left"
+                  : "Record this delivery"}
             </button>
             <button
               type="button"
