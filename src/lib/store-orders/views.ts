@@ -7,6 +7,10 @@
 
 import type { StoreOrderStatus } from "@prisma/client";
 import { db } from "../db";
+import { money } from "../documents/common";
+import { fromScaled, toScaled } from "../quotes/calc";
+import { getSettingsSnapshot } from "../settings";
+import { listSupplierPriceComparison } from "../items/history";
 
 export const STORE_ORDER_STATUS_LABELS: Record<StoreOrderStatus, string> = {
   PAID: "Paid — to convert",
@@ -87,6 +91,147 @@ export async function getStoreOrderDetail(id: string) {
 /** PAID orders waiting for conversion — the Sidebar badge + bell count. */
 export async function countPaidStoreOrders(): Promise<number> {
   return db.storeOrder.count({ where: { status: "PAID" } });
+}
+
+export type StoreOrderConversionPrep = {
+  orderId: string;
+  number: string;
+  amountPaid: string;
+  deliveryFee: string;
+  gatewayFee: string;
+  gatewayName: string;
+  gatewayPaymentRef: string;
+  matchedCustomer: { id: string; name: string } | null;
+  siRange: { from: number; to: number };
+  /** Lowest unclaimed in-band SI serial — a pre-fill only, never a claim. */
+  nextSi: number | null;
+  lines: {
+    id: string;
+    title: string;
+    qty: string;
+    unit: string;
+    unitPrice: string;
+    lineTotal: string;
+    matchFlag: "MAPPED" | "NO_MATCH" | "AMBIGUOUS";
+    mappedItemName: string | null;
+    needsPick: boolean;
+    costPreview: { supplierName: string; unitCost: string } | null;
+  }[];
+  /** Product lines with no last-PO cost history (they convert at cost 0). */
+  linesWithoutCost: string[];
+  /** Estimated margin % from last-PO costs; null when any product line has no cost history. */
+  marginPreviewPct: string | null;
+};
+
+/**
+ * Everything the conversion dialog shows before staff commit (Slice 2):
+ * the match proposal, per-line resolution state + last-PO cost previews,
+ * the booklet band + lowest unclaimed SI, and the §10.11 informational
+ * margin figure (recorded at conversion, never blocking).
+ */
+export async function getStoreOrderConversionPrep(id: string): Promise<StoreOrderConversionPrep | null> {
+  const order = await getStoreOrderDetail(id);
+  if (!order) return null;
+
+  const snap = await getSettingsSnapshot();
+  const range = snap.settings.invoiceBooklet.salesInvoice ?? snap.settings.invoiceBooklet;
+  const [usedBillings, spoiled, claims] = await Promise.all([
+    db.billing.findMany({
+      where: { invoiceNo: { gte: range.seriesFrom, lte: range.seriesTo } },
+      select: { invoiceNo: true },
+    }),
+    db.spoiledBookletNumber.findMany({ where: { type: "SI" }, select: { number: true } }),
+    db.bookletSerialClaim.findMany({ where: { type: "SI" }, select: { number: true } }),
+  ]);
+  const used = new Set<number>([
+    ...usedBillings.map((b) => b.invoiceNo),
+    ...spoiled.map((s) => s.number),
+    ...claims.map((c) => c.number),
+  ]);
+  let nextSi: number | null = null;
+  for (let n = range.seriesFrom; n <= range.seriesTo; n++) {
+    if (!used.has(n)) {
+      nextSi = n;
+      break;
+    }
+  }
+
+  const lines: StoreOrderConversionPrep["lines"] = [];
+  const linesWithoutCost: string[] = [];
+  let pricedTotal = 0n;
+  let costTotal = 0n;
+  let allPriced = true;
+  for (const line of order.lines) {
+    let costPreview: { supplierName: string; unitCost: string } | null = null;
+    if (line.item) {
+      const rows = await listSupplierPriceComparison(line.item.name);
+      if (rows.length) {
+        const newest = rows.reduce((a, b) => (b.lastCostDate > a.lastCostDate ? b : a));
+        costPreview = { supplierName: newest.supplierName, unitCost: newest.lastCost };
+      }
+    }
+    const needsPick = !line.item;
+    if (line.item && !costPreview) linesWithoutCost.push(line.title);
+    if (costPreview) {
+      pricedTotal += toScaled(money(line.lineTotal), 2);
+      // Scale-4 accumulation: unitCost (scale 2) × qty (scale 2).
+      costTotal += toScaled(costPreview.unitCost, 2) * toScaled(money(line.qty), 2);
+    } else {
+      allPriced = false;
+    }
+    lines.push({
+      id: line.id,
+      title: line.title,
+      qty: money(line.qty),
+      unit: line.unit,
+      unitPrice: money(line.unitPrice),
+      lineTotal: money(line.lineTotal),
+      matchFlag: line.matchFlag,
+      mappedItemName: line.item?.name ?? null,
+      needsPick,
+      costPreview,
+    });
+  }
+  // pricedTotal is scale 2, costTotal is scale 4 — compare at scale 4.
+  const marginPreviewPct =
+    allPriced && pricedTotal > 0n
+      ? fromScaled(((pricedTotal * 100n - costTotal) * 10000n) / (pricedTotal * 100n), 2)
+      : null;
+
+  return {
+    orderId: order.id,
+    number: order.number,
+    amountPaid: money(order.amountPaid),
+    deliveryFee: money(order.deliveryFee),
+    gatewayFee: money(order.gatewayFee),
+    gatewayName: order.gatewayName,
+    gatewayPaymentRef: order.gatewayPaymentRef,
+    matchedCustomer: order.matchedCustomer ? { id: order.matchedCustomer.id, name: order.matchedCustomer.name } : null,
+    siRange: { from: range.seriesFrom, to: range.seriesTo },
+    nextSi,
+    lines,
+    linesWithoutCost,
+    marginPreviewPct,
+  };
+}
+
+/** Customer + catalogue pick lists for the conversion dialog. */
+export async function listStoreOrderConversionOptions() {
+  const [customers, items] = await Promise.all([
+    db.customer.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 500,
+    }),
+    db.item.findMany({
+      where: { active: true },
+      select: { id: true, name: true, sku: true },
+      orderBy: { name: "asc" },
+      take: 1000,
+    }),
+  ]);
+  return { customers, items };
 }
 
 /** Bell section data: the oldest PAID orders first (they wait longest). */

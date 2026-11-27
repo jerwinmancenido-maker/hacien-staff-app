@@ -172,7 +172,7 @@ export async function getAttachmentSheetModel(deliveryId: string): Promise<Attac
     select: { invoiceNo: true },
     orderBy: { invoiceDate: "asc" },
   });
-  const warrantyNotes = so.quote.warrantyNotes?.trim() || settings.print.warrantyNotes?.trim() || null;
+  const warrantyNotes = so.quote?.warrantyNotes?.trim() || settings.print.warrantyNotes?.trim() || null;
   const footerIdentity = printFooterIdentity(company, settings.identity);
   return {
     deliveryId: delivery.id,

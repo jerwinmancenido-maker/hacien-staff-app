@@ -102,7 +102,7 @@ describe.skipIf(!env.hasDb)("selection-first create POs (MySQL)", () => {
         description: i.description,
         components: i.components.map((c) => ({ qty: c.qty.toFixed(2), supplierId: c.supplierId, unitCost: c.unitCost.toFixed(2), description: c.description })),
       })),
-      quoteItems: so.quote.items.map((i) => ({
+      quoteItems: so.quote!.items.map((i) => ({
         qty: i.qty.toFixed(2),
         supplierId: i.supplierId,
         supplierUnitCost: i.supplierUnitCost.toFixed(2),

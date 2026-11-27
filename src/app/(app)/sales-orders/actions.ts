@@ -71,7 +71,7 @@ export async function deleteSalesOrderAction(id: string, reason: string): Promis
     revalidatePath(`/sales-orders/${removed.id}`);
     revalidatePath(`/print/sales-orders/${removed.id}`);
     revalidatePath("/quotes");
-    revalidatePath(`/quotes/${removed.quoteId}`);
+    if (removed.quoteId) revalidatePath(`/quotes/${removed.quoteId}`);
     revalidatePath(`/customers/${removed.customerId}`);
     revalidatePath("/");
     revalidatePath("/reminders");

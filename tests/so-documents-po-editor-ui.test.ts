@@ -14,10 +14,10 @@ describe("SO Documents tab — whole-row clickable", () => {
     expect(page).not.toContain("<th>Link</th>");
     expect(page).not.toContain(">Open</Link>");
     const stretched = page.match(/row-stretched-link/g) ?? [];
-    // quote, billing, collection, delivery, purchase order
-    expect(stretched.length).toBe(5);
+    // quote, web order, billing, collection, delivery, purchase order
+    expect(stretched.length).toBe(6);
     const clickable = page.match(/clickable row-has-link/g) ?? [];
-    expect(clickable.length).toBe(5);
+    expect(clickable.length).toBe(6);
     // The billing Print link survives (it sits above the stretched link).
     expect(page).toContain("/print/billings/");
     expect(page).toContain("Print");
