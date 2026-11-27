@@ -92,6 +92,24 @@ function KpiMtdFoot({
   );
 }
 
+/**
+ * Phone Pipeline tile caption: break at the caption's own " · " boundary so
+ * the amount leads its own line instead of stretching edge-to-edge in the
+ * half-width tile (finding 1360). Same words, same separator — only the line
+ * break is added. Captions without the boundary render as-is.
+ */
+function PipelinePhoneCaption({ caption }: { caption: string }) {
+  const cut = caption.indexOf(" · ");
+  if (cut < 0) return <div className="home-kv home-pipeline-caption">{caption}</div>;
+  return (
+    <div className="home-kv home-pipeline-caption">
+      {caption.slice(0, cut)} ·
+      <br />
+      {caption.slice(cut + 3)}
+    </div>
+  );
+}
+
 export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
   const paid = collectedWholePesos(kpis.collectedThisMonth.cashCollected, kpis.collectedThisMonth.received2307);
   return (
@@ -207,7 +225,7 @@ export function HomePipelineCard({
         {rows.map((r) => (
           <Link key={r.href} className="card home-pipeline-tile" href={r.href}>
             <div className="home-kl">{r.label}</div>
-            <div className="home-kv home-pipeline-caption">{r.caption}</div>
+            <PipelinePhoneCaption caption={r.caption} />
           </Link>
         ))}
       </div>
