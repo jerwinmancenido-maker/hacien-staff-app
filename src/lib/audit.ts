@@ -38,6 +38,7 @@ export type AuditEntityType =
   | "TaxCalendarCompletion"
   | "SpoiledBookletNumber"
   | "StatementReminder"
+  | "StoreOrder"
   | "WarrantyClaim"
   | "PeriodLock"
   | "EmailSuppression";

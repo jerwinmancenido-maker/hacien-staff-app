@@ -6,6 +6,7 @@ import { arAgingSummary } from "@/lib/billing/views";
 import { billingBalance } from "@/lib/billing/status";
 import { money } from "@/lib/documents/common";
 import { countWarrantiesEndingSoon, listWarrantiesEndingSoon } from "@/lib/purchasing/views";
+import { storeOrderBellData } from "@/lib/store-orders/views";
 import type { NotificationSection } from "./notification-types";
 export type { NotificationItem, NotificationSection } from "./notification-types";
 
@@ -43,6 +44,19 @@ export async function getNotifications(user: PermissionUser): Promise<Notificati
         count,
         href: "/quotes",
         items: pending.map((q) => ({ label: `${q.number} · ${q.customer.name}`, href: `/quotes/${q.id}` })),
+      });
+    }
+  }
+
+  if (can(user, "edit_data")) {
+    const storeOrders = await storeOrderBellData();
+    if (storeOrders.count > 0) {
+      sections.push({
+        key: "store-orders",
+        label: "Store orders to convert",
+        count: storeOrders.count,
+        href: "/store-orders",
+        items: storeOrders.items,
       });
     }
   }

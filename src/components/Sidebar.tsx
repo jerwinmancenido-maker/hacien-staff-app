@@ -33,6 +33,7 @@ const LATER: Item[] = [
   { href: "/purchase-orders", label: "Supplier POs", icon: <BoxIcon /> },
   { href: "/receiving", label: "Receiving", icon: <TruckIcon />, editOnly: true },
   { href: "/billing", label: "Billing & Collections", icon: <CoinIcon /> },
+  { href: "/store-orders", label: "Store Orders", icon: <ListIcon /> },
   { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },
   { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
   { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
@@ -95,6 +96,7 @@ export function SidebarNav({
   booksEnabled = false,
   cashEnabled = false,
   payablesEnabled = false,
+  storeOrdersPaidCount = 0,
 }: {
   isAdmin: boolean;
   canSeeCosts?: boolean;
@@ -103,6 +105,7 @@ export function SidebarNav({
   booksEnabled?: boolean;
   cashEnabled?: boolean;
   payablesEnabled?: boolean;
+  storeOrdersPaidCount?: number;
 }) {
   const path = usePathname();
   const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
@@ -111,6 +114,9 @@ export function SidebarNav({
       {i.icon}
       <span>{i.label}</span>
       {i.soon && <span className="soon-tag" title="Coming soon">soon</span>}
+      {i.href === "/store-orders" && storeOrdersPaidCount > 0 && (
+        <span className="nav-badge">{storeOrdersPaidCount > 99 ? "99+" : storeOrdersPaidCount}</span>
+      )}
     </Link>
   );
   return (
@@ -149,6 +155,7 @@ const CRUMB_LABELS: Record<string, string> = {
   backups: "Backups",
   quotes: "Quotes",
   "sales-orders": "Sales Orders",
+  "store-orders": "Store Orders",
   search: "Search",
   "supplier-pos": "Supplier POs",
   "purchase-orders": "Supplier POs",
