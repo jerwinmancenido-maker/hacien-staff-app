@@ -16,9 +16,11 @@ import { billingToday } from "../billing/dates";
 import { billingBalance, unappliedCash } from "../billing/status";
 import { assertCashEnabled } from "../cash/features";
 import type { ApplyCreditInput, CollectionInput, Mark2307ReceivedInput } from "../validation/billing";
+import { COLLECTION_METHOD_LABELS } from "../validation/billing";
 import { voidReasonSchema } from "../validation/quotes";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { recomputeBillingStatus } from "./billings";
+import { defaultExpenseCategoryId } from "./expenses";
 import { notifyPaymentReceived } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
 import { assertPeriodOpen } from "./period-close";
@@ -356,6 +358,62 @@ async function upsert2307(
   return created;
 }
 
+/**
+ * Collection fee bounds (REQ-COLLECTION-FEES-001). Returns a plain refusal
+ * message, or null when the fee is acceptable. The fee is money the
+ * channel kept out of the collection, so it can never be negative and
+ * never more than what was collected.
+ */
+export function collectionFeeError(feeAmount: string, amountReceived: string): string | null {
+  const fee = toScaled(money(feeAmount), 2);
+  if (fee < 0n) return "Collection fee can't be negative.";
+  if (fee > toScaled(money(amountReceived), 2)) {
+    return `Collection fee can't be more than the amount received (₱${money(amountReceived)}). Lower the fee.`;
+  }
+  return null;
+}
+
+/**
+ * Notes fingerprint for a collection's fee expense — mirrors the store
+ * gateway-fee fingerprint ("Gateway fee withheld from settlement - web
+ * order …, payment ref ….") so fee expenses read the same everywhere.
+ */
+export function collectionFeeExpenseNotes(collectionNumber: string, billingNumbers: readonly string[]): string {
+  const base = `Collection fee withheld from collection - collection ${collectionNumber}`;
+  if (!billingNumbers.length) return `${base}.`;
+  return `${base}, billing ${billingNumbers.join(", ")}.`;
+}
+
+/**
+ * Fee expense category (REQ-COLLECTION-FEES-001): the category named
+ * "Collection fees" when an Admin has created one, else "Bank charges",
+ * else the house default — the same resolution shape as the store
+ * gateway fee (Gap 7). Resolved before the transaction so a missing
+ * category refuses the collection cleanly, before anything is written.
+ */
+async function collectionFeeCategory(): Promise<{ id: string; label: string }> {
+  for (const label of ["Collection fees", "Bank charges"]) {
+    const cat = await db.expenseCategory.findFirst({
+      where: { label, active: true },
+      select: { id: true, label: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (cat) return cat;
+  }
+  const fallbackId = await defaultExpenseCategoryId();
+  if (fallbackId) {
+    const cat = await db.expenseCategory.findUnique({
+      where: { id: fallbackId },
+      select: { id: true, label: true },
+    });
+    if (cat) return cat;
+  }
+  throw new DocRuleError(
+    "No active expense category exists, so the collection fee cannot be expensed. Add an expense category under Cash first.",
+    "feeAmount",
+  );
+}
+
 export async function recordCollection(
   input: Omit<CollectionInput, "isDeposit"> & { isDeposit?: boolean },
   actor: CollectionActor,
@@ -364,10 +422,20 @@ export async function recordCollection(
   assertCan(actor, "record_billing");
   if (toScaled(input.amountReceived, 2) <= 0n) throw new DocRuleError("Amount received must be greater than 0.", "amountReceived");
 
+  // Collection fee (REQ-COLLECTION-FEES-001): absent/0 = exactly the
+  // pre-fee behaviour. Validated before anything is written.
+  const feeAmount = money(input.feeAmount ?? "0");
+  const feeError = collectionFeeError(feeAmount, input.amountReceived);
+  if (feeError) throw new DocRuleError(feeError, "feeAmount");
+  const hasFee = toScaled(feeAmount, 2) > 0n;
+  const feeCategory = hasFee ? await collectionFeeCategory() : null;
+
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.collection;
+  const expenseFormat = snap.settings.numbering.expense;
   const year = input.date.getUTCFullYear();
   await ensureSeries(db, "COLLECTION", year, format);
+  if (hasFee) await ensureSeries(db, "EXPENSE", year, expenseFormat);
   const uploads = await prepareUploads(files);
 
   try {
@@ -441,6 +509,7 @@ export async function recordCollection(
             checkDate: input.checkDate,
             receiptNo,
             amountReceived: input.amountReceived,
+            feeAmount,
             cashAccountId: input.cashAccountId ?? null,
             notes: input.notes,
             isDeposit: input.isDeposit ?? false,
@@ -523,6 +592,77 @@ export async function recordCollection(
         }
         for (const billingId of touched) await recomputeBillingStatus(tx, billingId, actor.id);
 
+        // --- Collection fee expense (REQ-COLLECTION-FEES-001): the fee
+        // was kept by the channel out of this collection. The billing
+        // settles by the full amount received — the allocations above
+        // are untouched and this block never writes a Billing row. The
+        // fee is a business expense on the SAME cash account as the
+        // collection, so the account's posted balance moves by exactly
+        // (received − fee): the cash lands net. Linked to the sale of
+        // the first allocated billing (the gateway-fee pattern, Gap 7);
+        // an unallocated collection (credit / deposit) links no sale.
+        let feeExpenseNumber: string | null = null;
+        if (feeCategory) {
+          const touchedBillings = input.allocations.filter((a) => touched.has(a.billingId));
+          const firstBilling = open.find((b) => b.id === touchedBillings[0]?.billingId);
+          const linkedSo = firstBilling
+            ? await tx.salesOrder.findUnique({
+                where: { id: firstBilling.salesOrderId },
+                select: { number: true, businessId: true },
+              })
+            : null;
+          const billingRows = touchedBillings.length
+            ? await tx.billing.findMany({
+                where: { id: { in: touchedBillings.map((a) => a.billingId) } },
+                select: { id: true, number: true },
+              })
+            : [];
+          const numberById = new Map(billingRows.map((b) => [b.id, b.number]));
+          const billingNumbers = touchedBillings
+            .map((a) => numberById.get(a.billingId))
+            .filter((n): n is string => !!n);
+          feeExpenseNumber = await allocateDocNumber(tx, "EXPENSE", year, expenseFormat);
+          const feeExpense = await tx.expense.create({
+            data: {
+              number: feeExpenseNumber,
+              date: input.date,
+              supplierId: null,
+              payeeText: COLLECTION_METHOD_LABELS[input.method],
+              categoryId: feeCategory.id,
+              amount: feeAmount,
+              withholdingApplied: "0",
+              cashAccountId: input.cashAccountId ?? null,
+              receiptNo: null,
+              notes: collectionFeeExpenseNotes(number, billingNumbers),
+              salesOrderId: firstBilling?.salesOrderId ?? null,
+              purchaseOrderId: null,
+              businessId: linkedSo?.businessId ?? null,
+              createdById: actor.id,
+            },
+          });
+          await tx.collection.update({
+            where: { id: collection.id },
+            data: { feeExpenseId: feeExpense.id },
+          });
+          await writeAudit(tx, {
+            userId: actor.id,
+            entityType: "Expense",
+            entityId: feeExpense.id,
+            action: "create",
+            after: {
+              number: feeExpenseNumber,
+              date: ymd(input.date),
+              payee: COLLECTION_METHOD_LABELS[input.method],
+              category: feeCategory.label,
+              amount: feeAmount,
+              withholdingApplied: "0.00",
+              cashAccount: input.cashAccountId ?? null,
+              ...(linkedSo ? { salesOrder: linkedSo.number } : {}),
+              source: `Collection ${number}`,
+            },
+          });
+        }
+
         await createAttachments(tx, uploads, { collectionId: collection.id }, actor.id);
 
         const cashApplied = allocInputs.reduce((acc, a) => acc + toScaled(a.cashApplied || "0", 2), 0n);
@@ -539,6 +679,7 @@ export async function recordCollection(
             method: input.method,
             receiptNo: input.receiptNo,
             amountReceived: input.amountReceived,
+            ...(hasFee ? { feeAmount, feeExpense: feeExpenseNumber } : {}),
             cashAccountId: input.cashAccountId ?? null,
             cashApplied: fromScaled(cashApplied, 2),
             unappliedCredit: credit,
@@ -683,7 +824,7 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
       await tx.$queryRaw`SELECT \`id\` FROM \`Collection\` WHERE \`id\` = ${id} FOR UPDATE`;
       const before = await tx.collection.findUnique({
         where: { id },
-        include: { allocations: true, withholdings: true },
+        include: { allocations: true, withholdings: true, feeExpense: true },
       });
       if (!before) throw new DocRuleError("Collection not found.");
       if (before.status === "VOID") throw new DocRuleError("This collection is already void.");
@@ -719,6 +860,40 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
           });
         }
       }
+      // Collection fee expense (REQ-COLLECTION-FEES-001): void it with
+      // the collection, mirroring voidExpense's semantics inline — the
+      // same transaction and the same pattern as the 2307 soft-clear
+      // above: status VOID + reason, a DocumentVoid snapshot, and an
+      // audit row. Posted-balance math excludes VOID expenses, so the
+      // cash account un-lands the fee together with the collection.
+      const feeExpense = before.feeExpense;
+      if (feeExpense && feeExpense.status !== "VOID") {
+        const feeVoidReason = `Voided with collection ${before.number}: ${why}`;
+        await tx.expense.update({
+          where: { id: feeExpense.id },
+          data: { status: "VOID", voidedAt: now, voidReason: feeVoidReason },
+        });
+        await tx.documentVoid.create({
+          data: {
+            docType: "EXPENSE",
+            docNumber: feeExpense.number,
+            docId: feeExpense.id,
+            reason: feeVoidReason,
+            snapshot: JSON.parse(JSON.stringify(feeExpense)) as Prisma.InputJsonValue,
+            voidedById: actor.id,
+            voidedAt: now,
+          },
+        });
+        await writeAudit(tx, {
+          userId: actor.id,
+          entityType: "Expense",
+          entityId: feeExpense.id,
+          action: "void",
+          before: { status: "POSTED", amount: money(feeExpense.amount) },
+          after: { status: "VOID", voidReason: feeVoidReason },
+          diff: false,
+        });
+      }
       for (const a of before.allocations) await recomputeBillingStatus(tx, a.billingId, actor.id);
 
       await tx.documentVoid.create({
@@ -738,7 +913,11 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
         entityId: id,
         action: "void",
         before: { status: "POSTED", amountReceived: money(before.amountReceived) },
-        after: { status: "VOID", voidReason: why },
+        after: {
+          status: "VOID",
+          voidReason: why,
+          ...(before.feeExpense ? { feeExpense: before.feeExpense.number } : {}),
+        },
         diff: false,
       });
       return after;

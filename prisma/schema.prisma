@@ -1798,6 +1798,14 @@ model Collection {
   // Hand-written OR / acknowledgment receipt number (manual text).
   receiptNo      String?            @db.VarChar(64)
   amountReceived Decimal            @db.Decimal(15, 2)
+  // Collection fee (REQ-COLLECTION-FEES-001): an optional fee the channel
+  // kept out of this collection (e.g. a bank/GCash charge). The billing
+  // still settles by the full amountReceived; the fee is expensed
+  // separately (feeExpense) against the same cash account, so the account
+  // lands net. 0 = no fee — exactly the pre-fee behaviour.
+  feeAmount      Decimal            @default(0) @db.Decimal(15, 2)
+  feeExpenseId   String?            @unique
+  feeExpense     Expense?           @relation("CollectionFeeExpense", fields: [feeExpenseId], references: [id], onDelete: SetNull)
   // Audit E: deposit / advance — money held as customer credit, never
   // allocated to a billing at record time. Applied later via Apply credit.
   isDeposit      Boolean           @default(false)
@@ -2148,6 +2156,9 @@ model Expense {
   updatedAt          DateTime       @updatedAt
 
   attachments DocumentAttachment[]
+
+  // The collection whose fee this expense records (REQ-COLLECTION-FEES-001).
+  feeForCollection Collection? @relation("CollectionFeeExpense")
 
   @@index([date])
   @@index([status])

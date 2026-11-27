@@ -116,6 +116,11 @@ export const collectionInputSchema = z
       .max(64)
       .transform((v) => v || null),
     amountReceived: moneyStr,
+    // Collection fee (REQ-COLLECTION-FEES-001): optional fee the channel
+    // kept out of the amount received. Optional so direct service callers
+    // that predate the field keep today's behaviour; the form always
+    // posts it (blank = "0"). Bounds are enforced in the service.
+    feeAmount: optionalMoney.optional(),
     // Audit E: deposit / advance — the full amount stays as customer credit.
     isDeposit: z.boolean().default(false),
     // Optional cash account (Part 7a). Blank = not assigned.
@@ -270,6 +275,7 @@ export function parseCollectionForm(form: FormData): { ok: true; data: Collectio
     checkDate: String(form.get("checkDate") ?? ""),
     receiptNo: String(form.get("receiptNo") ?? ""),
     amountReceived: String(form.get("amountReceived") ?? ""),
+    feeAmount: String(form.get("feeAmount") ?? ""),
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
