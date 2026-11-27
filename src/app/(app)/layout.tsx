@@ -19,6 +19,7 @@ import { Breadcrumb, BreadcrumbLabelProvider, SidebarNav } from "@/components/Si
 import { Avatar } from "@/components/ui";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { getNotifications } from "@/lib/notifications";
+import { countPaidStoreOrders } from "@/lib/store-orders/views";
 import { TopbarSearch } from "@/components/TopbarSearch";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const milestoneMessage = NON_VAT_MESSAGES[meter.level];
   const milestoneTitle = homeNonVatTitle();
   const canOpenSettings = can(user, "manage_settings");
+  const storeOrdersPaidCount = can(user, "edit_data") ? await countPaidStoreOrders() : 0;
 
   const sidebar = (
     <>
@@ -64,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         booksEnabled={booksEnabled}
         cashEnabled={cashEnabled}
         payablesEnabled={payablesEnabled}
+        storeOrdersPaidCount={storeOrdersPaidCount}
       />
       <div className="sidebar-spacer" />
       <a

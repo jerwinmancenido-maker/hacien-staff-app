@@ -23,6 +23,7 @@ export const NUMBERED_DOCS = [
   { key: "supplierPayment", label: "Supplier payments (internal)" },
   { key: "expense", label: "Expenses (internal)" },
   { key: "cashTransfer", label: "Cash transfers (internal)" },
+  { key: "storeOrder", label: "Store orders (web)" },
 ] as const;
 
 export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {

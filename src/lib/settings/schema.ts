@@ -106,6 +106,7 @@ export const settingsSections = {
     supplierPayment: numberingFormat,
     expense: numberingFormat,
     cashTransfer: numberingFormat,
+    storeOrder: numberingFormat,
   }),
   taxYear: z
     .object({

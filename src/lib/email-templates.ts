@@ -5,6 +5,7 @@
 // HTML. All interpolated values are escaped — names come from the database.
 
 import { DEFAULT_SETTINGS } from "./settings/defaults";
+import { formatPeso } from "./format";
 import { emailIdentity, type EmailIdentity } from "./settings/identity";
 
 function escapeHtml(s: string): string {
@@ -66,4 +67,84 @@ export function accountEmailHtml(e: AccountEmail, identity: EmailIdentity = emai
     `<p style="margin:0;font-size:12px;color:#999999;">This is an automated message. Please do not reply.</p>` +
     `</td></tr></table></td></tr></table></body></html>`
   );
+}
+
+export type StoreOrderConfirmation = {
+  buyerName: string;
+  number: string;
+  /** 2-dp decimal strings, as stored. */
+  amountPaid: string;
+  deliveryFee: string;
+  lines: { title: string; qty: string; unit: string; unitPrice: string; lineTotal: string }[];
+};
+
+function qtyLabel(qty: string): string {
+  const n = Number(qty);
+  return Number.isInteger(n) ? String(n) : qty.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/**
+ * Buyer-facing order confirmation for a paid web order (store intake
+ * Slice 1). Same shell as the account emails — wordmark header, identity
+ * footer — minus the STAFF APP lockup: the reader is a customer, not staff.
+ * Nothing cost-side is ever included: lines show the prices the buyer paid.
+ */
+export function storeOrderConfirmationEmail(
+  o: StoreOrderConfirmation,
+  identity: EmailIdentity = emailIdentity(DEFAULT_SETTINGS),
+): { subject: string; text: string; html: string } {
+  const subject = `Order ${o.number} confirmed — ${identity.shortName}`;
+  const hasDelivery = Number(o.deliveryFee) > 0;
+
+  const textLines = [
+    `Good day, ${o.buyerName},`,
+    "",
+    `Thank you — we have received your payment for order ${o.number}.`,
+    "",
+    ...o.lines.map((l) => `${qtyLabel(l.qty)} ${l.unit} × ${l.title} — ${formatPeso(l.lineTotal)}`),
+  ];
+  if (hasDelivery) textLines.push(`Delivery fee — ${formatPeso(o.deliveryFee)}`);
+  textLines.push(
+    `Total paid: ${formatPeso(o.amountPaid)}`,
+    "",
+    "We will process your order from here. If anything about the order looks wrong, just reply to this email and we will be glad to help.",
+    "",
+    identity.shortName,
+    identity.footerLine,
+  );
+  const text = textLines.join("\n");
+
+  const rows = o.lines
+    .map(
+      (l) =>
+        `<tr><td style="padding:8px 0;font-size:14px;line-height:1.5;">${escapeHtml(l.title)}<br><span style="color:#666666;font-size:13px;">${escapeHtml(qtyLabel(l.qty))} ${escapeHtml(l.unit)} × ${escapeHtml(formatPeso(l.unitPrice))}</span></td>` +
+        `<td align="right" style="padding:8px 0;font-size:14px;white-space:nowrap;">${escapeHtml(formatPeso(l.lineTotal))}</td></tr>`,
+    )
+    .join("");
+  const deliveryRow = hasDelivery
+    ? `<tr><td style="padding:8px 0;font-size:14px;">Delivery fee</td><td align="right" style="padding:8px 0;font-size:14px;white-space:nowrap;">${escapeHtml(formatPeso(o.deliveryFee))}</td></tr>`
+    : "";
+  const html =
+    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>` +
+    `<body style="margin:0;padding:0;background:#f2f2f2;font-family:Arial,Helvetica,sans-serif;color:#111111;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;">` +
+    `<tr><td align="center" style="padding:40px 16px;">` +
+    `<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">` +
+    `<tr><td style="background:#111111;padding:20px 32px;">` +
+    `<span style="font-size:20px;font-weight:bold;letter-spacing:2px;color:#ffffff;">${escapeHtml(identity.wordmark)}</span>` +
+    `</td></tr>` +
+    `<tr><td style="padding:32px;">` +
+    `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;">Order confirmed</h1>` +
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Good day, ${escapeHtml(o.buyerName)},</p>` +
+    `<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Thank you — we have received your payment for order <strong>${escapeHtml(o.number)}</strong>.</p>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}${deliveryRow}` +
+    `<tr><td style="padding:12px 0 0;font-size:15px;font-weight:bold;border-top:1px solid #eeeeee;">Total paid</td>` +
+    `<td align="right" style="padding:12px 0 0;font-size:15px;font-weight:bold;white-space:nowrap;border-top:1px solid #eeeeee;">${escapeHtml(formatPeso(o.amountPaid))}</td></tr></table>` +
+    `<p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#444444;">We will process your order from here. If anything about the order looks wrong, just reply to this email and we will be glad to help.</p>` +
+    `</td></tr>` +
+    `<tr><td style="padding:20px 32px;border-top:1px solid #eeeeee;">` +
+    `<p style="margin:0 0 4px;font-size:12px;color:#999999;">${escapeHtml(identity.footerLine)}</p>` +
+    `<p style="margin:0;font-size:12px;color:#999999;">This is an automated message.</p>` +
+    `</td></tr></table></td></tr></table></body></html>`;
+  return { subject, text, html };
 }

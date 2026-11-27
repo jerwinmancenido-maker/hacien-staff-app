@@ -12,6 +12,7 @@ export const API_SCOPES = [
   { value: "customers:read", label: "Customers — read" },
   { value: "customers:write", label: "Customers — create and update" },
   { value: "items:read", label: "Items — read" },
+  { value: "store-orders:write", label: "Store orders — create (web checkout intake)" },
 ] as const;
 
 export const API_SCOPE_VALUES: readonly string[] = API_SCOPES.map((s) => s.value);
