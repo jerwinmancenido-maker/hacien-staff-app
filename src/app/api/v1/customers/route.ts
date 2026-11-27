@@ -13,7 +13,7 @@ export function GET(req: NextRequest) {
 
 export function POST(req: NextRequest) {
   return withApi(req, { scope: "customers:write", permission: "edit_data", idempotency: "required" }, async (ctx) => {
-    const saved = await writeCustomer(null, ctx.body, ctx.user);
+    const saved = await writeCustomer(null, ctx.body, ctx.user, { supersededRecordId: ctx.supersededRecordId });
     return apiOk({ customer: serializeCustomer(saved, ctx.user) }, 201);
   });
 }
