@@ -8,6 +8,8 @@ import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
 import type { BillingStatus } from "@prisma/client";
 import { BillingNav } from "@/components/billing/BillingNav";
+import { BillingListFilters } from "@/components/billing/BillingListFilters";
+import { billingListHref, type BillingListSearch } from "@/lib/billing/list-href";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
@@ -56,6 +58,18 @@ export default async function BillingsListPage({
     params.set("page", String(target));
     return `/billing/billings?${params.toString()}`;
   };
+  // Current list params in the shared patch shape: chips and the search /
+  // date controls merge over this object, so customerId (threaded from the
+  // customer page) and pageSize survive every filter change, and any change
+  // that does not name the page restarts at page 1.
+  const search: BillingListSearch = {
+    q: sp.q,
+    status: status !== "ALL" ? status : undefined,
+    customerId: sp.customerId,
+    from: fromYmd,
+    to: toYmd,
+    pageSize: sp.pageSize,
+  };
   const canRecord = can(user, "record_billing");
 
   return (
@@ -73,30 +87,36 @@ export default async function BillingsListPage({
       />
       <BillingNav active="billings" />
 
-      <form className="toolbar txn-filters" method="get" action="/billing/billings" style={{ marginBottom: 16 }}>
-        <input className="input" name="q" defaultValue={sp.q ?? ""} placeholder="Search number, customer, booklet no." />
-        <select className="input" name="status" defaultValue={status}>
-          <option value="ALL">All statuses</option>
-          <option value="OVERDUE">Overdue</option>
-          {BILLING_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {BILLING_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <label className="small faint">
-          From
-          <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From invoice date" />
-        </label>
-        <label className="small faint">
-          To
-          <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To invoice date" />
-        </label>
-        {sp.customerId ? <input type="hidden" name="customerId" value={sp.customerId} /> : null}
-        <button className="btn btn-secondary" type="submit">
-          Filter
-        </button>
-      </form>
+      <div className="toolbar txn-filters" style={{ marginBottom: 16 }}>
+        <BillingListFilters
+          basePath="/billing/billings"
+          searchPlaceholder="Search number, customer, booklet no."
+          fromAriaLabel="From invoice date"
+          toAriaLabel="To invoice date"
+          current={search}
+        />
+        <Link
+          className={`filter-chip${status === "ALL" ? " active" : ""}`}
+          href={billingListHref("/billing/billings", search, { status: undefined })}
+        >
+          All
+        </Link>
+        <Link
+          className={`filter-chip${status === "OVERDUE" ? " active" : ""}`}
+          href={billingListHref("/billing/billings", search, { status: "OVERDUE" })}
+        >
+          Overdue
+        </Link>
+        {BILLING_STATUSES.map((t) => (
+          <Link
+            key={t}
+            className={`filter-chip${status === t ? " active" : ""}`}
+            href={billingListHref("/billing/billings", search, { status: t })}
+          >
+            {BILLING_STATUS_LABELS[t]}
+          </Link>
+        ))}
+      </div>
 
       {rows.length === 0 ? (
         <div className="card">
