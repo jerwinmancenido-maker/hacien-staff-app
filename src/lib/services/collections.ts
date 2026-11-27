@@ -10,6 +10,7 @@ import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { DocRuleError, DOC_TX, money, withTxRetry, ymd } from "../documents/common";
 import { fromScaled, toScaled, type WithholdingSnapshot } from "../quotes/calc";
+import { WITHHOLDING_DEFAULT_CATALOG } from "../quotes/withholding-defaults";
 import { validateAllocations, planCreditApplication, type AllocationInput, type BillingForAlloc, type CreditSource } from "../billing/allocations";
 import { bookletRangeError, formatBookletNumber, parseBookletSerial } from "../billing/booklet";
 import { billingToday } from "../billing/dates";
@@ -630,6 +631,17 @@ export async function recordCollection(
               // generated from a pick). A rate/ATC pair on neither list
               // is a custom rate and still needs an Admin; fail closed.
               const standard = new Set(soCodes.map((c) => `${c.atcCode ?? ""}|${Number(c.rate)}`));
+              // The catalogue is DEFINED in code (Pass 3 -
+              // quotes/withholding-defaults.ts); the WithholdingRate
+              // table below is its Settings-managed copy, seeded from
+              // those same rows. Consult the definition as well as the
+              // table: on a database whose base seed has not run the
+              // table is empty, and the standard BIR pairs must still
+              // record. Active Settings rows (incl. admin-added rates)
+              // count too.
+              for (const r of WITHHOLDING_DEFAULT_CATALOG) {
+                if (r.active) standard.add(`${r.atcCode}|${Number(r.rate)}`);
+              }
               const catalogue = await tx.withholdingRate.findMany({
                 where: { active: true },
                 select: { atcCode: true, rate: true },
