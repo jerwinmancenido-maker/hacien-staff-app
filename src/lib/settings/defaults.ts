@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
     supplierPayment: { prefix: "PAY", padding: 4, resetYearly: true },
     expense: { prefix: "EXP", padding: 4, resetYearly: true },
     cashTransfer: { prefix: "TRF", padding: 4, resetYearly: true },
+    storeOrder: { prefix: "WO", padding: 4, resetYearly: true },
   },
   taxYear: {
     year: 2026,
