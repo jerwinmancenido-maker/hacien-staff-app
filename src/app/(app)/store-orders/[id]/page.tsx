@@ -2,9 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDate, formatDateTime, formatPeso } from "@/lib/format";
-import { getStoreOrderDetail, storeOrderDisplayLabel } from "@/lib/store-orders/views";
+import { can } from "@/lib/permissions";
+import {
+  getStoreOrderConversionPrep,
+  getStoreOrderDetail,
+  listStoreOrderConversionOptions,
+  storeOrderDisplayLabel,
+} from "@/lib/store-orders/views";
 import { Chip, PageHeader } from "@/components/ui";
 import { RecordBreadcrumbLabel } from "@/components/Sidebar";
+import { ConvertStoreOrderButton } from "@/components/store-orders/ConvertStoreOrderDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +21,21 @@ const MATCH_LABELS = { MAPPED: "Mapped", NO_MATCH: "No match", AMBIGUOUS: "Ambig
  * Store order detail (store intake Slice 1): everything staff need to see
  * before converting — buyer, delivery address, lines with their SKU match
  * flags, the gateway data (fee shown as data, never on a customer
- * document), and the proposed customer match. Conversion is Slice 2.
+ * document), and the proposed customer match. The Convert action
+ * (Slice 2) shows for approve-permission staff while the order is PAID.
  */
 export default async function StoreOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePagePermission("view");
+  const user = await requirePagePermission("view");
   const { id } = await params;
   const order = await getStoreOrderDetail(id);
   if (!order) notFound();
+
+  // Conversion (Slice 2) is approve-gated; the dialog data loads only for
+  // staff who could actually convert, and only while the order is PAID.
+  const canConvert = order.status === "PAID" && can(user, "approve");
+  const [prep, options] = canConvert
+    ? await Promise.all([getStoreOrderConversionPrep(order.id), listStoreOrderConversionOptions()])
+    : [null, null];
 
   const addressLine = [order.addressStreet, order.addressBarangay, order.addressCityMunicipality, order.addressProvince, order.addressZip]
     .filter(Boolean)
@@ -33,9 +48,14 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
         title={order.number}
         subtitle={`Web order paid ${formatDateTime(order.paidAt)} via ${order.gatewayName}.`}
         actions={
-          <Chip tone={order.displayStatus === "PAID" ? "amber" : order.displayStatus === "DONE" ? "green" : "grey"}>
-            {storeOrderDisplayLabel(order.displayStatus)}
-          </Chip>
+          <>
+            {prep && options && (
+              <ConvertStoreOrderButton prep={prep} customers={options.customers} items={options.items} />
+            )}
+            <Chip tone={order.displayStatus === "PAID" ? "amber" : order.displayStatus === "DONE" ? "green" : "grey"}>
+              {storeOrderDisplayLabel(order.displayStatus)}
+            </Chip>
+          </>
         }
       />
 
@@ -127,7 +147,7 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
           <dt>Payment reference</dt>
           <dd>{order.gatewayPaymentRef}</dd>
           <dt>Gateway fee (data)</dt>
-          <dd>{formatPeso(order.gatewayFee.toFixed(2))} — recorded as an order expense at conversion; never on a customer document.</dd>
+          <dd>{formatPeso(order.gatewayFee.toFixed(2))} — recorded as data on this order; never on a customer document.</dd>
           <dt>Received</dt>
           <dd>{formatDateTime(order.createdAt)}</dd>
         </dl>

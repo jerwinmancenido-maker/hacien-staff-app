@@ -557,6 +557,7 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
       customer: { select: { id: true, name: true, address: true, tin: true, active: true, withholdingType: true } },
       contact: { select: contactSelect },
       quote: { select: { id: true, number: true, status: true, date: true, contractPrice: true } },
+      storeOrder: { select: { id: true, number: true } },
       createdBy: { select: { name: true } },
       updatedBy: { select: { name: true } },
     },
@@ -601,7 +602,9 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
   // unnoticed). SO ↑/↓ reorder renumbers sortOrder to 1..n; without the
   // description check that would pair the wrong quote line. Any doubt → no
   // marker, never a wrong one. Found by staging QA 2026-11-11: SO-2026-0006.
-  if (!quoteItems.length && so.items.length > 0) {
+  // Quote-less SOs (store conversions) skip the fallback entirely: there
+  // is no quote to compare against, so no markers — never a wrong one.
+  if (!quoteItems.length && so.quote && so.items.length > 0) {
     const all = await db.quoteItem.findMany({
       where: { quoteId: so.quote.id, removedAt: null },
       orderBy: { sortOrder: "asc" },
@@ -697,7 +700,10 @@ export async function getSalesOrderView(id: string, viewer: PermissionUser) {
     updatedAt: so.updatedAt.toISOString(),
     customer: so.customer,
     contact: so.contact,
-    quote: { id: so.quote.id, number: so.quote.number, status: so.quote.status, date: ymd(so.quote.date), contractPrice: money(so.quote.contractPrice) },
+    quote: so.quote
+      ? { id: so.quote.id, number: so.quote.number, status: so.quote.status, date: ymd(so.quote.date), contractPrice: money(so.quote.contractPrice) }
+      : null,
+    storeOrder: so.storeOrder ? { id: so.storeOrder.id, number: so.storeOrder.number } : null,
     withholding,
     items: itemViews,
     /** Part A: how many lines differ from the quote (0 = no summary line). */

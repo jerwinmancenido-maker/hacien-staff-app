@@ -15,7 +15,7 @@ const poEditor = readFileSync("src/components/purchasing/PoEditor.tsx", "utf8");
 
 describe("#193 marker fallback for pre-stamp conversions", () => {
   it("falls back only when no stamped quote items resolved", () => {
-    expect(views).toContain("if (!quoteItems.length && so.items.length > 0)");
+    expect(views).toContain("if (!quoteItems.length && so.quote && so.items.length > 0)");
     expect(views).toContain("where: { quoteId: so.quote.id, removedAt: null }");
   });
 
