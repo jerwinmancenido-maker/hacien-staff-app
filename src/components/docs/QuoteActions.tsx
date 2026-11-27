@@ -18,6 +18,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionsMenu, type MenuItem } from "./ActionsMenu";
 import { BusinessReclassifyForm } from "@/app/(app)/sales-orders/[id]/BusinessReclassifyForm";
+import { RemindMeForm } from "@/components/RemindMeForm";
 import { GapReasonForm } from "./GapReasonForm";
 import { ConvertDialog, DeleteDialog, EmailDialog, Modal, VoidDialog, type AddressOption, type EmailDraftView, type NewAddressFields } from "./Dialogs";
 import type { EditorAddressOption } from "./DocumentEditor";
@@ -64,6 +65,10 @@ type Props = {
   hasAcceptance?: boolean;
   /** E15: the business this quote is tagged to, if any (Convert dialog note). */
   businessName?: string;
+  /** REQ-REMIND-ACTIONS-001: the page passes its own edit_data gate; the
+   * menu item shows exactly when the old page-body RemindMeForm card did. */
+  canRemind?: boolean;
+  reminderAction?: (state: FormState, form: FormData) => Promise<FormState>;
   actions: {
     markSent: (id: string, confirmedWarnings?: boolean) => Promise<FormState>;
     /** Saves explicit none then marks sent (Yes, none). */
@@ -106,10 +111,12 @@ export function QuoteActions({
   costMissing = false,
   hasAcceptance = false,
   businessName,
+  canRemind = false,
+  reminderAction,
   actions,
 }: Props) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<"void" | "delete" | "convert" | "lost" | "wh-none" | "cost" | "reject" | "approval" | null>(null);
+  const [dialog, setDialog] = useState<"void" | "delete" | "convert" | "lost" | "wh-none" | "cost" | "reject" | "approval" | "remind" | null>(null);
   /** Which send waits behind the approval prompt (F5). */
   const [pendingSend, setPendingSend] = useState<"mark" | "none" | "email" | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -176,6 +183,9 @@ export function QuoteActions({
     });
   }
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/quotes/${id}`, newTab: true });
+  // REQ-REMIND-ACTIONS-001: the Remind-me card moved off the page body
+  // into this menu; the dialog holds the existing form unchanged.
+  if (canRemind && reminderAction) items.push({ key: "remind", label: "Set a reminder…", onSelect: () => setDialog("remind") });
   if (canRefreshCompany) {
     items.push({
       key: "refresh-company",
@@ -391,6 +401,16 @@ export function QuoteActions({
           </div>
         </Modal>
       )}
+      {dialog === "remind" && reminderAction && (
+        <Modal title="Set a reminder" onClose={() => setDialog(null)} labelId="quote-remind-title">
+          <RemindMeForm entityType="QUOTE" entityId={id} action={reminderAction} />
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setDialog(null)}>
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
       {draft && <EmailDialog draft={draft} onClose={() => setDraft(null)} />}
     </>
   );
@@ -410,11 +430,12 @@ type SoProps = {
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId, isAdmin = false, ownCompanyName, currentBusinessId = null, businesses = [], reclassifyBusinessAction, showGapNote = false, gapPartial = false, gapReasonCode = null, currentGapNote = null, setGapReasonAction }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string; isAdmin?: boolean; ownCompanyName?: string; currentBusinessId?: string | null; businesses?: { id: string; name: string; active: boolean }[]; reclassifyBusinessAction?: (state: FormState, form: FormData) => Promise<FormState>; showGapNote?: boolean; gapPartial?: boolean; gapReasonCode?: string | null; currentGapNote?: string | null; setGapReasonAction?: (state: FormState, form: FormData) => Promise<FormState> }) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId, isAdmin = false, ownCompanyName, currentBusinessId = null, businesses = [], reclassifyBusinessAction, showGapNote = false, gapPartial = false, gapReasonCode = null, currentGapNote = null, setGapReasonAction, canRemind = false, reminderAction }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string; isAdmin?: boolean; ownCompanyName?: string; currentBusinessId?: string | null; businesses?: { id: string; name: string; active: boolean }[]; reclassifyBusinessAction?: (state: FormState, form: FormData) => Promise<FormState>; showGapNote?: boolean; gapPartial?: boolean; gapReasonCode?: string | null; currentGapNote?: string | null; setGapReasonAction?: (state: FormState, form: FormData) => Promise<FormState>; canRemind?: boolean; reminderAction?: (state: FormState, form: FormData) => Promise<FormState> }) {
   const [voiding, setVoiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [gapNoteOpen, setGapNoteOpen] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
   const items: MenuItem[] = [];
   if (canEdit && status === "OPEN") items.push({ key: "edit", label: "Edit", href: `/sales-orders/${id}/edit` });
   // S-66: Record billing and Create POs used to sit beside the menu as
@@ -427,6 +448,9 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
   // existing form in a dialog, under the same conditions as the cards.
   if (isAdmin && reclassifyBusinessAction) items.push({ key: "change-business", label: "Change business…", onSelect: () => setBusinessOpen(true) });
   if (showGapNote && setGapReasonAction) items.push({ key: "billing-gap-note", label: "Billing gap note…", onSelect: () => setGapNoteOpen(true) });
+  // REQ-REMIND-ACTIONS-001: the Remind-me card moved off the page body
+  // into this menu; the dialog holds the existing form unchanged.
+  if (canRemind && reminderAction) items.push({ key: "set-reminder", label: "Set a reminder…", onSelect: () => setRemindOpen(true) });
   items.push({ key: "print", label: "Print / Save PDF", href: `/print/sales-orders/${id}`, newTab: true });
   // S-87: one "Print billing statement" entry per billing, opening the
   // existing billing-statement print (never a sales invoice — the official
@@ -474,6 +498,16 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
           <GapReasonForm kind="SO" currentCode={gapReasonCode} currentNote={currentGapNote} action={setGapReasonAction} partial={gapPartial} />
           <div className="modal-actions">
             <button type="button" className="btn secondary" onClick={() => setGapNoteOpen(false)}>
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
+      {remindOpen && reminderAction && (
+        <Modal title="Set a reminder" onClose={() => setRemindOpen(false)} labelId="so-remind-title">
+          <RemindMeForm entityType="SALES_ORDER" entityId={id} action={reminderAction} />
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={() => setRemindOpen(false)}>
               Close
             </button>
           </div>
