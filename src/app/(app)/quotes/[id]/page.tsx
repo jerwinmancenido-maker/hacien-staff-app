@@ -18,7 +18,6 @@ import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, S
 import { QuoteActions } from "@/components/docs/QuoteActions";
 import { ConformeUploadForm } from "@/components/docs/ConformeUploadForm";
 import { AcceptanceForm } from "@/components/docs/AcceptanceForm";
-import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import {
   uploadQuoteConformeAction,
@@ -105,6 +104,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             hasAcceptance={q.hasAcceptance}
             businessName={q.business?.name}
+            canRemind={canEdit}
+            reminderAction={createReminderAction}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
@@ -275,7 +276,6 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
               </div>
             </div>
           </div>
-          {canEdit && <RemindMeForm entityType="QUOTE" entityId={q.id} action={createReminderAction} />}
         </>
       )}
 

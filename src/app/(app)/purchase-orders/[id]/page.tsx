@@ -19,7 +19,6 @@ import { AttachmentsTab } from "@/components/AttachmentsTab";
 import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
 import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
 import { PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
-import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
 import { GapReasonForm } from "@/components/docs/GapReasonForm";
@@ -84,6 +83,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" && po.approval.needsApproval ? "Waiting for an approver." : po.approval.blockedReason}
             canMarkSentFromDraft={canEdit && po.canSeeCosts && po.approval.canMarkSentFromDraft}
             postedReceipts={po.postedReceipts}
+            canRemind={canEdit}
+            reminderAction={createReminderAction}
             actions={{
               approve: approvePurchaseOrderAction,
               markSent: markPurchaseOrderSentAction,
@@ -248,7 +249,6 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
               </div>
             )}
           </div>
-          {canEdit && <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={createReminderAction} />}
         </>
       )}
 
