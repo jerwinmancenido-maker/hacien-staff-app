@@ -1,5 +1,7 @@
-// Home Sales section against MySQL (TEST_DATABASE_URL). Gross sales match the
-// Non-VAT meter; voids excluded; Staff without manage_billing sees no Sales.
+// Home Sales section against MySQL (TEST_DATABASE_URL).
+// Chart / Sales KPI = confirmed SO contractPrice by SO date.
+// Billed year / meter = non-void billings (unchanged). Staff without
+// manage_billing sees no Sales.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -11,13 +13,14 @@ const env = vi.hoisted(() => {
 
 import { db } from "@/lib/db";
 import { loadHomeDashboard } from "@/lib/home/dashboard";
-import { loadHomeSales } from "@/lib/home/sales-data";
-import { manilaMonthKey, shiftMonthKey } from "@/lib/home/sales";
+import { loadConfirmedUnbilledSoTotal, loadHomeSales } from "@/lib/home/sales-data";
+import { confirmedSoUnbilledTotal, manilaMonthKey, shiftMonthKey } from "@/lib/home/sales";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { getGrossSalesYtd, getNonVatMeter } from "@/lib/services/non-vat";
 import { recordBilling, voidBilling } from "@/lib/services/billings";
 import { approveQuote, convertQuoteToSalesOrder, createQuote, type DocActor } from "@/lib/services/quotes";
 import { customerDeliveryAddressId, makeCustomer, makeSupplier, makeUser, tag } from "./fixtures";
+import { money } from "@/lib/documents/common";
 
 describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
   let admin: DocActor;
@@ -148,7 +151,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     expect(dashAdmin.header.newQuoteHref).toBe("/quotes/new");
   });
 
-  it("excludes voided billings from months, year total and top customers", async () => {
+  it("keeps Billed year on non-void billings (meter); voids excluded from billed MTD", async () => {
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
     const now = new Date(Date.UTC(taxYear, 9, 15)); // mid-Oct of tax year
@@ -157,7 +160,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const invoiceDate = new Date(Date.UTC(y, m - 1, 10));
 
     const t = tag();
-    const { customer, so } = await openSo(taxYear, "9999999.00", `Sales Void Cust ${t}`);
+    const { so } = await openSo(taxYear, "9999999.00", `Sales Void Cust ${t}`);
     const keep = await bill(so.id, "250000.00", invoiceDate);
     const gone = await bill(so.id, "8000.00", invoiceDate);
     await voidBilling(gone.id, "Wrong amount", admin);
@@ -165,46 +168,40 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const sales = await loadHomeSales(admin, { now });
     const meter = await getNonVatMeter(snap.settings.taxYear, now);
     expect(sales).not.toBeNull();
-    // Year total matches Non-VAT (both exclude voids).
+    // Year total matches Non-VAT (both exclude voids). Meter unchanged source.
     expect(Number(sales!.thisYear)).toBe(meter.used);
     expect(await getGrossSalesYtd(taxYear, now)).toBe(meter.used);
-
-    const bar = sales!.months.find((row) => row.key === monthKey);
-    expect(Number(bar!.amount)).toBeGreaterThanOrEqual(250_000);
-
-    // Customer YTD from non-void rows only — voided ₱8k must not count.
-    const kept = await db.billing.aggregate({
-      where: { customerId: customer.id, status: { not: "VOID" } },
-      _sum: { amount: true },
-    });
-    expect(Number(kept._sum.amount ?? 0)).toBe(250_000);
+    expect(Number(sales!.billedThisMonth)).toBeGreaterThanOrEqual(250_000);
     expect(keep.status).not.toBe("VOID");
-    // If they make the top-3 cut on this shared DB, their amount is the kept total only.
-    const ours = sales!.topCustomers.find((c) => c.customerId === customer.id);
-    if (ours) expect(Number(ours.amount)).toBe(250_000);
+
+    // Chart months are SO contractPrice (not billing amounts).
+    const bar = sales!.months.find((row) => row.key === manilaMonthKey(so.date));
+    // SO date from openSo is March 2 of taxYear — may be outside Oct chart window.
+    void bar;
+    expect(sales!.href).toBe("/sales-orders");
   });
 
-  it("counts a billing on the last calendar day of the month (11:30 PM PHT still that month)", async () => {
-    // invoiceDate is @db.Date — calendar day. 11:30 PM PHT on the last day is still
+  it("chart counts confirmed SO contractPrice by SO date (last calendar day still that month)", async () => {
+    // SO.date is @db.Date — calendar day. 11:30 PM PHT on the last day is still
     // that Manila calendar day; the DATE column stores that day at 00:00 UTC.
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
-    // Use March (31 days) of the tax year.
     const lastDay = new Date(Date.UTC(taxYear, 2, 31)); // Mar 31 DATE
     const now = new Date(Date.UTC(taxYear, 2, 31, 15, 30, 0)); // Mar 31 23:30 PHT
     expect(manilaMonthKey(now)).toBe(`${taxYear}-03`);
 
     const { so } = await openSo(taxYear, "50000.00");
-    await bill(so.id, "777.00", lastDay);
+    await db.salesOrder.update({ where: { id: so.id }, data: { date: lastDay } });
 
     const sales = await loadHomeSales(admin, { now });
     const mar = sales!.months.find((m) => m.key === `${taxYear}-03`);
-    expect(Number(mar!.amount)).toBeGreaterThanOrEqual(777);
+    expect(Number(mar!.amount)).toBeGreaterThanOrEqual(50_000);
     expect(mar!.isCurrent).toBe(true);
     expect(mar!.isPartial).toBe(true);
+    expect(sales!.orderCount).toBeGreaterThanOrEqual(1);
   });
 
-  it("year total equals the Non-VAT meter; change % when last month is 0", async () => {
+  it("year total equals the Non-VAT meter; Sales change chip is defined", async () => {
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
     const now = new Date(Date.UTC(taxYear, 5, 20)); // June
@@ -214,40 +211,30 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const [ly, lm] = lastKey.split("-").map(Number) as [number, number];
 
     const { so } = await openSo(taxYear, "200000.00");
-    // Bill only this month — last month stays whatever the shared DB has; we
-    // assert the change helper path when lastMonth amount for our isolated
-    // check uses salesChange via a synthetic empty last month by comparing
-    // that year total tracks the meter after our billing.
     await bill(so.id, "1500.00", new Date(Date.UTC(ty, tm - 1, 5)));
-    // Ensure last month also has a known row so change is defined for that key
-    // on a quiet DB slice — optional; at minimum year === meter.
     await bill(so.id, "500.00", new Date(Date.UTC(ly, lm - 1, 5)));
 
     const sales = await loadHomeSales(admin, { now });
     const meter = await getNonVatMeter(snap.settings.taxYear, now);
     expect(Number(sales!.thisYear)).toBe(meter.used);
-    expect(sales!.change.label === "—" || /%/.test(sales!.change.label)).toBe(true);
+    expect(sales!.change.label === "—" || /%/.test(sales!.change.label) || sales!.change.label === "Same").toBe(
+      true,
+    );
   });
 
-  it("top customers this year: top 3, fewer when short, name links", async () => {
+  it("top customers this year: by confirmed SO value, top 3, name links", async () => {
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
     const now = new Date(Date.UTC(taxYear, 8, 10));
     const t = tag();
-    const a = await openSo(taxYear, "500000.00", `TopA ${t}`);
-    const b = await openSo(taxYear, "500000.00", `TopB ${t}`);
+    // Distinct contract prices so SO ranking is clear (chart is SO value, not billings).
+    const a = await openSo(taxYear, "900000.00", `TopA ${t}`);
+    const b = await openSo(taxYear, "700000.00", `TopB ${t}`);
     const c = await openSo(taxYear, "500000.00", `TopC ${t}`);
-    const d = await openSo(taxYear, "500000.00", `TopD ${t}`);
-    const day = new Date(Date.UTC(taxYear, 7, 1));
-    await bill(a.so.id, "9000.00", day);
-    await bill(b.so.id, "7000.00", day);
-    await bill(c.so.id, "5000.00", day);
-    await bill(d.so.id, "1000.00", day);
+    const d = await openSo(taxYear, "100000.00", `TopD ${t}`);
 
     const sales = await loadHomeSales(admin, { now });
     const ours = sales!.topCustomers.filter((c) => c.name.includes(t));
-    // Shared DB may already have larger customers; at least our largest should rank if amounts dominate.
-    // Assert shape: at most 3, hrefs point at customer pages, amounts descending.
     expect(sales!.topCustomers.length).toBeLessThanOrEqual(3);
     for (let i = 1; i < sales!.topCustomers.length; i++) {
       expect(Number(sales!.topCustomers[i - 1]!.amount)).toBeGreaterThanOrEqual(
@@ -257,16 +244,18 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     for (const row of sales!.topCustomers) {
       expect(row.href).toBe(`/customers/${row.customerId}`);
     }
-    // Our four customers alone would top as A,B,C — if the global top includes them, order holds.
     if (ours.length >= 3) {
       expect(ours[0]!.name).toContain("TopA");
     }
     expect(a.customer.id).toBeTruthy();
+    expect(b.so.id).toBeTruthy();
+    expect(c.so.id).toBeTruthy();
+    expect(d.so.id).toBeTruthy();
   });
 
-  it("empty chart when no billings fall in the 12-month window", async () => {
-    // Far-future now: chart months are all zero → empty UI (rows hidden).
-    // Top customers / year still follow the settings tax year (Non-VAT window).
+  it("empty chart when no confirmed SOs fall in the 12-month window", async () => {
+    // Far-future now: chart months are all zero → empty UI.
+    // Billed year still follows the settings tax year (Non-VAT window).
     const far = new Date(Date.UTC(2800, 5, 15));
     const sales = await loadHomeSales(admin, { now: far });
     expect(sales).not.toBeNull();
@@ -274,21 +263,52 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     expect(sales!.months.every((m) => Number(m.amount) === 0)).toBe(true);
     expect(sales!.monthsNarrow).toHaveLength(6);
     expect(sales!.change.label).toBe("—");
+    expect(sales!.orderCount).toBe(0);
 
     const dash = await loadHomeDashboard(admin, { now: far });
     expect(dash.kpis).not.toBeNull();
     expect(dash.sales!.empty).toBe(true);
+    expect(dash.kpis!.salesThisMonth.change.label).toBe("—");
     expect(dash.kpis!.billedThisMonth.change.label).toBe("—");
+    expect(dash.kpis!.owedByCustomers.label).toBe("Owed by customers");
+  });
+
+  it("unbilled confirmed SO line matches contractPrice minus non-void billings", async () => {
+    const snap = await getSettingsSnapshot();
+    const taxYear = snap.settings.taxYear.year;
+    const { so } = await openSo(taxYear, "80000.00", `Unbilled ${tag()}`);
+    await bill(so.id, "30000.00", new Date(Date.UTC(taxYear, 4, 1)));
+
+    const soRow = await db.salesOrder.findUniqueOrThrow({
+      where: { id: so.id },
+      select: {
+        contractPrice: true,
+        billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
+      },
+    });
+    const expectedOne = confirmedSoUnbilledTotal([
+      {
+        contractPrice: money(soRow.contractPrice),
+        billingAmounts: soRow.billings.map((b) => money(b.amount)),
+      },
+    ]);
+    expect(expectedOne).toBe("50000.00");
+
+    const total = await loadConfirmedUnbilledSoTotal();
+    expect(Number(total)).toBeGreaterThanOrEqual(50_000);
   });
 
   it("KPI overdue chip and vs caption for Admin with billing access", async () => {
     const now = new Date();
     const dash = await loadHomeDashboard(admin, { now });
     expect(dash.kpis).not.toBeNull();
+    expect(dash.kpis!.salesThisMonth.label).toMatch(/^Sales \(/);
+    expect(dash.kpis!.salesThisMonth.orderCountLabel).toMatch(/\d[\d,]* orders?$/);
     // Same-days MTD: "vs ₱X by Oct 15", or empty when both MTD and prior same-days are ₱0.
     const vs = dash.kpis!.billedThisMonth.vsCaption;
     expect(vs === "" || /^vs ₱[\d,]+ by [A-Z][a-z]{2} \d{1,2}$/.test(vs)).toBe(true);
     expect(dash.kpis!.owedByCustomers.billingCountLabel).toMatch(/\d[\d,]* billings?$/);
+    expect(dash.kpis!.owedByCustomers.label).toBe("Owed by customers");
     if (dash.kpis!.owedByCustomers.overdueChip) {
       expect(dash.kpis!.owedByCustomers.overdueChip.tone).toBe("overdue");
       expect(dash.kpis!.owedByCustomers.overdueChip.label).toMatch(/^(All overdue|\d+ overdue)$/);

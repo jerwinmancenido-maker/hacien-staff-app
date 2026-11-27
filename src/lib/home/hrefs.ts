@@ -23,6 +23,11 @@ export function openSalesOrdersHref(): string {
   return `/sales-orders?${HOME_SO_OPEN}=1&business=own`;
 }
 
+/** Full Sales orders list (Home Sales KPI + chart link). */
+export function salesOrdersListHref(): string {
+  return "/sales-orders";
+}
+
 export function quotesNeedsApprovalHref(): string {
   return `/quotes?${HOME_QUOTE_NEEDS_APPROVAL}=1`;
 }

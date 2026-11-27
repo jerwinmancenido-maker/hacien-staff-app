@@ -6,6 +6,8 @@ import { isPayablesEnabled } from "@/lib/payables/features";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { homeNonVatTitle } from "@/lib/home/nonVatCopy";
+import { confirmedUnbilledSoCaption } from "@/lib/home/sales";
+import { loadConfirmedUnbilledSoTotal } from "@/lib/home/sales-data";
 import { isBooksEnabled } from "@/lib/books/features";
 import { getNonVatMeter, NON_VAT_MESSAGES } from "@/lib/services/non-vat";
 import { currentSessionLimits } from "@/lib/auth/session";
@@ -37,17 +39,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     meter,
     booksEnabled,
     settings,
+    unbilledConfirmedSos,
   } = await withConnectionRetry(async () => {
     const sessionLimits = await currentSessionLimits();
     const { settings } = await getSettingsSnapshot();
-    const [cashEnabled, payablesEnabled] = await Promise.all([isCashEnabled(), isPayablesEnabled()]);
+    const [cashEnabled, payablesEnabled, unbilledConfirmedSos] = await Promise.all([
+      isCashEnabled(),
+      isPayablesEnabled(),
+      // Confirmed SO remainder only — does not change meter.used / YTD billings.
+      loadConfirmedUnbilledSoTotal(),
+    ]);
     // Gross sales = non-voided Part 5 billing totals YTD (see src/lib/services/non-vat.ts).
     const meter = await getNonVatMeter(settings.taxYear);
     const booksEnabled = await isBooksEnabled();
-    return { sessionLimits, cashEnabled, payablesEnabled, meter, booksEnabled, settings };
+    return {
+      sessionLimits,
+      cashEnabled,
+      payablesEnabled,
+      meter,
+      booksEnabled,
+      settings,
+      unbilledConfirmedSos,
+    };
   });
   const milestoneMessage = NON_VAT_MESSAGES[meter.level];
   const milestoneTitle = homeNonVatTitle();
+  const unbilledCaption = confirmedUnbilledSoCaption(unbilledConfirmedSos);
   const canOpenSettings = can(user, "manage_settings");
   const storeOrdersPaidCount = can(user, "edit_data") ? await countPaidStoreOrders() : 0;
 
@@ -103,6 +120,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Milestones at {meter.warnFirstPct}%, {meter.warnSecondPct}% and 100%
           </div>
         )}
+        <div className="faint small tracker-unbilled">{unbilledCaption}</div>
       </a>
       <div className="user-row">
         <Avatar name={user.name} dark />

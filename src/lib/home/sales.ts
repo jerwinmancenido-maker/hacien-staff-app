@@ -1,9 +1,10 @@
 // Pure helpers for the Home Sales section (month windows, change %, axis
-// labels, top customers). No DB — unit-tested. Gross sales definition matches
-// the Non-VAT meter: non-voided Part 5 billings by invoiceDate (see
-// src/lib/services/non-vat.ts). The app has no credit-note documents; customer
-// credit from unapplied collections does not reduce sales.
+// labels, top customers, SO sales totals). No DB — unit-tested.
+// Chart / Sales KPI = confirmed SO contractPrice by SO date (OPEN|CLOSED,
+// businessId null). Billed KPIs and the ₱3M meter stay on non-void billings
+// (see src/lib/services/non-vat.ts). Do not edit non-vat.ts here.
 
+import { remainingToBill } from "../billing/status";
 import { formatCompactPesoLimit } from "./nonVatCopy";
 import { isoDate, manilaToday } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
@@ -225,7 +226,7 @@ export function owedOverdueChip(
   return { label: `${overdue} overdue`, tone: "overdue" };
 }
 
-/** "Nov 2025 – Oct 2026" range under Sales billed. */
+/** "Nov 2025 – Oct 2026" range under the Sales chart. */
 export function salesMonthsRangeLabel(months: readonly { key: MonthKey; shortLabel: string }[]): string {
   if (months.length === 0) return "";
   const first = months[0]!;
@@ -233,6 +234,35 @@ export function salesMonthsRangeLabel(months: readonly { key: MonthKey; shortLab
   const firstYear = first.key.slice(0, 4);
   const lastYear = last.key.slice(0, 4);
   return `${first.shortLabel} ${firstYear} – ${last.shortLabel} ${lastYear}`;
+}
+
+/**
+ * Confirmed-SO value not yet covered by non-void billings (no double count).
+ * Each billing belongs to one salesOrderId; remaining = contractPrice − billed.
+ * Negative remainders (over-billed) do not reduce other orders.
+ */
+export function confirmedSoUnbilledTotal(
+  rows: readonly { contractPrice: string; billingAmounts: readonly string[] }[],
+): string {
+  let cents = 0n;
+  for (const r of rows) {
+    const rem = toScaled(remainingToBill(r.contractPrice, r.billingAmounts), 2);
+    if (rem > 0n) cents += rem;
+  }
+  return fromScaled(cents, 2);
+}
+
+/** "N orders" / "1 order" sub-line for the Sales KPI. */
+export function salesOrderCountLabel(count: number): string {
+  const n = Math.max(0, Math.trunc(Number(count) || 0));
+  return n === 1 ? "1 order" : `${n.toLocaleString("en-US")} orders`;
+}
+
+/** Sidebar muted line under the ₱3M meter. */
+export function confirmedUnbilledSoCaption(amount: string | number): string {
+  const n = typeof amount === "number" ? amount : Number(amount);
+  const pesos = Number.isFinite(n) ? formatCompactPesoWhole(n) : "₱0";
+  return `Plus ${pesos} in confirmed orders not yet billed`;
 }
 
 /** Empty Sales chart: no ₱ axis labels / gridlines (month labels + zero bars only). */
@@ -294,24 +324,37 @@ export type HomeSalesCustomer = {
 };
 
 export type HomeSales = {
+  /** Sales orders list (`/sales-orders`). */
   href: string;
+  /** Confirmed SO contractPrice by SO month (last 12 Manila months). */
   months: HomeSalesMonth[];
   /** Last 6 months (narrow view); same objects as a slice of `months`. */
   monthsNarrow: HomeSalesMonth[];
+  /** Confirmed SO contractPrice dated this Manila month (Sales KPI). */
   thisMonth: string;
-  /** Prior calendar month total (full month; chart / legacy). */
+  /** Confirmed SO count dated this Manila month. */
+  orderCount: number;
+  /** Prior calendar month SO total (full month; chart / legacy). */
   lastMonth: string;
-  /** Same calendar days of prior month as MTD so far (KPI compare). */
+  /** Same calendar days of prior month as MTD so far (Sales KPI compare). */
   lastMonthSameDays: string;
   /** Manila day-of-month used for same-days compare. */
   mtdDay: number;
   change: { label: string; tone: "up" | "down" | "flat" | "none" };
-  /** null when both MTD and same-days prior are ₱0 (no chip). */
+  /** null when both Sales MTD and same-days prior are ₱0 (no chip). */
   mtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
+  /** Non-void billings this Manila month (Billed KPI; unchanged source). */
+  billedThisMonth: string;
+  /** Same calendar days of prior month for Billed MTD chip. */
+  billedLastMonthSameDays: string;
+  /** null when both Billed MTD and same-days prior are ₱0. */
+  billedMtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
+  /** YTD non-void billings (same as Non-VAT / Billed year KPI). */
   thisYear: string;
+  /** Top customers by year-to-date confirmed SO value. */
   topCustomers: HomeSalesCustomer[];
   empty: boolean;
   axisTicks: number[];
-  /** e.g. "Nov 2025 – Oct 2026" under the Sales billed card. */
+  /** e.g. "Nov 2025 – Oct 2026" under the Sales chart. */
   rangeLabel?: string;
 };

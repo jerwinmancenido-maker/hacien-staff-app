@@ -62,6 +62,7 @@ import {
   owedOverdueChip,
   salesMonthLabel,
   salesMonthsRangeLabel,
+  salesOrderCountLabel,
   sameDaysEndYmd,
   shiftMonthKey,
   type HomeSales,
@@ -179,6 +180,18 @@ export type HomeKpiChange = {
 };
 
 export type HomeKpis = {
+  /** Confirmed SO contractPrice this Manila month (first card). */
+  salesThisMonth: {
+    /** e.g. "Sales (Nov)" — month from Manila now. */
+    label: string;
+    amount: string;
+    orderCount: number;
+    orderCountLabel: string;
+    change: HomeKpiChange;
+    /** Empty when both MTD and same-days prior are ₱0 (no chip). */
+    vsCaption: string;
+    href: string;
+  };
   billedThisMonth: {
     /** e.g. "Billed (Oct)" — month from Manila now. */
     label: string;
@@ -386,7 +399,8 @@ function buildKpis(opts: {
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const day = sales.mtdDay;
-  const billedChip = sales.mtdChip;
+  const salesChip = sales.mtdChip;
+  const billedChip = sales.billedMtdChip;
   const collectedChip = mtdVsSameDaysChip(totalPaid, totalPaidPrior, lastKey, day);
   const collectedCaption =
     collectedChip != null ? "" : toScaled(totalPaid, 2) <= 0n ? "No payments yet" : `Posted collections in ${mon}`;
@@ -396,15 +410,24 @@ function buildKpis(opts: {
     billingCount === 1 ? "1 billing" : `${billingCount.toLocaleString("en-US")} billings`;
 
   return {
-    billedThisMonth: {
-      label: `Billed (${mon})`,
+    salesThisMonth: {
+      label: `Sales (${mon})`,
       amount: sales.thisMonth,
-      change: billedChip?.change ?? { label: "—", tone: "none" },
-      vsCaption: billedChip?.vsCaption ?? "",
+      orderCount: sales.orderCount,
+      orderCountLabel: salesOrderCountLabel(sales.orderCount),
+      change: salesChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: salesChip?.vsCaption ?? "",
       href: sales.href,
     },
+    billedThisMonth: {
+      label: `Billed (${mon})`,
+      amount: sales.billedThisMonth,
+      change: billedChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: billedChip?.vsCaption ?? "",
+      href: nonVatHref(),
+    },
     owedByCustomers: {
-      label: "Owed",
+      label: "Owed by customers",
       amount: owedAmount,
       overdueChip: owedOverdueChip(overdueCount, openCount),
       billingCount,

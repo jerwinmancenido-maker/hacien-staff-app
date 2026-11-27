@@ -214,7 +214,9 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       fromYmd: period.fromYmd,
       toYmd: period.toYmd,
     });
-    expect(dashAdmin.sales!.thisMonth).toBe(billedSum);
+    // Billed MTD stays on billings; Sales KPI thisMonth is confirmed SO value.
+    expect(dashAdmin.sales!.billedThisMonth).toBe(billedSum);
+    expect(dashAdmin.kpis!.billedThisMonth.amount).toBe(billedSum);
     expect(collected!.amount).toBe(collectedSum);
 
     const dashStaff = await loadHomeDashboard(staff);
@@ -376,7 +378,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const dueSoon = await listSupplierBillsDueSoon(7);
 
     expect(dash.sales).toBeTruthy();
-    expect(dash.sales!.thisMonth).toBe(billedSum);
+    expect(dash.sales!.billedThisMonth).toBe(billedSum);
+    expect(dash.kpis!.billedThisMonth.amount).toBe(billedSum);
     expect(collectedMoney.amount).toBe(collectedSum);
     expect(owedMoney.amount).toBe(ar.totalReceivable);
     expect(owedMoney.overdueAmount).toBe(ar.overdue);
@@ -585,7 +588,8 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const dash = await loadHomeDashboard(admin);
     const collectedMoney = dash.money.find((m) => m.kind === "collectedThisMonth")!;
     expect(dash.sales).toBeTruthy();
-    expect(dash.sales!.thisMonth).toBe(billedAgg);
+    expect(dash.sales!.billedThisMonth).toBe(billedAgg);
+    expect(dash.kpis!.billedThisMonth.amount).toBe(billedAgg);
     expect(collectedMoney.amount).toBe(collectedAgg);
 
     const ar = await arAgingSummary();

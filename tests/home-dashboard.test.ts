@@ -174,6 +174,12 @@ describe("home Non-VAT card copy", () => {
     expect(formatCompactPesoLimit(1_500_000)).toBe("₱1.5M");
     // Q13 S-46: title is fixed, not the limit — the limit still shows in the card body.
     expect(homeNonVatTitle()).toBe("Sales Milestone");
+    // Unbilled confirmed-SO line sits under the meter; meter itself stays YTD billings.
+    const layout = readFileSync(path.join(process.cwd(), "src/app/(app)/layout.tsx"), "utf8");
+    expect(layout).toMatch(/loadConfirmedUnbilledSoTotal/);
+    expect(layout).toMatch(/confirmedUnbilledSoCaption/);
+    expect(layout).toMatch(/tracker-unbilled/);
+    expect(layout).toMatch(/getNonVatMeter/);
   });
 
   it("never emits 1000K / 1000M and always keeps the ₱ sign at unit boundaries", () => {

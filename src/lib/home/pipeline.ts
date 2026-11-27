@@ -24,6 +24,16 @@ export function isOpenQuoteStatus(status: QuoteStatus): boolean {
   return (OPEN_QUOTE_STATUSES as readonly string[]).includes(status);
 }
 
+/**
+ * Confirmed sales orders for Home Sales KPIs / chart / unbilled line.
+ * OPEN or CLOSED count; VOID does not. There is no separate "confirmed" status.
+ */
+export const CONFIRMED_SALES_ORDER_STATUSES: readonly SalesOrderStatus[] = ["OPEN", "CLOSED"];
+
+export function isConfirmedSalesOrder(status: SalesOrderStatus): boolean {
+  return (CONFIRMED_SALES_ORDER_STATUSES as readonly string[]).includes(status);
+}
+
 /** Cancelled SOs use VOID. Fully billed = remaining-to-bill ≤ 0 while still OPEN. */
 export function isOpenUnbilledSalesOrder(
   status: SalesOrderStatus,

@@ -388,6 +388,10 @@ a.tracker-card:hover {
   margin-top: calc(6px * var(--ui-scale, 1));
   font-weight: 500;
 }
+.tracker-unbilled {
+  margin-top: calc(6px * var(--ui-scale, 1));
+  line-height: 1.35;
+}
 /* Q13 S-46: sales milestone, congratulations style only. No amber/red at
    any level — the bar stays the blue accent (.bar > span, below) and the
    card keeps the default background, so a milestone never looks like an
@@ -6774,13 +6778,14 @@ button.contact-card-add {
 
 .home-kps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Five KPI cards (Sales first). Phone wraps to 2 cols — never drop Billed. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: calc(12px * var(--ui-scale, 1));
   align-items: stretch;
   width: 100%;
   min-width: 0;
 }
-/* Defeat global `.card + .card { margin-top }` so all four share one top + height. */
+/* Defeat global `.card + .card { margin-top }` so all five share one top + height. */
 .home-kps > .card,
 .home-kps > .home-kp {
   margin-top: 0;
@@ -6792,7 +6797,8 @@ button.contact-card-add {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: calc(14px * var(--ui-scale, 1));
+  /* Design Guidelines v1.5: 16px card padding. */
+  padding: calc(16px * var(--ui-scale, 1));
   text-align: left;
 }
 .home-kl {

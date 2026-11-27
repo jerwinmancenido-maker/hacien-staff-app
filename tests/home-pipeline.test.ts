@@ -5,14 +5,16 @@ import {
   buildHomePipeline,
   canSeeHomePipelineQuotes,
   canSeeHomePipelineSalesOrders,
+  CONFIRMED_SALES_ORDER_STATUSES,
   EXCLUDED_OPEN_QUOTE_STATUSES,
+  isConfirmedSalesOrder,
   isOpenQuoteStatus,
   isOpenUnbilledSalesOrder,
   OPEN_QUOTE_STATUSES,
   pipelineOpenCaption,
   soUnbilledAmount,
 } from "@/lib/home/pipeline";
-import { openQuotesHref, openSalesOrdersHref } from "@/lib/home/hrefs";
+import { openQuotesHref, openSalesOrdersHref, salesOrdersListHref } from "@/lib/home/hrefs";
 import { roleFlags, type PermissionUser } from "@/lib/permissions";
 
 function user(
@@ -54,11 +56,19 @@ describe("home pipeline open-SO filter", () => {
     expect(soUnbilledAmount("1000.00", ["1200.00"])).toBe("0.00");
   });
 
+  it("confirmed SO = OPEN or CLOSED (no separate confirmed status); VOID out", () => {
+    expect(CONFIRMED_SALES_ORDER_STATUSES).toEqual(["OPEN", "CLOSED"]);
+    expect(isConfirmedSalesOrder("OPEN")).toBe(true);
+    expect(isConfirmedSalesOrder("CLOSED")).toBe(true);
+    expect(isConfirmedSalesOrder("VOID")).toBe(false);
+  });
+
   it("wires the open=1 SO list filter to remaining-to-bill > 0", () => {
     const src = readFileSync(path.join(process.cwd(), "src/lib/quotes/views.ts"), "utf8");
     expect(src).toMatch(/openUnbilled/);
     expect(src).toMatch(/remainingToBill/);
     expect(openSalesOrdersHref()).toBe("/sales-orders?open=1&business=own");
+    expect(salesOrdersListHref()).toBe("/sales-orders");
   });
 });
 
