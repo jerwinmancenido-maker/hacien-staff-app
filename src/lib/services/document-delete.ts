@@ -153,7 +153,7 @@ export async function deleteSalesOrder(id: string, reason: string, actor: Delete
   return runDelete(async (tx) => {
     const peek = await tx.salesOrder.findUnique({ where: { id }, select: { quoteId: true } });
     if (!peek) throw new DocRuleError("Sales order not found.");
-    await lockQuote(tx, peek.quoteId);
+    if (peek.quoteId) await lockQuote(tx, peek.quoteId);
     await lockSalesOrder(tx, id);
 
     const so = await tx.salesOrder.findUnique({
@@ -242,7 +242,7 @@ export async function deleteBilling(id: string, reason: string, actor: DeleteAct
       select: { salesOrderId: true, salesOrder: { select: { quoteId: true } } },
     });
     if (!peek) throw new DocRuleError("Billing not found.");
-    await lockQuote(tx, peek.salesOrder.quoteId);
+    if (peek.salesOrder.quoteId) await lockQuote(tx, peek.salesOrder.quoteId);
     await lockSalesOrder(tx, peek.salesOrderId);
     await lockBilling(tx, id);
 
@@ -298,7 +298,7 @@ async function lockCollectionParents(tx: Tx, collectionId: string) {
     select: { billingId: true },
   });
   const billingIds = [...new Set(allocs.map((a) => a.billingId))].sort();
-  const parents: { quoteId: string; salesOrderId: string; billingId: string }[] = [];
+  const parents: { quoteId: string | null; salesOrderId: string; billingId: string }[] = [];
   for (const billingId of billingIds) {
     const billing = await tx.billing.findUnique({
       where: { id: billingId },
@@ -310,7 +310,7 @@ async function lockCollectionParents(tx: Tx, collectionId: string) {
   const seenS = new Set<string>();
   const seenB = new Set<string>();
   for (const p of parents) {
-    if (seenQ.has(p.quoteId)) continue;
+    if (!p.quoteId || seenQ.has(p.quoteId)) continue;
     seenQ.add(p.quoteId);
     await lockQuote(tx, p.quoteId);
   }

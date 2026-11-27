@@ -555,7 +555,7 @@ export async function getCreatePosPreview(salesOrderId: string, viewer: Permissi
     id: so.id,
     number: so.number,
     status: so.status,
-    quoteStatus: so.quote.status,
+    quoteStatus: so.quote?.status ?? null,
     customerName: so.customer.name,
     deliveryAddress: so.deliveryAddress,
     lines,

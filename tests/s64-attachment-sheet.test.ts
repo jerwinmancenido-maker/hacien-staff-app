@@ -46,7 +46,7 @@ describe("S-64 attachment sheet", () => {
 
   it("warranty falls back from the quote to Settings, and banks use print rules", () => {
     const model = src("src/lib/print/attachment.ts");
-    expect(model).toContain("so.quote.warrantyNotes?.trim() || settings.print.warrantyNotes?.trim() || null");
+    expect(model).toContain("so.quote?.warrantyNotes?.trim() || settings.print.warrantyNotes?.trim() || null");
     expect(model).toContain("paymentInstructionsFromSettings");
   });
 

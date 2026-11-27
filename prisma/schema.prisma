@@ -984,8 +984,9 @@ model SalesOrder {
   // S-93: random tracking reference for new orders (TRK- + 16 base32 chars).
   // Null on orders created before S-93; the SO number keeps working for those.
   trackingRef       String?          @unique @db.VarChar(24)
-  quoteId           String
-  quote             Quote            @relation(fields: [quoteId], references: [id])
+  // Null on store-converted SOs (no source quote — store intake Slice 2, Gap 1).
+  quoteId           String?
+  quote             Quote?           @relation(fields: [quoteId], references: [id])
   // Business entity, copied from the quote at conversion. NULL = HACIEN.
   businessId        String?
   business          Business?        @relation(fields: [businessId], references: [id])
