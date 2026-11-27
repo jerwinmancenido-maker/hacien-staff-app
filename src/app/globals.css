@@ -6809,7 +6809,9 @@ button.contact-card-add {
   font-weight: 600;
   font-size: calc(12px * var(--ui-scale, 1));
   text-align: left;
-  white-space: nowrap;
+  /* Five-col strip: allow “Owed by customers” to wrap instead of clipping. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .home-kv {
   font-size: calc(22px * var(--ui-scale, 1));
@@ -6831,11 +6833,12 @@ button.contact-card-add {
   justify-content: flex-start;
   gap: calc(6px * var(--ui-scale, 1));
   min-height: calc(18px * var(--ui-scale, 1));
-  flex-wrap: nowrap;
+  /* Five-col strip: wrap MTD / goal captions instead of clipping mid-peso. */
+  flex-wrap: wrap;
   text-align: left;
   margin-top: auto;
-  white-space: nowrap;
-  overflow: hidden;
+  white-space: normal;
+  overflow: visible;
 }
 .home-ks.home-ks-paid {
   flex-direction: column;
