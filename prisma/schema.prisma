@@ -2116,8 +2116,15 @@ model Expense {
   amount             Decimal        @db.Decimal(15, 2)
   // Optional EWT withheld on this expense (Part 6 already models EWT).
   withholdingApplied Decimal        @default(0) @db.Decimal(15, 2)
-  cashAccountId      String
-  cashAccount        CashAccount    @relation(fields: [cashAccountId], references: [id])
+  // Nullable since the Gap 7 follow-up (2026-11-27): a gateway fee withheld
+  // from settlement is a real expense that never moved through a cash
+  // account, so a store-order conversion records it account-less. The manual
+  // expense form still requires an account (recordExpense asserts one);
+  // only conversion mints account-less expenses. An account-less expense
+  // counts in expense/profit reporting but touches no cash-account balance
+  // and no cash-position figure.
+  cashAccountId      String?
+  cashAccount        CashAccount?   @relation(fields: [cashAccountId], references: [id])
   receiptNo          String?        @db.VarChar(64)
   notes              String?        @db.Text
   // Phase 4 #7 (re-planned): optional link to the order this expense is a
