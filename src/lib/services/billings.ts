@@ -1,7 +1,7 @@
 // Customer billings: record a hand-written booklet invoice against an OPEN SO.
 // Internal number BL-YYYY-####. The app never titles or prints this as an Invoice.
 
-import type { BillingStatus, Prisma } from "@prisma/client";
+import { Prisma, type BillingStatus } from "@prisma/client";
 import { db, isUniqueViolation, type Tx } from "../db";
 import { writeAudit } from "../audit";
 import { assertCan, assertCanMarkAdminCheck, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
@@ -171,7 +171,12 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
         }
         await claimBookletSerial(tx, "SI", input.invoiceNo);
 
-        const withholdingExpected = proRataWithholding(input.amount, so.contractPrice, so.withholdingTotal);
+        // Forecast retired (ERP payment-entry model, 2026-11-28): a new
+        // billing carries NO withholding forecast — withholding is typed
+        // from the Form 2307 at collection. Stored billings issued before
+        // this change keep their forecast untouched (updateBilling still
+        // rescales from the stored figure); a stored 0 stays 0.
+        const withholdingExpected = "0.00";
         const net = netExpected(input.amount, withholdingExpected);
         const number = await allocateDocNumber(tx, "BILLING", year, format);
 
@@ -185,7 +190,7 @@ export async function recordBilling(input: BillingInput, actor: BillingActor, fi
             dueDate: input.dueDate,
             amount: input.amount,
             withholdingExpected,
-            withholdingBreakdown: await captureWithholdingBreakdown(tx, so.id, so.withholding),
+            withholdingBreakdown: Prisma.DbNull,
             netExpected: net,
             status: "OPEN",
             notes: input.notes,

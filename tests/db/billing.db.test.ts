@@ -1191,7 +1191,7 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
     ).resolves.toMatchObject({ withholdingType: "NONE" });
   });
 
-  it("S-19 non-Admin cannot post 2307 codes when the SO has none", async () => {
+  it("S-19 non-Admin: catalogue 2307 lines record on a code-less SO; off-catalogue lines still refuse", async () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year);
     await db.salesOrder.update({ where: { id: so.id }, data: { withholding: [] } });
@@ -1210,24 +1210,54 @@ describe.skipIf(!env.hasDb)("billing & collections (MySQL)", () => {
       },
       admin,
     );
+    // ERP payment-entry model (2026-11-28): staff copy the certificate's
+    // ATC lines — a catalogue pair (WI640, 1%) records even when the SO
+    // carries no codes. Before this change every line was refused here.
+    const col = await recordCollection(
+      {
+        customerId: customer.id,
+        date: new Date(Date.UTC(year, 2, 6)),
+        method: "CASH",
+        reference: null,
+        checkBank: null,
+        checkDate: null,
+        receiptNo: "OR-EMPTY-SO-CODES",
+        amountReceived: "900.00",
+        notes: null,
+        allocations: [
+          {
+            billingId: billing.id,
+            cashApplied: "900.00",
+            withholdingApplied: "50.00",
+            codes: [{ rate: "0.0100", atcCode: "WI640", amount: "50.00" }],
+          },
+        ],
+      },
+      approver,
+    );
+    const w = await db.withholding2307.findFirstOrThrow({ where: { collectionId: col.id } });
+    expect(money(w.amount)).toBe("50.00");
+
+    // A rate/ATC pair on neither the SO nor the catalogue is a custom
+    // rate: still Admin-only, with the original refusal.
     await expect(
       recordCollection(
         {
           customerId: customer.id,
-          date: new Date(Date.UTC(year, 2, 6)),
+          date: new Date(Date.UTC(year, 2, 7)),
           method: "CASH",
           reference: null,
           checkBank: null,
           checkDate: null,
-          receiptNo: "OR-EMPTY-SO-CODES",
-          amountReceived: "900.00",
+          receiptNo: "OR-EMPTY-SO-CODES-2",
+          amountReceived: "50.00",
           notes: null,
           allocations: [
             {
               billingId: billing.id,
-              cashApplied: "900.00",
-              withholdingApplied: "50.00",
-              codes: [{ rate: "0.0100", atcCode: "WI640", amount: "50.00" }],
+              cashApplied: "10.00",
+              withholdingApplied: "40.00",
+              codes: [{ rate: "0.0400", atcCode: "WI999", amount: "40.00" }],
             },
           ],
         },

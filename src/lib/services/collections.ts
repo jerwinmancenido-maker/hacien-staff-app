@@ -23,6 +23,12 @@ import { recomputeBillingStatus } from "./billings";
 import { defaultExpenseCategoryId } from "./expenses";
 import { notifyPaymentReceived } from "../messaging/order-text-triggers";
 import { claimBookletSerial } from "./booklet";
+import {
+  deductionsError,
+  deductionExpenseNotes,
+  feeRowsTotal,
+  normaliseDeductions,
+} from "../billing/deductions";
 import { assertPeriodOpen } from "./period-close";
 
 export type CollectionActor = PermissionUser & { id: string };
@@ -159,6 +165,37 @@ export function splitBillingWithholding(
 }
 
 /**
+ * Customer-default hint (ERP payment-entry model): when neither the
+ * billing's stored breakdown nor the SO carries any code, the customer's
+ * saved default pick lends its CODES ONLY — bare rows with blank
+ * amounts, resolved through the ATC catalogue. The typed amount on the
+ * certificate always rules; a hint amount is never pre-filled.
+ */
+async function customerHintPrefill(
+  tx: Tx,
+  salesOrderId: string,
+): Promise<{ rate: string; atcCode: string | null; amount?: string }[]> {
+  const so = await tx.salesOrder.findUnique({
+    where: { id: salesOrderId },
+    select: { customer: { select: { defaultWithholding: true } } },
+  });
+  const codes = ((so?.customer.defaultWithholding ?? []) as string[]).filter(
+    (c): c is string => typeof c === "string" && c.length > 0,
+  );
+  if (!codes.length) return [];
+  const rates = await tx.withholdingRate.findMany({
+    where: { code: { in: codes }, active: true },
+    select: { code: true, rate: true, atcCode: true },
+  });
+  const byCode = new Map(rates.map((r) => [r.code, r]));
+  return codes.flatMap((code) => {
+    const r = byCode.get(code);
+    if (!r) return [];
+    return [{ rate: Number(r.rate).toFixed(4), atcCode: r.atcCode ?? null, amount: "" }];
+  });
+}
+
+/**
  * Per-ATC prefill amounts for a billing's remaining withholding, for the new
  * collection form. Prefers the billing's stored issue-time breakdown,
  * pro-rated by remaining expected withholding, so later SO edits can never
@@ -181,7 +218,10 @@ export async function withholdingCodePrefill(
   const storedBreakdown = (billing.withholdingBreakdown ?? null) as
     | { rate: string; atcCode: string | null; amount: string }[]
     | null;
-  if (!storedBreakdown?.length) return bare;
+  if (!storedBreakdown?.length) {
+    if (bare.length) return bare;
+    return customerHintPrefill(tx, billing.salesOrderId);
+  }
   const parts = storedBreakdown.map((x) => ({
     rate: x.rate,
     atcCode: x.atcCode ?? null,
@@ -422,20 +462,42 @@ export async function recordCollection(
   assertCan(actor, "record_billing");
   if (toScaled(input.amountReceived, 2) <= 0n) throw new DocRuleError("Amount received must be greater than 0.", "amountReceived");
 
-  // Collection fee (REQ-COLLECTION-FEES-001): absent/0 = exactly the
-  // pre-fee behaviour. Validated before anything is written.
-  const feeAmount = money(input.feeAmount ?? "0");
-  const feeError = collectionFeeError(feeAmount, input.amountReceived);
-  if (feeError) throw new DocRuleError(feeError, "feeAmount");
+  // Collection deductions (ERP payment-entry model, 2026-11-28): the
+  // PR #354 fee, generalised to a rows list. The legacy feeAmount folds
+  // in as one FEE row, so fee-only callers keep exactly their behaviour
+  // — including the stored feeAmount / feeExpenseId, which stay synced
+  // to the FEE rows below. Validated before anything is written.
+  const legacyFee = money(input.feeAmount ?? "0");
+  if (toScaled(legacyFee, 2) < 0n) throw new DocRuleError("Collection fee can't be negative.", "feeAmount");
+  const deductionRows = normaliseDeductions(input);
+  const appliedScaled = input.allocations.reduce(
+    (a, x) => a + toScaled(money(x.cashApplied || "0"), 2) + toScaled(money(x.withholdingApplied || "0"), 2),
+    0n,
+  );
+  const withholdingScaled = input.allocations.reduce(
+    (a, x) => a + toScaled(money(x.withholdingApplied || "0"), 2),
+    0n,
+  );
+  const dedError = deductionsError(deductionRows, {
+    amountReceived: input.amountReceived,
+    applied: input.isDeposit ? "0.00" : fromScaled(appliedScaled, 2),
+    withholding: fromScaled(withholdingScaled, 2),
+  });
+  if (dedError) {
+    throw new DocRuleError(dedError, input.deductions?.length ? "deductions" : "feeAmount");
+  }
+  const feeAmount = feeRowsTotal(deductionRows);
   const hasFee = toScaled(feeAmount, 2) > 0n;
-  const feeCategory = hasFee ? await collectionFeeCategory() : null;
+  const hasDeductions = deductionRows.length > 0;
+  const postsExpenses = deductionRows.some((r) => r.cashAffecting);
+  const feeCategory = postsExpenses ? await collectionFeeCategory() : null;
 
   const snap = await getSettingsSnapshot();
   const format = snap.settings.numbering.collection;
   const expenseFormat = snap.settings.numbering.expense;
   const year = input.date.getUTCFullYear();
   await ensureSeries(db, "COLLECTION", year, format);
-  if (hasFee) await ensureSeries(db, "EXPENSE", year, expenseFormat);
+  if (postsExpenses) await ensureSeries(db, "EXPENSE", year, expenseFormat);
   const uploads = await prepareUploads(files);
 
   try {
@@ -561,24 +623,31 @@ export async function recordCollection(
             // Staff may record standard SO codes; custom rates need Admin.
             // Fail closed when the SO has no standard codes — any posted codes need Admin.
             if (!actor.isAdmin && lines.length) {
-              if (!soCodes.length) {
-                throw new DocRuleError(
-                  "Only an Admin can set withholding rates when the sales order has none.",
-                  "allocations",
-                );
-              }
-              const standard = new Set(soCodes.map((c) => `${c.atcCode ?? ""}:${c.rate}`));
+              // Staff may record the SO's codes and any line on the ATC
+              // catalogue — the certificate they are copying carries
+              // catalogue ATCs (ERP payment-entry model, 2026-11-28:
+              // lines are chosen by staff from the certificate, never
+              // generated from a pick). A rate/ATC pair on neither list
+              // is a custom rate and still needs an Admin; fail closed.
+              const standard = new Set(soCodes.map((c) => `${c.atcCode ?? ""}|${Number(c.rate)}`));
+              const catalogue = await tx.withholdingRate.findMany({
+                where: { active: true },
+                select: { atcCode: true, rate: true },
+              });
+              for (const r of catalogue) standard.add(`${r.atcCode ?? ""}|${Number(r.rate)}`);
               for (const line of lines) {
-                const key = `${line.atcCode ?? ""}:${line.rate}`;
+                const key = `${line.atcCode ?? ""}|${Number(line.rate)}`;
                 if (!standard.has(key)) {
                   throw new DocRuleError(
-                    "Only an Admin can override withholding rates on a 2307. Use the rates from the sales order.",
+                    soCodes.length
+                      ? "Only an Admin can override withholding rates on a 2307. Use a rate from the ATC list or the sales order."
+                      : "Only an Admin can set withholding rates when the sales order has none.",
                     "allocations",
                   );
                 }
               }
             }
-            await upsert2307(tx, {
+            const w2307 = await upsert2307(tx, {
               billingId: a.billingId,
               collectionId: collection.id,
               customerId: customer.id,
@@ -588,21 +657,42 @@ export async function recordCollection(
               lines,
               codesWereProvided: !!(codes && codes.length > 0),
             });
+            // Settlement-ledger mirror (finding 1397): one WITHHOLDING
+            // deduction row per billing, linked to its 2307 record. The
+            // allocation + 2307 rows stay the source of truth; this row
+            // never posts an expense and never touches the cash account.
+            if (w2307) {
+              await tx.collectionDeduction.create({
+                data: {
+                  collectionId: collection.id,
+                  kind: "WITHHOLDING",
+                  label: null,
+                  amount: wh,
+                  cashAffecting: false,
+                  expenseId: null,
+                  billingId: a.billingId,
+                  withholding2307Id: w2307.id,
+                },
+              });
+            }
           }
         }
         for (const billingId of touched) await recomputeBillingStatus(tx, billingId, actor.id);
 
-        // --- Collection fee expense (REQ-COLLECTION-FEES-001): the fee
-        // was kept by the channel out of this collection. The billing
-        // settles by the full amount received — the allocations above
-        // are untouched and this block never writes a Billing row. The
-        // fee is a business expense on the SAME cash account as the
-        // collection, so the account's posted balance moves by exactly
-        // (received − fee): the cash lands net. Linked to the sale of
-        // the first allocated billing (the gateway-fee pattern, Gap 7);
-        // an unallocated collection (credit / deposit) links no sale.
+        // --- Collection deductions (ERP payment-entry model): every
+        // cash-affecting row posts a linked expense on the SAME cash
+        // account as the collection, so the account lands net of what
+        // the channel / payer kept (received − cash-affecting rows);
+        // settlement-only rows post nothing. The billings settle by
+        // their allocations above — this block never writes a Billing
+        // row. Each expense links to the sale of the first allocated
+        // billing (the gateway-fee pattern, Gap 7); an unallocated
+        // collection (credit / deposit) links no sale. The FEE total
+        // and the first FEE expense stay mirrored on the collection's
+        // legacy feeAmount / feeExpenseId fields.
         let feeExpenseNumber: string | null = null;
-        if (feeCategory) {
+        let firstFeeExpenseId: string | null = null;
+        if (hasDeductions) {
           const touchedBillings = input.allocations.filter((a) => touched.has(a.billingId));
           const firstBilling = open.find((b) => b.id === touchedBillings[0]?.billingId);
           const linkedSo = firstBilling
@@ -621,46 +711,68 @@ export async function recordCollection(
           const billingNumbers = touchedBillings
             .map((a) => numberById.get(a.billingId))
             .filter((n): n is string => !!n);
-          feeExpenseNumber = await allocateDocNumber(tx, "EXPENSE", year, expenseFormat);
-          const feeExpense = await tx.expense.create({
-            data: {
-              number: feeExpenseNumber,
-              date: input.date,
-              supplierId: null,
-              payeeText: COLLECTION_METHOD_LABELS[input.method],
-              categoryId: feeCategory.id,
-              amount: feeAmount,
-              withholdingApplied: "0",
-              cashAccountId: input.cashAccountId ?? null,
-              receiptNo: null,
-              notes: collectionFeeExpenseNotes(number, billingNumbers),
-              salesOrderId: firstBilling?.salesOrderId ?? null,
-              purchaseOrderId: null,
-              businessId: linkedSo?.businessId ?? null,
-              createdById: actor.id,
-            },
-          });
-          await tx.collection.update({
-            where: { id: collection.id },
-            data: { feeExpenseId: feeExpense.id },
-          });
-          await writeAudit(tx, {
-            userId: actor.id,
-            entityType: "Expense",
-            entityId: feeExpense.id,
-            action: "create",
-            after: {
-              number: feeExpenseNumber,
-              date: ymd(input.date),
-              payee: COLLECTION_METHOD_LABELS[input.method],
-              category: feeCategory.label,
-              amount: feeAmount,
-              withholdingApplied: "0.00",
-              cashAccount: input.cashAccountId ?? null,
-              ...(linkedSo ? { salesOrder: linkedSo.number } : {}),
-              source: `Collection ${number}`,
-            },
-          });
+          for (const row of deductionRows) {
+            let expenseId: string | null = null;
+            if (row.cashAffecting && feeCategory) {
+              const expenseNumber = await allocateDocNumber(tx, "EXPENSE", year, expenseFormat);
+              const exp = await tx.expense.create({
+                data: {
+                  number: expenseNumber,
+                  date: input.date,
+                  supplierId: null,
+                  payeeText: COLLECTION_METHOD_LABELS[input.method],
+                  categoryId: feeCategory.id,
+                  amount: row.amount,
+                  withholdingApplied: "0",
+                  cashAccountId: input.cashAccountId ?? null,
+                  receiptNo: null,
+                  notes: deductionExpenseNotes(row, number, billingNumbers),
+                  salesOrderId: firstBilling?.salesOrderId ?? null,
+                  purchaseOrderId: null,
+                  businessId: linkedSo?.businessId ?? null,
+                  createdById: actor.id,
+                },
+              });
+              expenseId = exp.id;
+              if (row.kind === "FEE" && !firstFeeExpenseId) {
+                firstFeeExpenseId = exp.id;
+                feeExpenseNumber = expenseNumber;
+              }
+              await writeAudit(tx, {
+                userId: actor.id,
+                entityType: "Expense",
+                entityId: exp.id,
+                action: "create",
+                after: {
+                  number: expenseNumber,
+                  date: ymd(input.date),
+                  payee: COLLECTION_METHOD_LABELS[input.method],
+                  category: feeCategory.label,
+                  amount: row.amount,
+                  withholdingApplied: "0.00",
+                  cashAccount: input.cashAccountId ?? null,
+                  ...(linkedSo ? { salesOrder: linkedSo.number } : {}),
+                  source: `Collection ${number}`,
+                },
+              });
+            }
+            await tx.collectionDeduction.create({
+              data: {
+                collectionId: collection.id,
+                kind: row.kind,
+                label: row.label,
+                amount: row.amount,
+                cashAffecting: row.cashAffecting,
+                expenseId,
+              },
+            });
+          }
+          if (firstFeeExpenseId) {
+            await tx.collection.update({
+              where: { id: collection.id },
+              data: { feeExpenseId: firstFeeExpenseId },
+            });
+          }
         }
 
         await createAttachments(tx, uploads, { collectionId: collection.id }, actor.id);
@@ -680,6 +792,16 @@ export async function recordCollection(
             receiptNo: input.receiptNo,
             amountReceived: input.amountReceived,
             ...(hasFee ? { feeAmount, feeExpense: feeExpenseNumber } : {}),
+            ...(hasDeductions
+              ? {
+                  deductions: deductionRows.map((r) => ({
+                    kind: r.kind,
+                    label: r.label,
+                    amount: r.amount,
+                    cashAffecting: r.cashAffecting,
+                  })),
+                }
+              : {}),
             cashAccountId: input.cashAccountId ?? null,
             cashApplied: fromScaled(cashApplied, 2),
             unappliedCredit: credit,
@@ -824,7 +946,12 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
       await tx.$queryRaw`SELECT \`id\` FROM \`Collection\` WHERE \`id\` = ${id} FOR UPDATE`;
       const before = await tx.collection.findUnique({
         where: { id },
-        include: { allocations: true, withholdings: true, feeExpense: true },
+        include: {
+          allocations: true,
+          withholdings: true,
+          feeExpense: true,
+          deductions: { include: { expense: true } },
+        },
       });
       if (!before) throw new DocRuleError("Collection not found.");
       if (before.status === "VOID") throw new DocRuleError("This collection is already void.");
@@ -860,26 +987,28 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
           });
         }
       }
-      // Collection fee expense (REQ-COLLECTION-FEES-001): void it with
-      // the collection, mirroring voidExpense's semantics inline — the
-      // same transaction and the same pattern as the 2307 soft-clear
-      // above: status VOID + reason, a DocumentVoid snapshot, and an
-      // audit row. Posted-balance math excludes VOID expenses, so the
-      // cash account un-lands the fee together with the collection.
-      const feeExpense = before.feeExpense;
-      if (feeExpense && feeExpense.status !== "VOID") {
-        const feeVoidReason = `Voided with collection ${before.number}: ${why}`;
+      // Deduction expenses (PR #354 fee, generalised): void every
+      // expense this collection posted — the legacy feeExpense link and
+      // every deduction row's expense, deduped by id — mirroring
+      // voidExpense's semantics inline: status VOID + reason, a
+      // DocumentVoid snapshot, and an audit row. Posted-balance math
+      // excludes VOID expenses, so the cash account un-lands every
+      // cash-affecting deduction together with the collection.
+      // Settlement-only and WITHHOLDING rows posted no expense.
+      type LinkedExpense = NonNullable<typeof before.feeExpense>;
+      const voidLinkedExpense = async (expense: LinkedExpense) => {
+        const voidReason = `Voided with collection ${before.number}: ${why}`;
         await tx.expense.update({
-          where: { id: feeExpense.id },
-          data: { status: "VOID", voidedAt: now, voidReason: feeVoidReason },
+          where: { id: expense.id },
+          data: { status: "VOID", voidedAt: now, voidReason },
         });
         await tx.documentVoid.create({
           data: {
             docType: "EXPENSE",
-            docNumber: feeExpense.number,
-            docId: feeExpense.id,
-            reason: feeVoidReason,
-            snapshot: JSON.parse(JSON.stringify(feeExpense)) as Prisma.InputJsonValue,
+            docNumber: expense.number,
+            docId: expense.id,
+            reason: voidReason,
+            snapshot: JSON.parse(JSON.stringify(expense)) as Prisma.InputJsonValue,
             voidedById: actor.id,
             voidedAt: now,
           },
@@ -887,12 +1016,20 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
         await writeAudit(tx, {
           userId: actor.id,
           entityType: "Expense",
-          entityId: feeExpense.id,
+          entityId: expense.id,
           action: "void",
-          before: { status: "POSTED", amount: money(feeExpense.amount) },
-          after: { status: "VOID", voidReason: feeVoidReason },
+          before: { status: "POSTED", amount: money(expense.amount) },
+          after: { status: "VOID", voidReason },
           diff: false,
         });
+      };
+      const linkedExpenses = new Map<string, LinkedExpense>();
+      if (before.feeExpense) linkedExpenses.set(before.feeExpense.id, before.feeExpense);
+      for (const d of before.deductions) {
+        if (d.expense) linkedExpenses.set(d.expense.id, d.expense);
+      }
+      for (const expense of linkedExpenses.values()) {
+        if (expense.status !== "VOID") await voidLinkedExpense(expense);
       }
       for (const a of before.allocations) await recomputeBillingStatus(tx, a.billingId, actor.id);
 
@@ -917,6 +1054,9 @@ export async function voidCollection(id: string, reason: string, actor: Collecti
           status: "VOID",
           voidReason: why,
           ...(before.feeExpense ? { feeExpense: before.feeExpense.number } : {}),
+          ...(before.deductions.length
+            ? { deductions: before.deductions.map((d) => ({ kind: d.kind, amount: money(d.amount) })) }
+            : {}),
         },
         diff: false,
       });

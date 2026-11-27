@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import { NoIdUploadWarning } from "@/components/NoIdUploadWarning";
 import type { FormState } from "@/lib/validation/forms";
 import { COLLECTION_METHODS, COLLECTION_METHOD_LABELS } from "@/lib/validation/billing";
 import { formatPeso } from "@/lib/format";
 import { formatBookletNumber } from "@/lib/billing/booklet";
+import { deductionsError, normaliseDeductions, settlementProof } from "@/lib/billing/deductions";
 import { ratePctLabel } from "@/lib/quotes/calc";
 import { CashAccountSelect, type CashAccountOption } from "@/components/cash/CashAccountSelect";
 import { FileInput } from "@/components/FileInput";
@@ -26,6 +27,8 @@ export type OpenBillingRow = {
   /** Prefill from SO lines / snapshot — one entry per ATC. */
   defaultCodes: PrefillCode[];
 };
+
+type DedRow = { key: number; kind: "FEE" | "OTHER"; label: string; amount: string; cashAffecting: boolean };
 
 type AllocState = {
   billingId: string;
@@ -96,6 +99,7 @@ export function CollectionForm({
   cashEnabled = false,
   canEdit,
   canOverrideRates = false,
+  atcOptions = [],
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   customerId: string;
@@ -108,6 +112,8 @@ export function CollectionForm({
   canEdit: boolean;
   /** Admin only — Staff cannot type a custom rate/ATC. */
   canOverrideRates?: boolean;
+  /** The ATC catalogue for the 2307 line editor (staff pick from the certificate). */
+  atcOptions?: { atc: string; rate: string; label: string }[];
 }) {
   const { state, pending, submit } = useFormAction(action);
   const e = state.fieldErrors ?? {};
@@ -125,6 +131,17 @@ export function CollectionForm({
   const [allocs, setAllocs] = useState(initialAlloc);
   // Audit E: deposit / advance — the full amount stays as customer credit.
   const [isDeposit, setIsDeposit] = useState(false);
+  // Deduction rows (ERP payment-entry model): starts with one blank FEE
+  // row, mirroring the old always-visible fee field; blank rows post
+  // nothing.
+  const [dedRows, setDedRows] = useState<DedRow[]>([
+    { key: 0, kind: "FEE", label: "", amount: "", cashAffecting: true },
+  ]);
+  const dedKeyRef = useRef(1);
+
+  function updateDedRow(key: number, patch: Partial<DedRow>) {
+    setDedRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
 
   function markTouched(i: number) {
     setTouched((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
@@ -146,17 +163,61 @@ export function CollectionForm({
   const cashSum = allocs.reduce((a, x) => a + (Number(x.cash) || 0), 0);
   const unapplied = Math.max(0, (Number(amount) || 0) - cashSum);
 
-  function setCodeAmount(billingIndex: number, codeIndex: number, value: string) {
+  // Settlement proof (live): Applied = cash + deductions. The same
+  // helpers run in the service, which refuses what the form flags here.
+  const whSum = allocs.reduce((a, x) => a + (Number(x.withholding) || 0), 0);
+  const postedDedRows = normaliseDeductions({
+    deductions: dedRows
+      .filter((r) => r.amount.trim() !== "" && Number(r.amount) !== 0)
+      .map((r) => ({ kind: r.kind, label: r.label, amount: r.amount, cashAffecting: r.cashAffecting })),
+  });
+  const proof = settlementProof({
+    cashApplied: cashSum.toFixed(2),
+    withholdingApplied: whSum.toFixed(2),
+    rows: postedDedRows,
+  });
+  const dedError = deductionsError(postedDedRows, {
+    amountReceived: amount || "0",
+    applied: isDeposit ? "0.00" : proof.applied,
+    withholding: proof.withholding,
+  });
+
+  function setCodes(billingIndex: number, codes: AllocState["codes"]) {
     markTouched(billingIndex);
     const next = [...allocs];
     const row = { ...next[billingIndex]! };
-    const codes = [...row.codes];
-    codes[codeIndex] = { ...codes[codeIndex]!, amount: value };
     const whTotal = codes.reduce((a, c) => a + (Number(c.amount) || 0), 0);
-    row.codes = codes;
-    row.withholding = whTotal > 0 ? whTotal.toFixed(2) : "";
-    next[billingIndex] = row;
+    next[billingIndex] = {
+      ...row,
+      codes,
+      withholding: whTotal > 0 ? whTotal.toFixed(2) : "",
+      rate: codes[0]?.rate ?? row.rate,
+      atc: codes[0]?.atc ?? row.atc,
+    };
     setAllocs(next);
+  }
+
+  function setCodeAmount(billingIndex: number, codeIndex: number, value: string) {
+    const codes = [...allocs[billingIndex]!.codes];
+    codes[codeIndex] = { ...codes[codeIndex]!, amount: value };
+    setCodes(billingIndex, codes);
+  }
+
+  function setCodeRateAtc(billingIndex: number, codeIndex: number, rate: string, atc: string) {
+    const codes = [...allocs[billingIndex]!.codes];
+    codes[codeIndex] = { ...codes[codeIndex]!, rate, atc };
+    setCodes(billingIndex, codes);
+  }
+
+  function addCodeRow(billingIndex: number) {
+    setCodes(billingIndex, [...allocs[billingIndex]!.codes, { rate: "", atc: "", amount: "" }]);
+  }
+
+  function removeCodeRow(billingIndex: number, codeIndex: number) {
+    setCodes(
+      billingIndex,
+      allocs[billingIndex]!.codes.filter((_, ci) => ci !== codeIndex),
+    );
   }
 
   return (
@@ -206,21 +267,6 @@ export function CollectionForm({
             inputMode="decimal"
           />
           {e.amountReceived && <div className="error">{e.amountReceived}</div>}
-        </div>
-        <div className={`field${e.feeAmount ? " has-error" : ""}`}>
-          <label htmlFor="feeAmount">Collection fee (optional)</label>
-          <input
-            id="feeAmount"
-            name="feeAmount"
-            defaultValue={state.values?.feeAmount ?? ""}
-            inputMode="decimal"
-            placeholder="0.00"
-          />
-          <div className="hint">
-            Fee the bank or channel kept out of this payment. The billing is still settled by the full amount
-            received; the fee is recorded as an expense, so the account lands the amount minus the fee.
-          </div>
-          {e.feeAmount && <div className="error">{e.feeAmount}</div>}
         </div>
         <div className={`field${e.receiptNo ? " has-error" : ""}`}>
           <label htmlFor="receiptNo">OR / acknowledgment receipt no.</label>
@@ -273,6 +319,108 @@ export function CollectionForm({
       </div>
 
       <h3 className="section-title" style={{ marginTop: 24 }}>
+        Deductions
+      </h3>
+      <p className="faint small">
+        Amounts kept out of this payment, apart from the 2307 withholding entered per billing below. A fee — and an
+        &ldquo;Other&rdquo; row kept from the cash — is recorded as an expense on the same account, so the account
+        lands net. A settlement-only &ldquo;Other&rdquo; row settles the billing with no expense and no account
+        movement.
+      </p>
+      {e.deductions && (
+        <div className="alert error" role="alert">
+          {e.deductions}
+        </div>
+      )}
+      {e.feeAmount && (
+        <div className="alert error" role="alert">
+          {e.feeAmount}
+        </div>
+      )}
+      {dedRows.map((r, ri) => (
+        <div key={r.key} style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
+          <input type="hidden" name="deductionKind" value={r.kind} />
+          <input type="hidden" name="deductionLabel" value={r.label} />
+          <input type="hidden" name="deductionAmount" value={r.amount} />
+          <input type="hidden" name="deductionCashAffecting" value={r.cashAffecting ? "cash" : "settlement"} />
+          <div className="field">
+            <label htmlFor={`ded-kind-${r.key}`}>Kind</label>
+            <select
+              id={`ded-kind-${r.key}`}
+              value={r.kind}
+              onChange={(ev) =>
+                updateDedRow(r.key, {
+                  kind: ev.target.value as DedRow["kind"],
+                  ...(ev.target.value === "FEE" ? { label: "", cashAffecting: true } : {}),
+                })
+              }
+            >
+              <option value="FEE">Fee (bank / channel charge)</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          {r.kind === "OTHER" && (
+            <>
+              <div className="field">
+                <label htmlFor={`ded-label-${r.key}`}>Label</label>
+                <input
+                  id={`ded-label-${r.key}`}
+                  value={r.label}
+                  onChange={(ev) => updateDedRow(r.key, { label: ev.target.value })}
+                  placeholder="What was kept, and why"
+                  style={{ width: 220 }}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={`ded-cash-${r.key}`}>Cash effect</label>
+                <select
+                  id={`ded-cash-${r.key}`}
+                  value={r.cashAffecting ? "cash" : "settlement"}
+                  onChange={(ev) => updateDedRow(r.key, { cashAffecting: ev.target.value === "cash" })}
+                >
+                  <option value="cash">Kept from the cash — posts an expense</option>
+                  <option value="settlement">Settlement only — no expense</option>
+                </select>
+              </div>
+            </>
+          )}
+          <div className="field">
+            <label htmlFor={`ded-amount-${r.key}`}>Amount</label>
+            <input
+              id={`ded-amount-${r.key}`}
+              value={r.amount}
+              onChange={(ev) => updateDedRow(r.key, { amount: ev.target.value })}
+              inputMode="decimal"
+              placeholder="0.00"
+              style={{ width: 110 }}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn-link danger"
+            aria-label={`Remove deduction ${ri + 1}`}
+            onClick={() => setDedRows((rows) => rows.filter((x) => x.key !== r.key))}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() =>
+            setDedRows((rows) => [
+              ...rows,
+              { key: dedKeyRef.current++, kind: "OTHER", label: "", amount: "", cashAffecting: true },
+            ])
+          }
+        >
+          Add deduction
+        </button>
+      </div>
+
+      <h3 className="section-title" style={{ marginTop: 24 }}>
         Allocate to open billings
       </h3>
       <label className="check" style={{ marginBottom: 8 }}>
@@ -288,7 +436,9 @@ export function CollectionForm({
         Leave cash unallocated to keep it as customer credit (advances / downpayments). Cash applied cannot exceed amount
         received. Unapplied: <strong>{formatPeso(isDeposit ? Number(amount) || 0 : unapplied)}</strong> The 2307 split fills in automatically once the amount
         fully covers a billing — clear it if the customer withheld less.
-        {!canOverrideRates ? " Rates come from the sales order — only an Admin can override." : ""}
+        {!canOverrideRates
+          ? " Pick each 2307 line's ATC from the certificate and type the amount on it — only an Admin can set a rate that is not on the ATC list."
+          : ""}
       </p>
       {e.allocations && (
         <div className="alert error" role="alert">
@@ -351,6 +501,25 @@ export function CollectionForm({
                           <span className="small">
                             {code.atc || "—"} · {ratePctLabel(Number(code.rate).toFixed(4))}
                           </span>
+                          {!canOverrideRates && atcOptions.length > 0 ? (
+                            <select
+                              className="input"
+                              aria-label={`2307 line ${ci + 1} ATC`}
+                              value={atcOptions.some((o) => o.atc === code.atc) ? code.atc : ""}
+                              onChange={(ev) => {
+                                const opt = atcOptions.find((o) => o.atc === ev.target.value);
+                                if (opt) setCodeRateAtc(i, ci, opt.rate, opt.atc);
+                              }}
+                              style={{ width: 230 }}
+                            >
+                              <option value="">Pick ATC from the certificate…</option>
+                              {atcOptions.map((o) => (
+                                <option key={`${o.atc}-${o.rate}`} value={o.atc}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
                           {canOverrideRates ? (
                             <>
                               <input
@@ -393,8 +562,21 @@ export function CollectionForm({
                             placeholder="Amount"
                             aria-label={`2307 amount for ${code.atc || "code"}`}
                           />
+                          <button
+                            type="button"
+                            className="btn-link danger"
+                            aria-label={`Remove 2307 line ${ci + 1}`}
+                            onClick={() => removeCodeRow(i, ci)}
+                          >
+                            ✕
+                          </button>
                         </div>
                       ))}
+                      <div>
+                        <button type="button" className="btn-link" onClick={() => addCodeRow(i)}>
+                          + Add 2307 line
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -404,8 +586,24 @@ export function CollectionForm({
         </div>
       )}
 
+      {!isDeposit && (
+        <p className="settlement-proof" role="status" style={{ marginTop: 20 }}>
+          <strong>Settlement:</strong> Applied {formatPeso(proof.applied)} = cash {formatPeso(proof.cash)} +
+          deductions {formatPeso(proof.deductions)}
+          <span className="faint small">
+            {" "}
+            — deductions are the 2307 withholding plus the deduction rows. Cash is what lands in the account for
+            these billings.
+          </span>
+        </p>
+      )}
+      {dedError && (
+        <div className="alert error" role="alert">
+          {dedError}
+        </div>
+      )}
       <div className="form-actions">
-        <button className="btn" type="submit" disabled={pending}>
+        <button className="btn" type="submit" disabled={pending || !!dedError}>
           {pending ? "Saving…" : "Record collection"}
         </button>
         <Link className="btn btn-secondary" href="/billing/collections">

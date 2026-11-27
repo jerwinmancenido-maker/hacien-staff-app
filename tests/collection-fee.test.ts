@@ -98,10 +98,15 @@ describe("collection input carries the fee", () => {
 });
 
 describe("collection fee wiring (source)", () => {
-  it("the record-collection form has an optional fee field", () => {
+  // NB-CD: the single fee field was generalised into the Deductions
+  // section (the fee is now a FEE deduction row). The service-level fee
+  // behaviour this file covers is unchanged — feeAmount still parses and
+  // still syncs — so this wiring check now asserts the deductions shape.
+  it("the record-collection form captures the fee as a deduction row", () => {
     const src = read("src/components/billing/CollectionForm.tsx");
-    expect(src).toContain('name="feeAmount"');
-    expect(src).toContain("Collection fee (optional)");
+    expect(src).toContain('name="deductionKind"');
+    expect(src).toContain('name="deductionAmount"');
+    expect(src).toContain("Deductions");
   });
 
   it("the schema stores the fee and its expense link on the collection", () => {
