@@ -98,8 +98,8 @@ export function ItemsTable({
             <th className="col-tab-hide">Unit</th>
             {showCosts && <th className="col-phone-hide">Supplier</th>}
             {showCosts && <th className="num col-phone-hide">Supplier unit</th>}
-            {showCosts && <th className="num">Supplier total</th>}
-            <th className="num">{shortName} price</th>
+            {showCosts && <th className="num" style={{ whiteSpace: "nowrap" }}>Supplier total</th>}
+            <th className="num" style={{ whiteSpace: "nowrap" }}>{shortName} price</th>
             <th className="num">Total</th>
             {showCosts && <th className="num">Margin</th>}
           </tr>
@@ -109,7 +109,7 @@ export function ItemsTable({
             <tr key={i.id}>
               <td className="faint">{n + 1}</td>
               <td>
-                <div className="strong" style={{ whiteSpace: "pre-wrap" }}>
+                <div className="strong items-desc" title={i.description} style={{ whiteSpace: "pre-wrap" }}>
                   {i.description}
                 </div>
                 <div className="small muted">{i.kind === "SERVICES" ? "Services" : "Goods"}</div>
