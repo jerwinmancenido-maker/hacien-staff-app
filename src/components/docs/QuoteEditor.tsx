@@ -343,6 +343,9 @@ export function QuoteEditor({
   const skipWhNoneWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
   const alsoMarkSentConfirmedRef = useRef<HTMLInputElement>(null);
+  /** Finding 1364: near-duplicate "Add to Products" warning confirm. */
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
+  const [dismissedDupeWarning, setDismissedDupeWarning] = useState<string | null>(null);
   /** F5: the Approver confirmed the approval prompt for this send. */
   const approvalConfirmedRef = useRef(false);
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
@@ -1463,6 +1466,30 @@ export function QuoteEditor({
         {state.message && (
           <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
             {state.message}
+          </div>
+        )}
+        {state.warning && state.warning !== dismissedDupeWarning && (
+          <div className="alert warn" role="alert">
+            <p>{state.warning}</p>
+            <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
+            <div className="form-actions">
+              <button
+                className="btn"
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  // Only this button confirms the duplicate (F38 pattern):
+                  // the plain Save submits with the flag blank and re-warns.
+                  if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                  formRef.current?.requestSubmit();
+                }}
+              >
+                Save anyway
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={() => setDismissedDupeWarning(state.warning ?? null)}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 

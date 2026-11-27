@@ -11,7 +11,7 @@ export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 export const IDEMPOTENCY_PENDING_MS = 60 * 1000;
 
 export type IdempotencyDecision =
-  | { type: "fresh" }
+  | { type: "fresh"; supersededRecordId?: string }
   | { type: "conflict" }
   | { type: "in_progress" }
   | { type: "stale" }
@@ -30,6 +30,24 @@ type IdempotencyRow = {
 /** Same body with different key order hashes the same. */
 export function hashRequestBody(body: unknown): string {
   return createHash("sha256").update(canonical(body)).digest("hex");
+}
+
+/**
+ * The id of the record a settled write created, read back from its stored
+ * response envelope ({ ok: true, data: { <entity>: { id } } }). Undefined
+ * for error bodies and anything else — only a finished write that settled
+ * through the guard stores that envelope.
+ */
+export function storedResponseRecordId(responseJson: unknown): string | undefined {
+  if (!responseJson || typeof responseJson !== "object") return undefined;
+  const data = (responseJson as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return undefined;
+  for (const value of Object.values(data as Record<string, unknown>)) {
+    if (value && typeof value === "object" && typeof (value as { id?: unknown }).id === "string") {
+      return (value as { id: string }).id;
+    }
+  }
+  return undefined;
 }
 
 function canonical(value: unknown): string {
@@ -104,9 +122,17 @@ export async function claimIdempotency(input: {
       const existing = await tx.apiCallLog.findFirst({
         where: { apiKeyId: input.apiKeyId, idempotencyKey: input.idempotencyKey },
       });
+      let supersededRecordId: string | undefined;
       if (existing) {
         const decision = judgeIdempotency(existing, input);
         if (decision.type !== "stale" && decision.type !== "expired") return decision;
+        // An expired claim re-executes as a new operation. When the body is
+        // the same one the expired execution settled, the record THAT
+        // execution created is this request's own earlier product — the
+        // handler's duplicate-name check must not count it against itself.
+        if (decision.type === "expired" && existing.requestHash === input.requestHash) {
+          supersededRecordId = storedResponseRecordId(existing.responseJson);
+        }
         // Release the key without deleting the old call row. The release is
         // qualified, mirroring settleIdempotentWrite: a stale claim is
         // released only while its row is still pending, and either way the
@@ -151,7 +177,10 @@ export async function claimIdempotency(input: {
           at: new Date(),
         },
       });
-      return { type: "fresh" };
+      const fresh: IdempotencyDecision = supersededRecordId
+        ? { type: "fresh", supersededRecordId }
+        : { type: "fresh" };
+      return fresh;
     });
   } catch (e) {
     // A duplicate key aborts the transaction. Read the winner after it commits.

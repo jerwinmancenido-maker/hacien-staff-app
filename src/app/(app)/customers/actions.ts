@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
-import { duplicateCustomer, findCustomerWithName, loadCustomerWriteOptions, saveCustomer, setCustomerActive } from "@/lib/services/companies";
+import { duplicateCustomer, loadCustomerWriteOptions, saveCustomer, setCustomerActive } from "@/lib/services/companies";
+import { db } from "@/lib/db";
+import { duplicateWarningMessage, findDuplicateNames } from "@/lib/duplicates";
 import { saveAddress } from "@/lib/services/addresses";
 import { attachStagedBusinessDocument } from "@/lib/services/business-documents";
 import { resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
@@ -129,22 +131,25 @@ export async function saveCustomerAction(id: string | null, _prev: FormState, fo
       };
     }
 
-    // Duplicate-name soft warning (create only): an exact-name customer
-    // already exists — save nothing until the user confirms it is not a
-    // duplicate. The form resubmits with confirmDuplicateName=1 to proceed.
-    if (!id && str(form, "confirmDuplicateName") !== "1") {
-      const existing = await findCustomerWithName(parsed.data.name);
-      if (existing) {
-        return {
-          values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
-          warning: `A customer named "${existing.name}" already exists${existing.active ? "" : " (inactive)"}. If this is a different customer, save anyway.`,
-        };
-      }
+    // Finding 1364: near-duplicate name warning (create only) — the shared
+    // matcher (lib/duplicates). Nothing is saved until the user confirms:
+    // the form resubmits with confirmDuplicateName=1 via the warning's
+    // "Save anyway" button; the plain Save submits blank and re-warns
+    // (F38). A confirmed save passes the matches to the service so the
+    // create audit row records them.
+    const dupes = !id ? await findDuplicateNames(db, "customer", parsed.data.name) : [];
+    if (dupes.length && str(form, "confirmDuplicateName") !== "1") {
+      return {
+        values: { ...values, defaultWithholding: pick == null ? "" : JSON.stringify(pick) },
+        warning: duplicateWarningMessage("customer", dupes),
+      };
     }
 
     let saved;
     try {
-      saved = await saveCustomer(id, parsed.data, { id: user.id, isAdmin: user.isAdmin });
+      saved = await saveCustomer(id, parsed.data, { id: user.id, isAdmin: user.isAdmin }, {
+        duplicateNameWarningConfirmed: dupes,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not save.";
       if (/Only an Admin can change/i.test(msg)) {

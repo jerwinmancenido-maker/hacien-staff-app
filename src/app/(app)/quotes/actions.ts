@@ -28,6 +28,7 @@ import { deleteQuote } from "@/lib/services/document-delete";
 import { acceptanceInputSchema, convertInputSchema, quoteInputSchemaForSave, voidReasonSchema } from "@/lib/validation/quotes";
 import { getQuoteView } from "@/lib/quotes/views";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { duplicateWarningMessage, findDuplicateNames, type NameMatch } from "@/lib/duplicates";
 import { saveAddress } from "@/lib/services/addresses";
 import { addressSchema } from "@/lib/validation/addresses";
 import { toEditorAddressOption } from "./editor-data";
@@ -56,7 +57,27 @@ export async function saveQuoteAction(id: string | null, _prev: FormState, form:
     }
     const parsed = quoteInputSchemaForSave(raw, stored).safeParse(raw);
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
-    const quote = id ? await updateQuote(id, parsed.data, user) : await createQuote(parsed.data, user);
+    // Finding 1364: a line ticked "Add to Products" whose description
+    // near-matches an existing product warns BEFORE anything is saved (the
+    // shared mechanism, lib/duplicates). The editor resubmits with
+    // confirmDuplicateName=1 to proceed; confirmed matches ride into the
+    // save so each auto-created item records them on its create audit row.
+    const confirmedItemDuplicates = new Map<number, NameMatch[]>();
+    for (const [index, item] of parsed.data.items.entries()) {
+      if (item.itemId || !item.newCatalog) continue;
+      const dupes = await findDuplicateNames(db, "item", item.description.trim());
+      if (dupes.length) confirmedItemDuplicates.set(index, dupes);
+    }
+    if (confirmedItemDuplicates.size && str(form, "confirmDuplicateName") !== "1") {
+      const lines = [...confirmedItemDuplicates.entries()].map(
+        ([index, dupes]) =>
+          `Line ${index + 1} ("${parsed.data.items[index]!.description.trim()}"): ${duplicateWarningMessage("item", dupes)}`,
+      );
+      return { warning: lines.join(" ") };
+    }
+    const quote = id
+      ? await updateQuote(id, parsed.data, user, { confirmedItemDuplicates })
+      : await createQuote(parsed.data, user, { confirmedItemDuplicates });
     // Mark as sent in this same request. A successful save redirects, so the
     // editor never sees ok and cannot call markQuoteSent afterwards.
     if (id && str(form, "alsoMarkSent") === "1") {

@@ -18,6 +18,10 @@ export type ApiContext = {
   user: ApiActor;
   ip: string;
   body: unknown;
+  /** Set only when this execution supersedes an expired idempotency claim
+   * for the same body: the id of the record that earlier execution created.
+   * Duplicate-name checks exclude it — it is this request's own product. */
+  supersededRecordId?: string;
 };
 
 type GuardOpts = {
@@ -97,6 +101,7 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
   const ip = clientIp(req.headers);
   let logId: string | null = null;
   let claimedKey: string | null = null;
+  let supersededRecordId: string | undefined;
   try {
     const auth = await authenticateBearer(req.headers.get("authorization"), { method, path, kind });
     const slot = await reserveRateLimit({ apiKeyId: auth.apiKeyId, kind, method, path, ip });
@@ -139,6 +144,9 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
       if (decision.type === "in_progress") {
         throw new ApiError(409, "idempotency_in_progress", "A request with this Idempotency-Key is already running.");
       }
+      if (decision.type === "fresh" && decision.supersededRecordId) {
+        supersededRecordId = decision.supersededRecordId;
+      }
       claimedKey = idempotencyKey;
     }
 
@@ -160,7 +168,7 @@ export async function withApi(req: NextRequest, opts: GuardOpts, handler: (ctx: 
             }
           : undefined,
       },
-      () => handler({ apiKeyId: auth.apiKeyId, user: auth.user, ip, body }),
+      () => handler({ apiKeyId: auth.apiKeyId, user: auth.user, ip, body, supersededRecordId }),
     );
     if (claimedKey) {
       const stored = await db.apiCallLog.findUnique({ where: { id: logId as string }, select: { status: true, responseJson: true } });
