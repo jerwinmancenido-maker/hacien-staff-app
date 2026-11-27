@@ -37,8 +37,6 @@ import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/
 import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, setSalesOrderGapReasonAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 import { listBusinesses } from "@/lib/services/businesses";
 import { getSettingsSnapshot } from "@/lib/settings";
-import { BusinessReclassifyForm } from "./BusinessReclassifyForm";
-import { GapReasonForm } from "@/components/docs/GapReasonForm";
 import { salesOrderGapState } from "@/lib/services/reconciliation";
 
 const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.000Z`)) : "—");
@@ -124,7 +122,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} />
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} isAdmin={user.isAdmin} ownCompanyName={settings.company.name} currentBusinessId={so.businessId} businesses={allBusinesses} reclassifyBusinessAction={reclassifySalesOrderBusinessAction.bind(null, so.id)} showGapNote={gapState?.show ?? false} gapPartial={gapState?.partial ?? false} gapReasonCode={so.gapReasonCode} currentGapNote={so.gapNote} setGapReasonAction={setSalesOrderGapReasonAction.bind(null, so.id)} />
         }
       />
       {created && (
@@ -143,23 +141,6 @@ export default async function SalesOrderPage({
           {settings.company.name}&apos;s sales, Books, and tax figures. Billing for it is issued by {so.business.name}, not
           from this app&apos;s booklet.
         </div>
-      )}
-      {user.isAdmin && (
-        <BusinessReclassifyForm
-          ownCompanyName={settings.company.name}
-          currentBusinessId={so.businessId}
-          businesses={allBusinesses}
-          action={reclassifySalesOrderBusinessAction.bind(null, so.id)}
-        />
-      )}
-      {gapState?.show && (
-        <GapReasonForm
-          kind="SO"
-          currentCode={so.gapReasonCode}
-          currentNote={so.gapNote}
-          action={setSalesOrderGapReasonAction.bind(null, so.id)}
-          partial={gapState.partial}
-        />
       )}
       <CreditLimitWarning text={creditLimitWarningText(exposure)} />
 
