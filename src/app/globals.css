@@ -6774,13 +6774,13 @@ button.contact-card-add {
 
 .home-kps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: calc(12px * var(--ui-scale, 1));
   align-items: stretch;
   width: 100%;
   min-width: 0;
 }
-/* Defeat global `.card + .card { margin-top }` so all four share one top + height. */
+/* Defeat global `.card + .card { margin-top }` so all five share one top + height. */
 .home-kps > .card,
 .home-kps > .home-kp {
   margin-top: 0;

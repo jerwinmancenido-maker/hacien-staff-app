@@ -1,5 +1,7 @@
-// Home Sales section against MySQL (TEST_DATABASE_URL). Gross sales match the
-// Non-VAT meter; voids excluded; Staff without manage_billing sees no Sales.
+// Home Sales section against MySQL (TEST_DATABASE_URL). Sales counts
+// confirmed SOs (OPEN/CLOSED, own-company) by SO date; the Billed figures
+// keep matching the Non-VAT meter; voids excluded; Staff without
+// manage_billing sees no Sales.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -148,7 +150,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     expect(dashAdmin.header.newQuoteHref).toBe("/quotes/new");
   });
 
-  it("excludes voided billings from months, year total and top customers", async () => {
+  it("Sales counts the confirmed SO by SO date; Billed (Year) still matches Non-VAT; voids excluded from billed", async () => {
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
     const now = new Date(Date.UTC(taxYear, 9, 15)); // mid-Oct of tax year
@@ -157,6 +159,7 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const invoiceDate = new Date(Date.UTC(y, m - 1, 10));
 
     const t = tag();
+    // openSo dates the SO Mar 2 of the tax year; contract price = unitPrice.
     const { customer, so } = await openSo(taxYear, "9999999.00", `Sales Void Cust ${t}`);
     const keep = await bill(so.id, "250000.00", invoiceDate);
     const gone = await bill(so.id, "8000.00", invoiceDate);
@@ -165,46 +168,51 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const sales = await loadHomeSales(admin, { now });
     const meter = await getNonVatMeter(snap.settings.taxYear, now);
     expect(sales).not.toBeNull();
-    // Year total matches Non-VAT (both exclude voids).
-    expect(Number(sales!.thisYear)).toBe(meter.used);
+    // Sales is SO-based now: the March bar carries the order's gross total,
+    // and the SO YTD total includes it — neither follows the billing meter.
+    const marKey = `${taxYear}-03`;
+    const mar = sales!.months.find((row) => row.key === marKey);
+    expect(Number(mar!.amount)).toBeGreaterThanOrEqual(9_999_999);
+    expect(Number(sales!.thisYear)).toBeGreaterThanOrEqual(9_999_999);
+    // Top customers are SO-based: our customer's total is the order gross.
+    const ours = sales!.topCustomers.find((c) => c.customerId === customer.id);
+    if (ours) expect(Number(ours.amount)).toBe(9_999_999);
+
+    // The Non-VAT lockstep now applies ONLY to Billed (Year) on the KPI strip.
+    const dash = await loadHomeDashboard(admin, { now });
+    expect(Number(dash.kpis!.billedThisYear.amount)).toBe(meter.used);
+    expect(Number(sales!.billedThisYear)).toBe(meter.used);
     expect(await getGrossSalesYtd(taxYear, now)).toBe(meter.used);
+    // Billed (Mon) counts the kept October billing; the voided ₱8k is out.
+    expect(Number(sales!.billedThisMonth)).toBeGreaterThanOrEqual(250_000);
 
-    const bar = sales!.months.find((row) => row.key === monthKey);
-    expect(Number(bar!.amount)).toBeGreaterThanOrEqual(250_000);
-
-    // Customer YTD from non-void rows only — voided ₱8k must not count.
     const kept = await db.billing.aggregate({
       where: { customerId: customer.id, status: { not: "VOID" } },
       _sum: { amount: true },
     });
     expect(Number(kept._sum.amount ?? 0)).toBe(250_000);
     expect(keep.status).not.toBe("VOID");
-    // If they make the top-3 cut on this shared DB, their amount is the kept total only.
-    const ours = sales!.topCustomers.find((c) => c.customerId === customer.id);
-    if (ours) expect(Number(ours.amount)).toBe(250_000);
   });
 
-  it("counts a billing on the last calendar day of the month (11:30 PM PHT still that month)", async () => {
-    // invoiceDate is @db.Date — calendar day. 11:30 PM PHT on the last day is still
+  it("counts a confirmed SO in its SO-date month (11:30 PM PHT on the last day still that month)", async () => {
+    // SO date is @db.Date — calendar day. 11:30 PM PHT on the last day is still
     // that Manila calendar day; the DATE column stores that day at 00:00 UTC.
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
-    // Use March (31 days) of the tax year.
-    const lastDay = new Date(Date.UTC(taxYear, 2, 31)); // Mar 31 DATE
+    // Use March (31 days) of the tax year; openSo dates the SO Mar 2.
     const now = new Date(Date.UTC(taxYear, 2, 31, 15, 30, 0)); // Mar 31 23:30 PHT
     expect(manilaMonthKey(now)).toBe(`${taxYear}-03`);
 
-    const { so } = await openSo(taxYear, "50000.00");
-    await bill(so.id, "777.00", lastDay);
+    await openSo(taxYear, "50000.00");
 
     const sales = await loadHomeSales(admin, { now });
     const mar = sales!.months.find((m) => m.key === `${taxYear}-03`);
-    expect(Number(mar!.amount)).toBeGreaterThanOrEqual(777);
+    expect(Number(mar!.amount)).toBeGreaterThanOrEqual(50_000);
     expect(mar!.isCurrent).toBe(true);
     expect(mar!.isPartial).toBe(true);
   });
 
-  it("year total equals the Non-VAT meter; change % when last month is 0", async () => {
+  it("Billed (Year) equals the Non-VAT meter; Sales year total is the SO total", async () => {
     const snap = await getSettingsSnapshot();
     const taxYear = snap.settings.taxYear.year;
     const now = new Date(Date.UTC(taxYear, 5, 20)); // June
@@ -214,18 +222,14 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     const [ly, lm] = lastKey.split("-").map(Number) as [number, number];
 
     const { so } = await openSo(taxYear, "200000.00");
-    // Bill only this month — last month stays whatever the shared DB has; we
-    // assert the change helper path when lastMonth amount for our isolated
-    // check uses salesChange via a synthetic empty last month by comparing
-    // that year total tracks the meter after our billing.
     await bill(so.id, "1500.00", new Date(Date.UTC(ty, tm - 1, 5)));
-    // Ensure last month also has a known row so change is defined for that key
-    // on a quiet DB slice — optional; at minimum year === meter.
     await bill(so.id, "500.00", new Date(Date.UTC(ly, lm - 1, 5)));
 
     const sales = await loadHomeSales(admin, { now });
     const meter = await getNonVatMeter(snap.settings.taxYear, now);
-    expect(Number(sales!.thisYear)).toBe(meter.used);
+    // Billed (Year) keeps the lockstep; Sales YTD counts the order itself.
+    expect(Number(sales!.billedThisYear)).toBe(meter.used);
+    expect(Number(sales!.thisYear)).toBeGreaterThanOrEqual(200_000);
     expect(sales!.change.label === "—" || /%/.test(sales!.change.label)).toBe(true);
   });
 
@@ -246,7 +250,8 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
 
     const sales = await loadHomeSales(admin, { now });
     const ours = sales!.topCustomers.filter((c) => c.name.includes(t));
-    // Shared DB may already have larger customers; at least our largest should rank if amounts dominate.
+    // Top customers are SO-based now: each of our four orders is ₱500,000
+    // gross regardless of the billed amounts above (₱9k/₱7k/₱5k/₱1k).
     // Assert shape: at most 3, hrefs point at customer pages, amounts descending.
     expect(sales!.topCustomers.length).toBeLessThanOrEqual(3);
     for (let i = 1; i < sales!.topCustomers.length; i++) {
@@ -257,14 +262,17 @@ describe.skipIf(!env.hasDb)("home sales (MySQL)", () => {
     for (const row of sales!.topCustomers) {
       expect(row.href).toBe(`/customers/${row.customerId}`);
     }
-    // Our four customers alone would top as A,B,C — if the global top includes them, order holds.
+    for (const row of ours) {
+      expect(Number(row.amount)).toBe(500_000);
+    }
+    // Equal SO totals tie-break by name: TopA before TopB before TopC.
     if (ours.length >= 3) {
       expect(ours[0]!.name).toContain("TopA");
     }
     expect(a.customer.id).toBeTruthy();
   });
 
-  it("empty chart when no billings fall in the 12-month window", async () => {
+  it("empty chart when no confirmed SOs fall in the 12-month window", async () => {
     // Far-future now: chart months are all zero → empty UI (rows hidden).
     // Top customers / year still follow the settings tax year (Non-VAT window).
     const far = new Date(Date.UTC(2800, 5, 15));

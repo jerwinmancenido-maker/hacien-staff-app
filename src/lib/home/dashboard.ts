@@ -56,6 +56,7 @@ import {
 } from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
+  formatWholePeso,
   manilaDayOfMonth,
   manilaMonthKey,
   mtdVsSameDaysChip,
@@ -179,6 +180,17 @@ export type HomeKpiChange = {
 };
 
 export type HomeKpis = {
+  salesThisMonth: {
+    /** e.g. "Sales (Nov)" — month from Manila now. Confirmed SOs, gross. */
+    label: string;
+    amount: string;
+    change: HomeKpiChange;
+    /** Empty when both MTD and same-days prior are ₱0 (no chip). */
+    vsCaption: string;
+    /** Trainee hint under the card (plain words). */
+    hint: string;
+    href: string;
+  };
   billedThisMonth: {
     /** e.g. "Billed (Oct)" — month from Manila now. */
     label: string;
@@ -219,6 +231,8 @@ export type HomeKpis = {
     pctLabel: string;
     /** Same line at both widths, e.g. "0.6% of ₱3M goal". Percent is the live meter. */
     phoneLimitLabel: string;
+    /** "Plus ₱X in confirmed orders not yet billed"; null when the remainder is ₱0. */
+    unbilledLabel: string | null;
     href: string;
   };
 };
@@ -386,7 +400,7 @@ function buildKpis(opts: {
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const day = sales.mtdDay;
-  const billedChip = sales.mtdChip;
+  const billedChip = sales.billedMtdChip;
   const collectedChip = mtdVsSameDaysChip(totalPaid, totalPaidPrior, lastKey, day);
   const collectedCaption =
     collectedChip != null ? "" : toScaled(totalPaid, 2) <= 0n ? "No payments yet" : `Posted collections in ${mon}`;
@@ -395,13 +409,27 @@ function buildKpis(opts: {
   const billingCountLabel =
     billingCount === 1 ? "1 billing" : `${billingCount.toLocaleString("en-US")} billings`;
 
+  const salesChip = sales.mtdChip;
+  const unbilledLabel =
+    toScaled(sales.unbilledConfirmed, 2) > 0n
+      ? `Plus ${formatWholePeso(sales.unbilledConfirmed)} in confirmed orders not yet billed`
+      : null;
+
   return {
+    salesThisMonth: {
+      label: `Sales (${mon})`,
+      amount: sales.thisMonth,
+      change: salesChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: salesChip?.vsCaption ?? "",
+      hint: "Confirmed sales orders this month.",
+      href: sales.href,
+    },
     billedThisMonth: {
       label: `Billed (${mon})`,
-      amount: sales.thisMonth,
+      amount: sales.billedThisMonth,
       change: billedChip?.change ?? { label: "—", tone: "none" },
       vsCaption: billedChip?.vsCaption ?? "",
-      href: sales.href,
+      href: nonVatHref(),
     },
     owedByCustomers: {
       label: "Owed",
@@ -423,10 +451,11 @@ function buildKpis(opts: {
     },
     billedThisYear: {
       label: `Billed (${year})`,
-      amount: sales.thisYear,
+      amount: sales.billedThisYear,
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,
       phoneLimitLabel: billedYearPhoneLimitLabel(nonVat.pctLabel, nonVat.limit),
+      unbilledLabel,
       href: nonVat.href,
     },
   };

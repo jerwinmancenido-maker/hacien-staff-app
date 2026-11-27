@@ -98,6 +98,16 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
     <div className="home-kps">
       <div className="card home-kp">
         <div className="home-kl">
+          <CartIcon size={14} />
+          {kpis.salesThisMonth.label}
+        </div>
+        <div className="home-kv num">{formatPeso(kpis.salesThisMonth.amount)}</div>
+        <KpiMtdFoot change={kpis.salesThisMonth.change} vsCaption={kpis.salesThisMonth.vsCaption} />
+        <div className="home-ks muted small">{kpis.salesThisMonth.hint}</div>
+      </div>
+
+      <div className="card home-kp">
+        <div className="home-kl">
           <CoinIcon size={14} />
           {kpis.billedThisMonth.label}
         </div>
@@ -148,6 +158,9 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           </span>
           <span className="num home-ks-goal">{kpis.billedThisYear.phoneLimitLabel}</span>
         </div>
+        {kpis.billedThisYear.unbilledLabel ? (
+          <div className="home-ks muted small">{kpis.billedThisYear.unbilledLabel}</div>
+        ) : null}
       </div>
     </div>
   );
@@ -269,13 +282,16 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
     <div className="card home-sales">
       <div className="home-ct">
         <div>
-          <h3>Sales billed</h3>
+          <h3>Sales</h3>
           <div className="home-sales-sub muted">
             {sales.rangeLabel || "Last 12 months"}
           </div>
+          <div className="home-sales-sub muted">
+            Sales = orders confirmed. Billed = invoices issued.
+          </div>
         </div>
         <Link className="home-lk" href={sales.href}>
-          Billing →
+          Sales orders →
         </Link>
       </div>
 
@@ -283,10 +299,10 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
 
       {sales.empty ? (
         <div className="home-sales-empty">
-          <p className="home-sales-empty-copy">No sales billed yet</p>
-          <p className="home-sales-empty-copy muted">Billings you issue will show here.</p>
+          <p className="home-sales-empty-copy">No sales yet</p>
+          <p className="home-sales-empty-copy muted">Confirmed sales orders will show here.</p>
           <Link className="btn" href={sales.href}>
-            Go to Billing
+            Go to Sales orders
           </Link>
         </div>
       ) : null}
