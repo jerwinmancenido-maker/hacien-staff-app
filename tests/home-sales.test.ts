@@ -4,8 +4,6 @@ import path from "node:path";
 import { desktopCss } from "./desktop-css";
 import {
   canShowHomeSales,
-  confirmedSoUnbilledTotal,
-  confirmedUnbilledSoCaption,
   formatSalesAxisPeso,
   isSalesEmpty,
   lastNMonthKeys,
@@ -21,17 +19,17 @@ import {
   salesChangeVsLastMonth,
   salesMonthLabel,
   salesMonthsRangeLabel,
-  salesOrderCountLabel,
   salesVsLastMonthCaption,
   sameDaysEndYmd,
   shiftMonthKey,
   topSalesCustomers,
+  confirmedUnbilledSoCaption,
+  formatWholePeso,
+  isConfirmedSalesOrderStatus,
+  salesOrderCountLabel,
+  summarizeConfirmedSales,
+  unbilledConfirmedTotal,
 } from "@/lib/home/sales";
-import {
-  CONFIRMED_SALES_ORDER_STATUSES,
-  isConfirmedSalesOrder,
-} from "@/lib/home/pipeline";
-import { salesOrdersListHref } from "@/lib/home/hrefs";
 import {
   HOME_RECENT_DESKTOP_ROWS,
   HOME_RECENT_PHONE_ROWS,
@@ -39,7 +37,7 @@ import {
   filterHomeActivity,
   activityDetail,
 } from "@/lib/home/activity";
-import { newBillingHref, newQuoteHref, auditLogHref } from "@/lib/home/hrefs";
+import { newBillingHref, newQuoteHref, auditLogHref, salesOrdersHref } from "@/lib/home/hrefs";
 import { roleFlags, can, type PermissionUser } from "@/lib/permissions";
 import { renderToStaticMarkup } from "react-dom/server";
 import { HomeRecentActivity } from "@/components/home/HomeSections";
@@ -303,64 +301,8 @@ describe("home sales axis + empty", () => {
     expect(chartSrc).toMatch(/showAxis/);
     expect(chartSrc).toMatch(/home-sales-line/);
     expect(sections).toMatch(/No sales yet/);
-    expect(sections).toMatch(/Confirmed sales orders will show here/);
+    expect(sections).toMatch(/Confirmed sales orders will show here\./);
     expect(sections).toMatch(/Go to Sales orders/);
-  });
-});
-
-describe("home confirmed SO sales totals + unbilled line", () => {
-  it("treats OPEN and CLOSED as confirmed; VOID does not count", () => {
-    expect(CONFIRMED_SALES_ORDER_STATUSES).toEqual(["OPEN", "CLOSED"]);
-    expect(isConfirmedSalesOrder("OPEN")).toBe(true);
-    expect(isConfirmedSalesOrder("CLOSED")).toBe(true);
-    expect(isConfirmedSalesOrder("VOID")).toBe(false);
-  });
-
-  it("sums remaining contractPrice not covered by non-void billings (no double count)", () => {
-    expect(
-      confirmedSoUnbilledTotal([
-        { contractPrice: "1000.00", billingAmounts: ["400.00"] },
-        { contractPrice: "500.00", billingAmounts: [] },
-        { contractPrice: "200.00", billingAmounts: ["200.00"] },
-        { contractPrice: "100.00", billingAmounts: ["150.00"] }, // over-billed → 0
-      ]),
-    ).toBe("1100.00");
-    expect(confirmedSoUnbilledTotal([])).toBe("0.00");
-  });
-
-  it("builds the muted unbilled caption and order-count sub-line", () => {
-    expect(confirmedUnbilledSoCaption("125000.00")).toBe(
-      "Plus ₱125,000 in confirmed orders not yet billed",
-    );
-    expect(confirmedUnbilledSoCaption(0)).toBe("Plus ₱0 in confirmed orders not yet billed");
-    expect(salesOrderCountLabel(0)).toBe("0 orders");
-    expect(salesOrderCountLabel(1)).toBe("1 order");
-    expect(salesOrderCountLabel(12)).toBe("12 orders");
-  });
-
-  it("links Sales KPI / chart to the Sales orders list", () => {
-    expect(salesOrdersListHref()).toBe("/sales-orders");
-    const sections = readFileSync(path.join(process.cwd(), "src/components/home/HomeSections.tsx"), "utf8");
-    const data = readFileSync(path.join(process.cwd(), "src/lib/home/sales-data.ts"), "utf8");
-    expect(sections).toMatch(/Sales orders →/);
-    expect(sections).toMatch(/>Sales</);
-    expect(sections).not.toMatch(/Sales billed/);
-    expect(data).toMatch(/salesOrdersListHref/);
-    expect(data).toMatch(/CONFIRMED_SALES_ORDER_STATUSES/);
-    expect(data).toMatch(/businessId:\s*null/);
-  });
-
-  it("keeps chart months on SO contractPrice and Billed KPI on billings", () => {
-    const data = readFileSync(path.join(process.cwd(), "src/lib/home/sales-data.ts"), "utf8");
-    const dash = readFileSync(path.join(process.cwd(), "src/lib/home/dashboard.ts"), "utf8");
-    expect(data).toMatch(/db\.salesOrder\.findMany/);
-    expect(data).toMatch(/contractPrice/);
-    expect(data).toMatch(/billedThisMonth/);
-    expect(data).toMatch(/getGrossSalesYtd/);
-    expect(dash).toMatch(/salesThisMonth/);
-    expect(dash).toMatch(/Owed by customers/);
-    expect(dash).toMatch(/sales\.billedThisMonth/);
-    expect(dash).toMatch(/sales\.thisYear/);
   });
 });
 
@@ -396,10 +338,10 @@ describe("home concept A layout wiring", () => {
     expect(page).not.toMatch(/HomeNonVat/);
     expect(sections).not.toMatch(/export function HomeMoney/);
     expect(dash).not.toMatch(/moneyRow\("billedThisMonth"/);
-    expect(sections).toMatch(/kpis\.salesThisMonth\.label/);
     expect(sections).toMatch(/kpis\.billedThisMonth\.label/);
-    expect(sections).toMatch(/>Sales</);
-    expect(sections).not.toMatch(/Sales billed/);
+    expect(sections).toMatch(/kpis\.salesThisMonth\.label/);
+    expect(sections).toMatch(/<h3>Sales<\/h3>/);
+    expect(sections).toMatch(/Sales = orders confirmed\. Billed = invoices issued\./);
     expect(sections).toMatch(/Nothing needs action/);
     expect(sections).toMatch(/home-chip-overdue/);
     expect(css).toMatch(/#f8fafc/i);
@@ -414,11 +356,9 @@ describe("home concept A layout wiring", () => {
     expect(dash).toMatch(/No payments yet/);
     expect(dash).not.toMatch(/Customers missing WHT type|No WHT type set/);
     expect(dash).not.toMatch(/No payments recorded in/);
-    expect(dash).toMatch(/Sales \(\$\{mon\}\)/);
     expect(dash).toMatch(/Billed \(\$\{mon\}\)/);
     expect(css).toMatch(/\.home-dashboard\s*\{[^}]*gap:\s*10px/s);
     expect(css).toMatch(/\.home-kp\s*\{[^}]*padding:\s*16px/s);
-    expect(css).toMatch(/\.home-kps\s*\{[^}]*grid-template-columns:\s*repeat\(5,/s);
     expect(css).toMatch(/\.home-sales-svg\s*\{[^}]*height:\s*114px/s);
     expect(css).toMatch(/\.home-na-row\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/\.home-tax-full\s*\{[^}]*min-height:\s*0/s);
@@ -442,7 +382,7 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-dashboard\s+\.card\s*\{[^}]*padding:\s*0/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-kp\s*\{[^}]*padding:\s*10px\s+12px/s);
     expect(css).toMatch(/@media \(max-width:\s*640px\)[\s\S]*\.home-ct\s*\{[^}]*padding:\s*10px\s+12px\s+0/s);
-    // Sales billed + Needs action match KPI 12px padding; chart has no empty band
+    // Sales + Needs action match KPI 12px padding; chart has no empty band
     expect(css).toMatch(
       /@media \(max-width:\s*640px\)[\s\S]*\.home-sales\s*>\s*\.home-ct[\s\S]*padding:\s*12px\s+12px\s+0/s,
     );
@@ -562,12 +502,10 @@ describe("home concept A layout wiring", () => {
     expect(css).toMatch(/\.home-kps\s*\{[^}]*align-items:\s*stretch/s);
     expect(css).toMatch(/\.home-kps\s*>\s*\.card[^}]*margin-top:\s*0/s);
     expect(css).toMatch(/\.home-kv(?:\.num)?\s*\{[^}]*text-align:\s*left/s);
-    expect(sections).toMatch(/formatPeso\(kpis\.salesThisMonth\.amount\)/);
     expect(sections).toMatch(/formatPeso\(kpis\.billedThisMonth\.amount\)/);
     expect(sections).toMatch(/formatPeso\(kpis\.owedByCustomers\.amount\)/);
     expect(sections).toMatch(/formatPeso\(paid\.total\)/);
     expect(sections).toMatch(/formatPeso\(kpis\.billedThisYear\.amount\)/);
-    expect(sections).toMatch(/orderCountLabel/);
     const chartSrc = readFileSync(path.join(root, "src/components/home/SalesChart.tsx"), "utf8");
     expect(chartSrc).toMatch(/formatPeso\(current\.month\.amount\)/);
   });
@@ -613,5 +551,91 @@ describe("home activity cost filter", () => {
     expect(filterHomeActivity(rows, false).map((r) => r.entityType)).toEqual(["Quote", "Billing"]);
     expect(filterHomeActivity(rows, true)).toHaveLength(3);
     expect(activityDetail("SO-0007", "Sample Corp")).toBe("SO-0007 · Sample Corp");
+  });
+});
+
+describe("home sales — confirmed sales orders (SO-based)", () => {
+  it("counts OPEN and CLOSED as confirmed; VOID never counts", () => {
+    expect(isConfirmedSalesOrderStatus("OPEN")).toBe(true);
+    expect(isConfirmedSalesOrderStatus("CLOSED")).toBe(true);
+    expect(isConfirmedSalesOrderStatus("VOID")).toBe(false);
+  });
+
+  it("links the Sales section to the Sales Orders list", () => {
+    expect(salesOrdersHref()).toBe("/sales-orders");
+  });
+
+  it("buckets SO gross totals by SO-date month, with a prior-month same-days slice", () => {
+    const rows = [
+      { ymd: "2026-11-05", amount: "100000.00", customerId: "a", customerName: "Alpha" },
+      { ymd: "2026-11-20", amount: "50000.00", customerId: "b", customerName: "Beta" },
+      { ymd: "2026-10-03", amount: "20000.00", customerId: "a", customerName: "Alpha" },
+      { ymd: "2026-10-25", amount: "99000.00", customerId: "a", customerName: "Alpha" },
+      { ymd: "2025-12-31", amount: "777.00", customerId: "c", customerName: "Old Year" },
+    ];
+    const s = summarizeConfirmedSales(rows, {
+      monthKeys: ["2026-10", "2026-11"],
+      lastMonthKey: "2026-10",
+      priorSameDaysEnd: "2026-10-20", // MTD day 20
+      yearStartYmd: "2026-01-01",
+      yearEndYmd: "2027-01-01",
+    });
+    expect(s.byMonth.get("2026-11")).toBe("150000.00");
+    expect(s.byMonth.get("2026-10")).toBe("119000.00");
+    // Same-days slice stops at Oct 20: the Oct 25 order is out.
+    expect(s.lastMonthSameDays).toBe("20000.00");
+    // Tax-year totals exclude the 2025 order.
+    expect(s.thisYear).toBe("269000.00");
+    const alpha = s.byCustomer.find((c) => c.customerId === "a");
+    expect(alpha?.amount).toBe("219000.00");
+    expect(s.byCustomer.find((c) => c.customerId === "c")).toBeUndefined();
+  });
+
+  it("unbilled remainder: per-order floor at zero, partial billings subtracted", () => {
+    expect(
+      unbilledConfirmedTotal([
+        { contractPrice: "100000.00", billedAmounts: [] },
+        { contractPrice: "80000.00", billedAmounts: ["30000.00", "10000.00"] },
+        // Over-billed order floors at 0 — never negative, never offsets others.
+        { contractPrice: "50000.00", billedAmounts: ["60000.00"] },
+        { contractPrice: "25000.50", billedAmounts: ["25000.50"] },
+      ]),
+    ).toBe("140000.00");
+    expect(unbilledConfirmedTotal([])).toBe("0.00");
+  });
+
+  it("formats whole pesos for the Billed (Year) sub-line", () => {
+    expect(formatWholePeso("787130.00")).toBe("₱787,130");
+    expect(formatWholePeso(0)).toBe("₱0");
+  });
+
+  it("dashboard wires Sales first with its hint, and the unbilled sub-line on Billed (Year)", () => {
+    const dash = readFileSync(path.join(process.cwd(), "src/lib/home/dashboard.ts"), "utf8");
+    const sections = readFileSync(
+      path.join(process.cwd(), "src/components/home/HomeSections.tsx"),
+      "utf8",
+    );
+    expect(dash).toMatch(/salesThisMonth/);
+    expect(dash).toMatch(/Confirmed sales orders this month\./);
+    expect(dash).toMatch(/in confirmed orders not yet billed/);
+    expect(dash).toMatch(/Owed by customers/);
+    expect(dash).toMatch(/salesOrderCountLabel/);
+    expect(sections).toMatch(/orderCountLabel/);
+    // Sales card renders before the Billed card.
+    expect(sections.indexOf("kpis.salesThisMonth.label")).toBeLessThan(
+      sections.indexOf("kpis.billedThisMonth.label"),
+    );
+    // Billed (Year) amount comes from the billing figures, not the SO totals.
+    expect(dash).toMatch(/amount: sales\.billedThisYear/);
+    expect(dash).toMatch(/amount: sales\.billedThisMonth/);
+  });
+
+  it("builds N orders and the muted sidebar unbilled caption", () => {
+    expect(salesOrderCountLabel(0)).toBe("0 orders");
+    expect(salesOrderCountLabel(1)).toBe("1 order");
+    expect(salesOrderCountLabel(12)).toBe("12 orders");
+    expect(confirmedUnbilledSoCaption("125000.00")).toBe(
+      "Plus ₱125,000 in confirmed orders not yet billed",
+    );
   });
 });

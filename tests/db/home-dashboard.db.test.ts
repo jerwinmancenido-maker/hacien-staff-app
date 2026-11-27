@@ -126,6 +126,41 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     return { customer, supplier, so, quote: q, year };
   }
 
+  // Like openSo, but the SO carries an explicit order date (Sales (Mon)
+  // buckets confirmed orders by SO date in Manila months).
+  async function openSoOn(date: Date, unitPrice: string) {
+    await ensureWideBooklet();
+    const customer = await makeCustomer(["GOODS_1"]);
+    const supplier = await makeSupplier();
+    const rate = await db.withholdingRate.findUnique({ where: { code: "GOODS_1" } });
+    if (!rate) {
+      await db.withholdingRate.create({
+        data: { code: "GOODS_1", label: "Goods 1%", lineKind: "GOODS", atcCode: "WC010", rate: "0.0100", sortOrder: 1 },
+      });
+    }
+    const q = await createQuote(
+      quoteInput(customer.id, date.getUTCFullYear(), {
+        contactId: customer.contacts[0]!.id,
+        items: [
+          {
+            id: null,
+            description: `Goods ${tag()}`,
+            kind: "GOODS",
+            qty: "1",
+            unit: "lot",
+            supplierId: supplier.id,
+            supplierUnitCost: "80000",
+            unitPrice,
+          },
+        ],
+      }),
+      admin,
+    );
+    await approveQuote(q.id, admin);
+    const deliveryAddressId = await customerDeliveryAddressId(customer.id);
+    return convertQuoteToSalesOrder(q.id, { buyerPoNo: `B-${tag()}`, deliveryAddressId }, admin, { date });
+  }
+
   const fromSo = (year: number) => ({
     date: new Date(Date.UTC(year, 2, 3)),
     expectedDate: null as Date | null,
@@ -193,6 +228,16 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       admin,
     );
 
+    // Sales (Mon) is SO-based now: capture the figure before adding orders
+    // dated around the current Manila month, then prove the delta below.
+    const dashBefore = await loadHomeDashboard(admin);
+    const salesBefore = dashBefore.sales!.thisMonth;
+    const monthStart = new Date(`${period.fromYmd}T00:00:00.000Z`);
+    await openSoOn(monthStart, "7000.00"); // first day of the month: counts
+    await openSoOn(addDays(monthStart, -1), "9000.00"); // last day of prev month: excluded
+    const voidedSo = await openSoOn(monthStart, "11000.00");
+    await db.salesOrder.update({ where: { id: voidedSo.id }, data: { status: "VOID" } });
+
     const dashAdmin = await loadHomeDashboard(admin);
     const owed = dashAdmin.money.find((m) => m.kind === "owedByCustomers");
     const collected = dashAdmin.money.find((m) => m.kind === "collectedThisMonth");
@@ -214,9 +259,11 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
       fromYmd: period.fromYmd,
       toYmd: period.toYmd,
     });
-    // Billed MTD stays on billings; Sales KPI thisMonth is confirmed SO value.
+    // Billed (Mon) keeps the billing source; Sales (Mon) moved by exactly
+    // the one confirmed in-month order (₱7,000 — prev-month and VOID orders
+    // above are excluded by the PHT month bounds and the status rule).
     expect(dashAdmin.sales!.billedThisMonth).toBe(billedSum);
-    expect(dashAdmin.kpis!.billedThisMonth.amount).toBe(billedSum);
+    expect(toScaled(dashAdmin.sales!.thisMonth, 2) - toScaled(salesBefore, 2)).toBe(700_000n);
     expect(collected!.amount).toBe(collectedSum);
 
     const dashStaff = await loadHomeDashboard(staff);
@@ -379,7 +426,20 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
 
     expect(dash.sales).toBeTruthy();
     expect(dash.sales!.billedThisMonth).toBe(billedSum);
-    expect(dash.kpis!.billedThisMonth.amount).toBe(billedSum);
+    // Sales parity: Sales (Mon) equals an independent recount of confirmed
+    // own-company orders dated in the current Manila month.
+    const soAgg = await db.salesOrder.aggregate({
+      where: {
+        status: { in: ["OPEN", "CLOSED"] },
+        businessId: null,
+        date: {
+          gte: new Date(`${period.fromYmd}T00:00:00.000Z`),
+          lt: addDays(new Date(`${period.toYmd}T00:00:00.000Z`), 1),
+        },
+      },
+      _sum: { contractPrice: true },
+    });
+    expect(dash.sales!.thisMonth).toBe(money(soAgg._sum.contractPrice ?? 0));
     expect(collectedMoney.amount).toBe(collectedSum);
     expect(owedMoney.amount).toBe(ar.totalReceivable);
     expect(owedMoney.overdueAmount).toBe(ar.overdue);
@@ -589,8 +649,69 @@ describe.skipIf(!env.hasDb)("home dashboard (MySQL)", () => {
     const collectedMoney = dash.money.find((m) => m.kind === "collectedThisMonth")!;
     expect(dash.sales).toBeTruthy();
     expect(dash.sales!.billedThisMonth).toBe(billedAgg);
-    expect(dash.kpis!.billedThisMonth.amount).toBe(billedAgg);
     expect(collectedMoney.amount).toBe(collectedAgg);
+
+    // Uncapped SO aggregates: 201 confirmed orders dated this month with
+    // distinct centavo prices + 1 VOID that must be excluded. Sales (Mon)
+    // must include every confirmed one (the loader aggregates; it never
+    // sums a capped list page).
+    const soRow = await db.salesOrder.findUniqueOrThrow({ where: { id: so.id } });
+    const soRows: {
+      number: string;
+      customerId: string;
+      date: Date;
+      settingsVersionId: string;
+      withholding: Prisma.InputJsonValue;
+      contractPrice: string;
+      status: "OPEN" | "VOID";
+      createdById: string;
+      updatedById: string;
+    }[] = [];
+    let expectedSalesCents = 0n;
+    for (let i = 0; i < 201; i++) {
+      const cents = 101n + BigInt(i); // 1.01, 1.02, ...
+      expectedSalesCents += cents;
+      soRows.push({
+        number: `SO-HM-${run}-${i}`,
+        customerId: customer.id,
+        date: invoiceDate,
+        settingsVersionId: soRow.settingsVersionId,
+        withholding: soRow.withholding as Prisma.InputJsonValue,
+        contractPrice: fromScaled(cents, 2),
+        status: "OPEN",
+        createdById: admin.id,
+        updatedById: admin.id,
+      });
+    }
+    soRows.push({
+      number: `SO-HM-${run}-void`,
+      customerId: customer.id,
+      date: invoiceDate,
+      settingsVersionId: soRow.settingsVersionId,
+      withholding: soRow.withholding as Prisma.InputJsonValue,
+      contractPrice: "999.99",
+      status: "VOID",
+      createdById: admin.id,
+      updatedById: admin.id,
+    });
+    await db.salesOrder.createMany({ data: soRows });
+
+    const dashAfterSo = await loadHomeDashboard(admin);
+    expect(toScaled(dashAfterSo.sales!.thisMonth, 2) - toScaled(dash.sales!.thisMonth, 2)).toBe(
+      expectedSalesCents,
+    );
+    const soAggUncapped = await db.salesOrder.aggregate({
+      where: {
+        status: { in: ["OPEN", "CLOSED"] },
+        businessId: null,
+        date: {
+          gte: new Date(`${period.fromYmd}T00:00:00.000Z`),
+          lt: addDays(new Date(`${period.toYmd}T00:00:00.000Z`), 1),
+        },
+      },
+      _sum: { contractPrice: true },
+    });
+    expect(dashAfterSo.sales!.thisMonth).toBe(money(soAggUncapped._sum.contractPrice ?? 0));
 
     const ar = await arAgingSummary();
     const overdueAction = dash.actions.find((a) => a.kind === "billingsOverdue");

@@ -1,7 +1,9 @@
-// Home Sales loaders.
-// Chart + Sales KPI = confirmed SO contractPrice by SO `date` (OPEN|CLOSED,
-// businessId null, Asia/Manila). Billed KPIs / year total stay on non-void
-// billings (same Non-VAT source) — do not change the ₱3M meter here.
+// Home Sales loaders. "Sales" = confirmed sales orders: OPEN or CLOSED
+// (VOID excluded), HACIEN own-company only (businessId null — the entity
+// wall), counted once per order at the gross contract price by SO date.
+// The Billed KPI figures keep the Non-VAT billing source: non-voided
+// Billing.amount by invoiceDate; the Billed (Year) total reuses
+// getGrossSalesYtd, so the Non-VAT lockstep applies ONLY to that card.
 
 import { money } from "../documents/common";
 import { db } from "../db";
@@ -12,7 +14,6 @@ import { dateYmd } from "../billing/dates";
 import { fromScaled, toScaled } from "../quotes/calc";
 import {
   canShowHomeSales,
-  confirmedSoUnbilledTotal,
   isSalesEmpty,
   lastNMonthKeys,
   manilaDayOfMonth,
@@ -24,13 +25,14 @@ import {
   salesMonthsRangeLabel,
   sameDaysEndYmd,
   shiftMonthKey,
+  summarizeConfirmedSales,
   topSalesCustomers,
+  unbilledConfirmedTotal,
   type HomeSales,
   type HomeSalesMonth,
   type MonthKey,
 } from "./sales";
-import { CONFIRMED_SALES_ORDER_STATUSES } from "./pipeline";
-import { salesOrdersListHref } from "./hrefs";
+import { salesOrdersHref } from "./hrefs";
 import type { PermissionUser } from "../permissions";
 
 function customerHref(id: string): string {
@@ -62,14 +64,18 @@ export async function loadHomeSales(
   const lastMonthKey = shiftMonthKey(currentKey, -1);
   const mtdDay = manilaDayOfMonth(now);
   const priorSameDaysEnd = sameDaysEndYmd(lastMonthKey, mtdDay);
-  const yearStartYmd = `${taxYear}-01-01`;
-  const yearEndExclusive = taxYearStart(taxYear + 1);
 
-  const [soRows, billingRows, thisYear] = await Promise.all([
-    // Confirmed SOs only (HACIEN = businessId null). Sale date = SO `date`.
+  // Billed (Mon) window: the prior month (for the same-days slice) through
+  // the end of the current month, by invoiceDate.
+  const billedFrom = ymdToDate(monthKeyBounds(lastMonthKey).fromYmd);
+  const billedTo = ymdToDate(monthKeyBounds(shiftMonthKey(currentKey, 1)).fromYmd);
+
+  const [soRows, billingRows, billedThisYear, unbilledRows] = await Promise.all([
+    // Confirmed orders only: OPEN or CLOSED (VOID excluded), own-company
+    // (businessId null). Amount = contractPrice, the order's gross total.
     db.salesOrder.findMany({
       where: {
-        status: { in: [...CONFIRMED_SALES_ORDER_STATUSES] },
+        status: { in: ["OPEN", "CLOSED"] },
         businessId: null,
         date: { gte: from, lt: to },
       },
@@ -80,59 +86,61 @@ export async function loadHomeSales(
         customer: { select: { id: true, name: true } },
       },
     }),
-    // Billed KPI MTD: same non-void / invoiceDate filter as before (entity
-    // filter left as-is — separate ticket). Year total uses getGrossSalesYtd.
+    // Same non-void / invoiceDate filter as Non-VAT (billingsGrossSales) —
+    // used ONLY for the Billed (Mon) card and its same-days chip.
     db.billing.findMany({
       where: {
         status: { not: "VOID" },
-        invoiceDate: { gte: from, lt: to },
+        invoiceDate: { gte: billedFrom, lt: billedTo },
       },
+      select: { amount: true, invoiceDate: true },
+    }),
+    // Same YTD total as the Non-VAT meter (identical helper + source).
+    getGrossSalesYtd(taxYear, now),
+    // Every confirmed own-company order with its non-VOID billings, for the
+    // "confirmed orders not yet billed" remainder on the Billed (Year) card.
+    db.salesOrder.findMany({
+      where: { status: { in: ["OPEN", "CLOSED"] }, businessId: null },
       select: {
-        amount: true,
-        invoiceDate: true,
+        contractPrice: true,
+        billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
       },
     }),
-    getGrossSalesYtd(taxYear, now),
   ]);
 
-  const byMonth = new Map<MonthKey, bigint>();
-  for (const k of monthKeys) byMonth.set(k, 0n);
+  const summary = summarizeConfirmedSales(
+    soRows.map((r) => ({
+      ymd: dateYmd(r.date),
+      amount: money(r.contractPrice),
+      customerId: r.customerId,
+      customerName: r.customer.name,
+    })),
+    {
+      monthKeys,
+      lastMonthKey,
+      priorSameDaysEnd,
+      yearStartYmd: `${taxYear}-01-01`,
+      yearEndYmd: `${taxYear + 1}-01-01`,
+    },
+  );
 
-  const byCustomer = new Map<string, { name: string; cents: bigint }>();
-  let lastMonthSameDaysCents = 0n;
-  let thisMonthOrderCount = 0;
-
-  for (const r of soRows) {
-    const ymd = dateYmd(r.date);
-    const key = ymd.slice(0, 7) as MonthKey;
-    const cents = toScaled(money(r.contractPrice), 2);
-    if (byMonth.has(key)) byMonth.set(key, (byMonth.get(key) ?? 0n) + cents);
-
-    if (key === currentKey) thisMonthOrderCount += 1;
-
-    if (key === lastMonthKey && ymd <= priorSameDaysEnd) {
-      lastMonthSameDaysCents += cents;
-    }
-
-    // Top customers: tax-year YTD confirmed SO value.
-    if (r.date >= yearFrom && r.date < yearEndExclusive && ymd >= yearStartYmd) {
-      const cur = byCustomer.get(r.customerId) ?? { name: r.customer.name, cents: 0n };
-      cur.cents += cents;
-      byCustomer.set(r.customerId, cur);
-    }
-  }
-
+  // Billed (Mon) + its same-days prior slice, from billings only.
   let billedThisMonthCents = 0n;
-  let billedLastMonthSameDaysCents = 0n;
+  let billedPriorSameDaysCents = 0n;
   for (const r of billingRows) {
     const ymd = dateYmd(r.invoiceDate);
     const key = ymd.slice(0, 7) as MonthKey;
     const cents = toScaled(money(r.amount), 2);
     if (key === currentKey) billedThisMonthCents += cents;
-    if (key === lastMonthKey && ymd <= priorSameDaysEnd) {
-      billedLastMonthSameDaysCents += cents;
-    }
+    if (key === lastMonthKey && ymd <= priorSameDaysEnd) billedPriorSameDaysCents += cents;
   }
+  const billedThisMonth = fromScaled(billedThisMonthCents, 2);
+  const billedMtdChip = mtdVsSameDaysChip(
+    billedThisMonth,
+    fromScaled(billedPriorSameDaysCents, 2),
+    lastMonthKey,
+    mtdDay,
+  );
 
   const months: HomeSalesMonth[] = monthKeys.map((key, i) => {
     const prev = i > 0 ? monthKeys[i - 1]! : null;
@@ -142,53 +150,35 @@ export async function loadHomeSales(
       key,
       shortLabel: label.short,
       yearLabel: label.showYear ? String(label.year) : null,
-      amount: fromScaled(byMonth.get(key) ?? 0n, 2),
+      amount: summary.byMonth.get(key) ?? "0.00",
       isCurrent,
       isPartial: isCurrent,
     };
   });
 
   const thisMonth = months[months.length - 1]?.amount ?? "0.00";
-  const lastMonth = fromScaled(byMonth.get(lastMonthKey) ?? 0n, 2);
-  const lastMonthSameDays = fromScaled(lastMonthSameDaysCents, 2);
-  const mtdChip = mtdVsSameDaysChip(thisMonth, lastMonthSameDays, lastMonthKey, mtdDay);
+  const lastMonth = summary.byMonth.get(lastMonthKey) ?? "0.00";
+  const mtdChip = mtdVsSameDaysChip(thisMonth, summary.lastMonthSameDays, lastMonthKey, mtdDay);
   const change = mtdChip?.change ?? { label: "—", tone: "none" as const };
+  const orderCount = soRows.reduce((n, r) => {
+    const key = dateYmd(r.date).slice(0, 7);
+    return key === currentKey ? n + 1 : n;
+  }, 0);
 
-  const billedThisMonth = fromScaled(billedThisMonthCents, 2);
-  const billedLastMonthSameDays = fromScaled(billedLastMonthSameDaysCents, 2);
-  const billedMtdChip = mtdVsSameDaysChip(
-    billedThisMonth,
-    billedLastMonthSameDays,
-    lastMonthKey,
-    mtdDay,
-  );
-
-  const top = topSalesCustomers(
-    [...byCustomer.entries()].map(([customerId, v]) => ({
-      customerId,
-      name: v.name,
-      amount: fromScaled(v.cents, 2),
-    })),
-    3,
-  );
-
+  const top = topSalesCustomers(summary.byCustomer, 3);
   const maxMonth = Math.max(0, ...months.map((m) => Number(m.amount)));
 
   return {
-    href: salesOrdersListHref(),
+    href: salesOrdersHref(),
     months,
     monthsNarrow: months.slice(-6),
     thisMonth,
-    orderCount: thisMonthOrderCount,
     lastMonth,
-    lastMonthSameDays,
+    lastMonthSameDays: summary.lastMonthSameDays,
     mtdDay,
     change,
     mtdChip,
-    billedThisMonth,
-    billedLastMonthSameDays,
-    billedMtdChip,
-    thisYear: Number.isFinite(thisYear) && thisYear > 0 ? thisYear.toFixed(2) : "0.00",
+    thisYear: summary.thisYear,
     topCustomers: top.map((c) => ({
       customerId: c.customerId,
       name: c.name,
@@ -198,6 +188,17 @@ export async function loadHomeSales(
     empty: isSalesEmpty(months),
     axisTicks: salesAxisTicks(maxMonth),
     rangeLabel: salesMonthsRangeLabel(months),
+    billedThisMonth,
+    billedMtdChip,
+    billedThisYear:
+      Number.isFinite(billedThisYear) && billedThisYear > 0 ? billedThisYear.toFixed(2) : "0.00",
+    unbilledConfirmed: unbilledConfirmedTotal(
+      unbilledRows.map((o) => ({
+        contractPrice: money(o.contractPrice),
+        billedAmounts: o.billings.map((b) => money(b.amount)),
+      })),
+    ),
+    orderCount,
   };
 }
 
@@ -207,19 +208,16 @@ export async function loadHomeSales(
  */
 export async function loadConfirmedUnbilledSoTotal(): Promise<string> {
   const rows = await db.salesOrder.findMany({
-    where: {
-      status: { in: [...CONFIRMED_SALES_ORDER_STATUSES] },
-      businessId: null,
-    },
+    where: { status: { in: ["OPEN", "CLOSED"] }, businessId: null },
     select: {
       contractPrice: true,
       billings: { where: { status: { not: "VOID" } }, select: { amount: true } },
     },
   });
-  return confirmedSoUnbilledTotal(
-    rows.map((r) => ({
-      contractPrice: money(r.contractPrice),
-      billingAmounts: r.billings.map((b) => money(b.amount)),
+  return unbilledConfirmedTotal(
+    rows.map((o) => ({
+      contractPrice: money(o.contractPrice),
+      billedAmounts: o.billings.map((b) => money(b.amount)),
     })),
   );
 }

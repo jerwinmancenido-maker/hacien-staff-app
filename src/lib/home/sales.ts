@@ -1,10 +1,11 @@
 // Pure helpers for the Home Sales section (month windows, change %, axis
-// labels, top customers, SO sales totals). No DB — unit-tested.
-// Chart / Sales KPI = confirmed SO contractPrice by SO date (OPEN|CLOSED,
-// businessId null). Billed KPIs and the ₱3M meter stay on non-void billings
-// (see src/lib/services/non-vat.ts). Do not edit non-vat.ts here.
+// labels, top customers). No DB — unit-tested. "Sales" counts confirmed
+// sales orders (OPEN or CLOSED, HACIEN own-company only) by SO date at the
+// order's gross contract price. The Billed figures keep the Non-VAT meter
+// definition: non-voided billings by invoiceDate (see
+// src/lib/services/non-vat.ts). The app has no credit-note documents; customer
+// credit from unapplied collections does not reduce billed sales.
 
-import { remainingToBill } from "../billing/status";
 import { formatCompactPesoLimit } from "./nonVatCopy";
 import { isoDate, manilaToday } from "../format";
 import { fromScaled, toScaled } from "../quotes/calc";
@@ -203,6 +204,11 @@ export function salesVsLastMonthCaption(lastMonthAmount: number | string, lastMo
 }
 
 /** Whole-peso ₱ for KPI captions (₱145,000). */
+export function formatWholePeso(amount: number | string): string {
+  const n = typeof amount === "number" ? amount : Number(amount);
+  return formatCompactPesoWhole(Number.isFinite(n) ? n : 0);
+}
+
 function formatCompactPesoWhole(amount: number): string {
   const n = Math.abs(Number(amount));
   if (!Number.isFinite(n)) return "₱0";
@@ -226,7 +232,7 @@ export function owedOverdueChip(
   return { label: `${overdue} overdue`, tone: "overdue" };
 }
 
-/** "Nov 2025 – Oct 2026" range under the Sales chart. */
+/** "Nov 2025 – Oct 2026" range under the Sales section. */
 export function salesMonthsRangeLabel(months: readonly { key: MonthKey; shortLabel: string }[]): string {
   if (months.length === 0) return "";
   const first = months[0]!;
@@ -234,35 +240,6 @@ export function salesMonthsRangeLabel(months: readonly { key: MonthKey; shortLab
   const firstYear = first.key.slice(0, 4);
   const lastYear = last.key.slice(0, 4);
   return `${first.shortLabel} ${firstYear} – ${last.shortLabel} ${lastYear}`;
-}
-
-/**
- * Confirmed-SO value not yet covered by non-void billings (no double count).
- * Each billing belongs to one salesOrderId; remaining = contractPrice − billed.
- * Negative remainders (over-billed) do not reduce other orders.
- */
-export function confirmedSoUnbilledTotal(
-  rows: readonly { contractPrice: string; billingAmounts: readonly string[] }[],
-): string {
-  let cents = 0n;
-  for (const r of rows) {
-    const rem = toScaled(remainingToBill(r.contractPrice, r.billingAmounts), 2);
-    if (rem > 0n) cents += rem;
-  }
-  return fromScaled(cents, 2);
-}
-
-/** "N orders" / "1 order" sub-line for the Sales KPI. */
-export function salesOrderCountLabel(count: number): string {
-  const n = Math.max(0, Math.trunc(Number(count) || 0));
-  return n === 1 ? "1 order" : `${n.toLocaleString("en-US")} orders`;
-}
-
-/** Sidebar muted line under the ₱3M meter. */
-export function confirmedUnbilledSoCaption(amount: string | number): string {
-  const n = typeof amount === "number" ? amount : Number(amount);
-  const pesos = Number.isFinite(n) ? formatCompactPesoWhole(n) : "₱0";
-  return `Plus ${pesos} in confirmed orders not yet billed`;
 }
 
 /** Empty Sales chart: no ₱ axis labels / gridlines (month labels + zero bars only). */
@@ -301,6 +278,111 @@ export function sumSalesAmounts(amounts: readonly string[]): string {
   return fromScaled(cents, 2);
 }
 
+/** A confirmed sale: the order stands (OPEN or CLOSED). VOID never counts. */
+export function isConfirmedSalesOrderStatus(status: string): boolean {
+  return status === "OPEN" || status === "CLOSED";
+}
+
+/** One confirmed-SO row, already filtered (status + own-company) by the loader. */
+export type ConfirmedSalesRow = {
+  /** Manila calendar day of the SO date, YYYY-MM-DD. */
+  ymd: string;
+  /** Gross contract price (₱ string with cents). */
+  amount: string;
+  customerId: string;
+  customerName: string;
+};
+
+export type ConfirmedSalesSummary = {
+  /** Total per month key (only the requested keys are present). */
+  byMonth: Map<MonthKey, string>;
+  /** Same calendar days of the prior month as MTD so far. */
+  lastMonthSameDays: string;
+  /** Tax-year totals per customer (rows outside the year window ignored). */
+  byCustomer: SalesCustomerTotal[];
+  /** Tax-year total of the rows (₱ string with cents). */
+  thisYear: string;
+};
+
+/**
+ * Bucket confirmed-SO rows into month totals, the prior-month same-days
+ * slice, and tax-year customer totals. Pure — the loader supplies rows that
+ * already passed the confirmed-status + own-company filter.
+ */
+export function summarizeConfirmedSales(
+  rows: readonly ConfirmedSalesRow[],
+  opts: {
+    monthKeys: readonly MonthKey[];
+    lastMonthKey: MonthKey;
+    priorSameDaysEnd: string;
+    yearStartYmd: string;
+    yearEndYmd: string; // exclusive
+  },
+): ConfirmedSalesSummary {
+  const byMonthCents = new Map<MonthKey, bigint>();
+  for (const k of opts.monthKeys) byMonthCents.set(k, 0n);
+  let lastMonthSameDaysCents = 0n;
+  const byCustomerCents = new Map<string, { name: string; cents: bigint }>();
+  let yearCents = 0n;
+
+  for (const r of rows) {
+    const key = r.ymd.slice(0, 7) as MonthKey;
+    const cents = toScaled(r.amount, 2);
+    if (byMonthCents.has(key)) byMonthCents.set(key, (byMonthCents.get(key) ?? 0n) + cents);
+    if (key === opts.lastMonthKey && r.ymd <= opts.priorSameDaysEnd) {
+      lastMonthSameDaysCents += cents;
+    }
+    if (r.ymd >= opts.yearStartYmd && r.ymd < opts.yearEndYmd) {
+      yearCents += cents;
+      const cur = byCustomerCents.get(r.customerId) ?? { name: r.customerName, cents: 0n };
+      cur.cents += cents;
+      byCustomerCents.set(r.customerId, cur);
+    }
+  }
+
+  const byMonth = new Map<MonthKey, string>();
+  for (const [k, cents] of byMonthCents) byMonth.set(k, fromScaled(cents, 2));
+  return {
+    byMonth,
+    lastMonthSameDays: fromScaled(lastMonthSameDaysCents, 2),
+    byCustomer: [...byCustomerCents.entries()].map(([customerId, v]) => ({
+      customerId,
+      name: v.name,
+      amount: fromScaled(v.cents, 2),
+    })),
+    thisYear: fromScaled(yearCents, 2),
+  };
+}
+
+/**
+ * Confirmed-but-not-yet-billed total: per order, the gross contract price
+ * minus its non-VOID billings, floored at ₱0 per order (an over-billed order
+ * never drags the total down). Orders count once, whatever their billing
+ * state — this is a remainder, not a second counting of sales.
+ */
+export function unbilledConfirmedTotal(
+  orders: readonly { contractPrice: string; billedAmounts: readonly string[] }[],
+): string {
+  let total = 0n;
+  for (const o of orders) {
+    let remaining = toScaled(o.contractPrice, 2);
+    for (const b of o.billedAmounts) remaining -= toScaled(b, 2);
+    if (remaining > 0n) total += remaining;
+  }
+  return fromScaled(total, 2);
+}
+
+/** "N orders" / "1 order" sub-line for the Sales KPI. */
+export function salesOrderCountLabel(count: number): string {
+  const n = Math.max(0, Math.trunc(Number(count) || 0));
+  return n === 1 ? "1 order" : `${n.toLocaleString("en-US")} orders`;
+}
+
+/** Sidebar muted line under the ₱3M meter (does not change meter math). */
+export function confirmedUnbilledSoCaption(amount: string | number): string {
+  return `Plus ${formatWholePeso(amount)} in confirmed orders not yet billed`;
+}
+
 export function isSalesEmpty(months: readonly { amount: string }[]): boolean {
   return months.every((m) => toScaled(m.amount, 2) <= 0n);
 }
@@ -324,37 +406,37 @@ export type HomeSalesCustomer = {
 };
 
 export type HomeSales = {
-  /** Sales orders list (`/sales-orders`). */
   href: string;
-  /** Confirmed SO contractPrice by SO month (last 12 Manila months). */
   months: HomeSalesMonth[];
   /** Last 6 months (narrow view); same objects as a slice of `months`. */
   monthsNarrow: HomeSalesMonth[];
-  /** Confirmed SO contractPrice dated this Manila month (Sales KPI). */
   thisMonth: string;
-  /** Confirmed SO count dated this Manila month. */
-  orderCount: number;
-  /** Prior calendar month SO total (full month; chart / legacy). */
+  /** Prior calendar month total (full month; chart / legacy). */
   lastMonth: string;
-  /** Same calendar days of prior month as MTD so far (Sales KPI compare). */
+  /** Same calendar days of prior month as MTD so far (KPI compare). */
   lastMonthSameDays: string;
   /** Manila day-of-month used for same-days compare. */
   mtdDay: number;
   change: { label: string; tone: "up" | "down" | "flat" | "none" };
-  /** null when both Sales MTD and same-days prior are ₱0 (no chip). */
+  /** null when both MTD and same-days prior are ₱0 (no chip). */
   mtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
-  /** Non-void billings this Manila month (Billed KPI; unchanged source). */
-  billedThisMonth: string;
-  /** Same calendar days of prior month for Billed MTD chip. */
-  billedLastMonthSameDays: string;
-  /** null when both Billed MTD and same-days prior are ₱0. */
-  billedMtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
-  /** YTD non-void billings (same as Non-VAT / Billed year KPI). */
+  /** Confirmed-SO total for the tax year (same window as top customers). */
   thisYear: string;
-  /** Top customers by year-to-date confirmed SO value. */
   topCustomers: HomeSalesCustomer[];
   empty: boolean;
   axisTicks: number[];
-  /** e.g. "Nov 2025 – Oct 2026" under the Sales chart. */
+  /** e.g. "Nov 2025 – Oct 2026" under the Sales card. */
   rangeLabel?: string;
+  /**
+   * Billing-based figures for the Billed KPI cards. These keep the Non-VAT
+   * source (non-VOID billings by invoiceDate); the YTD total reuses
+   * getGrossSalesYtd, so the Non-VAT lockstep applies ONLY to Billed (Year).
+   */
+  billedThisMonth: string;
+  billedMtdChip: { change: { label: string; tone: "up" | "down" | "flat" | "none" }; vsCaption: string } | null;
+  billedThisYear: string;
+  /** Confirmed own-company orders not yet billed (per-order remainder, ≥ 0). */
+  unbilledConfirmed: string;
+  /** Confirmed SO count dated this Manila month (Sales KPI sub-line). */
+  orderCount: number;
 };

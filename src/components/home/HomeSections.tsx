@@ -106,6 +106,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <span>{kpis.salesThisMonth.orderCountLabel}</span>
         </div>
         <KpiMtdFoot change={kpis.salesThisMonth.change} vsCaption={kpis.salesThisMonth.vsCaption} />
+        <div className="home-ks muted small">{kpis.salesThisMonth.hint}</div>
       </div>
 
       <div className="card home-kp">
@@ -133,7 +134,7 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
 
       <div className="card home-kp">
         <div className="home-kl">
-          <CoinIcon size={14} />
+          <CartIcon size={14} />
           {kpis.collectedThisMonth.label}
         </div>
         <div className="home-kv num" aria-label="Total paid">{formatPeso(paid.total)}</div>
@@ -160,6 +161,9 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           </span>
           <span className="num home-ks-goal">{kpis.billedThisYear.phoneLimitLabel}</span>
         </div>
+        {kpis.billedThisYear.unbilledLabel ? (
+          <div className="home-ks muted small">{kpis.billedThisYear.unbilledLabel}</div>
+        ) : null}
       </div>
     </div>
   );
@@ -284,6 +288,9 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
           <h3>Sales</h3>
           <div className="home-sales-sub muted">
             {sales.rangeLabel || "Last 12 months"}
+          </div>
+          <div className="home-sales-sub muted">
+            Sales = orders confirmed. Billed = invoices issued.
           </div>
         </div>
         <Link className="home-lk" href={sales.href}>
