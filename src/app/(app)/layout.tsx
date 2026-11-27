@@ -120,7 +120,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Milestones at {meter.warnFirstPct}%, {meter.warnSecondPct}% and 100%
           </div>
         )}
-        <div className="faint small tracker-unbilled">{unbilledCaption}</div>
+        {unbilledCaption ? (
+          <div className="faint small tracker-unbilled">{unbilledCaption}</div>
+        ) : null}
       </a>
       <div className="user-row">
         <Avatar name={user.name} dark />

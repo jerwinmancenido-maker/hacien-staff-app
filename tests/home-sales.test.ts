@@ -636,6 +636,8 @@ describe("home sales — confirmed sales orders (SO-based)", () => {
     expect(salesOrderCountLabel(0)).toBe("0 orders");
     expect(salesOrderCountLabel(1)).toBe("1 order");
     expect(salesOrderCountLabel(12)).toBe("12 orders");
+    expect(confirmedUnbilledSoCaption("0")).toBeNull();
+    expect(confirmedUnbilledSoCaption("0.00")).toBeNull();
     expect(confirmedUnbilledSoCaption("125000.00")).toBe(
       "Plus ₱125,000 in confirmed orders not yet billed",
     );

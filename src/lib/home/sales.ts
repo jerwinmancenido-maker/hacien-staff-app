@@ -378,8 +378,12 @@ export function salesOrderCountLabel(count: number): string {
   return n === 1 ? "1 order" : `${n.toLocaleString("en-US")} orders`;
 }
 
-/** Sidebar muted line under the ₱3M meter (does not change meter math). */
-export function confirmedUnbilledSoCaption(amount: string | number): string {
+/**
+ * Sidebar muted line under the ₱3M meter (does not change meter math).
+ * Null when fully billed — matches Billed (Year) hiding a ₱0 claim.
+ */
+export function confirmedUnbilledSoCaption(amount: string | number): string | null {
+  if (toScaled(amount, 2) <= 0n) return null;
   return `Plus ${formatWholePeso(amount)} in confirmed orders not yet billed`;
 }
 

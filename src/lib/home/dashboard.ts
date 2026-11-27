@@ -56,7 +56,7 @@ import {
 } from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
-  formatWholePeso,
+  confirmedUnbilledSoCaption,
   manilaDayOfMonth,
   manilaMonthKey,
   mtdVsSameDaysChip,
@@ -413,10 +413,7 @@ function buildKpis(opts: {
     billingCount === 1 ? "1 billing" : `${billingCount.toLocaleString("en-US")} billings`;
 
   const salesChip = sales.mtdChip;
-  const unbilledLabel =
-    toScaled(sales.unbilledConfirmed, 2) > 0n
-      ? `Plus ${formatWholePeso(sales.unbilledConfirmed)} in confirmed orders not yet billed`
-      : null;
+  const unbilledLabel = confirmedUnbilledSoCaption(sales.unbilledConfirmed);
 
   return {
     salesThisMonth: {
