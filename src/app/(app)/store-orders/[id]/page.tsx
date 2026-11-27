@@ -9,9 +9,11 @@ import {
   listStoreOrderConversionOptions,
   storeOrderDisplayLabel,
 } from "@/lib/store-orders/views";
+import { getStoreOrderMirrorState } from "@/lib/store-orders/refund";
 import { Chip, PageHeader } from "@/components/ui";
 import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import { ConvertStoreOrderButton } from "@/components/store-orders/ConvertStoreOrderDialog";
+import { MarkProvisioningButton, RefundStoreOrderButtons } from "@/components/store-orders/StoreOrderMirrorActions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,9 @@ const MATCH_LABELS = { MAPPED: "Mapped", NO_MATCH: "No match", AMBIGUOUS: "Ambig
  * flags, the gateway data (the fee is absorbed as an order expense at
  * conversion, never on a customer document), and the proposed match. The Convert action
  * (Slice 2) shows for approve-permission staff while the order is PAID.
+ * After conversion, the refund / chargeback mirror (Slice 3) shows the
+ * converted chain's void progress and its actions; PROVISIONING is a
+ * plain staff-set state for subscription orders being fulfilled.
  */
 export default async function StoreOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission("view");
@@ -36,6 +41,13 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
   const [prep, options] = canConvert
     ? await Promise.all([getStoreOrderConversionPrep(order.id), listStoreOrderConversionOptions()])
     : [null, null];
+
+  // Refund / chargeback mirror (Slice 3): progress is derived live from
+  // the linked documents' statuses — there is no progress column.
+  const mirror = order.salesOrderId ? await getStoreOrderMirrorState(order.id) : null;
+  const canMirror = (order.status === "CONFIRMED" || order.status === "PROVISIONING") && can(user, "manage_billing");
+  const canProvision = order.status === "CONFIRMED" && can(user, "edit_data");
+  const isTerminal = order.status === "REFUNDED" || order.status === "CHARGEBACK";
 
   const addressLine = [order.addressStreet, order.addressBarangay, order.addressCityMunicipality, order.addressProvince, order.addressZip]
     .filter(Boolean)
@@ -152,6 +164,60 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
           <dd>{formatDateTime(order.createdAt)}</dd>
         </dl>
       </div>
+
+      {mirror ? (
+        <>
+          <h2>Refund / chargeback</h2>
+          <div className="card">
+            <p className="small">
+              {isTerminal
+                ? `This order is marked ${order.status === "REFUNDED" ? "refunded" : "as a chargeback"} — every document in the converted chain is void. The linked documents below are the ones a chargeback evidence pack needs.`
+                : "A refund or chargeback unwinds the converted documents in order — collection, billing, sales order, then the gateway fee expense — each voided by its own service with the same reason. Progress is read live from the documents; if the sequence stops, run it again to finish the remaining steps."}
+            </p>
+            <div className="table-wrap">
+              <table className="list" aria-label="Refund mirror progress">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Number</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mirror.steps.map((s) => (
+                    <tr key={`${s.key}-${s.docId}`}>
+                      <td>{s.label}</td>
+                      <td>
+                        <Link href={s.href}>{s.docNumber}</Link>
+                      </td>
+                      <td>
+                        <Chip tone={s.done ? "grey" : "amber"}>{s.done ? "Void" : "To void"}</Chip>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {mirror.gatewayFee === "0.00" ? (
+              <p className="small faint">No gateway fee expense — the gateway fee on this order was 0.00.</p>
+            ) : null}
+            {(canProvision || canMirror) && (
+              <div style={{ marginTop: 12 }}>
+                {canProvision && <MarkProvisioningButton orderId={order.id} />}{" "}
+                {canMirror && (
+                  <RefundStoreOrderButtons
+                    orderId={order.id}
+                    number={order.number}
+                    gatewayName={order.gatewayName}
+                    gatewayPaymentRef={order.gatewayPaymentRef}
+                    pendingSteps={mirror.steps.filter((s) => !s.done).map((s) => `${s.label} ${s.docNumber}`)}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

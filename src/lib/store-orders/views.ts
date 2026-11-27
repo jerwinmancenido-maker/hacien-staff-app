@@ -1,16 +1,18 @@
 // Store Orders inbox read side (store intake Slice 1): list + detail views,
 // the PAID count the Sidebar badge and the bell section share, and the
 // derived display status. DONE is derived, never stored: a converted order
-// reads DONE when its linked Sales Order is CLOSED (fully billed + paid +
-// delivered — a store SO is billed and paid from conversion, so delivery
-// completion closes it).
+// (CONFIRMED, or PROVISIONING while it is being fulfilled) reads DONE when
+// its linked Sales Order is CLOSED (fully billed + paid + delivered — a
+// store SO is billed and paid from conversion, so delivery completion
+// closes it).
 
-import type { StoreOrderStatus } from "@prisma/client";
+import type { Prisma, StoreOrderStatus } from "@prisma/client";
 import { db } from "../db";
 import { money } from "../documents/common";
 import { fromScaled, toScaled } from "../quotes/calc";
 import { getSettingsSnapshot } from "../settings";
 import { listSupplierPriceComparison } from "../items/history";
+import { manilaToday } from "../format";
 
 export const STORE_ORDER_STATUS_LABELS: Record<StoreOrderStatus, string> = {
   PAID: "Paid — to convert",
@@ -26,7 +28,11 @@ export function storeOrderDisplayStatus(order: {
   status: StoreOrderStatus;
   salesOrder: { status: string } | null;
 }): StoreOrderDisplayStatus {
-  if (order.status === "CONFIRMED" && order.salesOrder?.status === "CLOSED") return "DONE";
+  if (
+    (order.status === "CONFIRMED" || order.status === "PROVISIONING") &&
+    order.salesOrder?.status === "CLOSED"
+  )
+    return "DONE";
   return order.status;
 }
 
@@ -36,9 +42,27 @@ export function storeOrderDisplayLabel(status: StoreOrderDisplayStatus): string 
 
 export const STORE_ORDER_PAGE_SIZE = 25;
 
-export async function listStoreOrders(input: { status?: StoreOrderStatus | null; page?: number }) {
+/** Days ahead the interim renewal list looks (store plan §7, Slice 3). */
+export const STORE_ORDER_RENEWAL_WINDOW_DAYS = 45;
+
+export async function listStoreOrders(input: {
+  status?: StoreOrderStatus | null;
+  page?: number;
+  /** Interim renewal list: any line's subscription term ends within the window. */
+  renewalsOnly?: boolean;
+}) {
   const page = Math.max(1, input.page ?? 1);
-  const where = input.status ? { status: input.status } : {};
+  const where: Prisma.StoreOrderWhereInput = {};
+  if (input.status) where.status = input.status;
+  if (input.renewalsOnly) {
+    const today = manilaToday();
+    const until = new Date(today.getTime() + STORE_ORDER_RENEWAL_WINDOW_DAYS * 86_400_000);
+    where.AND = [
+      // A refunded/chargebacked order is never a renewal candidate.
+      { status: { notIn: ["REFUNDED", "CHARGEBACK"] } },
+      { lines: { some: { termEndDate: { gte: today, lte: until } } } },
+    ];
+  }
   const [total, rows] = await Promise.all([
     db.storeOrder.count({ where }),
     db.storeOrder.findMany({
@@ -47,7 +71,7 @@ export async function listStoreOrders(input: { status?: StoreOrderStatus | null;
       skip: (page - 1) * STORE_ORDER_PAGE_SIZE,
       take: STORE_ORDER_PAGE_SIZE,
       include: {
-        lines: { select: { matchFlag: true } },
+        lines: { select: { matchFlag: true, termEndDate: true } },
         matchedCustomer: { select: { name: true } },
         salesOrder: { select: { status: true } },
       },
@@ -57,20 +81,28 @@ export async function listStoreOrders(input: { status?: StoreOrderStatus | null;
     total,
     page,
     totalPages: Math.max(1, Math.ceil(total / STORE_ORDER_PAGE_SIZE)),
-    rows: rows.map((r) => ({
-      id: r.id,
-      number: r.number,
-      status: r.status,
-      displayStatus: storeOrderDisplayStatus(r),
-      buyerName: r.buyerName,
-      gatewayName: r.gatewayName,
-      amountPaid: r.amountPaid.toFixed(2),
-      paidAt: r.paidAt,
-      createdAt: r.createdAt,
-      lineCount: r.lines.length,
-      unmappedCount: r.lines.filter((l) => l.matchFlag !== "MAPPED").length,
-      matchedCustomerName: r.matchedCustomer?.name ?? null,
-    })),
+    rows: rows.map((r) => {
+      const termEnds = r.lines
+        .map((l) => l.termEndDate)
+        .filter((d): d is Date => !!d)
+        .sort((a, b) => a.getTime() - b.getTime());
+      return {
+        id: r.id,
+        number: r.number,
+        status: r.status,
+        displayStatus: storeOrderDisplayStatus(r),
+        buyerName: r.buyerName,
+        gatewayName: r.gatewayName,
+        amountPaid: r.amountPaid.toFixed(2),
+        paidAt: r.paidAt,
+        createdAt: r.createdAt,
+        lineCount: r.lines.length,
+        unmappedCount: r.lines.filter((l) => l.matchFlag !== "MAPPED").length,
+        matchedCustomerName: r.matchedCustomer?.name ?? null,
+        /** Earliest subscription term end on the order, when any line carries one. */
+        nextTermEndDate: termEnds[0] ?? null,
+      };
+    }),
   };
 }
 

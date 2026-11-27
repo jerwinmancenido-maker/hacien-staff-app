@@ -15,3 +15,15 @@ export const convertStoreOrderInputSchema = z.object({
 });
 
 export type ConvertStoreOrderInputParsed = z.infer<typeof convertStoreOrderInputSchema>;
+
+/**
+ * Refund / chargeback mirror input (Slice 3). The reason is the void
+ * services' own contract (at least 3 characters) — it is recorded on
+ * every DocumentVoid snapshot the mirror creates.
+ */
+export const refundStoreOrderInputSchema = z.object({
+  kind: z.enum(["REFUNDED", "CHARGEBACK"]),
+  reason: z.string().trim().min(3, "Give a reason (at least 3 characters).").max(1000),
+});
+
+export type RefundStoreOrderInputParsed = z.infer<typeof refundStoreOrderInputSchema>;
