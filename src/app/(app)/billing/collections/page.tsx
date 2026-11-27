@@ -5,6 +5,8 @@ import { can } from "@/lib/permissions";
 import { formatDate, formatPeso } from "@/lib/format";
 import { listCollections } from "@/lib/billing/views";
 import { BillingNav } from "@/components/billing/BillingNav";
+import { BillingListFilters } from "@/components/billing/BillingListFilters";
+import { billingListHref, type BillingListSearch } from "@/lib/billing/list-href";
 import { CollectionStatusChip, MethodLabel } from "@/components/billing/BillingParts";
 import { EmptyState, Chip, PageHeader } from "@/components/ui";
 import { PlusIcon } from "@/components/Icons";
@@ -23,6 +25,14 @@ export default async function CollectionsListPage({
   const fromYmd = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : undefined;
   const toYmd = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : undefined;
   const rows = await listCollections({ status, q: sp.q, fromYmd, toYmd });
+  // Current list params in the shared patch shape, as on the Billings list:
+  // chips and the search / date controls merge over this object.
+  const search: BillingListSearch = {
+    q: sp.q,
+    status: status !== "ALL" ? status : undefined,
+    from: fromYmd,
+    to: toYmd,
+  };
   const canRecord = can(user, "record_billing");
 
   return (
@@ -39,19 +49,33 @@ export default async function CollectionsListPage({
         }
       />
       <BillingNav active="collections" />
-      <form className="toolbar txn-filters" method="get" action="/billing/collections" style={{ marginBottom: 16 }}>
-        <input className="input" name="q" defaultValue={sp.q ?? ""} placeholder="Search number, receipt, customer" />
-        <select className="input" name="status" defaultValue={status}>
-          <option value="ALL">All</option>
-          <option value="POSTED">Posted</option>
-          <option value="VOID">Void</option>
-        </select>
-        <input className="input" type="date" name="from" defaultValue={fromYmd ?? ""} aria-label="From collection date" />
-        <input className="input" type="date" name="to" defaultValue={toYmd ?? ""} aria-label="To collection date" />
-        <button className="btn btn-secondary" type="submit">
-          Filter
-        </button>
-      </form>
+      <div className="toolbar txn-filters" style={{ marginBottom: 16 }}>
+        <BillingListFilters
+          basePath="/billing/collections"
+          searchPlaceholder="Search number, receipt, customer"
+          fromAriaLabel="From collection date"
+          toAriaLabel="To collection date"
+          current={search}
+        />
+        <Link
+          className={`filter-chip${status === "ALL" ? " active" : ""}`}
+          href={billingListHref("/billing/collections", search, { status: undefined })}
+        >
+          All
+        </Link>
+        <Link
+          className={`filter-chip${status === "POSTED" ? " active" : ""}`}
+          href={billingListHref("/billing/collections", search, { status: "POSTED" })}
+        >
+          Posted
+        </Link>
+        <Link
+          className={`filter-chip${status === "VOID" ? " active" : ""}`}
+          href={billingListHref("/billing/collections", search, { status: "VOID" })}
+        >
+          Void
+        </Link>
+      </div>
       {rows.length === 0 ? (
         <div className="card">
           <EmptyState
