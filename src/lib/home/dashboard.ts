@@ -15,6 +15,7 @@ import { can, canSeeCosts, type PermissionUser } from "../permissions";
 import { listReceivingView, listPurchaseOrdersView } from "../purchasing/views";
 import { listQuotesView, listSalesOrdersPageView, listSalesOrdersView } from "../quotes/views";
 import { cashPositionSummary } from "../services/cash-accounts";
+import { countMyOverdueReminders } from "../services/reminders";
 import { listCustomers } from "../services/companies";
 import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
@@ -48,6 +49,7 @@ import {
   supplierBillsDueSoonHref,
   taxCalendarHref,
   cashHomeHref,
+  remindersOverdueHref,
   salesOrdersOpenStatusHref,
   salesOrdersToDeliverHref,
 } from "./hrefs";
@@ -278,6 +280,9 @@ export type HomeCashBalanceRow = {
 export type HomeCounts = {
   ordersToDeliver: HomeCountCard | null;
   openSalesOrders: HomeCountCard | null;
+  /** Adoption item 13: MY open reminders past their date (reminders are
+   *  personal — createdById is the viewer). Null without a viewer id. */
+  overdueReminders: HomeCountCard | null;
   cashBalances: HomeCashBalanceRow[];
   unassignedCash: { balance: string; href: string } | null;
 };
@@ -552,15 +557,17 @@ async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | nu
   });
 }
 
-async function loadHomeCounts(user: PermissionUser, features: HomeFeatureFlags): Promise<HomeCounts> {
+async function loadHomeCounts(user: PermissionUser & { id?: string }, features: HomeFeatureFlags): Promise<HomeCounts> {
   const canViewOrders = can(user, "view");
   const showCash = canShowHomeCashBalances(user, features);
-  const [toDeliverPage, openCount, cash] = await Promise.all([
+  const [toDeliverPage, openCount, cash, overdueReminders] = await Promise.all([
     // The linked list's own total, so the card can never disagree with the
     // page it opens (same doctrine as the Needs action parity tests).
     canViewOrders ? listSalesOrdersPageView({ toDeliver: true, businessId: "own" }, 1, 1) : null,
     canViewOrders ? db.salesOrder.count({ where: { status: "OPEN", businessId: null } }) : null,
     showCash ? cashPositionSummary() : null,
+    // Reminders are personal: only the signed-in viewer's own overdue ones.
+    canViewOrders && user.id ? countMyOverdueReminders(user.id, manilaToday()) : null,
   ]);
   return {
     ordersToDeliver:
@@ -570,6 +577,10 @@ async function loadHomeCounts(user: PermissionUser, features: HomeFeatureFlags):
     openSalesOrders:
       openCount != null
         ? { label: "Open sales orders", count: openCount, href: salesOrdersOpenStatusHref() }
+        : null,
+    overdueReminders:
+      overdueReminders != null
+        ? { label: "Overdue reminders", count: overdueReminders, href: remindersOverdueHref() }
         : null,
     cashBalances: cash
       ? cash.accounts.map((a) => ({
