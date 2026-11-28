@@ -2,17 +2,22 @@
 // direct 2026-11-10 17:17, final approval 17:22):
 // inside updateSalesOrder, under the SO row lock —
 //  A1: once any non-void billing exists, the BIR core is frozen for
-//      everyone: no line removals, no withholding rate/ATC/pick changes
-//      (the 2307 split uses the billing's stored breakdown). Qty/price
-//      edits and line adds stay open under the price lock (Admin + typed
-//      reason, audited). Each billing captures its own withholding
-//      breakdown at record time (Billing.withholdingBreakdown), and the
-//      2307 prefill splits from it — proven below: an allowed edit cannot
-//      move an issued SI's prefill.
+//      everyone: no line removals, no withholding rate/ATC/pick changes.
+//      Qty/price edits and line adds stay open under the price lock
+//      (Admin + typed reason, audited). An allowed edit cannot move an
+//      issued SI's collection prefill — proven below.
 //  A2: contract price can never drop below the billed total.
 //  A3: qty can never drop below the live ordered qty (PO not VOID, PO line
 //      not removed); a line — or a lot whose component — is on a PO cannot
 //      be removed.
+// Withholding storage (ERP payment-entry model, Jerwin 2026-11-27/28,
+// ERP plan Part 1): a billing recorded TODAY captures no forecast —
+// withholdingExpected "0.00", withholdingBreakdown null; the 2307 split
+// is typed at collection in the line editor, and the collection prefill
+// for such a billing is the SO's bare codes. Billings issued BEFORE the
+// change keep their captured breakdown + expected, and updateBilling
+// still rescales the stored parts by the issue-time ratio — the legs
+// below seed that issued state directly and prove both worlds.
 // Runs on MySQL 8 (TEST_DATABASE_URL); skipped locally.
 
 import { describe, expect, it, vi } from "vitest";
@@ -246,9 +251,11 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
       const laptop = rows[0]!;
 
-      // The billing captured its own withholding breakdown at record time.
+      // Payment-entry model: the new billing captures NO forecast —
+      // breakdown null, expected 0.00 (withholding is typed at collection).
       const billedRow = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
-      expect(billedRow.withholdingBreakdown).not.toBeNull();
+      expect(billedRow.withholdingBreakdown).toBeNull();
+      expect(billedRow.withholdingExpected.toFixed(2)).toBe("0.00");
       const prefillBefore = await withholdingCodePrefill(db as never, billing.id);
 
       // Qty up on the unbilled portion: allowed for an admin with a reason,
@@ -387,6 +394,10 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     }
 
     // --- Bugbot @f8c58dc: a billing edit must not move the issued split --
+    // Legacy world: a billing ISSUED before the payment-entry change
+    // carries its captured breakdown + pro-rata expected. Seed that
+    // issued state directly (recordBilling today stores neither), then
+    // prove an edit rescales the STORED parts and never recaptures live.
     {
       const year = await freshYear();
       const { so } = await openSo(year, undefined, ["GOODS_1", "SERVICES_2"]);
@@ -395,14 +406,27 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
       );
+      // Issued-document state, as record-time capture used to store it:
+      // the expected is the billing's pro-rata share; the parts live on
+      // their own scale (they summed to the SO's full withholding then).
+      await db.billing.update({
+        where: { id: billing.id },
+        data: {
+          withholdingExpected: "100.00",
+          withholdingBreakdown: [
+            { rate: "0.0100", atcCode: "WC010", amount: "600.00" },
+            { rate: "0.0200", atcCode: "WI157", amount: "400.00" },
+          ],
+        },
+      });
       const before = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
       const partsBefore = before.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
       expect(partsBefore.length).toBeGreaterThan(1);
-      // The stored parts are the issue-time SHARES (they sum to the SO's
-      // full withholding). The billing's expected withholding is pro-rata,
-      // so after the SO edit + amount change the parts rescale to the NEW
-      // expected — same rates, same shares, sum tracks the expected total
-      // (it does NOT simply double, and it is never recaptured live).
+      // The stored parts are the issue-time SHARES. The billing's expected
+      // withholding is pro-rata, so after the SO edit + amount change the
+      // parts rescale to the NEW expected — same rates, same shares, sum
+      // tracks the expected total (it does NOT simply double, and it is
+      // never recaptured live).
       // An allowed SO edit (qty up) changes the live line mix.
       const rows = await db.salesOrderItem.findMany({ where: { salesOrderId: so.id, removedAt: null }, orderBy: { sortOrder: "asc" } });
       const laptop = rows[0]!;
@@ -434,7 +458,8 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     }
 
     // --- REQ-188 Test 1: Same-amount updateBilling after an allowed SO money edit -----
-    // With a stored breakdown: expected must stay ₱100.00, not move to ₱66.67.
+    // Legacy issued billing (stored breakdown + expected seeded below):
+    // the expected must stay ₱100.00, not move to ₱66.67.
     // Setup: bill ₱10,000.00 on a ₱100,000.00 / ₱1,000.00 WH order, then grow the
     // contract to ₱150,000.00 with WH still ₱1,000.00, then save the billing at the
     // same ₱10,000.00 (notes/dates may change). Assert withholdingExpected stays
@@ -450,6 +475,20 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
       );
+      // New model at record time: no forecast is captured.
+      const freshRow = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
+      expect(freshRow.withholdingExpected.toFixed(2)).toBe("0.00");
+      expect(freshRow.withholdingBreakdown).toBeNull();
+      // Seed the ISSUED (pre-change) state this leg protects: expected
+      // ₱100.00 captured at record time; one stored part on the SO scale
+      // (the parts summed to the SO's full ₱1,000.00 withholding).
+      await db.billing.update({
+        where: { id: billing.id },
+        data: {
+          withholdingExpected: "100.00",
+          withholdingBreakdown: [{ rate: "0.0100", atcCode: "WC010", amount: "1000.00" }],
+        },
+      });
       const billedRowBefore = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
       expect(billedRowBefore.withholdingExpected.toFixed(2)).toBe("100.00");
       const partsBefore = billedRowBefore.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
@@ -508,8 +547,11 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         admin,
       );
       const b1Row = await db.billing.findUniqueOrThrow({ where: { id: b1.id } });
-      const b1Parts = b1Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
-      expect(b1Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
+      // Payment-entry model: a new billing captures no breakdown and no
+      // forecast — the {WI640, WB080} stack lives on the SO snapshot and
+      // is typed at collection, not stored on the billing.
+      expect(b1Row.withholdingBreakdown).toBeNull();
+      expect(b1Row.withholdingExpected.toFixed(2)).toBe("0.00");
 
       // Notes-only save: must keep both ATCs and ₱80.00
       await updateSalesOrder(so.id, await soInput(so.id, (items) => items, { notes: "Preserve stack test" }), admin);
@@ -532,15 +574,17 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
       const snapsAfterQty = snapshotList(soAfterQty.withholding);
       expect(snapsAfterQty.map((s) => s.atcCode)).toEqual(["WI640", "WB080"]);
 
-      // Later recordBilling path still sees the stack, not a collapsed {WI640}
+      // A later recordBilling still captures nothing — the stack stays
+      // on the SO snapshot (asserted above), never collapsed into a
+      // stored billing split.
       const invoiceNo2 = await nextInvoice();
       const b2 = await recordBilling(
         { salesOrderId: so.id, amount: "500.00", invoiceNo: invoiceNo2, invoiceDate: new Date(Date.UTC(year, 2, 6)), dueDate: new Date(Date.UTC(year, 3, 5)), notes: null },
         admin,
       );
       const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
-      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
-      expect(b2Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
+      expect(b2Row.withholdingBreakdown).toBeNull();
+      expect(b2Row.withholdingExpected.toFixed(2)).toBe("0.00");
 
       // Refuse re-apply and pick changes while billings exist
       await expect(
@@ -555,8 +599,9 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
     // Same setup as Test 2 (₱2,000.00 / ₱80.00, header {WI640, WB080}). After a
     // non-void billing, Admin adds an exempt override line (same pattern as
     // Test 1). Header must stay stacked, WH must stay ₱80.00 (goods base
-    // unchanged), and a later recordBilling must still see {WI640, WB080}
-    // with part amounts summing to so.withholdingTotal (not tax the exempt).
+    // unchanged), and a later recordBilling must still capture nothing
+    // (payment-entry model) — with no billing-time capture, the exempt
+    // add-on can no longer be taxed by one.
     {
       const year = await freshYear();
       const govItems: QuoteInput["items"] = [
@@ -594,22 +639,21 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         admin,
       );
       const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
-      // proRataWithholding(500, 3000, 80) = 13.33; stack must still drive the breakdown
-      expect(b2Row.withholdingExpected.toFixed(2)).toBe("13.33");
-      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
-      expect(b2Parts.map((p) => p.atcCode)).toEqual(["WI640", "WB080"]);
-      // Capture must not tax the exempt GOODS add-on (unfiltered → 30+90=120).
-      expect(b2Parts.map((p) => ({ atcCode: p.atcCode, amount: p.amount }))).toEqual([
-        { atcCode: "WI640", amount: "20.00" },
-        { atcCode: "WB080", amount: "60.00" },
-      ]);
-      expect(b2Parts.reduce((a, p) => a + Number(p.amount), 0).toFixed(2)).toBe("80.00");
+      // Payment-entry model: no forecast is captured on the new billing —
+      // not the pro-rata 13.33 the old capture stored, and no split —
+      // even though the SO still carries its ₱80.00 stack (asserted
+      // above). The exempt-taxing question is moot at billing time now:
+      // nothing is captured, so nothing can tax the add-on; the split is
+      // typed at collection.
+      expect(b2Row.withholdingExpected.toFixed(2)).toBe("0.00");
+      expect(b2Row.withholdingBreakdown).toBeNull();
     }
 
     // --- REQ-188 Test 3b: same stack + SERVICES exempt override (2307 share) -----
-    // Unfiltered capture would keep WI640 at ₱20 (goods-only) but inflate WB080
-    // to ₱90 (3% of ₱3,000) → sum ₱110 and distort 2307 shares. Filtered
-    // capture must stay WI640 ₱20 + WB080 ₱60 = ₱80.
+    // Under the old capture, an unfiltered pass would keep WI640 at ₱20
+    // (goods-only) but inflate WB080 to ₱90 (3% of ₱3,000) → sum ₱110 and
+    // distort 2307 shares. With no billing-time capture (payment-entry
+    // model) there is nothing to distort: the new billing stores no split.
     {
       const year = await freshYear();
       const govItems: QuoteInput["items"] = [
@@ -643,13 +687,10 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         admin,
       );
       const b2Row = await db.billing.findUniqueOrThrow({ where: { id: b2.id } });
-      expect(b2Row.withholdingExpected.toFixed(2)).toBe("13.33");
-      const b2Parts = b2Row.withholdingBreakdown as { rate: string; atcCode: string | null; amount: string }[];
-      expect(b2Parts.map((p) => ({ atcCode: p.atcCode, amount: p.amount }))).toEqual([
-        { atcCode: "WI640", amount: "20.00" },
-        { atcCode: "WB080", amount: "60.00" },
-      ]);
-      expect(b2Parts.reduce((a, p) => a + Number(p.amount), 0).toFixed(2)).toBe("80.00");
+      // Payment-entry model: no forecast, no stored split on the new
+      // billing (see Test 3).
+      expect(b2Row.withholdingExpected.toFixed(2)).toBe("0.00");
+      expect(b2Row.withholdingBreakdown).toBeNull();
     }
 
     // --- REQ-205 Bugbot HIGH: legacy null breakdown must not recapture -----
@@ -669,10 +710,13 @@ describe.skipIf(!env.hasDb)("SO guards (A1 revised billed-SO protections, A2/A3 
         { salesOrderId: so.id, amount: "10000.00", invoiceNo, invoiceDate: new Date(Date.UTC(year, 2, 5)), dueDate: new Date(Date.UTC(year, 3, 4)), notes: null },
         admin,
       );
-      // Simulate a pre-migration row: clear the captured breakdown.
+      // Simulate a pre-model issued row: the forecast expected WAS
+      // captured at record time (₱100.00); the breakdown is null
+      // (pre-breakdown-migration). recordBilling today stores neither,
+      // so seed both halves of the issued state directly.
       await db.billing.update({
         where: { id: billing.id },
-        data: { withholdingBreakdown: Prisma.DbNull },
+        data: { withholdingBreakdown: Prisma.DbNull, withholdingExpected: "100.00" },
       });
       const before = await db.billing.findUniqueOrThrow({ where: { id: billing.id } });
       expect(before.withholdingBreakdown).toBeNull();

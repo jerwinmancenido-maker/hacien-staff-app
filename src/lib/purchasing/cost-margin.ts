@@ -3,9 +3,11 @@
 // margin, and the two plain-language warnings.
 //
 // Planned (before withholding) = contract − planned supplier cost.
-// After customer withholding = (contract − stored withholdingTotal) − cost,
-// where withholdingTotal is the per-line sum saved on the SO (drafts only
-// recalculate; issued/void keep stored money).
+// After customer withholding = (contract − withholdingTotal) − cost.
+// The caller resolves withholdingTotal: the stored per-line sum for an
+// SO with a stored snapshot (existing documents, unchanged), or the
+// ACTUAL withheld recorded on posted collections for a new-model SO
+// with no snapshot (0 until a collection exists) — finding 1396a.
 
 import { fromScaled, toScaled } from "../quotes/calc";
 
@@ -214,7 +216,7 @@ export function buildCostMarginSummary(input: {
   contractPrice: string;
   /** Planned supplier cost from the SO / quote (before withholding). */
   plannedCost: string;
-  /** Stored withholding total from the SO (per-line sum; never silently recomputed here). */
+  /** Withholding total resolved by the caller (stored snapshot, or actual withheld for new-model SOs). */
   withholdingTotal?: string;
   pos: readonly CostMarginPoInput[];
   /** SO lines still short of PO coverage (ordered < SO qty). */

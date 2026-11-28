@@ -435,10 +435,11 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
       });
 
       // --- Billing for the full amount, on the claimed booklet SI.
-      // withholdingBreakdown stays unset: captureWithholdingBreakdown is
-      // local to the billing service, and a store SO's withholding total
-      // is 0.00 by construction, so there is no breakdown to capture.
-      const withholdingExpected = proRataWithholding(amountPaid, totals.contractPrice, totals.withholdingTotal);
+      // No withholding forecast (ERP payment-entry model, 2026-11-28):
+      // withholdingBreakdown stays unset and the expected figure is a
+      // literal 0 — a store SO's withholding total is 0.00 by
+      // construction, and new billings no longer derive a forecast.
+      const withholdingExpected = "0.00";
       const net = netExpected(amountPaid, withholdingExpected);
       const billingNumber = await allocateDocNumber(tx, "BILLING", year, billingFormat);
       const billing = await tx.billing.create({

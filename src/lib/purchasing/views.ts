@@ -691,6 +691,7 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
       contractPrice: true,
       supplierCost: true,
       withholdingTotal: true,
+      withholding: true,
       items: {
         where: { removedAt: null },
         select: {
@@ -784,10 +785,28 @@ export async function getSoCostMargin(salesOrderId: string, viewer: PermissionUs
   });
   const linkedExpenses = sumLinkedExpenses(linkedRows.map((r) => ({ id: r.id, amount: money(r.amount) })));
 
+  // Withholding for the net-received figure (finding 1396a): an SO with
+  // a stored snapshot (or a stored non-zero total — the legacy line
+  // override case) keeps its stored figure, unchanged. A new-model SO
+  // has no snapshot: its net received derives from the ACTUAL withheld
+  // recorded on posted collections — 0.00 until a collection exists.
+  const storedSnapshot = (so.withholding ?? []) as unknown[];
+  const useStoredWithholding =
+    (Array.isArray(storedSnapshot) && storedSnapshot.length > 0) ||
+    toScaled(money(so.withholdingTotal), 2) > 0n;
+  let actualWithheld = "0.00";
+  if (!useStoredWithholding) {
+    const allocs = await db.collectionAllocation.findMany({
+      where: { billing: { salesOrderId }, collection: { status: "POSTED" } },
+      select: { withholdingApplied: true },
+    });
+    actualWithheld = sumMoney(allocs.map((a) => money(a.withholdingApplied)));
+  }
+
   return buildCostMarginSummary({
     contractPrice: money(so.contractPrice),
     plannedCost: money(so.supplierCost),
-    withholdingTotal: money(so.withholdingTotal),
+    withholdingTotal: useStoredWithholding ? money(so.withholdingTotal) : actualWithheld,
     pos: poInputs,
     uncoveredLineCount,
     linkedExpenses,

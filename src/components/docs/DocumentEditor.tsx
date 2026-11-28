@@ -351,6 +351,11 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
   const [addContactOpen, setAddContactOpen] = useState(false);
 
   const initialPick = resolveInitialPick(initial);
+  // Forecast retirement (ERP payment-entry model, 2026-11-28): an order
+  // with no stored pick gets no pick field — withholding is typed from
+  // the Form 2307 at collection. Orders with a stored pick keep the
+  // field (and the billed freeze), unchanged.
+  const pickRetired = mode === "salesOrder" && !(initialPick && initialPick.length > 0);
   const [h, setH] = useState(() => {
     const pick = initialPick;
     return {
@@ -469,6 +474,8 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
     headerPatch: Partial<typeof h> = {},
     opts: { skipOverrides?: boolean; markReapply?: boolean } = {},
   ) {
+    // Retired pick: a customer change or re-apply lands on none.
+    if (pickRetired) nextPick = [];
     const snaps = pickSnapshotsFromCodes(nextPick, rates) ?? [];
     const refreshed = nextItems.map((i) => {
       if (opts.skipOverrides && i.withholdingOverride) return i;
@@ -797,6 +804,22 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                 <div className="hint">From each line&apos;s WH% · ATC (read-only). Re-apply customer&apos;s withholding to refresh.</div>
               )}
             </div>
+          ) : pickRetired ? (
+            <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
+              <span className="label">Withholding</span>
+              {computedDocRates.length > 0 ? (
+                <WhSummaryChips docRates={computedDocRates} />
+              ) : (
+                <div className="faint">None recorded on this order.</div>
+              )}
+              {e.withholdingCodes || e.withholding ? (
+                <div className="error">{e.withholdingCodes ?? e.withholding}</div>
+              ) : (
+                <div className="hint">
+                  Withholding is typed from the customer&apos;s Form 2307 when the collection is recorded.
+                </div>
+              )}
+            </div>
           ) : (
             <div className={`field so-wh${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
               <WithholdingPickField
@@ -831,9 +854,11 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
         <div className="card-head">
           <h2>Items</h2>
           <div className="right" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!customer || pricesLocked} onClick={reapplyFromCustomer}>
-              {REAPPLY_WITHHOLDING_LABEL}
-            </button>
+            {!pickRetired && (
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!customer || pricesLocked} onClick={reapplyFromCustomer}>
+                {REAPPLY_WITHHOLDING_LABEL}
+              </button>
+            )}
             {!pricesLocked && (
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItems((xs) => [...xs, blankItem(pickSnapshots ?? [])])}>
                 Add line

@@ -1731,6 +1731,7 @@ model Billing {
 
   allocations  CollectionAllocation[]
   withholdings Withholding2307[]
+  collectionDeductions CollectionDeduction[]
   attachments  DocumentAttachment[]
   creditApplications CustomerCreditApplication[]
 
@@ -1828,6 +1829,7 @@ model Collection {
 
   allocations  CollectionAllocation[]
   withholdings Withholding2307[]
+  deductions   CollectionDeduction[]
   attachments  DocumentAttachment[]
 
   @@index([customerId])
@@ -1835,6 +1837,43 @@ model Collection {
   @@index([date])
   @@index([cashAccountId])
   @@index([needsAdminCheck])
+}
+
+// One expense-posting deduction row on a collection (ERP payment-entry
+// model, 2026-11-28): FEE generalises the PR #354 collection fee; OTHER
+// is any other amount the payer kept, with a staff-typed label. Each row
+// posts exactly one linked expense; voiding the collection voids every
+// row's expense. Withholding (2307) never lands here — it lives on the
+// allocations and the Withholding2307 records. New collections also
+// mirror the FEE total into Collection.feeAmount / feeExpenseId so the
+// pre-deductions reads keep working.
+model CollectionDeduction {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  kind         String // FEE | OTHER | WITHHOLDING
+  label        String? // Required for OTHER; null for FEE / WITHHOLDING.
+  amount       Decimal    @db.Decimal(15, 2)
+  // Cash effect (Review Board run 100, finding 1398): a cash-affecting row
+  // posts a linked expense and reduces what lands in the cash account; a
+  // settlement-only row settles the billing with no account movement and
+  // no expense. FEE is always cash-affecting; WITHHOLDING never is; OTHER
+  // declares it per row.
+  cashAffecting Boolean @default(true)
+  // Set only on rows that post an expense (FEE + cash-affecting OTHER).
+  expenseId    String?    @unique
+  expense      Expense?   @relation("CollectionDeductionExpense", fields: [expenseId], references: [id])
+  // WITHHOLDING rows only: the billing settled and the 2307 record the
+  // amount was recorded on. The allocations + Withholding2307 rows stay
+  // the source of truth; this row is the settlement-ledger mirror.
+  billingId         String?
+  billing           Billing?         @relation(fields: [billingId], references: [id], onDelete: SetNull)
+  withholding2307Id String?          @unique
+  withholding2307   Withholding2307? @relation(fields: [withholding2307Id], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+
+  @@index([collectionId])
+  @@index([billingId])
 }
 
 // Links cash (and optional 2307 withholding) from a collection onto a billing.
@@ -1889,6 +1928,7 @@ model Withholding2307 {
 
   attachments DocumentAttachment[]
   lines       Withholding2307Line[]
+  collectionDeduction CollectionDeduction?
 
   @@index([customerId])
   @@index([billingId])
@@ -2159,6 +2199,9 @@ model Expense {
 
   // The collection whose fee this expense records (REQ-COLLECTION-FEES-001).
   feeForCollection Collection? @relation("CollectionFeeExpense")
+
+  // The collection deduction row this expense posts for, if any.
+  deductionForCollection CollectionDeduction? @relation("CollectionDeductionExpense")
 
   @@index([date])
   @@index([status])

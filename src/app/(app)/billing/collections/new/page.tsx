@@ -7,7 +7,7 @@ import { money } from "@/lib/documents/common";
 import { billingToday } from "@/lib/billing/dates";
 import { billingBalance } from "@/lib/billing/status";
 import { formatDate, isoDate } from "@/lib/format";
-import { fromScaled, toScaled } from "@/lib/quotes/calc";
+import { fromScaled, ratePctLabel, toScaled } from "@/lib/quotes/calc";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { isCashEnabled } from "@/lib/cash/features";
 import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
@@ -83,6 +83,23 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
     )
   ).filter((b): b is OpenBillingRow => b != null);
 
+  // ATC catalogue for the 2307 line editor: staff pick each line's ATC
+  // from the customer's certificate (never auto-generated from a pick).
+  const atcRates = await db.withholdingRate.findMany({
+    where: { active: true, atcCode: { not: null } },
+    orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+    select: { label: true, atcCode: true, rate: true },
+  });
+  const atcOptions = [
+    ...new Map(
+      atcRates.map((r) => {
+        const rate = Number(r.rate).toFixed(4);
+        const atc = r.atcCode!;
+        return [`${atc}|${rate}`, { atc, rate, label: `${r.label} · ${atc} · ${ratePctLabel(rate)}` }] as const;
+      }),
+    ).values(),
+  ];
+
   const today = billingToday();
   const cashOn = await isCashEnabled();
   const cashAccounts = cashOn ? await listActiveCashAccounts() : [];
@@ -97,6 +114,7 @@ export default async function NewCollectionPage({ searchParams }: { searchParams
           action={recordCollectionAction}
           canEdit
           canOverrideRates={user.isAdmin}
+          atcOptions={atcOptions}
           customerId={customer.id}
           customerName={customer.name}
           openBillings={openBillings}
