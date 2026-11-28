@@ -121,6 +121,8 @@ export const DEFAULT_SETTINGS: Settings = {
     booksEnabled: false,
     payables2307Enabled: false,
     warrantyClaimsEnabled: false,
+    // Adoption item 5: email the team when goods are received. ON by default.
+    receivingEmailEnabled: true,
     itemsImportEnabled: false,
     periodCloseEnabled: false,
   },

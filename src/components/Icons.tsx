@@ -104,3 +104,6 @@ export const ChevronRightIcon = ({ size }: P) => (
   <svg {...base(size)}><path d="m9 6 6 6-6 6" /></svg>
 );
 
+export const PanelLeftIcon = ({ size }: P) => (
+  <svg {...base(size)}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9.5 4v16" /></svg>
+);
