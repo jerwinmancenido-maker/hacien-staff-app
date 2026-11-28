@@ -16,6 +16,7 @@
 import { randomBytes } from "node:crypto";
 import { writeAudit } from "../audit";
 import { db, type Db, type Tx } from "../db";
+import { findNearNameMatches } from "../duplicates";
 import {
   applyCatalogDuplicateChecks,
   applyInFileDuplicateChecks,
@@ -106,7 +107,32 @@ async function prepareRows(
   applyInFileDuplicateChecks(rows);
   const existing = await fetchExistingItemKeys(client, rows);
   applyCatalogDuplicateChecks(rows, existing);
+  await applyNearNameWarnings(client, rows);
   return { fileError: null, rows };
+}
+
+/**
+ * Finding 1364: near-duplicate names (typo-level, or exact name under a
+ * different SKU) become row WARNINGS — the shared matcher (lib/duplicates).
+ * Warnings never block the import; the preview shows them and the confirm's
+ * batch audit row records them. Rows already carrying a duplicate ERROR
+ * (exact SKU / exact name+brand+model) are not double-reported.
+ */
+async function applyNearNameWarnings(client: ItemReader, rows: ImportRowPreview[]): Promise<void> {
+  const candidates = rows.filter((row) => row.data && !row.errors.some((e) => isDuplicateError(e)));
+  if (!candidates.length) return;
+  const catalog = await client.item.findMany({ select: { id: true, name: true, active: true } });
+  for (const row of candidates) {
+    const matches = findNearNameMatches(catalog, row.data!.name);
+    if (!matches.length) continue;
+    const names = matches
+      .slice(0, 3)
+      .map((m) => `"${m.name}"${m.active ? "" : " (inactive)"}`)
+      .join(", ");
+    row.warnings.push(
+      `Similar product already exists: ${names}. This row will still import — check it is not a duplicate.`,
+    );
+  }
 }
 
 /** Preview only — reads the catalog, writes nothing. */
@@ -143,12 +169,22 @@ export async function confirmItemsImport(
       const created = await tx.item.create({ data: { ...row.data!, importBatchId: batchId } });
       itemIds.push(created.id);
     }
+    // Finding 1364: rows confirmed past a near-duplicate warning are
+    // recorded on the batch audit row (the import's confirm IS the confirm).
+    const dupeWarnings = rows
+      .filter((row) => row.warnings.length > 0)
+      .map((row) => ({ line: row.line, name: row.data?.name ?? "", warnings: row.warnings }));
     await writeAudit(tx, {
       userId: actorId,
       entityType: "Item",
       entityId: batchId,
       action: "import",
-      after: { batchId, count: itemIds.length, itemIds },
+      after: {
+        batchId,
+        count: itemIds.length,
+        itemIds,
+        ...(dupeWarnings.length ? { duplicateNameWarnings: dupeWarnings } : {}),
+      },
     });
     return { ok: true as const, batchId, count: itemIds.length, itemIds };
   });

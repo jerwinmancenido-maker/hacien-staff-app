@@ -9,6 +9,7 @@ import {
   type BookRegister,
 } from "@/lib/books/registers";
 import { EmptyState } from "@/components/ui";
+import { ListPager, type ListPagerProps } from "@/components/ListPager";
 
 const day = (ymdStr: string) => formatDate(new Date(`${ymdStr}T00:00:00.000Z`));
 
@@ -100,9 +101,17 @@ function TotalRow({
 export function BooksRegisterTable({
   config,
   register,
+  pager,
 }: {
   config: RegisterConfig;
   register: BookRegister;
+  /**
+   * F-1 (finding 1354): when set, the rows handed in are ONE page of the
+   * register and the shared list pager renders under the table. The
+   * register's totals and rowCount stay full-period — only the rendered
+   * rows are paged, so the period totals in the footer never change.
+   */
+  pager?: ListPagerProps;
 }) {
   if (register.rowCount === 0) {
     return <EmptyState title="Nothing in this period" line={config.emptyFeeds} />;
@@ -176,6 +185,7 @@ export function BooksRegisterTable({
           </tfoot>
         </table>
       </div>
+      {pager && <ListPager {...pager} />}
       {sales && (
         <p className="faint small" style={{ marginTop: 8 }} role="note">
           Draft figures under the banner above — Invoiced and Collected are listed separately on purpose. Neither is a tax

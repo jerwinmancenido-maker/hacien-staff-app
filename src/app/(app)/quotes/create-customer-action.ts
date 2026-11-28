@@ -15,6 +15,7 @@ import { listWithholdingRates } from "@/lib/services/withholding";
 import { parseWithholdingPick, resolveCustomerSavedPick } from "@/lib/quotes/withholding-defaults";
 import { customerSchema, phoneField, WITHHOLDING_TYPES } from "@/lib/validation/companies";
 import { str, zodFieldErrors, type FormState } from "@/lib/validation/forms";
+import { duplicateConfirmNote, duplicateWarningMessage, findDuplicateNames } from "@/lib/duplicates";
 import { z } from "zod";
 
 const optionalText = (max: number) =>
@@ -145,6 +146,16 @@ export async function createCustomerForQuoteAction(
       }
     }
 
+    // Finding 1364: near-duplicate name warning — the shared mechanism
+    // (lib/duplicates). The drawer resubmits with confirmDuplicateName=1
+    // ("Save anyway") to proceed; a confirmed create records the matches
+    // on the customer create audit row below.
+    const dupes = await findDuplicateNames(db, "customer", parsedCustomer.data.name);
+    if (dupes.length && str(form, "confirmDuplicateName") !== "1") {
+      return { warning: duplicateWarningMessage("customer", dupes) };
+    }
+    const dupeNote = duplicateConfirmNote(dupes);
+
     // 3. Create all in ONE transaction
     const addressTrim = address.trim();
     // Split address parts, same fields as the full customer form. Barangay is
@@ -174,7 +185,7 @@ export async function createCustomerForQuoteAction(
         entityType: "Customer",
         entityId: created.id,
         action: "create",
-        after: created,
+        after: dupeNote ? { ...created, duplicateNameWarningConfirmed: dupeNote } : created,
       });
 
       if (addressTrim) {

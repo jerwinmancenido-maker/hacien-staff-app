@@ -48,6 +48,7 @@ import { TotalsBox } from "./DocParts";
 import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddContactDialog } from "./AddContactDialog";
+import { SearchPicker } from "@/components/SearchPicker";
 
 /** One saved address of a customer, shaped for the quote editor's
  * delivery-address picker (label matches the Convert dialog's options). */
@@ -933,14 +934,14 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
                     </td>
                     {withCosts && (
                       <td className="col-supplier" data-label="Supplier">
-                        <select aria-label={`Line ${idx + 1} supplier`} value={i.supplierId ?? ""} onChange={(ev) => setItem(i.key, { supplierId: ev.target.value || null })}>
-                          <option value="">—</option>
-                          {suppliers!.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
+                        <SearchPicker
+                          ariaLabel={`Line ${idx + 1} supplier`}
+                          value={i.supplierId ?? ""}
+                          options={suppliers!.map((s) => ({ id: s.id, label: s.name }))}
+                          placeholder="—"
+                          emptyOptionLabel="—"
+                          onPick={(id) => setItem(i.key, { supplierId: id || null })}
+                        />
                       </td>
                     )}
                     {withCosts && (

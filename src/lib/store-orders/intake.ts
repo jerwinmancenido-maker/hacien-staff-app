@@ -23,6 +23,7 @@ import { writeAudit } from "../audit";
 import type { ApiActor } from "../api/keys";
 import { ApiError } from "../api/errors";
 import { db, isUniqueViolation, type Tx } from "../db";
+import { findNearNameMatches } from "../duplicates";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
 import { TIME_ZONE } from "../format";
 import { getMailer, type Mailer } from "../mailer";
@@ -306,6 +307,15 @@ async function proposeMatch(
     take: 2,
   });
   if (customers.length === 1) return { customerId: customers[0]?.id as string, contactId: null };
+  // Finding 1364: near-name fallback — a buyer whose name is a typo away
+  // from exactly one existing customer gets that customer proposed, so the
+  // convert dialog warns instead of staff silently creating a near-duplicate.
+  const all = await tx.customer.findMany({
+    where: { active: true, archivedAt: null },
+    select: { id: true, name: true, active: true },
+  });
+  const near = findNearNameMatches(all, buyer.name);
+  if (near.length === 1) return { customerId: near[0]?.id as string, contactId: null };
   return { customerId: null, contactId: null };
 }
 
