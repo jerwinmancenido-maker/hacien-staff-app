@@ -47,6 +47,46 @@ const listOfNames = z
   .min(1, "Add at least one option.")
   .refine((items) => new Set(items.map((i) => i.toLowerCase())).size === items.length, "Options must be unique.");
 
+/**
+ * One named payment-term preset (ERP adoption item 10). `text` is capped
+ * at 100 chars because that is the Quote / SO terms field's own limit —
+ * a preset must always fit the field it fills.
+ */
+export const paymentTermPresetSchema = z.object({
+  name: z.string().trim().min(1, "Give the preset a name.").max(60),
+  text: z.string().trim().min(1, "Write the terms text the preset fills in.").max(100),
+  active: z.boolean(),
+});
+
+export type PaymentTermPreset = z.infer<typeof paymentTermPresetSchema>;
+
+export const paymentTermPresetsSchema = z
+  .array(paymentTermPresetSchema)
+  .max(30, "At most 30 presets.")
+  .refine(
+    (items) => new Set(items.map((i) => i.name.toLowerCase())).size === items.length,
+    "Preset names must be unique.",
+  );
+
+/**
+ * Seed presets. The texts are the long-standing lists.paymentTerms
+ * strings verbatim (pinned equal by tests against DEFAULT_SETTINGS), so
+ * a document filled from a preset prints exactly what the same terms
+ * string prints today. The names "COD", "50/50" and "Net 30" are the
+ * keys item 14's printed schedule table will match on — do not rename.
+ */
+export const PAYMENT_TERM_PRESET_SEED: PaymentTermPreset[] = [
+  { name: "COD", text: "COD", active: true },
+  { name: "50/50", text: "50% down, 50% on delivery", active: true },
+  { name: "Net 30", text: "Net 30 (approved accounts only)", active: true },
+  { name: "100% upfront", text: "100% upfront (software and special orders)", active: true },
+];
+
+/** The presets an editor may offer: active ones only, in saved order. */
+export function activePaymentTermPresets(presets: readonly PaymentTermPreset[]): PaymentTermPreset[] {
+  return presets.filter((p) => p.active);
+}
+
 const accountLast4 = z
   .string()
   .trim()
@@ -84,6 +124,28 @@ const paymentAccountEwallet = z.object({
   accountLast4,
   printFullAccountNumber: z.boolean().default(false),
   accountNumberFull,
+});
+
+const alertRole = z.enum(["admin", "approver", "staff"]);
+
+const alertEmailAddress = z
+  .string()
+  .trim()
+  .min(3, "Enter a valid email address.")
+  .max(254)
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a valid email address.");
+
+/**
+ * One email alert rule (ERP adoption item 8). The channel is part of the
+ * stored shape so a chat channel can be added later without reshaping the
+ * data — today "email" is the only value: there is no chat/Telegram
+ * integration in this app, and adding one needs a bot key (a secret).
+ */
+const alertRule = z.object({
+  enabled: z.boolean(),
+  channel: z.literal("email").default("email"),
+  roles: z.array(alertRole).max(3, "At most 3 roles."),
+  emails: z.array(alertEmailAddress).max(20, "At most 20 extra addresses."),
 });
 
 export const settingsSections = {
@@ -188,6 +250,20 @@ export const settingsSections = {
   lists: z.object({
     paymentTerms: listOfNames,
     contactRoles: listOfNames,
+    /**
+     * Named payment-term presets (ERP adoption item 10): a preset is a
+     * typing shortcut in the Quote / SO editors — picking one fills the
+     * document's terms field with the preset's text, and the document
+     * stores ONLY that text (no preset id), so editing a preset later
+     * never rewrites an issued document. Item 14 keys its printed
+     * schedule table on the preset NAMES "COD", "50/50" and "Net 30" —
+     * keep those three names exact. The seed texts are the long-standing
+     * lists.paymentTerms strings, so each resolves through
+     * resolvePaymentTerm to the same printed Point 2 wording as today:
+     * "COD" → COD, "50% down…" → FIFTY_FIFTY, "Net 30…" → NET30,
+     * "100% upfront…" → UPFRONT.
+     */
+    paymentTermPresets: paymentTermPresetsSchema.default(PAYMENT_TERM_PRESET_SEED),
   }),
   documents: z.object({
     // Business documents (DTI, BIR 2303 …) show "Expires in N days" this many days ahead.
@@ -316,6 +392,21 @@ export const settingsSections = {
     itemsImportEnabled: z.boolean().default(false),
     /** Phase 4 #10: period close controls on the Books page. OFF by default. */
     periodCloseEnabled: z.boolean().default(false),
+    /** Adoption item 5: goods-received team email. ON by default. */
+    receivingEmailEnabled: z.boolean().default(true),
+    /** Adoption item 16: payment-received email to the customer, one per billing settled. ON by default. */
+    customerPaymentEmailEnabled: z.boolean().default(true),
+    /** Adoption item 16: delivery-recorded email to the customer. ON by default. */
+    customerDeliveryEmailEnabled: z.boolean().default(true),
+  }),
+  // Adoption item 8: email alert rules — one rule per event. Alerts only:
+  // an alert never carries an action; approvals stay in the app.
+  alerts: z.object({
+    goodsReceived: alertRule,
+    supplierPayment: alertRule,
+    collection: alertRule,
+    quoteApproved: alertRule,
+    salesOrderConfirmed: alertRule,
   }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,
@@ -437,6 +528,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   invoiceBooklet: "invoice booklet",
   collections: "collections",
   features: "features",
+  alerts: "email alerts",
   messaging: "order text updates",
   taxCalendar: "tax calendar",
   print: "print & company details",
@@ -447,3 +539,43 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
 export function isSettingsKey(key: string): key is SettingsKey {
   return (SETTINGS_KEYS as string[]).includes(key);
 }
+
+export const ALERT_EVENT_KEYS = [
+  "goodsReceived",
+  "supplierPayment",
+  "collection",
+  "quoteApproved",
+  "salesOrderConfirmed",
+] as const;
+export type AlertEventKey = (typeof ALERT_EVENT_KEYS)[number];
+export type AlertRole = z.infer<typeof alertRole>;
+export type AlertRule = Settings["alerts"][AlertEventKey];
+
+/** Labels + help for the Settings "Email alerts" form and audit text. */
+export const ALERT_EVENTS: readonly { key: AlertEventKey; label: string; help: string }[] = [
+  {
+    key: "goodsReceived",
+    label: "Goods received",
+    help: "When a receiving report is posted for a purchase order. The PO's creator always gets this one too, on top of the roles and addresses below.",
+  },
+  {
+    key: "supplierPayment",
+    label: "Supplier payment recorded",
+    help: "When a payment to a supplier is recorded.",
+  },
+  {
+    key: "collection",
+    label: "Collection recorded",
+    help: "When a customer collection (payment received) is recorded.",
+  },
+  {
+    key: "quoteApproved",
+    label: "Quote approved",
+    help: "When a quote's approval is granted.",
+  },
+  {
+    key: "salesOrderConfirmed",
+    label: "Sales order confirmed",
+    help: "When a quote is converted into a sales order.",
+  },
+];

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { isoDate, manilaToday } from "@/lib/format";
+import { formatDate, formatPeso, isoDate, manilaToday } from "@/lib/format";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
 import { defaultCashAccountId, listActiveCashAccounts } from "@/lib/services/cash-accounts";
 import { defaultExpenseCategoryId, listExpenseCategories } from "@/lib/services/expenses";
@@ -28,13 +28,13 @@ export default async function NewExpensePage() {
     db.salesOrder.findMany({
       where: { status: { not: "VOID" } },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      select: { id: true, number: true, customer: { select: { name: true } } },
+      select: { id: true, number: true, contractPrice: true, date: true, customer: { select: { name: true } } },
       take: 200,
     }),
     db.purchaseOrder.findMany({
       where: { status: { not: "VOID" } },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      select: { id: true, number: true, supplier: { select: { name: true } } },
+      select: { id: true, number: true, subtotal: true, date: true, supplier: { select: { name: true } } },
       take: 200,
     }),
     listBusinesses({ activeOnly: true }),
@@ -59,8 +59,8 @@ export default async function NewExpensePage() {
           }))}
           categories={categories.map((c) => ({ id: c.id, label: c.label }))}
           suppliers={suppliers}
-          salesOrders={salesOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.customer.name}` }))}
-          purchaseOrders={purchaseOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.supplier.name}` }))}
+          salesOrders={salesOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.customer.name}`, meta: `${formatPeso(o.contractPrice)} · ${formatDate(o.date)}` }))}
+          purchaseOrders={purchaseOrders.map((o) => ({ id: o.id, label: `${o.number} — ${o.supplier.name}`, meta: `${formatPeso(o.subtotal)} · ${formatDate(o.date)}` }))}
           businesses={businesses}
           ownCompanyName={snap.settings.company.name}
           defaults={{

@@ -33,7 +33,7 @@ import {
   quoteSoTermsPoint5,
 } from "@/lib/print/terms-block";
 import { POLICIES_DISPLAY_HOST, POLICIES_URL, POLICY_VERSION_LINE } from "@/lib/print/policies";
-import { settingsSections, type Settings } from "@/lib/settings/schema";
+import { settingsSections, PAYMENT_TERM_PRESET_SEED, type Settings } from "@/lib/settings/schema";
 
 /** In-memory store with the same contract as the Prisma one. */
 function memoryStore(): SettingsStore & { rows: SettingsVersionRecord[] } {
@@ -338,6 +338,23 @@ describe("settings forms", () => {
     expect(settingsValueFromForm("lists", (n) => form[n] ?? null)).toEqual({
       paymentTerms: ["COD", "Net 30", "Net 60"],
       contactRoles: ["End user", "Other"],
+      // No presets field submitted → the seed presets ride along, so a
+      // plain-lists save can never wipe presets back to nothing.
+      paymentTermPresets: PAYMENT_TERM_PRESET_SEED,
+    });
+  });
+
+  it("carries payment term presets through the lists form as hidden JSON", () => {
+    const presets = [{ name: "Net 15", text: "Net 15", active: true }];
+    const form: Record<string, string> = {
+      paymentTerms: "COD",
+      contactRoles: "Other",
+      paymentTermPresets: JSON.stringify(presets),
+    };
+    expect(settingsValueFromForm("lists", (n) => form[n] ?? null)).toEqual({
+      paymentTerms: ["COD"],
+      contactRoles: ["Other"],
+      paymentTermPresets: presets,
     });
   });
 

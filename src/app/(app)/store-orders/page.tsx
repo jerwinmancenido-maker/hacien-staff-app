@@ -91,9 +91,9 @@ export default async function StoreOrdersPage({
             <thead>
               <tr>
                 <th>Order</th>
-                <th>Buyer</th>
-                <th>Gateway</th>
-                <th className="num">Lines</th>
+                <th className="col-phone-cap">Buyer</th>
+                <th className="col-phone-hide">Gateway</th>
+                <th className="num col-phone-hide">Lines</th>
                 <th className="num">Amount paid</th>
                 <th>Status</th>
               </tr>
@@ -101,21 +101,21 @@ export default async function StoreOrdersPage({
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td>
+                  <td data-col="number">
                     <Link href={`/store-orders/${r.id}`}>{r.number}</Link>
                     <div className="small faint">Paid {formatDateTime(r.paidAt)}</div>
                     {renewalsOnly && r.nextTermEndDate ? (
                       <div className="small faint">Term ends {formatDate(r.nextTermEndDate)}</div>
                     ) : null}
                   </td>
-                  <td>
+                  <td className="col-phone-cap">
                     {r.buyerName}
                     <div className="small faint">
                       {r.matchedCustomerName ? `Match proposed: ${r.matchedCustomerName}` : "No customer match proposed"}
                     </div>
                   </td>
-                  <td>{r.gatewayName}</td>
-                  <td className="num">
+                  <td className="col-phone-hide">{r.gatewayName}</td>
+                  <td className="num col-phone-hide">
                     {r.lineCount}
                     {r.unmappedCount > 0 ? (
                       <div>
@@ -124,7 +124,7 @@ export default async function StoreOrdersPage({
                     ) : null}
                   </td>
                   <td className="num">{formatPeso(r.amountPaid)}</td>
-                  <td>
+                  <td data-col="status">
                     <Chip tone={r.displayStatus === "PAID" ? "amber" : r.displayStatus === "DONE" ? "green" : "grey"}>
                       {storeOrderDisplayLabel(r.displayStatus)}
                     </Chip>

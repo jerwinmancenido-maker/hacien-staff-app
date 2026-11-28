@@ -35,6 +35,11 @@ export function salesOrdersNeedsPoHref(): string {
   return `/sales-orders?${HOME_SO_NEEDS_PO}=1`;
 }
 
+/** Sales Orders list (the Home Sales section's header / empty-state link). */
+export function salesOrdersHref(): string {
+  return "/sales-orders";
+}
+
 export function posAwaitingReceiptHref(): string {
   return "/receiving";
 }
@@ -100,4 +105,31 @@ export function newBillingHref(): string {
 
 export function auditLogHref(): string {
   return "/settings?tab=audit";
+}
+
+export const HOME_SO_TO_DELIVER = "toDeliver";
+
+/** Sales orders list: OPEN orders with a live line still short of delivery
+ *  (the list's own "Still to deliver" filter) — own company only, matching
+ *  the Home count that links here. */
+export function salesOrdersToDeliverHref(): string {
+  return `/sales-orders?${HOME_SO_TO_DELIVER}=1&business=own`;
+}
+
+/** Sales orders list: every OPEN order (the OPEN status chip), own company
+ *  only — the full set behind the Home "Open sales orders" count. (The
+ *  pipeline's openSalesOrdersHref is a different set: OPEN + still to bill.) */
+export function salesOrdersOpenStatusHref(): string {
+  return `/sales-orders?status=OPEN&business=own`;
+}
+
+/** My reminders, overdue section — the list behind the Home overdue count
+ *  (the Reminders page opens with exactly that section). */
+export function remindersOverdueHref(): string {
+  return "/reminders#overdue";
+}
+
+/** Cash home — the page whose table carries the "Not assigned" row. */
+export function cashHomeHref(): string {
+  return "/cash";
 }

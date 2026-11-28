@@ -1,7 +1,7 @@
 // Builds a settings section value from a submitted form (input names are the
 // field paths inside the section, e.g. "quote.prefix").
 
-import type { SettingsKey } from "./schema";
+import { PAYMENT_TERM_PRESET_SEED, paymentTermPresetsSchema, type SettingsKey } from "./schema";
 
 type Get = (name: string) => string | null;
 
@@ -125,8 +125,26 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         website: get("website") ?? "",
         logoStorageKey: get("logoStorageKey") ?? "",
       };
-    case "lists":
-      return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
+    case "lists": {
+      // Presets ride along as a hidden JSON field (rendered by the Lists
+      // form from the current settings) so saving the plain lists never
+      // resets them; absent or unreadable JSON falls back to the seed.
+      let paymentTermPresets: unknown = PAYMENT_TERM_PRESET_SEED;
+      const rawPresets = get("paymentTermPresets");
+      if (rawPresets) {
+        try {
+          const parsed = paymentTermPresetsSchema.safeParse(JSON.parse(rawPresets));
+          if (parsed.success) paymentTermPresets = parsed.data;
+        } catch {
+          // Keep the seed fallback.
+        }
+      }
+      return {
+        paymentTerms: lines(get("paymentTerms")),
+        contactRoles: lines(get("contactRoles")),
+        paymentTermPresets,
+      };
+    }
     case "documents":
       return { expiryWarningDays: get("expiryWarningDays") };
     case "invoiceBooklet": {
@@ -169,7 +187,31 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         warrantyClaimsEnabled: checked(get("warrantyClaimsEnabled")),
         itemsImportEnabled: checked(get("itemsImportEnabled")),
         periodCloseEnabled: checked(get("periodCloseEnabled")),
+        receivingEmailEnabled: checked(get("receivingEmailEnabled")),
+        customerPaymentEmailEnabled: checked(get("customerPaymentEmailEnabled")),
+        customerDeliveryEmailEnabled: checked(get("customerDeliveryEmailEnabled")),
       };
+    case "alerts": {
+      // One block per event: <event>.enabled, <event>.role.<role>,
+      // <event>.emails (one address per line). Channel is email-only today.
+      const rule = (event: string) => ({
+        enabled: checked(get(`${event}.enabled`)),
+        channel: "email" as const,
+        roles: [
+          ...(checked(get(`${event}.role.admin`)) ? ["admin" as const] : []),
+          ...(checked(get(`${event}.role.approver`)) ? ["approver" as const] : []),
+          ...(checked(get(`${event}.role.staff`)) ? ["staff" as const] : []),
+        ],
+        emails: lines(get(`${event}.emails`)),
+      });
+      return {
+        goodsReceived: rule("goodsReceived"),
+        supplierPayment: rule("supplierPayment"),
+        collection: rule("collection"),
+        quoteApproved: rule("quoteApproved"),
+        salesOrderConfirmed: rule("salesOrderConfirmed"),
+      };
+    }
     case "taxCalendar": {
       const keys = [
         "1701q",

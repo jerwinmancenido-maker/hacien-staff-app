@@ -18,7 +18,9 @@ import type { ReceiptInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { notifyGoodsReceived } from "./receiving-notify";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 export type RrActor = PermissionUser & { id: string };
 
@@ -50,6 +52,12 @@ async function lockForReceiving(tx: Tx, purchaseOrderId: string): Promise<{ stat
 async function setPoStatus(tx: Tx, purchaseOrderId: string, from: PoStatus, to: PoStatus, actorId: string, reason: string) {
   if (from === to) return;
   await tx.purchaseOrder.update({ where: { id: purchaseOrderId }, data: { status: to, updatedById: actorId } });
+  // Adoption item 13: fully received is the PO's done state — close its
+  // reminders in the same transaction (a later RR void recomputes the
+  // status back down but never resurrects a closed reminder).
+  if (to === "RECEIVED") {
+    await autoCloseReminders(tx, "PURCHASE_ORDER", purchaseOrderId, "Auto-closed: PO fully received");
+  }
   await writeAudit(tx, { userId: actorId, entityType: "PurchaseOrder", entityId: purchaseOrderId, action: "update", before: { status: from }, after: { status: to, reason }, diff: false });
 }
 
@@ -71,7 +79,7 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
   await ensureSeries(db, "RECEIVING_REPORT", year, format);
   const uploads = await prepareUploads(files);
   try {
-    return await withTxRetry(() =>
+    const posted = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const po = await lockForReceiving(tx, purchaseOrderId);
         const err = poActionError(po.status, "receive");
@@ -143,6 +151,12 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
         return rr;
       }, DOC_TX),
     );
+    // Adoption item 5: tell the team the goods arrived. Runs AFTER the
+    // receiving transaction commits; notifyGoodsReceived never throws (a
+    // mail failure is logged + audited, the receiving stands) - the extra
+    // catch is belt-and-braces so the posting path cannot change.
+    await notifyGoodsReceived(posted.id).catch(() => {});
+    return posted;
   } catch (e) {
     await discardUploads(uploads);
     throw e;

@@ -7,7 +7,7 @@
 import { isUniqueViolation } from "@/lib/db";
 import { redactPrintAccountNumbers } from "@/lib/print/account-number";
 import { DEFAULT_SETTINGS } from "./defaults";
-import { settingsSchema, settingsSections, type Settings, type SettingsKey } from "./schema";
+import { ALERT_EVENT_KEYS, settingsSchema, settingsSections, type Settings, type SettingsKey } from "./schema";
 
 export type SettingsVersionRecord = {
   id: string;
@@ -79,7 +79,20 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
         };
       })(),
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
+      lists: {
+        ...DEFAULT_SETTINGS.lists,
+        ...(v.data as Partial<Settings>).lists,
+        // Snapshots saved before presets existed keep the seed presets.
+        paymentTermPresets:
+          (v.data as Partial<Settings>).lists?.paymentTermPresets ?? DEFAULT_SETTINGS.lists.paymentTermPresets,
+      },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
+      alerts: (() => {
+        const raw = ((v.data as Partial<Settings>).alerts ?? {}) as Partial<Settings["alerts"]>;
+        const merged = {} as Settings["alerts"];
+        for (const k of ALERT_EVENT_KEYS) merged[k] = { ...DEFAULT_SETTINGS.alerts[k], ...(raw[k] ?? {}) };
+        return merged;
+      })(),
       messaging: { ...DEFAULT_SETTINGS.messaging, ...(v.data as Partial<Settings>).messaging },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },
       identity: { ...DEFAULT_SETTINGS.identity, ...(v.data as Partial<Settings>).identity },

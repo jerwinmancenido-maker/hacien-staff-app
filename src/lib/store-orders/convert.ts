@@ -30,6 +30,7 @@
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { duplicateConfirmNote, findDuplicateNames } from "../duplicates";
 import { assertCan, staffNeedsAdminCheck, type PermissionUser } from "../permissions";
 import { getSettingsSnapshot } from "../settings";
 import { allocateDocNumber, ensureSeries } from "../documents/series";
@@ -199,12 +200,21 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
           select: { id: true, name: true, defaultTerms: true },
         });
         customer = created;
+        // Finding 1364: if the buyer name near-matches existing customers,
+        // the convert dialog's proposal was the warning and choosing "new"
+        // is the confirm — record the matches on the create audit row.
+        const dupes = await findDuplicateNames(tx, "customer", order.buyerName);
+        const dupeNote = duplicateConfirmNote(dupes);
         await writeAudit(tx, {
           userId: actor.id,
           entityType: "Customer",
           entityId: created.id,
           action: "create",
-          after: { name: created.name, source: `Store order ${order.number}` },
+          after: {
+            name: created.name,
+            source: `Store order ${order.number}`,
+            ...(dupeNote ? { duplicateNameWarningConfirmed: dupeNote } : {}),
+          },
         });
       } else {
         const customerId = input.customerMode === "matched" ? order.matchedCustomerId : input.customerId;
@@ -425,10 +435,11 @@ export async function convertStoreOrder(id: string, input: ConvertStoreOrderInpu
       });
 
       // --- Billing for the full amount, on the claimed booklet SI.
-      // withholdingBreakdown stays unset: captureWithholdingBreakdown is
-      // local to the billing service, and a store SO's withholding total
-      // is 0.00 by construction, so there is no breakdown to capture.
-      const withholdingExpected = proRataWithholding(amountPaid, totals.contractPrice, totals.withholdingTotal);
+      // No withholding forecast (ERP payment-entry model, 2026-11-28):
+      // withholdingBreakdown stays unset and the expected figure is a
+      // literal 0 — a store SO's withholding total is 0.00 by
+      // construction, and new billings no longer derive a forecast.
+      const withholdingExpected = "0.00";
       const net = netExpected(amountPaid, withholdingExpected);
       const billingNumber = await allocateDocNumber(tx, "BILLING", year, billingFormat);
       const billing = await tx.billing.create({

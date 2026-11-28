@@ -13,11 +13,13 @@ import { fromScaled, toScaled } from "../quotes/calc";
 import { assertCashEnabled } from "../cash/features";
 import { assertFundsInTx } from "../cash/funds";
 import { assertPayables2307Enabled } from "../payables/issue2307";
+import { revertPaymentRequestsInTx, settlePaymentRequestInTx } from "./payment-requests";
 import { validatePaymentAllocations, type BillForAlloc, type PaymentAllocationInput } from "../payables/allocations";
 import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { assertPeriodOpen } from "./period-close";
+import { notifySupplierPaymentRecorded } from "./alerts";
 
 export type PayablesActor = PermissionUser & { id: string };
 
@@ -193,7 +195,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
   const uploads = await prepareUploads(files);
 
   try {
-    return await withTxRetry(() =>
+    const payment = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const supplier = await lockSupplier(tx, input.supplierId);
         const allocInputs: PaymentAllocationInput[] = input.allocations.map((a) => ({
@@ -270,6 +272,19 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         }
         for (const billId of touched) await recomputeSupplierBillStatus(tx, billId);
 
+        // ERP adoption item 3: a payment recorded against an APPROVED
+        // payment request settles it in this same transaction.
+        if (input.paymentRequestId) {
+          await settlePaymentRequestInTx(tx, {
+            requestId: input.paymentRequestId,
+            supplierId: supplier.id,
+            paymentId: payment.id,
+            paymentNumber: number,
+            allocations: allocInputs,
+            actorId: actor.id,
+          });
+        }
+
         await createAttachments(tx, uploads, { supplierPaymentId: payment.id }, actor.id);
 
         await writeAudit(tx, {
@@ -288,11 +303,17 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
             withholdingTotal: fromScaled(whTotal, 2),
             allocations: allocInputs.length,
             attachments: uploads.length,
+            ...(input.paymentRequestId ? { paymentRequestId: input.paymentRequestId } : {}),
           },
         });
         return payment;
       }, DOC_TX),
     );
+    // Adoption item 8: tell the team a supplier payment was recorded.
+    // Runs AFTER the payment transaction commits; the alert never throws
+    // (a mail failure is logged + audited, the payment stands).
+    await notifySupplierPaymentRecorded(payment.id, actor.id).catch(() => {});
+    return payment;
   } catch (e) {
     await discardUploads(uploads);
     throw e;
@@ -342,6 +363,10 @@ export async function voidSupplierPayment(id: string, reason: string, actor: Pay
         }
       }
       for (const a of before.allocations) await recomputeSupplierBillStatus(tx, a.supplierBillId);
+
+      // ERP adoption item 3: un-settle any payment request this payment
+      // had settled — it goes back to APPROVED (unpaid).
+      await revertPaymentRequestsInTx(tx, id, before.number, actor.id);
 
       await tx.documentVoid.create({
         data: {

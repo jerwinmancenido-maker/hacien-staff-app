@@ -23,6 +23,7 @@ export type AuditEntityType =
   | "SupplierReturn"
   | "CustomerReturn"
   | "SupplierBill"
+  | "SupplierPaymentRequest"
   | "Delivery"
   | "DocumentAttachment"
   | "Billing"

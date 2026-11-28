@@ -203,7 +203,11 @@ describe.skipIf(!env.hasDb)("non-VAT gross sales from billings (MySQL)", () => {
     const year = await freshYear();
     const { customer, so } = await openSo(year, "10000.00");
     const billing = await bill(so.id, "10000.00", new Date(Date.UTC(year, 4, 5)));
-    expect(money(billing.withholdingExpected)).not.toBe("0.00");
+    // Payment-entry model (ERP plan Part 1, 2026-11-28): a new billing
+    // carries NO withholding forecast — the 2307 is typed at collection
+    // (the ₱100.00 applied below), so the stored expected starts at 0.00
+    // and gross sales still count the full booklet amount.
+    expect(money(billing.withholdingExpected)).toBe("0.00");
 
     await recordCollection(
       {

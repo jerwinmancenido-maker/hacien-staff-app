@@ -7,6 +7,7 @@ import type { FormState } from "@/lib/validation/forms";
 import type { StoreOrderConversionPrep } from "@/lib/store-orders/views";
 import type { ConvertStoreOrderInput } from "@/lib/store-orders/convert";
 import { convertStoreOrderAction } from "@/app/(app)/store-orders/actions";
+import { SearchPicker } from "@/components/SearchPicker";
 
 type CustomerOption = { id: string; name: string };
 type ItemOption = { id: string; name: string; sku: string | null };
@@ -123,14 +124,14 @@ function ConvertStoreOrderDialog({
               an existing customer
             </label>
             {mode === "existing" && (
-              <select value={customerId} onChange={(ev) => setCustomerId(ev.target.value)}>
-                <option value="">Pick a customer…</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <SearchPicker
+                ariaLabel="Customer"
+                value={customerId}
+                options={customers.map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Pick a customer…"
+                emptyOptionLabel="Pick a customer…"
+                onPick={setCustomerId}
+              />
             )}
             <label style={{ display: "block", fontWeight: "normal" }}>
               <input type="radio" name="customerMode" checked={mode === "new"} onChange={() => setMode("new")} /> Create a
@@ -163,16 +164,17 @@ function ConvertStoreOrderDialog({
                     </div>
                   )}
                   {l.needsPick && (
-                    <select value={picks[l.id] ?? ""} onChange={(ev) => setPicks((p) => ({ ...p, [l.id]: ev.target.value }))}>
-                      <option value="">Resolve this line…</option>
-                      <option value="freetext">Keep as free text (title as sent)</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          Use item: {it.name}
-                          {it.sku ? ` (${it.sku})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchPicker
+                      ariaLabel={`Resolve line ${l.title}`}
+                      value={picks[l.id] ?? ""}
+                      options={[
+                        { id: "freetext", label: "Keep as free text (title as sent)" },
+                        ...items.map((it) => ({ id: it.id, label: `Use item: ${it.name}`, meta: it.sku ?? undefined })),
+                      ]}
+                      placeholder="Resolve this line…"
+                      emptyOptionLabel="Resolve this line…"
+                      onPick={(id) => setPicks((p) => ({ ...p, [l.id]: id }))}
+                    />
                   )}
                 </div>
               ))}

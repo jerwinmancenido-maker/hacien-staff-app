@@ -34,7 +34,7 @@ export const billingInputSchema = z.object({
   invoiceNo: z.coerce.number().int("Enter a whole number.").min(1, "Enter a booklet invoice number."),
   invoiceDate: ymd,
   dueDate: ymd,
-  // Billing notes print on the document \u2014 same save-layer guard as the
+  // Billing notes print on the document — same save-layer guard as the
   // quote/SO notes (lawyer ruling 2026-11-23): payment-term phrases are
   // refused at save; the printed Terms of Sale is the single source.
   notes: z
@@ -90,6 +90,28 @@ export const allocationRowSchema = z.object({
   codes: z.array(withholdingCodeRowSchema).optional(),
 });
 
+/**
+ * One expense-posting deduction row (ERP payment-entry model): FEE is
+ * the channel's charge; OTHER is any other kept amount and needs a
+ * label. cashAffecting defaults true; a settlement-only OTHER row
+ * settles the billing with no expense and no account movement.
+ * Withholding is never a row here — it rides the allocations.
+ */
+export const collectionDeductionRowSchema = z.object({
+  kind: z.enum(["FEE", "OTHER"]),
+  label: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((v) => v || null)
+    .nullable()
+    .optional(),
+  amount: moneyStr,
+  cashAffecting: z.boolean().optional(),
+});
+
+export type CollectionDeductionRowInput = z.infer<typeof collectionDeductionRowSchema>;
+
 export const collectionInputSchema = z
   .object({
     customerId: z.string().min(1, "Customer is required."),
@@ -116,6 +138,15 @@ export const collectionInputSchema = z
       .max(64)
       .transform((v) => v || null),
     amountReceived: moneyStr,
+    // Collection fee (REQ-COLLECTION-FEES-001): optional fee the channel
+    // kept out of the amount received. Optional so direct service callers
+    // that predate the field keep today's behaviour; the form always
+    // posts it (blank = "0"). Bounds are enforced in the service.
+    feeAmount: optionalMoney.optional(),
+    // Deduction rows (ERP payment-entry model, 2026-11-28): generalises
+    // feeAmount. Optional so direct service callers that predate the
+    // field keep today's behaviour; bounds are enforced in the service.
+    deductions: z.array(collectionDeductionRowSchema).max(20).optional(),
     // Audit E: deposit / advance — the full amount stays as customer credit.
     isDeposit: z.boolean().default(false),
     // Optional cash account (Part 7a). Blank = not assigned.
@@ -261,6 +292,19 @@ export function parseCollectionForm(form: FormData): { ok: true; data: Collectio
     })
     .filter((a) => a.billingId && (Number(a.cashApplied) > 0 || Number(a.withholdingApplied) > 0));
 
+  const deductionKinds = form.getAll("deductionKind").map(String);
+  const deductionLabels = form.getAll("deductionLabel").map(String);
+  const deductionAmounts = form.getAll("deductionAmount").map(String);
+  const deductionCash = form.getAll("deductionCashAffecting").map(String);
+  const deductions = deductionKinds
+    .map((kind, i) => ({
+      kind: kind === "OTHER" ? ("OTHER" as const) : ("FEE" as const),
+      label: (deductionLabels[i] ?? "").trim() || null,
+      amount: (deductionAmounts[i] ?? "").trim(),
+      cashAffecting: deductionCash[i] !== "settlement",
+    }))
+    .filter((d) => d.amount !== "" && Number(d.amount) !== 0);
+
   const values: Record<string, string> = {
     customerId: String(form.get("customerId") ?? ""),
     date: String(form.get("date") ?? ""),
@@ -270,10 +314,11 @@ export function parseCollectionForm(form: FormData): { ok: true; data: Collectio
     checkDate: String(form.get("checkDate") ?? ""),
     receiptNo: String(form.get("receiptNo") ?? ""),
     amountReceived: String(form.get("amountReceived") ?? ""),
+    feeAmount: String(form.get("feeAmount") ?? ""),
     cashAccountId: String(form.get("cashAccountId") ?? ""),
     notes: String(form.get("notes") ?? ""),
   };
-  const parsed = collectionInputSchema.safeParse({ ...values, allocations, isDeposit: form.get("isDeposit") === "on" });
+  const parsed = collectionInputSchema.safeParse({ ...values, allocations, deductions, isDeposit: form.get("isDeposit") === "on" });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;

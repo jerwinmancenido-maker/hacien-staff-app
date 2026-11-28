@@ -71,6 +71,15 @@ export const DEFAULT_SETTINGS: Settings = {
       "COD",
     ],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
+    // ERP adoption item 10: mirrors PAYMENT_TERM_PRESET_SEED in ./schema
+    // (kept literal so prisma/seed.mts can load this file without a deep
+    // import chain; pinned equal by tests).
+    paymentTermPresets: [
+      { name: "COD", text: "COD", active: true },
+      { name: "50/50", text: "50% down, 50% on delivery", active: true },
+      { name: "Net 30", text: "Net 30 (approved accounts only)", active: true },
+      { name: "100% upfront", text: "100% upfront (software and special orders)", active: true },
+    ],
   },
   documents: { expiryWarningDays: 30 },
   invoiceBooklet: {
@@ -121,8 +130,26 @@ export const DEFAULT_SETTINGS: Settings = {
     booksEnabled: false,
     payables2307Enabled: false,
     warrantyClaimsEnabled: false,
+    // Adoption item 5: email the team when goods are received. ON by default.
+    receivingEmailEnabled: true,
+    // Adoption item 16: email the customer when a payment is applied to
+    // their billing, and when a delivery is recorded on their order.
+    // ON by default — the same posture as the item-5 automatic email.
+    customerPaymentEmailEnabled: true,
+    customerDeliveryEmailEnabled: true,
     itemsImportEnabled: false,
     periodCloseEnabled: false,
+  },
+  // Adoption item 8: email alert rules. ON by default for Admins and
+  // Approvers — the same people who got the item-5 receiving email. The
+  // goodsReceived default reproduces that email's recipient set exactly
+  // (the engine adds the PO's creator on top, as item 5 always did).
+  alerts: {
+    goodsReceived: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    supplierPayment: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    collection: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    quoteApproved: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    salesOrderConfirmed: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
   },
   // Q16 S-95: Default chosen — all OFF until UniSMS keys, DPA + DB location,
   // and HACIEN sender ID are confirmed.

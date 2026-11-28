@@ -46,6 +46,9 @@ model User {
   // Turned-off users cannot sign in; they are never deleted.
   active       Boolean   @default(true)
   archivedAt   DateTime?
+  // ERP adoption item 2: the user's own sidebar show/hide choice,
+  // remembered across sign-ins and devices (the ERP forgets on reload).
+  sidebarHidden Boolean  @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -85,6 +88,8 @@ model User {
   collectionsCreated           Collection[]              @relation("CollectionCreatedBy")
   collectionsChecked           Collection[]              @relation("CollectionAdminCheckedBy")
   supplierPaymentsCreated      SupplierPayment[]         @relation("SupplierPaymentCreatedBy")
+  paymentRequestsMade          SupplierPaymentRequest[]  @relation("PaymentRequestRequestedBy")
+  paymentRequestsDecided       SupplierPaymentRequest[]  @relation("PaymentRequestDecidedBy")
   cashAccountsCreated          CashAccount[]             @relation("CashAccountCreatedBy")
   cashAccountsUpdated          CashAccount[]             @relation("CashAccountUpdatedBy")
   expensesCreated              Expense[]                 @relation("ExpenseCreatedBy")
@@ -570,6 +575,10 @@ model Reminder {
   createdById String
   createdBy   User      @relation(fields: [createdById], references: [id])
   doneAt     DateTime?
+  // Adoption item 13: why an auto-close fired (e.g. "Auto-closed: order
+  // fully delivered"). Null on open reminders and on ones the owner closed
+  // by hand — the absence of a reason IS the "closed by hand" signal.
+  doneReason String?   @db.VarChar(200)
   createdAt  DateTime  @default(now())
 
   @@index([createdById, remindAt])
@@ -1197,6 +1206,17 @@ enum SupplierBillStatus {
   VOID
 }
 
+// Payment requests (ERP adoption item 3, 2026-11-28): the request-to-pay
+// step in front of a supplier payment. PAID is set only by the payment
+// that settled the request; CANCELLED only by voiding the bill.
+enum SupplierPaymentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
 // One PO per supplier. Made from a sales order (salesOrderId set; lines link to
 // SO lines) or standalone. Unit costs, totals and the supplier are cost data:
 // only users with "Can see costs" open PO pages (src/lib/purchasing/views.ts).
@@ -1563,6 +1583,7 @@ model SupplierBill {
   attachments  DocumentAttachment[]
   allocations  SupplierPaymentAllocation[]
   withholdings SupplierWithholding2307[]
+  paymentRequests SupplierPaymentRequest[]
 
   @@index([supplierId])
   @@index([purchaseOrderId])
@@ -1731,6 +1752,7 @@ model Billing {
 
   allocations  CollectionAllocation[]
   withholdings Withholding2307[]
+  collectionDeductions CollectionDeduction[]
   attachments  DocumentAttachment[]
   creditApplications CustomerCreditApplication[]
 
@@ -1798,6 +1820,14 @@ model Collection {
   // Hand-written OR / acknowledgment receipt number (manual text).
   receiptNo      String?            @db.VarChar(64)
   amountReceived Decimal            @db.Decimal(15, 2)
+  // Collection fee (REQ-COLLECTION-FEES-001): an optional fee the channel
+  // kept out of this collection (e.g. a bank/GCash charge). The billing
+  // still settles by the full amountReceived; the fee is expensed
+  // separately (feeExpense) against the same cash account, so the account
+  // lands net. 0 = no fee — exactly the pre-fee behaviour.
+  feeAmount      Decimal            @default(0) @db.Decimal(15, 2)
+  feeExpenseId   String?            @unique
+  feeExpense     Expense?           @relation("CollectionFeeExpense", fields: [feeExpenseId], references: [id], onDelete: SetNull)
   // Audit E: deposit / advance — money held as customer credit, never
   // allocated to a billing at record time. Applied later via Apply credit.
   isDeposit      Boolean           @default(false)
@@ -1820,6 +1850,7 @@ model Collection {
 
   allocations  CollectionAllocation[]
   withholdings Withholding2307[]
+  deductions   CollectionDeduction[]
   attachments  DocumentAttachment[]
 
   @@index([customerId])
@@ -1827,6 +1858,43 @@ model Collection {
   @@index([date])
   @@index([cashAccountId])
   @@index([needsAdminCheck])
+}
+
+// One expense-posting deduction row on a collection (ERP payment-entry
+// model, 2026-11-28): FEE generalises the PR #354 collection fee; OTHER
+// is any other amount the payer kept, with a staff-typed label. Each row
+// posts exactly one linked expense; voiding the collection voids every
+// row's expense. Withholding (2307) never lands here — it lives on the
+// allocations and the Withholding2307 records. New collections also
+// mirror the FEE total into Collection.feeAmount / feeExpenseId so the
+// pre-deductions reads keep working.
+model CollectionDeduction {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  kind         String // FEE | OTHER | WITHHOLDING
+  label        String? // Required for OTHER; null for FEE / WITHHOLDING.
+  amount       Decimal    @db.Decimal(15, 2)
+  // Cash effect (Review Board run 100, finding 1398): a cash-affecting row
+  // posts a linked expense and reduces what lands in the cash account; a
+  // settlement-only row settles the billing with no account movement and
+  // no expense. FEE is always cash-affecting; WITHHOLDING never is; OTHER
+  // declares it per row.
+  cashAffecting Boolean @default(true)
+  // Set only on rows that post an expense (FEE + cash-affecting OTHER).
+  expenseId    String?    @unique
+  expense      Expense?   @relation("CollectionDeductionExpense", fields: [expenseId], references: [id])
+  // WITHHOLDING rows only: the billing settled and the 2307 record the
+  // amount was recorded on. The allocations + Withholding2307 rows stay
+  // the source of truth; this row is the settlement-ledger mirror.
+  billingId         String?
+  billing           Billing?         @relation(fields: [billingId], references: [id], onDelete: SetNull)
+  withholding2307Id String?          @unique
+  withholding2307   Withholding2307? @relation(fields: [withholding2307Id], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+
+  @@index([collectionId])
+  @@index([billingId])
 }
 
 // Links cash (and optional 2307 withholding) from a collection onto a billing.
@@ -1881,6 +1949,7 @@ model Withholding2307 {
 
   attachments DocumentAttachment[]
   lines       Withholding2307Line[]
+  collectionDeduction CollectionDeduction?
 
   @@index([customerId])
   @@index([billingId])
@@ -1956,11 +2025,44 @@ model SupplierPayment {
   allocations  SupplierPaymentAllocation[]
   withholdings SupplierWithholding2307[]
   attachments  DocumentAttachment[]
+  paymentRequests SupplierPaymentRequest[]
 
   @@index([supplierId])
   @@index([status])
   @@index([date])
   @@index([cashAccountId])
+}
+
+// A request to pay one supplier bill, approved before money moves
+// (ERP adoption item 3). The request never moves money itself: an
+// APPROVED request is settled by an ordinary supplier payment, which
+// links back here (supplierPaymentId) and flips the status to PAID.
+// Open requests (PENDING + APPROVED) reserve against the bill's
+// outstanding balance — see services/payment-requests.ts.
+model SupplierPaymentRequest {
+  id                String                       @id @default(cuid())
+  supplierBillId    String
+  supplierBill      SupplierBill                 @relation(fields: [supplierBillId], references: [id])
+  amount            Decimal                      @db.Decimal(15, 2)
+  dueDate           DateTime                     @db.Date
+  note              String?                      @db.Text
+  status            SupplierPaymentRequestStatus @default(PENDING)
+  requestedById     String
+  requestedBy       User                         @relation("PaymentRequestRequestedBy", fields: [requestedById], references: [id])
+  decidedById       String?
+  decidedBy         User?                        @relation("PaymentRequestDecidedBy", fields: [decidedById], references: [id])
+  decidedAt         DateTime?
+  decisionNote      String?                      @db.Text
+  supplierPaymentId String?
+  supplierPayment   SupplierPayment?             @relation(fields: [supplierPaymentId], references: [id])
+  paidAt            DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@index([supplierBillId])
+  @@index([status])
+  @@index([requestedById])
+  @@index([dueDate])
 }
 
 // Links cash + optional EWT from a supplier payment onto a supplier bill.
@@ -2148,6 +2250,12 @@ model Expense {
   updatedAt          DateTime       @updatedAt
 
   attachments DocumentAttachment[]
+
+  // The collection whose fee this expense records (REQ-COLLECTION-FEES-001).
+  feeForCollection Collection? @relation("CollectionFeeExpense")
+
+  // The collection deduction row this expense posts for, if any.
+  deductionForCollection CollectionDeduction? @relation("CollectionDeductionExpense")
 
   @@index([date])
   @@index([status])

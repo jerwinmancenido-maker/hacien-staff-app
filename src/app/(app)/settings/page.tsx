@@ -7,7 +7,7 @@ import { getSettingsSnapshot } from "@/lib/settings";
 import { changedLeaves } from "@/lib/settings/form";
 import { listWithholdingRates, WITHHOLDING_SETTINGS_KEY } from "@/lib/services/withholding";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
-import { SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
+import { ALERT_EVENTS, SETTINGS_LABELS, isSettingsKey } from "@/lib/settings/schema";
 import { formatDateTime, formatPeso } from "@/lib/format";
 import {
   BOOKS_OF_ACCOUNTS_TYPE_LABELS,
@@ -29,7 +29,8 @@ import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { uploadMaxMb } from "@/lib/business-docs/sniff";
-import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction } from "./actions";
+import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction, savePaymentTermPresetsAction } from "./actions";
+import { PaymentTermPresetsForm } from "./PaymentTermPresetsForm";
 import { BusinessesForm } from "./BusinessesForm";
 import { listBusinesses } from "@/lib/services/businesses";
 import { AuditLogTab } from "./AuditLogTab";
@@ -56,6 +57,7 @@ const SECTION_BY_TAB: Record<string, Section> = {
   company: "company",
   print: "company",
   features: "company",
+  alerts: "company",
   identity: "company",
   wording: "company",
   documents: "documents",
@@ -368,8 +370,69 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.warrantyClaimsEnabled,
                 hint: "OFF by default. Turn on to file and track supplier warranty claims from the Receiving pages.",
               },
+              {
+                name: "receivingEmailEnabled",
+                label: "Email the team when goods are received",
+                kind: "checkbox",
+                value: s.features.receivingEmailEnabled,
+                hint: "ON by default. Who receives it is set under Email alerts below (default: the PO's creator and every active Admin/Approver). The bell also shows goods received in the last 7 days.",
+              },
+              {
+                name: "customerPaymentEmailEnabled",
+                label: "Email the customer when a payment is applied to their billing",
+                kind: "checkbox",
+                value: s.features.customerPaymentEmailEnabled,
+                hint: "ON by default. One receipt email per billing a collection settles, sent to the customer's main contact email — what was applied (cash, plus withholding tax if any) and the balance left on that billing.",
+              },
+              {
+                name: "customerDeliveryEmailEnabled",
+                label: "Email the customer when a delivery is recorded on their order",
+                kind: "checkbox",
+                value: s.features.customerDeliveryEmailEnabled,
+                hint: "ON by default. One email per delivery, sent to the customer's main contact email — the DR number, what was delivered, and what remains to deliver.",
+              },
             ]}
           />
+        )}
+
+        {section === "company" && (
+          <>
+            <p className="faint small settings-tab-link">
+              Email alerts are one-way notes about things that just happened — they never approve, pay or
+              change anything; approvals stay in the app. Alerts go out by email only: a chat channel would
+              need a bot key, which is not set up.
+            </p>
+            <SettingsForm
+              title="Email alerts"
+              label={SETTINGS_LABELS.alerts}
+              versionId={snap.versionId}
+              action={save("alerts")}
+              showDocumentsOnlyFooter={false}
+              fields={ALERT_EVENTS.flatMap((ev) => {
+                const rule = s.alerts[ev.key];
+                return [
+                  {
+                    group: ev.label,
+                    name: `${ev.key}.enabled`,
+                    label: "Send this alert",
+                    kind: "checkbox" as const,
+                    value: rule.enabled,
+                    hint: ev.help,
+                  },
+                  { name: `${ev.key}.role.admin`, label: "Admins", kind: "checkbox" as const, value: rule.roles.includes("admin") },
+                  { name: `${ev.key}.role.approver`, label: "Approvers", kind: "checkbox" as const, value: rule.roles.includes("approver") },
+                  { name: `${ev.key}.role.staff`, label: "Staff", kind: "checkbox" as const, value: rule.roles.includes("staff") },
+                  {
+                    name: `${ev.key}.emails`,
+                    label: "Extra email addresses (one per line)",
+                    kind: "lines" as const,
+                    value: rule.emails,
+                    full: true,
+                  },
+                ];
+              })}
+            />
+          </>
         )}
 
         {section === "company" && (
@@ -453,8 +516,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             fields={[
               { name: "paymentTerms", label: "Payment terms options", kind: "lines", value: s.lists.paymentTerms, hint: "One per line." },
               { name: "contactRoles", label: "Contact roles", kind: "lines", value: s.lists.contactRoles, hint: "One per line." },
+              // Carried invisibly so saving the plain lists never resets the
+              // presets edited in the card below (parsed in settings/form.ts).
+              { name: "paymentTermPresets", label: "Payment term presets", kind: "hidden", value: JSON.stringify(s.lists.paymentTermPresets) },
             ]}
           />
+        )}
+
+        {section === "quote-terms" && (
+          <PaymentTermPresetsForm presets={s.lists.paymentTermPresets} versionId={snap.versionId} action={savePaymentTermPresetsAction} />
         )}
 
         {section === "documents" && (

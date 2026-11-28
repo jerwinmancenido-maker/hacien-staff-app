@@ -53,11 +53,11 @@ describe("Payables 2307 (withholding agent) flag", () => {
 
   it("hides the 2307 tab by default and shows it when the flag is on", () => {
     const off = visiblePayablesNavTabs(false);
-    expect(off.map((t) => t.key)).toEqual(["home", "we-owe", "payments", "aging"]);
+    expect(off.map((t) => t.key)).toEqual(["home", "we-owe", "payments", "requests", "aging"]);
     expect(off.some((t) => /2307|EWT pending/i.test(t.label))).toBe(false);
 
     const on = visiblePayablesNavTabs(true);
-    expect(on.map((t) => t.key)).toEqual(["home", "we-owe", "payments", "aging", "2307"]);
+    expect(on.map((t) => t.key)).toEqual(["home", "we-owe", "payments", "requests", "aging", "2307"]);
     expect(on.find((t) => t.key === "2307")?.label).toBe("2307 to issue");
   });
 

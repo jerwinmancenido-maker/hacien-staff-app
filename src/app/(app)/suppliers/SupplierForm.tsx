@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormAction } from "@/components/useFormAction";
 import type { Supplier } from "@prisma/client";
 import { Field } from "@/components/Field";
 import { SupplierBankAccount } from "@/components/SupplierBankAccount";
 import { bankNumberDraft } from "@/lib/bank-mask";
+import { SearchPicker } from "@/components/SearchPicker";
 import { isKnownBank, OTHER_BANK, PH_BANKS, resolveSupplierBank } from "@/lib/banks";
 import { SUPPLIER_TAX_TYPES, TAX_TYPE_LABELS } from "@/lib/validation/companies";
 import type { FormState } from "@/lib/validation/forms";
@@ -47,6 +48,8 @@ export function SupplierForm({
   // keeps the current number unless an Admin types a replacement.
   const [bankNumber, setBankNumber] = useState(bankNumberDraft(typeof state.values?.bankAccountNumber === "string" ? state.values.bankAccountNumber : ""));
   const e = state.fieldErrors ?? {};
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
   const termOptions = supplier?.defaultTerms && !terms.includes(supplier.defaultTerms) ? [...terms, supplier.defaultTerms] : terms;
   const maskedNumber = (supplier?.bankAccountNumber ?? "").trim();
   const hasNumber = maskedNumber.length > 0;
@@ -57,6 +60,31 @@ export function SupplierForm({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
+          <div className="form-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={pending}
+              onClick={(ev) => {
+                // Only this button confirms the duplicate: set the flag,
+                // then submit. The main Save button submits with the flag
+                // still blank, so the server re-issues the warning (F38).
+                if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                ev.currentTarget.form?.requestSubmit();
+              }}
+            >
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       {noBank && (
@@ -103,15 +131,15 @@ export function SupplierForm({
           {isAdmin && (
             <>
               <Field label="Bank" name="bankName" error={e.bankName} hint="The supplier's own bank — where payments to them go.">
-                <select id="bankName" name="bankPick" value={bankPick} onChange={(ev) => setBankPick(ev.target.value)}>
-                  <option value="">Pick a bank</option>
-                  {PH_BANKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                  <option value={OTHER_BANK}>Other — type the name</option>
-                </select>
+                <SearchPicker
+                  id="bankName"
+                  ariaLabel="Bank"
+                  value={bankPick}
+                  options={[...PH_BANKS.map((b) => ({ id: b, label: b })), { id: OTHER_BANK, label: "Other — type the name" }]}
+                  placeholder="Pick a bank"
+                  emptyOptionLabel="Pick a bank"
+                  onPick={setBankPick}
+                />
                 <input type="hidden" name="bankName" value={chosenBank} />
               </Field>
               {bankPick === OTHER_BANK && (

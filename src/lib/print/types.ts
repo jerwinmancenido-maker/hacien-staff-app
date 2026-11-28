@@ -67,6 +67,16 @@ export type PrintLineItem = {
 
 export type PrintMoneyLine = { label: string; amount: string; emphasize?: boolean };
 
+/** One row of the billing statement's printed payment schedule (item 14). */
+export type PrintPaymentScheduleRow = {
+  /** What this row pays, e.g. "50% — down payment". */
+  label: string;
+  /** When it is due: a milestone ("On delivery") or a date (Net 30). */
+  due: string;
+  /** Money string, 2 decimals — formatted with formatPeso at render. */
+  amount: string;
+};
+
 export type PrintSignatory = {
   role: "Prepared by" | "Approved by" | "Received by" | "Conforme";
   name: string | null;
@@ -138,6 +148,11 @@ export type ProfessionalPrintModel = {
     aging?: { label: string; amount: string }[];
   };
   terms?: string | null;
+  /** Billing statements only: the payment-schedule rows printed under
+   * the terms when the order's terms are COD / 50-50 / Net 30 (item 14).
+   * Null/absent = no table — the print is then byte-identical to before
+   * this item. Gross Total only; withholding never prints. */
+  paymentSchedule?: PrintPaymentScheduleRow[] | null;
   termsBlock?: string[] | null;
   versionLine?: string | null;
   validity?: string | null;

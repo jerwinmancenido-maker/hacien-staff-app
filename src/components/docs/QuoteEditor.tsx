@@ -97,6 +97,9 @@ export type QuoteEditorProps = {
   rates: WithholdingSnapshot[];
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Payment-term presets from Settings (ERP adoption item 10): picking
+   * one fills the terms field with the preset's text. Active only. */
+  termsPresets?: { name: string; text: string }[];
   /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
   contactRoles: string[];
   defaultValidityDays: number;
@@ -141,6 +144,17 @@ export type QuoteEditorProps = {
 };
 
 type TabId = "items" | "withholding" | "terms" | "notes" | "signoff";
+
+// NB-CD: the header pick for a NEW document (or one with no stored pick) is
+// retired — withholding is typed from the Form 2307 at collection time, so
+// the header starts from an explicit empty pick. Existing documents keep
+// their stored snapshot untouched. (A function call, like resolveInitialPick
+// itself, so the string[] | null type is preserved exactly.)
+function initialHeaderPick(initial: QuoteEditorInitial, isNew: boolean): string[] | null {
+  const resolved = resolveInitialPick(initial);
+  if (isNew || !(resolved && resolved.length > 0)) return [];
+  return resolved;
+}
 
 function filterGovVatCodes(codes: string[] | null): string[] | null {
   if (codes == null) return null;
@@ -313,6 +327,7 @@ export function QuoteEditor({
   rates: allRates,
   suppliers,
   termsOptions,
+  termsPresets = [],
   contactRoles,
   defaultValidityDays,
   printDefaults,
@@ -343,6 +358,9 @@ export function QuoteEditor({
   const skipWhNoneWarn = useRef(false);
   const alsoMarkSentRef = useRef<HTMLInputElement>(null);
   const alsoMarkSentConfirmedRef = useRef<HTMLInputElement>(null);
+  /** Finding 1364: near-duplicate "Add to Products" warning confirm. */
+  const confirmDuplicateRef = useRef<HTMLInputElement>(null);
+  const [dismissedDupeWarning, setDismissedDupeWarning] = useState<string | null>(null);
   /** F5: the Approver confirmed the approval prompt for this send. */
   const approvalConfirmedRef = useRef(false);
   const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
@@ -389,8 +407,18 @@ export function QuoteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Forecast retirement (ERP payment-entry model, 2026-11-28): the
+  // withholding pick is off the form for a new quote and for a quote
+  // with no stored pick — withholding is typed from the Form 2307 at
+  // collection instead. A quote with a stored pick keeps its field and
+  // tab, unchanged. A retired quote posts an explicit none ([]), so the
+  // save gates pass without the old "no withholding?" prompt.
+  const resolvedInitialPick = resolveInitialPick(initial);
+  const pickRetired = isNew || !(resolvedInitialPick && resolvedInitialPick.length > 0);
+  const initialPick = initialHeaderPick(initial, isNew);
+
   const [h, setH] = useState(() => {
-    const pick = resolveInitialPick(initial);
+    const pick: string[] | null = initialPick;
     return {
       ...initial,
       internalNotes: initial.internalNotes ?? "",
@@ -403,7 +431,7 @@ export function QuoteEditor({
     };
   });
 
-  const initialPickSnaps = pickSnapshotsFromCodes(resolveInitialPick(initial), rates) ?? [];
+  const initialPickSnaps = pickSnapshotsFromCodes(pickRetired ? [] : resolvedInitialPick, rates) ?? [];
   const [items, setItems] = useState<EditorItem[]>(() =>
     initial.items.length
       ? initial.items.map((i, idx) => ({
@@ -1049,6 +1077,9 @@ export function QuoteEditor({
     headerPatch: Partial<typeof h> = {},
     opts: { skipOverrides?: boolean } = {},
   ) {
+    // Retired pick: nothing may (re)apply a pick — not a customer
+    // change, not a re-apply — so every apply lands on explicit none.
+    if (pickRetired) nextPick = [];
     const snaps = pickSnapshotsFromCodes(nextPick, rates) ?? [];
     const refreshed = nextItems.map((i) => {
       if (opts.skipOverrides && i.withholdingOverride) return i;
@@ -1465,6 +1496,30 @@ export function QuoteEditor({
             {state.message}
           </div>
         )}
+        {state.warning && state.warning !== dismissedDupeWarning && (
+          <div className="alert warn" role="alert">
+            <p>{state.warning}</p>
+            <input ref={confirmDuplicateRef} type="hidden" name="confirmDuplicateName" defaultValue="" />
+            <div className="form-actions">
+              <button
+                className="btn"
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  // Only this button confirms the duplicate (F38 pattern):
+                  // the plain Save submits with the flag blank and re-warns.
+                  if (confirmDuplicateRef.current) confirmDuplicateRef.current.value = "1";
+                  formRef.current?.requestSubmit();
+                }}
+              >
+                Save anyway
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={() => setDismissedDupeWarning(state.warning ?? null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {notSet && (
           <div className="alert wh-not-set" role="alert">
@@ -1671,10 +1726,12 @@ export function QuoteEditor({
                 Items
                 {items.length > 0 ? <span className="quote-tab-badge">{items.length}</span> : null}
               </button>
-              <button type="button" role="tab" aria-selected={tab === "withholding"} className={`quote-tab${tab === "withholding" ? " quote-tab-on" : ""}`} onClick={() => setTab("withholding")}>
-                Withholding
-                {e.withholdingCodes || e.withholding ? <span className="quote-tab-dot" aria-hidden /> : null}
-              </button>
+              {!pickRetired && (
+                <button type="button" role="tab" aria-selected={tab === "withholding"} className={`quote-tab${tab === "withholding" ? " quote-tab-on" : ""}`} onClick={() => setTab("withholding")}>
+                  Withholding
+                  {e.withholdingCodes || e.withholding ? <span className="quote-tab-dot" aria-hidden /> : null}
+                </button>
+              )}
               <button type="button" role="tab" aria-selected={tab === "terms"} className={`quote-tab${tab === "terms" ? " quote-tab-on" : ""}`} onClick={() => setTab("terms")}>
                 Terms &amp; conditions
                 {termsTabDot ? <span className="quote-tab-dot" aria-hidden /> : null}
@@ -1882,7 +1939,7 @@ export function QuoteEditor({
                                 <option value="SERVICES">Services</option>
                               </select>
                             </div>
-                            {usePickChips ? (
+                            {pickRetired ? null : usePickChips ? (
                               <p className="small muted quote-ln-more-note">Withholding comes from the customer&apos;s picks — see the Withholding tab.</p>
                             ) : (
                               <div className="field">
@@ -2312,7 +2369,7 @@ export function QuoteEditor({
                               <option value="SERVICES">Services</option>
                             </select>
                           </div>
-                          {usePickChips ? (
+                          {pickRetired ? null : usePickChips ? (
                             <p className="small muted">Withholding comes from the customer&apos;s picks — see the Withholding tab.</p>
                           ) : (
                             <div className="field">
@@ -2633,6 +2690,10 @@ export function QuoteEditor({
           )}
 
           {tab === "withholding" && (
+            // NB-CD: for a new document (or one with no stored pick) the
+            // withholding pick is retired — withholding is typed from the
+            // Form 2307 at collection — so the panel renders nothing.
+            !pickRetired && (
             <div role="tabpanel">
               {withholdingPickBoxesHidden(customer?.withholdingType) ? (
                 <p className="faint">This customer does not withhold — there is nothing to pick here.</p>
@@ -2647,6 +2708,7 @@ export function QuoteEditor({
                 />
               )}
             </div>
+            )
           )}
 
           {tab === "terms" && (
@@ -2664,6 +2726,27 @@ export function QuoteEditor({
                 <div className="hint">Prints on the quote · From Settings, edit for this quote</div>
                 {e.terms && <div className="error">{e.terms}</div>}
               </div>
+              {termsPresets.length > 0 && (
+                <div className="quote-f quote-f-w2 field">
+                  <label htmlFor="termsPreset">Preset</label>
+                  <select
+                    id="termsPreset"
+                    value=""
+                    onChange={(ev) => {
+                      const preset = termsPresets.find((p) => p.name === ev.target.value);
+                      if (preset) setH({ ...h, terms: preset.text });
+                    }}
+                  >
+                    <option value="">Fill from a preset…</option>
+                    {termsPresets.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="hint">Fills the payment terms above · You can still change them after</div>
+                </div>
+              )}
               {showDeliveryWarranty ? (
                 <>
                   <div className="quote-f quote-f-w2 field">

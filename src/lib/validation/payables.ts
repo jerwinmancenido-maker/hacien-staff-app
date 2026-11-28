@@ -80,6 +80,15 @@ export const supplierPaymentInputSchema = z
     amountPaid: moneyStr,
     /** F37: set only when the user confirmed the over-balance warning. */
     allowOverBalance: z.boolean().optional(),
+    // ERP adoption item 3: set when this payment settles an APPROVED
+    // payment request (the request flips to PAID inside the payment's
+    // transaction — see services/payment-requests.ts).
+    paymentRequestId: z
+      .string()
+      .trim()
+      .transform((v) => v || null)
+      .nullable()
+      .optional(),
     // Optional cash account (Part 7a). Blank = not assigned.
     cashAccountId: z
       .string()
@@ -117,6 +126,38 @@ export const supplierPaymentInputSchema = z
 export type SupplierPaymentInput = z.infer<typeof supplierPaymentInputSchema>;
 export type PaymentAllocationRowInput = z.infer<typeof paymentAllocationRowSchema>;
 
+export const paymentRequestInputSchema = z.object({
+  supplierBillId: z.string().min(1, "Bill is required."),
+  amount: moneyStr,
+  dueDate: ymd,
+  note: z
+    .string()
+    .trim()
+    .max(5000)
+    .transform((v) => v || null)
+    .optional(),
+});
+
+export type PaymentRequestInput = z.infer<typeof paymentRequestInputSchema>;
+
+export function parsePaymentRequestForm(
+  form: FormData,
+): { ok: true; data: PaymentRequestInput; values: Record<string, string> } | { ok: false; fieldErrors: Record<string, string>; values: Record<string, string> } {
+  const values: Record<string, string> = {
+    supplierBillId: String(form.get("supplierBillId") ?? ""),
+    amount: String(form.get("amount") ?? ""),
+    dueDate: String(form.get("dueDate") ?? ""),
+    note: String(form.get("note") ?? ""),
+  };
+  const parsed = paymentRequestInputSchema.safeParse(values);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const i of parsed.error.issues) fieldErrors[i.path.join(".") || "_"] ??= i.message;
+    return { ok: false, fieldErrors, values };
+  }
+  return { ok: true, data: parsed.data, values };
+}
+
 export const markSupplier2307IssuedSchema = z.object({
   issuedAt: ymd,
   notes: z
@@ -143,6 +184,7 @@ export function parseSupplierPaymentForm(
     .filter((a) => a.supplierBillId && (Number(a.cashApplied) > 0 || Number(a.withholdingApplied) > 0));
 
   const values: Record<string, string> = {
+    paymentRequestId: String(form.get("paymentRequestId") ?? ""),
     supplierId: String(form.get("supplierId") ?? ""),
     date: String(form.get("date") ?? ""),
     method: String(form.get("method") ?? ""),

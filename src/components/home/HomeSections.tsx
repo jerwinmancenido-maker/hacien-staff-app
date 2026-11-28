@@ -6,18 +6,20 @@ import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import { collectedWholePesos } from "@/lib/home/money";
 import { HOME_RECENT_PHONE_ROWS } from "@/lib/home/activity";
-import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
+import type { HomeCounts, HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomePipeline } from "@/lib/home/pipeline";
 import type { HomeSales } from "@/lib/home/sales";
 import { EmptyState } from "@/components/ui";
 import { HomeSalesChart } from "@/components/home/HomeSalesChart";
 import {
   AlertTriangleIcon,
+  BellIcon,
   CartIcon,
   ChevronRightIcon,
   CoinIcon,
   FileIcon,
   InboxIcon,
+  TruckIcon,
   UsersIcon,
 } from "@/components/Icons";
 
@@ -92,10 +94,38 @@ function KpiMtdFoot({
   );
 }
 
+/**
+ * Phone Pipeline tile caption: break at the caption's own " · " boundary so
+ * the amount leads its own line instead of stretching edge-to-edge in the
+ * half-width tile (finding 1360). Same words, same separator — only the line
+ * break is added. Captions without the boundary render as-is.
+ */
+function PipelinePhoneCaption({ caption }: { caption: string }) {
+  const cut = caption.indexOf(" · ");
+  if (cut < 0) return <div className="home-kv home-pipeline-caption">{caption}</div>;
+  return (
+    <div className="home-kv home-pipeline-caption">
+      {caption.slice(0, cut)} ·
+      <br />
+      {caption.slice(cut + 3)}
+    </div>
+  );
+}
+
 export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
   const paid = collectedWholePesos(kpis.collectedThisMonth.cashCollected, kpis.collectedThisMonth.received2307);
   return (
     <div className="home-kps">
+      <div className="card home-kp">
+        <div className="home-kl">
+          <CartIcon size={14} />
+          {kpis.salesThisMonth.label}
+        </div>
+        <div className="home-kv num">{formatPeso(kpis.salesThisMonth.amount)}</div>
+        <KpiMtdFoot change={kpis.salesThisMonth.change} vsCaption={kpis.salesThisMonth.vsCaption} />
+        <div className="home-ks muted small">{kpis.salesThisMonth.hint}</div>
+      </div>
+
       <div className="card home-kp">
         <div className="home-kl">
           <CoinIcon size={14} />
@@ -148,7 +178,77 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           </span>
           <span className="num home-ks-goal">{kpis.billedThisYear.phoneLimitLabel}</span>
         </div>
+        {kpis.billedThisYear.unbilledLabel ? (
+          <div className="home-ks muted small">{kpis.billedThisYear.unbilledLabel}</div>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Count + balance strip under the KPI cards (ERP adoption item 9): orders
+ * still to deliver, every open sales order, and — behind the dashboard
+ * money gate — each cash account's live balance plus any unassigned money.
+ * Every card links to the exact list its figure came from; no derived or
+ * decorative numbers.
+ */
+export function HomeCountsStrip({ counts }: { counts: HomeCounts }) {
+  const { ordersToDeliver, openSalesOrders, overdueReminders, cashBalances, unassignedCash } = counts;
+  if (!ordersToDeliver && !openSalesOrders && !overdueReminders && cashBalances.length === 0 && !unassignedCash) {
+    return null;
+  }
+  return (
+    <div className="home-counts" aria-label="Orders and cash balances">
+      {ordersToDeliver ? (
+        <Link className="card home-kp home-count" href={ordersToDeliver.href}>
+          <div className="home-kl">
+            <TruckIcon size={14} />
+            {ordersToDeliver.label}
+          </div>
+          <div className="home-kv num">{ordersToDeliver.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {openSalesOrders ? (
+        <Link className="card home-kp home-count" href={openSalesOrders.href}>
+          <div className="home-kl">
+            <CartIcon size={14} />
+            {openSalesOrders.label}
+          </div>
+          <div className="home-kv num">{openSalesOrders.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {overdueReminders ? (
+        <Link className="card home-kp home-count" href={overdueReminders.href}>
+          <div className="home-kl">
+            <BellIcon size={14} />
+            {overdueReminders.label}
+          </div>
+          <div className="home-kv num">{overdueReminders.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {cashBalances.map((a) => (
+        <Link key={a.id} className="card home-kp home-count" href={a.href}>
+          <div className="home-kl">
+            <CoinIcon size={14} />
+            {a.name}
+          </div>
+          <div className={`home-kv num${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</div>
+          {a.detail ? <div className="home-ks">{a.detail}</div> : null}
+        </Link>
+      ))}
+      {unassignedCash ? (
+        <Link className="card home-kp home-count" href={unassignedCash.href}>
+          <div className="home-kl">
+            <CoinIcon size={14} />
+            Not assigned
+          </div>
+          <div className={`home-kv num${Number(unassignedCash.balance) < 0 ? " neg" : ""}`}>
+            {formatPeso(unassignedCash.balance)}
+          </div>
+          <div className="home-ks">Old collections / payments with no account yet</div>
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -194,7 +294,7 @@ export function HomePipelineCard({
         {rows.map((r) => (
           <Link key={r.href} className="card home-pipeline-tile" href={r.href}>
             <div className="home-kl">{r.label}</div>
-            <div className="home-kv home-pipeline-caption">{r.caption}</div>
+            <PipelinePhoneCaption caption={r.caption} />
           </Link>
         ))}
       </div>
@@ -269,13 +369,16 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
     <div className="card home-sales">
       <div className="home-ct">
         <div>
-          <h3>Sales billed</h3>
+          <h3>Sales</h3>
           <div className="home-sales-sub muted">
             {sales.rangeLabel || "Last 12 months"}
           </div>
+          <div className="home-sales-sub muted">
+            Sales = orders confirmed. Billed = invoices issued.
+          </div>
         </div>
         <Link className="home-lk" href={sales.href}>
-          Billing →
+          Sales orders →
         </Link>
       </div>
 
@@ -283,10 +386,10 @@ export function HomeSalesSection({ sales }: { sales: HomeSales }) {
 
       {sales.empty ? (
         <div className="home-sales-empty">
-          <p className="home-sales-empty-copy">No sales billed yet</p>
-          <p className="home-sales-empty-copy muted">Billings you issue will show here.</p>
+          <p className="home-sales-empty-copy">No sales yet</p>
+          <p className="home-sales-empty-copy muted">Confirmed sales orders will show here.</p>
           <Link className="btn" href={sales.href}>
-            Go to Billing
+            Go to Sales orders
           </Link>
         </div>
       ) : null}

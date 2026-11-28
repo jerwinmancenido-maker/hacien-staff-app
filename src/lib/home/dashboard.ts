@@ -6,13 +6,16 @@ import { arAgingSummary, countPending2307Certificates, getAllBookletWarnings, li
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
+import { CASH_ACCOUNT_TYPE_LABELS } from "../cash/labels";
 import { db } from "../db";
 import { addDays, formatDate, isoDate, manilaToday } from "../format";
 import { isPayablesEnabled } from "../payables/features";
 import { listSupplierBillsDueSoon } from "../payables/views";
 import { can, canSeeCosts, type PermissionUser } from "../permissions";
 import { listReceivingView, listPurchaseOrdersView } from "../purchasing/views";
-import { listQuotesView, listSalesOrdersView } from "../quotes/views";
+import { listQuotesView, listSalesOrdersPageView, listSalesOrdersView } from "../quotes/views";
+import { cashPositionSummary } from "../services/cash-accounts";
+import { countMyOverdueReminders } from "../services/reminders";
 import { listCustomers } from "../services/companies";
 import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
@@ -45,6 +48,10 @@ import {
   salesOrdersNeedsPoHref,
   supplierBillsDueSoonHref,
   taxCalendarHref,
+  cashHomeHref,
+  remindersOverdueHref,
+  salesOrdersOpenStatusHref,
+  salesOrdersToDeliverHref,
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
 import { formatCompactPesoLimit } from "./nonVatCopy";
@@ -56,6 +63,7 @@ import {
 } from "./pipeline";
 import { loadHomeSales } from "./sales-data";
 import {
+  formatWholePeso,
   manilaDayOfMonth,
   manilaMonthKey,
   mtdVsSameDaysChip,
@@ -68,6 +76,7 @@ import {
 } from "./sales";
 import {
   canShowActionRow,
+  canShowHomeCashBalances,
   canShowMoneyFigure,
   isHomeEmpty,
   showTaxDeadline,
@@ -179,6 +188,17 @@ export type HomeKpiChange = {
 };
 
 export type HomeKpis = {
+  salesThisMonth: {
+    /** e.g. "Sales (Nov)" — month from Manila now. Confirmed SOs, gross. */
+    label: string;
+    amount: string;
+    change: HomeKpiChange;
+    /** Empty when both MTD and same-days prior are ₱0 (no chip). */
+    vsCaption: string;
+    /** Trainee hint under the card (plain words). */
+    hint: string;
+    href: string;
+  };
   billedThisMonth: {
     /** e.g. "Billed (Oct)" — month from Manila now. */
     label: string;
@@ -219,6 +239,8 @@ export type HomeKpis = {
     pctLabel: string;
     /** Same line at both widths, e.g. "0.6% of ₱3M goal". Percent is the live meter. */
     phoneLimitLabel: string;
+    /** "Plus ₱X in confirmed orders not yet billed"; null when the remainder is ₱0. */
+    unbilledLabel: string | null;
     href: string;
   };
 };
@@ -226,6 +248,43 @@ export type HomeKpis = {
 export type HomeHeaderActions = {
   newQuoteHref: string | null;
   newBillingHref: string | null;
+};
+
+export type HomeCountCard = {
+  label: string;
+  count: number;
+  href: string;
+};
+
+export type HomeCashBalanceRow = {
+  id: string;
+  name: string;
+  /** Type label + last-4 hint, e.g. "Bank account · ···1177"; null when neither is set. */
+  detail: string | null;
+  balance: string;
+  href: string;
+};
+
+/**
+ * Count cards under the KPI strip (ERP adoption item 9). Every figure is a
+ * live count / balance computed from the same source its link opens:
+ * - ordersToDeliver: the SO list's own "Still to deliver" total — own-company
+ *   OPEN orders with at least one live line whose deliveredQty < qty (VOID
+ *   excluded by status; CLOSED orders are fully delivered by construction).
+ * - openSalesOrders: every own-company SO with status OPEN (the enum's only
+ *   non-VOID, non-CLOSED state).
+ * - cashBalances / unassignedCash: cashPositionSummary(), the exact figures
+ *   the Cash pages show; only present behind the dashboard money gate.
+ * Null / empty when the viewer may not see that figure.
+ */
+export type HomeCounts = {
+  ordersToDeliver: HomeCountCard | null;
+  openSalesOrders: HomeCountCard | null;
+  /** Adoption item 13: MY open reminders past their date (reminders are
+   *  personal — createdById is the viewer). Null without a viewer id. */
+  overdueReminders: HomeCountCard | null;
+  cashBalances: HomeCashBalanceRow[];
+  unassignedCash: { balance: string; href: string } | null;
 };
 
 export type HomeDashboard = {
@@ -238,6 +297,7 @@ export type HomeDashboard = {
   /** KPI strip; null without manage_billing (same gate as sales). */
   kpis: HomeKpis | null;
   header: HomeHeaderActions;
+  counts: HomeCounts;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
   incomeTaxFilings?: HomeIncomeTaxFilings | null;
@@ -386,7 +446,7 @@ function buildKpis(opts: {
   const mon = monthShortLabel(now);
   const year = Number(manilaMonthKey(now).slice(0, 4));
   const day = sales.mtdDay;
-  const billedChip = sales.mtdChip;
+  const billedChip = sales.billedMtdChip;
   const collectedChip = mtdVsSameDaysChip(totalPaid, totalPaidPrior, lastKey, day);
   const collectedCaption =
     collectedChip != null ? "" : toScaled(totalPaid, 2) <= 0n ? "No payments yet" : `Posted collections in ${mon}`;
@@ -395,13 +455,27 @@ function buildKpis(opts: {
   const billingCountLabel =
     billingCount === 1 ? "1 billing" : `${billingCount.toLocaleString("en-US")} billings`;
 
+  const salesChip = sales.mtdChip;
+  const unbilledLabel =
+    toScaled(sales.unbilledConfirmed, 2) > 0n
+      ? `Plus ${formatWholePeso(sales.unbilledConfirmed)} in confirmed orders not yet billed`
+      : null;
+
   return {
+    salesThisMonth: {
+      label: `Sales (${mon})`,
+      amount: sales.thisMonth,
+      change: salesChip?.change ?? { label: "—", tone: "none" },
+      vsCaption: salesChip?.vsCaption ?? "",
+      hint: "Confirmed sales orders this month.",
+      href: sales.href,
+    },
     billedThisMonth: {
       label: `Billed (${mon})`,
-      amount: sales.thisMonth,
+      amount: sales.billedThisMonth,
       change: billedChip?.change ?? { label: "—", tone: "none" },
       vsCaption: billedChip?.vsCaption ?? "",
-      href: sales.href,
+      href: nonVatHref(),
     },
     owedByCustomers: {
       label: "Owed",
@@ -423,10 +497,11 @@ function buildKpis(opts: {
     },
     billedThisYear: {
       label: `Billed (${year})`,
-      amount: sales.thisYear,
+      amount: sales.billedThisYear,
       barPct: nonVat.barPct,
       pctLabel: nonVat.pctLabel,
       phoneLimitLabel: billedYearPhoneLimitLabel(nonVat.pctLabel, nonVat.limit),
+      unbilledLabel,
       href: nonVat.href,
     },
   };
@@ -480,6 +555,50 @@ async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | nu
     salesOrdersCount: soCount,
     salesOrdersUnbilled: fromScaled(soUnbilled, 2),
   });
+}
+
+async function loadHomeCounts(user: PermissionUser & { id?: string }, features: HomeFeatureFlags): Promise<HomeCounts> {
+  const canViewOrders = can(user, "view");
+  const showCash = canShowHomeCashBalances(user, features);
+  const [toDeliverPage, openCount, cash, overdueReminders] = await Promise.all([
+    // The linked list's own total, so the card can never disagree with the
+    // page it opens (same doctrine as the Needs action parity tests).
+    canViewOrders ? listSalesOrdersPageView({ toDeliver: true, businessId: "own" }, 1, 1) : null,
+    canViewOrders ? db.salesOrder.count({ where: { status: "OPEN", businessId: null } }) : null,
+    showCash ? cashPositionSummary() : null,
+    // Reminders are personal: only the signed-in viewer's own overdue ones.
+    canViewOrders && user.id ? countMyOverdueReminders(user.id, manilaToday()) : null,
+  ]);
+  return {
+    ordersToDeliver:
+      toDeliverPage != null
+        ? { label: "Orders to deliver", count: toDeliverPage.total, href: salesOrdersToDeliverHref() }
+        : null,
+    openSalesOrders:
+      openCount != null
+        ? { label: "Open sales orders", count: openCount, href: salesOrdersOpenStatusHref() }
+        : null,
+    overdueReminders:
+      overdueReminders != null
+        ? { label: "Overdue reminders", count: overdueReminders, href: remindersOverdueHref() }
+        : null,
+    cashBalances: cash
+      ? cash.accounts.map((a) => ({
+          id: a.id,
+          name: a.name,
+          detail:
+            [CASH_ACCOUNT_TYPE_LABELS[a.type], a.accountHintLast4 ? `···${a.accountHintLast4}` : null]
+              .filter(Boolean)
+              .join(" · ") || null,
+          balance: a.balance,
+          href: a.href,
+        }))
+      : [],
+    unassignedCash:
+      cash && toScaled(cash.unassignedNet, 2) !== 0n
+        ? { balance: cash.unassignedNet, href: cashHomeHref() }
+        : null,
+  };
 }
 
 export async function loadHomeDashboard(
@@ -538,6 +657,7 @@ export async function loadHomeDashboard(
           })
         : null,
       header,
+      counts: await loadHomeCounts(user, features),
       money: [],
       tax: null,
       pipeline: null,
@@ -763,6 +883,8 @@ export async function loadHomeDashboard(
     }
   }
 
+  const counts = await loadHomeCounts(user, features);
+
   const salesWithRange =
     sales == null
       ? null
@@ -776,6 +898,7 @@ export async function loadHomeDashboard(
     sales: salesWithRange,
     kpis,
     header,
+    counts,
     money,
     tax,
     incomeTaxFilings,

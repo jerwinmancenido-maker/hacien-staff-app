@@ -20,7 +20,7 @@ import { addDays, manilaToday } from "../format";
 import { lineNeedsMorePo, sumMoney } from "../purchasing/cost-margin";
 import { loadOrderedQty } from "../purchasing/ordered";
 import { remainingToBill } from "../billing/status";
-import { COST_NOT_SET_LABEL, approvalReasons, docTotals, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
+import { COST_NOT_SET_LABEL, approvalReasons, docTotals, fromScaled, ratePctLabel, supplierCostStateFromSupplierTotals, toScaled, type ItemKind, type SupplierCostState, type WithholdingLine, type WithholdingSnapshot } from "./calc";
 import { parseWithholdingPick } from "./withholding-defaults";
 import { changedSummary, lineChangesVsQuote } from "./changed";
 import { validityDaysFromDates } from "./validity";
@@ -31,6 +31,7 @@ import { soHasRemainingToDeliver } from "../sales-orders/delivery";
 import { attachmentKindLabel } from "../attachment-kinds";
 import { buildRevisionChain } from "./revision-chain";
 import { pagingWindow, type ListPage } from "../paging";
+import { percentOf } from "../progress";
 
 type StoredMoney = {
   contractPrice: string;
@@ -748,6 +749,20 @@ export type SalesOrderListFilter = {
   businessId?: string;
 };
 
+/**
+ * ERP adoption item 7: per-document progress for the SO list, computed from
+ * the same aggregates the SO page uses — line qty / deliveredQty for
+ * Delivered, non-void billing amounts for Billed, and POSTED collection
+ * allocations + POSTED return-credit applications (the soBillingSummary
+ * definition of collected) for Paid. A measure is null when it has no true
+ * base (see lib/progress). VOID orders carry progress: null (no bars).
+ */
+export type SalesOrderProgress = {
+  deliveredPct: number | null;
+  billedPct: number | null;
+  paidPct: number | null;
+};
+
 export type SalesOrderListRow = {
   id: string;
   number: string;
@@ -758,6 +773,8 @@ export type SalesOrderListRow = {
   contractPrice: string;
   status: SalesOrderStatus;
   date: string;
+  /** Filled by listSalesOrdersPageView only; null on the other list views. */
+  progress: SalesOrderProgress | null;
 };
 
 function salesOrderListWhere(filter: SalesOrderListFilter): Prisma.SalesOrderWhereInput {
@@ -845,6 +862,7 @@ function mapSalesOrderListRows(
       contractPrice,
       status: raw.status,
       date: ymd(raw.date)!,
+      progress: null,
     });
   }
   return mapped;
@@ -893,6 +911,7 @@ function filterNeedsPoRows(rows: Awaited<ReturnType<typeof fetchNeedsPoRows>>): 
       contractPrice: money(r.contractPrice),
       status: r.status,
       date: ymd(r.date)!,
+      progress: null,
     }));
 }
 
@@ -909,6 +928,69 @@ export async function listSalesOrdersView(filter: SalesOrderListFilter) {
 
   const rows = await fetchNeedsPoRows(where);
   return filterNeedsPoRows(rows);
+}
+
+/**
+ * Item 7: fill `progress` on one page of SO list rows with four grouped
+ * queries total (line sums, the rows' non-void billings, their POSTED
+ * collection allocations, their POSTED return-credit applications) — no
+ * per-row queries, whatever the page size. VOID rows keep progress: null.
+ */
+async function attachSalesOrderProgress(rows: SalesOrderListRow[]): Promise<void> {
+  const live = rows.filter((r) => r.status !== "VOID");
+  if (live.length === 0) return;
+  const ids = live.map((r) => r.id);
+  const itemSums = await db.salesOrderItem.groupBy({
+    by: ["salesOrderId"],
+    where: { salesOrderId: { in: ids }, removedAt: null },
+    _sum: { qty: true, deliveredQty: true },
+  });
+  const billings = await db.billing.findMany({
+    where: { salesOrderId: { in: ids }, status: { not: "VOID" } },
+    select: { id: true, salesOrderId: true, amount: true },
+  });
+  const billingIds = billings.map((b) => b.id);
+  const [allocSums, creditSums] = billingIds.length
+    ? await Promise.all([
+        db.collectionAllocation.groupBy({
+          by: ["billingId"],
+          where: { billingId: { in: billingIds }, collection: { status: "POSTED" } },
+          _sum: { cashApplied: true, withholdingApplied: true },
+        }),
+        db.customerCreditApplication.groupBy({
+          by: ["billingId"],
+          where: { billingId: { in: billingIds }, customerCredit: { customerReturn: { status: "POSTED" } } },
+          _sum: { cashApplied: true },
+        }),
+      ])
+    : [[], []];
+  const qtyBySo = new Map(itemSums.map((s) => [s.salesOrderId, s._sum]));
+  const billedBySo = new Map<string, string[]>();
+  const soByBilling = new Map(billings.map((b) => [b.id, b.salesOrderId]));
+  for (const b of billings) {
+    const list = billedBySo.get(b.salesOrderId) ?? [];
+    list.push(money(b.amount));
+    billedBySo.set(b.salesOrderId, list);
+  }
+  const paidBySo = new Map<string, bigint>();
+  const addPaid = (billingId: string, cash: unknown, wh?: unknown) => {
+    const soId = soByBilling.get(billingId);
+    if (!soId) return;
+    const add = toScaled(money(cash as Dec), 2) + (wh == null ? 0n : toScaled(money(wh as Dec), 2));
+    paidBySo.set(soId, (paidBySo.get(soId) ?? 0n) + add);
+  };
+  for (const a of allocSums) addPaid(a.billingId, a._sum.cashApplied ?? 0, a._sum.withholdingApplied ?? 0);
+  for (const c of creditSums) addPaid(c.billingId, c._sum.cashApplied ?? 0);
+  for (const row of live) {
+    const sums = qtyBySo.get(row.id);
+    const billed = sumMoney(billedBySo.get(row.id) ?? []);
+    const paid = paidBySo.get(row.id) ?? 0n;
+    row.progress = {
+      deliveredPct: sums ? percentOf(money(sums.deliveredQty ?? 0), money(sums.qty ?? 0)) : null,
+      billedPct: percentOf(billed, row.contractPrice),
+      paidPct: percentOf(fromScaled(paid, 2), billed),
+    };
+  }
 }
 
 /**
@@ -932,8 +1014,10 @@ export async function listSalesOrdersPageView(
     const total = await db.salesOrder.count({ where });
     const win = pagingWindow(total, page, pageSize);
     const rows = await fetchSalesOrderListRows(where, openUnbilled, toDeliver, win);
+    const items = mapSalesOrderListRows(rows, openUnbilled, toDeliver);
+    await attachSalesOrderProgress(items);
     return {
-      items: mapSalesOrderListRows(rows, openUnbilled, toDeliver),
+      items,
       total,
       page: win.page,
       pageSize: win.pageSize,
@@ -949,8 +1033,10 @@ export async function listSalesOrdersPageView(
         toDeliver,
       );
   const win = pagingWindow(filtered.length, page, pageSize);
+  const items = filtered.slice(win.skip, win.skip + win.take);
+  await attachSalesOrderProgress(items);
   return {
-    items: filtered.slice(win.skip, win.skip + win.take),
+    items,
     total: filtered.length,
     page: win.page,
     pageSize: win.pageSize,

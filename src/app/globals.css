@@ -2550,6 +2550,25 @@ pre.json {
     overflow: visible;
   }
 }
+/* Phone and tablet widths: wrap the rail instead of sideways-scrolling
+   it. With a non-first tab active the scrolled first tab rested cut
+   mid-word under the edge fade (finding 1352). Fades are off at this
+   width; the desktop scroll behaviour above 768px is unchanged. */
+@media (max-width: 768px) {
+  .pill-tabs-track {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .pill-tabs-wrap.has-overflow.fade-left .pill-tabs-track,
+  .pill-tabs-wrap.has-overflow.fade-right .pill-tabs-track,
+  .pill-tabs-wrap.has-overflow.fade-left.fade-right .pill-tabs-track {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+  .toolbar .pill-tabs-track {
+    height: auto;
+  }
+}
 .pill-tab-count {
   font-size: calc(11px * var(--ui-scale, 1));
   font-weight: 600;
@@ -3556,6 +3575,35 @@ pre.json {
   background: rgba(10, 10, 10, 0.4);
 }
 
+/* Desktop sidebar toggle (ERP adoption item 2): one button in the topbar
+   hides the sidebar completely — no icon rail — and the content takes the
+   full width. The choice is the user's own and is remembered (persisted on
+   the user record). At <=768px the sidebar is the off-canvas drawer: this
+   button steps aside and .nav-toggle / .nav-open govern, whatever the saved
+   desktop choice is. */
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(36px * var(--ui-scale, 1));
+  height: calc(36px * var(--ui-scale, 1));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+@media (min-width: 769px) {
+  .frame.sidebar-hidden {
+    grid-template-columns: 1fr;
+  }
+  .frame.sidebar-hidden .sidebar {
+    display: none;
+  }
+}
+
 /* ---------- Mobile Responsiveness (down to 375px) ---------- */
 @media (max-width: 768px) {
   .frame {
@@ -3567,6 +3615,9 @@ pre.json {
   }
   .nav-toggle {
     display: inline-flex;
+  }
+  .sidebar-toggle {
+    display: none;
   }
   .nav-backdrop {
     display: block;
@@ -4677,6 +4728,72 @@ table.list.collections-table td {
 .qty-bar span.full {
   background: var(--blue);
 }
+/* Order lists (ERP adoption item 7): per-document progress — labelled
+   mini-bars (Delivered/Billed/Paid, Received/Billed/Paid) in one cell.
+   Same track/fill language as .qty-bar. On phones the track hides and the
+   label + percent text stay, so the numbers survive at 390px. */
+.prog {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3px * var(--ui-scale, 1));
+  min-width: calc(132px * var(--ui-scale, 1));
+}
+.prog-row {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale, 1));
+}
+.prog-label {
+  flex: 0 0 calc(54px * var(--ui-scale, 1));
+  font-size: calc(11px * var(--ui-scale, 1));
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.prog-bar {
+  flex: 1 1 auto;
+  height: calc(6px * var(--ui-scale, 1));
+  border-radius: calc(999px * var(--ui-scale, 1));
+  background: var(--fill);
+  overflow: hidden;
+}
+.prog-bar span {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  border-radius: calc(999px * var(--ui-scale, 1));
+}
+.prog-bar span.full {
+  background: var(--blue);
+}
+.prog-pct {
+  flex: 0 0 auto;
+  min-width: calc(36px * var(--ui-scale, 1));
+  text-align: right;
+  font-size: calc(11.5px * var(--ui-scale, 1));
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .prog {
+    min-width: 0;
+  }
+  .prog-bar {
+    display: none;
+  }
+  .prog-label {
+    flex-basis: auto;
+  }
+}
+/* Order lists (ERP adoption item 15): the derived stage as one quiet line
+   under the status chip — same muted register as .prog-label. No wrap:
+   the line sizes the status cell, and the table wrapper scrolls on
+   narrow screens exactly as it does for the progress cell. */
+.stage-line {
+  display: block;
+  margin-top: calc(3px * var(--ui-scale, 1));
+  font-size: calc(11.5px * var(--ui-scale, 1));
+  color: var(--text-2);
+  white-space: nowrap;
+}
 .attach-list {
   list-style: none;
   margin: 0;
@@ -5737,6 +5854,29 @@ button.contact-card-add {
   border-top: 1px solid var(--pp-rule);
   padding-top: calc(6px * var(--ui-scale, 1));
 }
+/* Item 14: the billing statement's payment-schedule table, printed
+   under the terms (Remarks) row for COD / 50-50 / Net 30 only. */
+.pp-schedule {
+  margin-top: calc(6px * var(--ui-scale, 1));
+}
+.pp-schedule-table {
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+.pp-schedule-table th,
+.pp-schedule-table td {
+  text-align: left;
+  font-weight: 400;
+  padding: calc(2px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)) calc(2px * var(--ui-scale, 1)) 0;
+}
+.pp-schedule-table th {
+  font-weight: 500;
+  color: #333;
+}
+.pp-schedule-table .num {
+  text-align: right;
+  padding-right: 0;
+}
 .pp-terms-block {
   font-size: 7pt;
   line-height: 1.35;
@@ -6755,13 +6895,13 @@ button.contact-card-add {
 
 .home-kps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: calc(12px * var(--ui-scale, 1));
   align-items: stretch;
   width: 100%;
   min-width: 0;
 }
-/* Defeat global `.card + .card { margin-top }` so all four share one top + height. */
+/* Defeat global `.card + .card { margin-top }` so all five share one top + height. */
 .home-kps > .card,
 .home-kps > .home-kp {
   margin-top: 0;
@@ -6806,11 +6946,16 @@ button.contact-card-add {
   justify-content: flex-start;
   gap: calc(6px * var(--ui-scale, 1));
   min-height: calc(18px * var(--ui-scale, 1));
-  flex-wrap: nowrap;
+  /* Wrap instead of clip: at the five-across breakpoint the sub-lines are
+     wider than the card (finding 1359) — the same wrap the phone block
+     already applies at <=640px. */
+  flex-wrap: wrap;
   text-align: left;
   margin-top: auto;
-  white-space: nowrap;
-  overflow: hidden;
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.3;
+  row-gap: calc(2px * var(--ui-scale, 1));
 }
 .home-ks.home-ks-paid {
   flex-direction: column;
@@ -6874,6 +7019,33 @@ button.contact-card-add {
   color: #b91c1c;
 }
 
+/* Count + balance strip (ERP adoption item 9): the KPI cards' language,
+   auto-fitting columns so 2 count cards + N account cards wrap without
+   squeezing any value. */
+.home-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(200px * var(--ui-scale, 1))), 1fr));
+  gap: calc(12px * var(--ui-scale, 1));
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+.home-counts > .card {
+  margin-top: 0; /* defeat global `.card + .card { margin-top }` */
+  height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+a.home-count {
+  text-decoration: none;
+  color: inherit;
+}
+/* Account names run longer than KPI labels — wrap, never clip. */
+.home-count .home-kl {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
 .home-mid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, calc(300px * var(--ui-scale, 1)));
@@ -6920,6 +7092,9 @@ button.contact-card-add {
   white-space: nowrap;
 }
 .home-lk {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   white-space: nowrap;
   color: var(--blue);
   font-weight: 600;
@@ -7554,6 +7729,11 @@ button.contact-card-add {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: calc(8px * var(--ui-scale, 1));
   }
+  .home-counts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: calc(8px * var(--ui-scale, 1));
+  }
+
   /* Phone Pipeline: 2 KPI-sized tiles right after the KPI strip. */
   .home-pipeline-phone {
     display: grid !important;
@@ -7591,7 +7771,7 @@ button.contact-card-add {
     font-size: calc(13px * var(--ui-scale, 1));
     font-weight: 800;
     margin: calc(2px * var(--ui-scale, 1)) 0 0;
-    line-height: 1.25;
+    line-height: 1.35;
     white-space: normal;
     overflow: visible;
     text-overflow: unset;

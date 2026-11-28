@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
 import { getQuoteView } from "@/lib/quotes/views";
+import { db } from "@/lib/db";
 import { quoteHeaderShowsStatusChip } from "@/lib/quotes/approval";
 import { COST_NOT_SET_LABEL, linesMissingSupplierCost } from "@/lib/quotes/calc";
 import { OVERRIDE_NOTE } from "@/lib/quotes/withholding-defaults";
@@ -18,7 +19,6 @@ import { ApprovalChip, ItemsTable, QuoteStatusChip, QuoteWorkflowApprovalChip, S
 import { QuoteActions } from "@/components/docs/QuoteActions";
 import { ConformeUploadForm } from "@/components/docs/ConformeUploadForm";
 import { AcceptanceForm } from "@/components/docs/AcceptanceForm";
-import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import {
   uploadQuoteConformeAction,
@@ -51,6 +51,24 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   // Built on the server without cost fields for users who can't see costs.
   const q = await getQuoteView(id, user);
   if (!q) notFound();
+  // Activity tab: the whole quote chain (its sales orders and their
+  // billings, collections and deliveries) reads on one scroll, like the
+  // sales-order page. Loaded only for the activity tab.
+  const soIds = q.salesOrders.map((s) => s.id);
+  let chainTargets: { entityType: string; ids: string[] }[] = [];
+  if (tab === "activity" && soIds.length) {
+    const [chainBillings, chainDeliveries, chainAllocations] = await Promise.all([
+      db.billing.findMany({ where: { salesOrderId: { in: soIds } }, select: { id: true } }),
+      db.delivery.findMany({ where: { salesOrderId: { in: soIds } }, select: { id: true } }),
+      db.collectionAllocation.findMany({ where: { billing: { salesOrderId: { in: soIds } } }, select: { collectionId: true } }),
+    ]);
+    chainTargets = [
+      { entityType: "SalesOrder", ids: soIds },
+      { entityType: "Billing", ids: chainBillings.map((b) => b.id) },
+      { entityType: "Collection", ids: [...new Set(chainAllocations.map((a) => a.collectionId))] },
+      { entityType: "Delivery", ids: chainDeliveries.map((d) => d.id) },
+    ];
+  }
   const canEdit = can(user, "edit_data");
   const openSo = q.salesOrders.find((s) => s.status === "OPEN");
   // Convert to SO: pick one of the customer's saved addresses (delivery first) or type one.
@@ -105,6 +123,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             costMissing={q.canSeeCosts && linesMissingSupplierCost(q.items)}
             hasAcceptance={q.hasAcceptance}
             businessName={q.business?.name}
+            canRemind={canEdit}
+            reminderAction={createReminderAction}
             actions={{
               markSent: markQuoteSentAction,
               confirmNoneAndMarkSent: confirmNoneAndMarkQuoteSentAction,
@@ -275,7 +295,6 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
               </div>
             </div>
           </div>
-          {canEdit && <RemindMeForm entityType="QUOTE" entityId={q.id} action={createReminderAction} />}
         </>
       )}
 
@@ -317,7 +336,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
       )}
 
       {tab === "activity" && (
-        <Activity targets={[{ entityType: "Quote", ids: [q.id] }]} viewer={user} />
+        <Activity targets={[{ entityType: "Quote", ids: [q.id] }, ...chainTargets]} viewer={user} />
       )}
 
       {tab === "conforme" && (

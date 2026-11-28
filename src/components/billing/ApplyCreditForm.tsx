@@ -5,6 +5,7 @@ import { applyCreditAction } from "@/app/(app)/billing/actions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useFormAction } from "@/components/useFormAction";
 import { formatPeso } from "@/lib/format";
+import { SearchPicker } from "@/components/SearchPicker";
 import { fromScaled, toScaled } from "@/lib/quotes/calc";
 
 export type ApplyCreditBillingOption = {
@@ -126,18 +127,15 @@ export function ApplyCreditForm({
           ) : (
             <div className={`field${e.billingId ? " has-error" : ""}`}>
               <label htmlFor="apply-credit-billing">Open billing</label>
-              <select
+              <SearchPicker
                 id="apply-credit-billing"
-                name="billingId"
+                ariaLabel="Open billing"
                 value={billingId}
-                onChange={(ev) => onBillingChange(ev.target.value)}
-              >
-                {billings.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label} · balance {formatPeso(b.balance)}
-                  </option>
-                ))}
-              </select>
+                options={billings.map((b) => ({ id: b.id, label: b.label, meta: `balance ${formatPeso(b.balance)}` }))}
+                placeholder="Pick a billing…"
+                onPick={onBillingChange}
+              />
+              <input type="hidden" name="billingId" value={billingId} />
               {e.billingId && <div className="error">{e.billingId}</div>}
             </div>
           )}

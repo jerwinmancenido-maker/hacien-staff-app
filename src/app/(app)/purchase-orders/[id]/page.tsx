@@ -2,7 +2,7 @@ import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
-import { can, canDeleteDocument, canVoid } from "@/lib/permissions";
+import { can, canDeleteDocument, canMaintainSupplierPayment, canVoid } from "@/lib/permissions";
 import { getPurchaseOrderView } from "@/lib/purchasing/views";
 import { listSupplierReturns } from "@/lib/services/returns";
 import { LINE_FLAG_LABELS, priceDifferenceText } from "@/lib/purchasing/match";
@@ -14,12 +14,12 @@ import { Chip, EmptyState, PageHeader } from "@/components/ui";
 import { PoActions } from "@/components/purchasing/PoActions";
 import { VoidButton } from "@/components/purchasing/DocButtons";
 import { AttachmentLinks, BillStatusChip, day, MatchChip, PoStatusChip, QtyBar, qtyText } from "@/components/purchasing/PoParts";
+import { PaymentRequestStatusChip } from "@/components/payables/PayablesParts";
 import { RrTable } from "@/components/purchasing/RrTable";
 import { AttachmentsTab } from "@/components/AttachmentsTab";
 import { OwnAttachmentsCard } from "@/components/OwnAttachmentsCard";
 import { archiveAttachmentAction } from "@/app/(app)/attachments/actions";
 import { PURCHASE_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
-import { RemindMeForm } from "@/components/RemindMeForm";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { voidReceivingReportAction } from "../../receiving/actions";
 import { GapReasonForm } from "@/components/docs/GapReasonForm";
@@ -51,6 +51,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
   const tab: Tab = (rawTab === "bills" || rawTab === "match") && !po.canSeeCosts ? "overview" : TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
   const returns = await listSupplierReturns(id);
   const canEdit = can(user, "edit_data");
+  const canPayBill = canMaintainSupplierPayment(user);
   // E7: the gap-reason editor shows only while a supplier-bill gap exists.
   const gapState = canEdit && po.canSeeCosts && po.status !== "VOID" ? await purchaseOrderGapState(id) : null;
   const canApprove = can(user, "approve") && po.approval.canApprove;
@@ -84,6 +85,8 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
             approveBlockedReason={can(user, "approve") ? po.approval.blockedReason : po.status === "DRAFT" && po.approval.needsApproval ? "Waiting for an approver." : po.approval.blockedReason}
             canMarkSentFromDraft={canEdit && po.canSeeCosts && po.approval.canMarkSentFromDraft}
             postedReceipts={po.postedReceipts}
+            canRemind={canEdit}
+            reminderAction={createReminderAction}
             actions={{
               approve: approvePurchaseOrderAction,
               markSent: markPurchaseOrderSentAction,
@@ -248,7 +251,6 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
               </div>
             )}
           </div>
-          {canEdit && <RemindMeForm entityType="PURCHASE_ORDER" entityId={id} action={createReminderAction} />}
         </>
       )}
 
@@ -391,6 +393,7 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                     <th className="num">Amount</th>
                     <th>Lines</th>
                     <th>Payments</th>
+                    <th>Payment requests</th>
                     <th>Files</th>
                     <th>Status</th>
                     <th aria-label="Actions" />
@@ -424,6 +427,29 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                           ))
                         )}
                       </td>
+                      <td className="small">
+                        {b.paymentRequests.length === 0 ? (
+                          <span className="faint">—</span>
+                        ) : (
+                          b.paymentRequests.map((r) => (
+                            <div key={r.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                              <PaymentRequestStatusChip status={r.status} />
+                              <span>{formatPeso(r.amount)}</span>
+                              {r.status === "PAID" && r.paymentId && (
+                                <Link href={`/payables/payments/${r.paymentId}`}>{r.paymentNumber}</Link>
+                              )}
+                              {r.status === "APPROVED" && canPayBill && (
+                                <Link
+                                  className="btn btn-secondary small"
+                                  href={`/payables/payments/new?supplierId=${po.supplier.id}&requestId=${r.id}`}
+                                >
+                                  Pay
+                                </Link>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </td>
                       <td>
                         <AttachmentLinks files={b.attachments} />
                       </td>
@@ -431,9 +457,16 @@ export default async function PurchaseOrderPage({ params, searchParams }: { para
                         <BillStatusChip status={b.status} />
                       </td>
                       <td>
-                        {canEdit && b.status !== "VOID" && b.status !== "PAID" && b.status !== "PARTIALLY_PAID" && (
-                          <VoidButton label="Void" docLabel="bill" body={`Bill ${b.billNumber} will be marked Void. Its number can be used again.`} onVoid={voidBillAction.bind(null, id, b.id)} />
-                        )}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                          {canEdit && b.status !== "VOID" && b.status !== "PAID" && (
+                            <Link className="btn btn-secondary small" href={`/payables/payment-requests/new?billId=${b.id}`}>
+                              Request payment
+                            </Link>
+                          )}
+                          {canEdit && b.status !== "VOID" && b.status !== "PAID" && b.status !== "PARTIALLY_PAID" && (
+                            <VoidButton label="Void" docLabel="bill" body={`Bill ${b.billNumber} will be marked Void. Its number can be used again.`} onVoid={voidBillAction.bind(null, id, b.id)} />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

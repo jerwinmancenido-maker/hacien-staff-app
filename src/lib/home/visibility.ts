@@ -61,6 +61,16 @@ export function canShowMoneyFigure(
   return true;
 }
 
+/**
+ * Cash balances on Home are money figures, so they follow the dashboard's
+ * own money gate — manage_billing, the same gate as the KPI strip and the
+ * Sales section — and the Cash feature must be on. Staff / Viewer never see
+ * balances on Home, just as they never see the KPI money cards.
+ */
+export function canShowHomeCashBalances(user: PermissionUser, flags: HomeFeatureFlags): boolean {
+  return flags.cashEnabled && can(user, "manage_billing");
+}
+
 /** Empty Home: no customers yet → getting-started card instead of sections. */
 export function isHomeEmpty(customerCount: number): boolean {
   return customerCount <= 0;

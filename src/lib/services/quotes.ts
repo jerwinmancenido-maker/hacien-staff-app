@@ -5,6 +5,7 @@
 import { Prisma, type Quote, type QuoteItem, type QuoteItemComponent } from "@prisma/client";
 import { db, type Tx } from "../db";
 import { writeAudit } from "../audit";
+import { duplicateConfirmNote, type NameMatch } from "../duplicates";
 import { resolveBusinessForWrite } from "./businesses";
 import { addDays, manilaToday } from "../format";
 import { assertCan, assertCanApprove, assertCanVoid, can, canSeeCosts, type PermissionUser } from "../permissions";
@@ -43,7 +44,9 @@ import {
 } from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
+import { notifyQuoteApproved, notifySalesOrderConfirmed } from "./alerts";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -224,9 +227,13 @@ export async function checkItems(items: readonly Pick<ItemInput, "itemId">[]) {
  * index (null = no link). Runs inside the quote transaction so a failed
  * save never leaves an orphan catalog row.
  */
-async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Promise<(string | null)[]> {
+async function resolveNewCatalogItems(
+  tx: Tx,
+  inputs: readonly ItemInput[],
+  opts?: { actorId?: string; confirmedItemDuplicates?: ReadonlyMap<number, NameMatch[]> },
+): Promise<(string | null)[]> {
   const out: (string | null)[] = [];
-  for (const input of inputs) {
+  for (const [index, input] of inputs.entries()) {
     if (input.itemId) {
       out.push(input.itemId);
       continue;
@@ -253,6 +260,20 @@ async function resolveNewCatalogItems(tx: Tx, inputs: readonly ItemInput[]): Pro
         defaultUnitPrice: input.unitPrice,
       },
     });
+    // Finding 1364: when the save was confirmed past the duplicate-name
+    // warning for this line, the auto-created item gets a create audit row
+    // recording the matches (the unconfirmed path never reaches here — the
+    // save action refuses first).
+    const confirmed = opts?.confirmedItemDuplicates?.get(index);
+    if (confirmed && opts?.actorId) {
+      await writeAudit(tx, {
+        userId: opts.actorId,
+        entityType: "Item",
+        entityId: created.id,
+        action: "create",
+        after: { ...created, duplicateNameWarningConfirmed: duplicateConfirmNote(confirmed) },
+      });
+    }
     out.push(created.id);
   }
   return out;
@@ -292,7 +313,11 @@ async function resolveDeliveryPick(customerId: string, addressId: string) {
 // Create / edit
 // ---------------------------------------------------------------------------
 
-export async function createQuote(input: QuoteInput, actor: DocActor): Promise<QuoteWithItems> {
+export async function createQuote(
+  input: QuoteInput,
+  actor: DocActor,
+  opts?: { confirmedItemDuplicates?: ReadonlyMap<number, NameMatch[]> },
+): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   const withCosts = canSeeCosts(actor);
   const snap = await getSettingsSnapshot();
@@ -355,7 +380,10 @@ export async function createQuote(input: QuoteInput, actor: DocActor): Promise<Q
       const number = await allocateDocNumber(tx, "QUOTE", year, format);
       // New-catalog lines get their item created here; planned items share
       // input order, so the resolved ids line up by index.
-      const catalogIds = await resolveNewCatalogItems(tx, input.items);
+      const catalogIds = await resolveNewCatalogItems(tx, input.items, {
+        actorId: actor.id,
+        confirmedItemDuplicates: opts?.confirmedItemDuplicates,
+      });
       const quote = await tx.quote.create({
         data: {
           number,
@@ -520,7 +548,12 @@ export async function copyQuote(id: string, actor: DocActor, revision: number): 
   );
 }
 
-export async function updateQuote(id: string, input: QuoteInput, actor: DocActor): Promise<QuoteWithItems> {
+export async function updateQuote(
+  id: string,
+  input: QuoteInput,
+  actor: DocActor,
+  opts?: { confirmedItemDuplicates?: ReadonlyMap<number, NameMatch[]> },
+): Promise<QuoteWithItems> {
   assertCan(actor, "edit_data");
   const withCosts = canSeeCosts(actor);
   const current = await db.quote.findUnique({ where: { id } });
@@ -593,7 +626,10 @@ export async function updateQuote(id: string, input: QuoteInput, actor: DocActor
         withholdingOverride: i.withholdingOverride,
       }));
       // New-catalog lines get their item created here, before planning.
-      const catalogIds = await resolveNewCatalogItems(tx, input.items);
+      const catalogIds = await resolveNewCatalogItems(tx, input.items, {
+        actorId: actor.id,
+        confirmedItemDuplicates: opts?.confirmedItemDuplicates,
+      });
       const inputsWithCatalog = input.items.map((inp, idx) => ({ ...inp, itemId: catalogIds[idx] ?? inp.itemId ?? null }));
       const existingPick = parseWithholdingPick(before.withholdingPick);
       const pick = resolveWithholdingPickInput(input, existingPick);
@@ -838,6 +874,10 @@ async function setStatus(id: string, actor: DocActor, from: readonly Quote["stat
         ...(override ? { approvalOverride: override.join("; "), approval: "approved (confirmed at send)" } : {}),
       },
     });
+    // Adoption item 13: LOST is a terminal quote state — close its reminders.
+    if (to === "LOST") {
+      await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote marked as lost");
+    }
     return after;
   });
 }
@@ -851,7 +891,7 @@ export function markQuoteSent(id: string, actor: DocActor, opts: { confirmedWarn
  *  for one — canApproveWorkflow is PENDING-only). */
 export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWithItems> {
   assertCanApprove(actor);
-  return db.$transaction(async (tx) => {
+  const after = await db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("A void quote can't be approved.");
     if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved.");
@@ -884,6 +924,13 @@ export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWi
     });
     return after;
   });
+  // Adoption item 8: alert the team when an approval actually lands
+  // (post-commit, never throws). The NOT_REQUIRED path above returns the
+  // quote unchanged — no approval happened there, so no alert.
+  if (after.approvalStatus === "APPROVED") {
+    await notifyQuoteApproved(after.id, actor.id).catch(() => {});
+  }
+  return after;
 }
 
 /** Approver/Admin: PENDING (or re-review) → REJECTED. Reason required. */
@@ -982,6 +1029,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
       data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id },
       include: { items: { where: { removedAt: null } } },
     });
+    await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote voided");
     await tx.documentVoid.create({
       data: {
         docType: "QUOTE",
@@ -1191,6 +1239,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         where: { id },
         data: { status: "WON", ...(override ? overrideApprovalData(actor) : {}), updatedById: actor.id },
       });
+      await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote converted to a sales order");
       await writeAudit(tx, {
         userId: actor.id,
         entityType: "Quote",
@@ -1214,6 +1263,8 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
     }, DOC_TX),
   );
   await notifyOrderConfirmed(so.id, actor.id);
+  // Adoption item 8: email alert for the team (post-commit, never throws).
+  await notifySalesOrderConfirmed(so.id, actor.id).catch(() => {});
   return so;
 }
 
