@@ -23,6 +23,7 @@ import { createAttachments, discardUploads, prepareUploads, type UploadFile } fr
 import { recomputeBillingStatus } from "./billings";
 import { defaultExpenseCategoryId } from "./expenses";
 import { notifyPaymentReceived } from "../messaging/order-text-triggers";
+import { notifyCollectionRecorded } from "./alerts";
 import { claimBookletSerial } from "./booklet";
 import {
   deductionsError,
@@ -825,6 +826,8 @@ export async function recordCollection(
       }, DOC_TX),
     );
     await notifyPaymentReceived(collection.id, actor.id);
+    // Adoption item 8: email alert for the team (post-commit, never throws).
+    await notifyCollectionRecorded(collection.id, actor.id).catch(() => {});
     return collection;
   } catch (e) {
     await discardUploads(uploads);

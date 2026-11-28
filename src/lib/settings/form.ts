@@ -171,6 +171,27 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         periodCloseEnabled: checked(get("periodCloseEnabled")),
         receivingEmailEnabled: checked(get("receivingEmailEnabled")),
       };
+    case "alerts": {
+      // One block per event: <event>.enabled, <event>.role.<role>,
+      // <event>.emails (one address per line). Channel is email-only today.
+      const rule = (event: string) => ({
+        enabled: checked(get(`${event}.enabled`)),
+        channel: "email" as const,
+        roles: [
+          ...(checked(get(`${event}.role.admin`)) ? ["admin" as const] : []),
+          ...(checked(get(`${event}.role.approver`)) ? ["approver" as const] : []),
+          ...(checked(get(`${event}.role.staff`)) ? ["staff" as const] : []),
+        ],
+        emails: lines(get(`${event}.emails`)),
+      });
+      return {
+        goodsReceived: rule("goodsReceived"),
+        supplierPayment: rule("supplierPayment"),
+        collection: rule("collection"),
+        quoteApproved: rule("quoteApproved"),
+        salesOrderConfirmed: rule("salesOrderConfirmed"),
+      };
+    }
     case "taxCalendar": {
       const keys = [
         "1701q",

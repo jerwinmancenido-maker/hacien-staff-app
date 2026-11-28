@@ -44,6 +44,7 @@ import {
 } from "../validation/quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
+import { notifyQuoteApproved, notifySalesOrderConfirmed } from "./alerts";
 import { assertPeriodOpen } from "./period-close";
 
 export type DocActor = PermissionUser & { id: string };
@@ -885,7 +886,7 @@ export function markQuoteSent(id: string, actor: DocActor, opts: { confirmedWarn
  *  for one — canApproveWorkflow is PENDING-only). */
 export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWithItems> {
   assertCanApprove(actor);
-  return db.$transaction(async (tx) => {
+  const after = await db.$transaction(async (tx) => {
     const before = await lockQuote(tx, id);
     if (before.status === "VOID") throw new DocRuleError("A void quote can't be approved.");
     if (before.approvalStatus === "APPROVED") throw new DocRuleError("This quote is already approved.");
@@ -918,6 +919,13 @@ export async function approveQuote(id: string, actor: DocActor): Promise<QuoteWi
     });
     return after;
   });
+  // Adoption item 8: alert the team when an approval actually lands
+  // (post-commit, never throws). The NOT_REQUIRED path above returns the
+  // quote unchanged — no approval happened there, so no alert.
+  if (after.approvalStatus === "APPROVED") {
+    await notifyQuoteApproved(after.id, actor.id).catch(() => {});
+  }
+  return after;
 }
 
 /** Approver/Admin: PENDING (or re-review) → REJECTED. Reason required. */
@@ -1248,6 +1256,8 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
     }, DOC_TX),
   );
   await notifyOrderConfirmed(so.id, actor.id);
+  // Adoption item 8: email alert for the team (post-commit, never throws).
+  await notifySalesOrderConfirmed(so.id, actor.id).catch(() => {});
   return so;
 }
 
