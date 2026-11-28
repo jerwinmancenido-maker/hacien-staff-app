@@ -58,6 +58,7 @@ export function DeliverySection({
   canVoid,
   action,
   voidAction,
+  startOpen = false,
 }: {
   nextDrNo?: number | null;
   drSeriesFrom?: number | null;
@@ -69,17 +70,36 @@ export function DeliverySection({
   canVoid: boolean;
   action: (state: FormState, form: FormData) => Promise<FormState>;
   voidAction: (deliveryId: string, reason: string) => Promise<FormState>;
+  /** Open the record form on arrival (the Actions menu's Record delivery link). */
+  startOpen?: boolean;
 }) {
-  const [showForm, setShowForm] = useState(false);
+  // The Actions menu's Record delivery link arrives with startOpen: the
+  // form starts open, initialised exactly as openForm() initialises it
+  // (everything-that-is-left quantities, next DR number, today's date).
+  const remaining = (ordered: string, delivered: string) => {
+    const r = Math.max(0, Number(ordered) - Number(delivered));
+    return Number.isInteger(r) ? String(r) : r.toFixed(2);
+  };
+
+  const remainingMap = () => {
+    const next: Record<string, string> = {};
+    for (const item of items) {
+      const rem = remaining(item.qty, item.deliveredQty);
+      if (Number(rem) > 0) next[item.id] = rem;
+    }
+    return next;
+  };
+
+  const [showForm, setShowForm] = useState(startOpen);
   const [mode, setMode] = useState<"all" | "some">("all");
-  const [qtys, setQtys] = useState<Record<string, string>>({});
+  const [qtys, setQtys] = useState<Record<string, string>>(() => (startOpen ? remainingMap() : {}));
   const [serials, setSerials] = useState<Record<string, string>>({});
-  const [drNumber, setDrNumber] = useState("");
+  const [drNumber, setDrNumber] = useState(startOpen && nextDrNo != null ? String(nextDrNo) : "");
   const [drOverride, setDrOverride] = useState(false);
   const [showOptional, setShowOptional] = useState(false);
   const [serialOpen, setSerialOpen] = useState<Record<string, boolean>>({});
   const [successMsg, setSuccessMsg] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(() => (startOpen ? isoDate(manilaToday()) : ""));
   const progress = soDeliveryProgress(items);
   const podIncomplete = soPodIncomplete(progress, deliveries);
   const todayYmd = isoDate(manilaToday());
@@ -126,20 +146,6 @@ export function DeliverySection({
     }
     return res;
   });
-
-  const remaining = (ordered: string, delivered: string) => {
-    const r = Math.max(0, Number(ordered) - Number(delivered));
-    return Number.isInteger(r) ? String(r) : r.toFixed(2);
-  };
-
-  const remainingMap = () => {
-    const next: Record<string, string> = {};
-    for (const item of items) {
-      const rem = remaining(item.qty, item.deliveredQty);
-      if (Number(rem) > 0) next[item.id] = rem;
-    }
-    return next;
-  };
 
   const fillAllRemaining = () => {
     setQtys(remainingMap());
