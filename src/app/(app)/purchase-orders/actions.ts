@@ -17,6 +17,7 @@ import {
   type EmailDraft,
 } from "@/lib/services/purchase-orders";
 import { recordSupplierBill, voidSupplierBill } from "@/lib/services/supplier-bills";
+import { driftWarningMessage, findPoCostDrift } from "@/lib/purchasing/drift";
 import { postSupplierReturn, voidSupplierReturn } from "@/lib/services/returns";
 import { setPurchaseOrderGapReason } from "@/lib/services/reconciliation";
 import { formFiles } from "@/lib/form-files";
@@ -66,6 +67,14 @@ export async function savePurchaseOrderAction(id: string | null, _prev: FormStat
     assertCanMaintainPurchaseOrder(user);
     const parsed = poInputSchema.safeParse(payload(form));
     if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error), message: "Fix the fields marked below." };
+    // Same-rate drift warning (ERP adoption item 6): warn, never block.
+    // Nothing is saved until the user confirms with "Save anyway"
+    // (confirmDriftWarning=1) — the PR #360 soft-warning pattern. The plain
+    // Save submits the flag blank, so the warning re-issues.
+    if (str(form, "confirmDriftWarning") !== "1") {
+      const drift = await findPoCostDrift(db, id, parsed.data.items);
+      if (drift.length) return { warning: driftWarningMessage(drift) };
+    }
     const po = id ? await updatePurchaseOrder(id, parsed.data, user) : await createStandalonePurchaseOrder(parsed.data, user);
     refresh(po.id);
     goTo = `/purchase-orders/${po.id}`;
