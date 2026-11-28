@@ -67,6 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         booksEnabled={booksEnabled}
         cashEnabled={cashEnabled}
         payablesEnabled={payablesEnabled}
+        canApprove={can(user, "approve")}
         storeOrdersPaidCount={storeOrdersPaidCount}
       />
       <div className="sidebar-spacer" />

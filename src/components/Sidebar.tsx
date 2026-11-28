@@ -18,6 +18,7 @@ type Item = {
   booksOnly?: boolean;
   cashOnly?: boolean;
   payablesOnly?: boolean;
+  approveOnly?: boolean;
 };
 
 const MAIN: Item[] = [
@@ -37,6 +38,7 @@ const LATER: Item[] = [
   { href: "/payables", label: "Payables", icon: <CoinIcon />, payablesOnly: true },
   { href: "/cash", label: "Cash", icon: <CoinIcon />, cashOnly: true },
   { href: "/books", label: "Books", icon: <BookIcon />, booksOnly: true },
+  { href: "/approvals", label: "Approvals", icon: <ListIcon />, approveOnly: true },
   { href: "/reminders", label: "Reminders", icon: <ListIcon /> },
 ];
 
@@ -53,6 +55,7 @@ type DealsNavFlags = {
   payablesEnabled?: boolean;
   booksEnabled?: boolean;
   canViewBooks?: boolean;
+  canApprove?: boolean;
 };
 
 /** Pure filter for Deals nav — unit-tested for CASH / PAYABLES / BOOKS feature gating. */
@@ -63,6 +66,7 @@ export function filterDealsNavItems<
     cashOnly?: boolean;
     payablesOnly?: boolean;
     booksOnly?: boolean;
+    approveOnly?: boolean;
   },
 >(items: readonly T[], flags: DealsNavFlags): T[] {
   const {
@@ -72,6 +76,7 @@ export function filterDealsNavItems<
     payablesEnabled = false,
     booksEnabled = false,
     canViewBooks = false,
+    canApprove = false,
   } = flags;
   return items.filter(
     (i) =>
@@ -79,7 +84,8 @@ export function filterDealsNavItems<
       (!i.editOnly || canEdit) &&
       (!i.cashOnly || cashEnabled) &&
       (!i.payablesOnly || payablesEnabled) &&
-      (!i.booksOnly || (booksEnabled && canViewBooks)),
+      (!i.booksOnly || (booksEnabled && canViewBooks)) &&
+      (!i.approveOnly || canApprove),
   );
 }
 
@@ -96,6 +102,7 @@ export function SidebarNav({
   booksEnabled = false,
   cashEnabled = false,
   payablesEnabled = false,
+  canApprove = false,
   storeOrdersPaidCount = 0,
 }: {
   isAdmin: boolean;
@@ -105,6 +112,7 @@ export function SidebarNav({
   booksEnabled?: boolean;
   cashEnabled?: boolean;
   payablesEnabled?: boolean;
+  canApprove?: boolean;
   storeOrdersPaidCount?: number;
 }) {
   const path = usePathname();
@@ -130,6 +138,7 @@ export function SidebarNav({
         payablesEnabled,
         booksEnabled,
         canViewBooks,
+        canApprove,
       }).map(render)}
       {isAdmin && (
         <>
@@ -193,6 +202,7 @@ const CRUMB_LABELS: Record<string, string> = {
   items: "Items",
   dispatch: "Dispatch",
   reminders: "Reminders",
+  approvals: "Approvals",
   profit: "Monthly profit",
   new: "New",
   edit: "Edit",
