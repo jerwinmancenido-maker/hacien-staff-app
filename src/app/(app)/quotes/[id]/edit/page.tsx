@@ -3,6 +3,7 @@ import { requirePagePermission } from "@/lib/auth/current-user";
 import { formatDateTime } from "@/lib/format";
 import { can, canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { activePaymentTermPresets } from "@/lib/settings/schema";
 import { editableItems, getQuoteView } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
@@ -46,6 +47,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        termsPresets={activePaymentTermPresets(settings.lists.paymentTermPresets)}
         contactRoles={settings.lists.contactRoles}
         defaultValidityDays={settings.quotes.defaultValidityDays}
         printDefaults={{

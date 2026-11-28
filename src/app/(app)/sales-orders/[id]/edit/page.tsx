@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { canSeeCosts } from "@/lib/permissions";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { activePaymentTermPresets } from "@/lib/settings/schema";
 import { editableItems, getSalesOrderView, soLineOrderedQty } from "@/lib/quotes/views";
 import { PageHeader } from "@/components/ui";
 import { DocumentEditor } from "@/components/docs/DocumentEditor";
@@ -43,6 +44,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        termsPresets={activePaymentTermPresets(settings.lists.paymentTermPresets)}
         contactRoles={settings.lists.contactRoles}
         action={saveSalesOrderAction.bind(null, id)}
         cancelHref={`/sales-orders/${id}`}

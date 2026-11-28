@@ -29,7 +29,8 @@ import { NumberingForm } from "./NumberingForm";
 import { PrintCompanyForm } from "./PrintCompanyForm";
 import { WithholdingForm } from "./WithholdingForm";
 import { uploadMaxMb } from "@/lib/business-docs/sniff";
-import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction } from "./actions";
+import { saveSettingsAction, savePrintCompanyAction, saveWithholdingAction, saveBusinessAction, setBusinessActiveAction, savePaymentTermPresetsAction } from "./actions";
+import { PaymentTermPresetsForm } from "./PaymentTermPresetsForm";
 import { BusinessesForm } from "./BusinessesForm";
 import { listBusinesses } from "@/lib/services/businesses";
 import { AuditLogTab } from "./AuditLogTab";
@@ -501,8 +502,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             fields={[
               { name: "paymentTerms", label: "Payment terms options", kind: "lines", value: s.lists.paymentTerms, hint: "One per line." },
               { name: "contactRoles", label: "Contact roles", kind: "lines", value: s.lists.contactRoles, hint: "One per line." },
+              // Carried invisibly so saving the plain lists never resets the
+              // presets edited in the card below (parsed in settings/form.ts).
+              { name: "paymentTermPresets", label: "Payment term presets", kind: "hidden", value: JSON.stringify(s.lists.paymentTermPresets) },
             ]}
           />
+        )}
+
+        {section === "quote-terms" && (
+          <PaymentTermPresetsForm presets={s.lists.paymentTermPresets} versionId={snap.versionId} action={savePaymentTermPresetsAction} />
         )}
 
         {section === "documents" && (

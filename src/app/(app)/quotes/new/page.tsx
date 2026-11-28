@@ -1,5 +1,6 @@
 import { requirePagePermission } from "@/lib/auth/current-user";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { activePaymentTermPresets } from "@/lib/settings/schema";
 import { addDays, isoDate, manilaToday } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/docs/QuoteEditor";
@@ -46,6 +47,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         rates={rates}
         suppliers={suppliers}
         termsOptions={settings.lists.paymentTerms}
+        termsPresets={activePaymentTermPresets(settings.lists.paymentTermPresets)}
         policiesUrl={settings.identity.policiesUrl}
         policiesDisplayHost={settings.identity.policiesDisplayHost}
         contactRoles={settings.lists.contactRoles}
