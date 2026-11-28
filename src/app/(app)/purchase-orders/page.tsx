@@ -5,6 +5,7 @@ import { listPurchaseOrdersView, PO_STATUSES } from "@/lib/purchasing/views";
 import { PO_STATUS_LABELS, type PoStatus } from "@/lib/purchasing/status";
 import { formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
+import { ProgressBars } from "@/components/ProgressBars";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { PlusIcon, SearchIcon } from "@/components/Icons";
 import { day, PoStatusChip } from "@/components/purchasing/PoParts";
@@ -122,6 +123,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             { key: "status", label: "Status" },
             { key: "date", label: "Date", className: "col-phone-hide col-tab-hide" },
             { key: "expected", label: "Expected", className: "col-phone-hide col-tab-hide" },
+            { key: "progress", label: "Progress", sortable: false },
           ]}
           rows={pos.map((o) => ({
             id: o.id,
@@ -139,6 +141,18 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
               status: <PoStatusChip status={o.status} />,
               date: day(o.date),
               expected: day(o.expectedDate),
+              progress: o.progress ? (
+                <ProgressBars
+                  context={o.number}
+                  measures={[
+                    { label: "Received", pct: o.progress.receivedPct },
+                    { label: "Billed", pct: o.progress.billedPct },
+                    { label: "Paid", pct: o.progress.paidPct },
+                  ]}
+                />
+              ) : (
+                <span className="faint">—</span>
+              ),
             },
             sort: { number: o.number, supplier: o.supplierName, so: o.salesOrder?.number ?? "", total: Number(o.subtotal ?? 0), status: o.status, date: o.date, expected: o.expectedDate ?? "" },
           }))}

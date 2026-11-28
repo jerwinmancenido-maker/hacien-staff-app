@@ -44,7 +44,9 @@ describe("purchasing visible to non-cost users", () => {
 
   it("the SO Documents tab lists purchase orders for everyone", () => {
     const src = read("src/app/(app)/sales-orders/[id]/page.tsx");
-    expect(src).toContain("purchasing.purchaseOrders.map((p) => (");
+    // Adoption item 12: the Documents tab maps one combined list — live
+    // POs from getSoPurchasing plus the SO's VOID POs (marked VOID).
+    expect(src).toContain("documentPurchaseOrders.map((p) => (");
     expect(src).toContain("Purchase order · {p.supplierName}");
     expect(src).toContain("Receiving and supplier bills stay in the Cost &amp; margin tab.");
   });

@@ -30,6 +30,7 @@ import {
 import { loadOrderedQty } from "./ordered";
 import { planPurchaseOrders, qtyLeft, qtyMismatch } from "./plan";
 import { receivingCoverageNote } from "../billing/coverage";
+import { percentOf } from "../progress";
 import { buildSoPickerRows, remainingQtyForExistingPoLine, type SoPickerRow } from "./picker";
 import { attachmentKindLabel } from "../attachment-kinds";
 import {
@@ -104,7 +105,7 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
       })
     : rows;
 
-  return filtered.map((r) => ({
+  const mapped = filtered.map((r) => ({
     id: r.id,
     number: r.number,
     businessName: r.business?.name ?? null,
@@ -117,7 +118,78 @@ export async function listPurchaseOrdersView(filter: PoListFilter, viewer: Permi
     expectedDate: ymd(r.expectedDate),
     // Audit F: null for non-cost viewers — the list page hides the column.
     subtotal: withCosts ? money(r.subtotal) : null,
+    // Item 7: filled by attachPoListProgress below (null on VOID rows).
+    progress: null as PoListProgress | null,
   }));
+  await attachPoListProgress(mapped, withCosts);
+  return mapped;
+}
+
+/**
+ * ERP adoption item 7: per-document progress for the PO list, from the same
+ * aggregates the PO page uses — line qty / receivedQty for Received,
+ * non-void supplier-bill amounts for Billed, and POSTED supplier-payment
+ * allocations (cash + withholding, the billOutstanding definition of paid)
+ * for Paid. Received is a quantity ratio, so every viewer gets it; Billed
+ * and Paid are money, so they stay null for non-cost viewers (Audit F).
+ * Three grouped queries for the whole list — no per-row queries. A measure
+ * is null when it has no true base (see lib/progress); VOID rows get no
+ * progress at all.
+ */
+export type PoListProgress = {
+  receivedPct: number | null;
+  billedPct: number | null;
+  paidPct: number | null;
+};
+
+async function attachPoListProgress(
+  rows: { id: string; status: PoStatus; subtotal: string | null; progress: PoListProgress | null }[],
+  withCosts: boolean,
+): Promise<void> {
+  const live = rows.filter((r) => r.status !== "VOID");
+  if (live.length === 0) return;
+  const ids = live.map((r) => r.id);
+  const itemSums = await db.purchaseOrderItem.groupBy({
+    by: ["purchaseOrderId"],
+    where: { purchaseOrderId: { in: ids }, removedAt: null },
+    _sum: { qty: true, receivedQty: true },
+  });
+  const qtyByPo = new Map(itemSums.map((s) => [s.purchaseOrderId, s._sum]));
+  const billedByPo = new Map<string, string>();
+  const paidByPo = new Map<string, bigint>();
+  if (withCosts) {
+    const bills = await db.supplierBill.findMany({
+      where: { purchaseOrderId: { in: ids }, status: { not: "VOID" } },
+      select: { id: true, purchaseOrderId: true, amount: true },
+    });
+    const poByBill = new Map(bills.map((b) => [b.id, b.purchaseOrderId!]));
+    for (const b of bills) {
+      billedByPo.set(b.purchaseOrderId!, sumMoney([billedByPo.get(b.purchaseOrderId!) ?? "0.00", money(b.amount)]));
+    }
+    const billIds = bills.map((b) => b.id);
+    if (billIds.length) {
+      const allocSums = await db.supplierPaymentAllocation.groupBy({
+        by: ["supplierBillId"],
+        where: { supplierBillId: { in: billIds }, supplierPayment: { status: "POSTED" } },
+        _sum: { cashApplied: true, withholdingApplied: true },
+      });
+      for (const a of allocSums) {
+        const poId = poByBill.get(a.supplierBillId);
+        if (!poId) continue;
+        const add = toScaled(money(a._sum.cashApplied ?? 0), 2) + toScaled(money(a._sum.withholdingApplied ?? 0), 2);
+        paidByPo.set(poId, (paidByPo.get(poId) ?? 0n) + add);
+      }
+    }
+  }
+  for (const row of live) {
+    const sums = qtyByPo.get(row.id);
+    const billed = billedByPo.get(row.id) ?? "0.00";
+    row.progress = {
+      receivedPct: sums ? percentOf(money(sums.receivedQty ?? 0), money(sums.qty ?? 0)) : null,
+      billedPct: withCosts && row.subtotal != null ? percentOf(billed, row.subtotal) : null,
+      paidPct: withCosts ? percentOf(fromScaled(paidByPo.get(row.id) ?? 0n, 2), billed) : null,
+    };
+  }
 }
 
 export async function getPurchaseOrderView(id: string, viewer: Viewer) {

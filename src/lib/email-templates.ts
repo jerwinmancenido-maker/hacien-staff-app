@@ -241,3 +241,66 @@ export function receivingNotificationEmail(
     `</td></tr></table></td></tr></table></body></html>`;
   return { subject, text, html };
 }
+
+export type StaffAlert = {
+  subject: string;
+  heading: string;
+  intro: string;
+  /** Detail lines, e.g. "Supplier: Acme Corp". Plain text; escaped in HTML. */
+  lines: string[];
+  /** View-only link to the record in the app. Alerts never carry actions. */
+  url: string;
+  urlLabel: string;
+};
+
+/**
+ * Generic staff alert (ERP adoption item 8): one shell for every alert
+ * event — a heading, a one-line summary, the facts, and a view link.
+ * Internal readers only (the team), so the STAFF APP lockup stays.
+ * Nothing here approves, pays or changes anything: the link only opens
+ * the record, and acting on it still needs a sign-in with permission.
+ */
+export function staffAlertEmail(
+  o: StaffAlert,
+  identity: EmailIdentity = emailIdentity(DEFAULT_SETTINGS),
+): { subject: string; text: string; html: string } {
+  const textLines = [
+    o.intro,
+    "",
+    ...o.lines,
+    "",
+    `${o.urlLabel}: ${o.url}`,
+    "",
+    identity.shortName,
+    identity.footerLine,
+  ];
+  const text = textLines.join("\n");
+
+  const lineRows = o.lines
+    .map(
+      (l) =>
+        `<p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#444444;">${escapeHtml(l)}</p>`,
+    )
+    .join("");
+  const html =
+    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(o.subject)}</title></head>` +
+    `<body style="margin:0;padding:0;background:#f2f2f2;font-family:Arial,Helvetica,sans-serif;color:#111111;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;">` +
+    `<tr><td align="center" style="padding:40px 16px;">` +
+    `<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">` +
+    `<tr><td style="background:#111111;padding:20px 32px;">` +
+    `<span style="font-size:20px;font-weight:bold;letter-spacing:2px;color:#ffffff;">${escapeHtml(identity.wordmark)}</span>` +
+    `<span style="font-size:12px;letter-spacing:2px;color:#cccccc;"> &nbsp;STAFF APP</span>` +
+    `</td></tr>` +
+    `<tr><td style="padding:32px;">` +
+    `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;">${escapeHtml(o.heading)}</h1>` +
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${escapeHtml(o.intro)}</p>` +
+    lineRows +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 0;"><tr><td align="center" bgcolor="${identity.accentColor}" style="background:${identity.accentColor};border-radius:6px;"><a href="${escapeHtml(o.url)}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">${escapeHtml(o.urlLabel)}</a></td></tr></table>` +
+    `</td></tr>` +
+    `<tr><td style="padding:20px 32px;border-top:1px solid #eeeeee;">` +
+    `<p style="margin:0 0 4px;font-size:12px;color:#999999;">${escapeHtml(identity.footerLine)}</p>` +
+    `<p style="margin:0;font-size:12px;color:#999999;">This is an automated message.</p>` +
+    `</td></tr></table></td></tr></table></body></html>`;
+  return { subject: o.subject, text, html };
+}

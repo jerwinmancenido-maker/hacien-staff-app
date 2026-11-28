@@ -11,15 +11,22 @@
 // receiving transaction commits and NEVER throws — a mail failure is
 // logged and audited, the receiving stands. Settings toggle:
 // features.receivingEmailEnabled (default ON).
+//
+// Adoption item 8: the send itself now runs through the alert-rules
+// engine (src/lib/services/alerts.ts) as the "goodsReceived" event — the
+// rule's roles + extra addresses decide the rest of the recipient list,
+// and the PO's creator is passed as an always-recipient, so with the
+// default rule (Admins + Approvers) the recipient set is exactly what
+// item 5 produced. The audit row keeps its item-5 shape (action
+// send_email, after.receivingEmail) via the engine's auditStatusKey.
 
 import { db } from "../db";
-import { writeAudit } from "../audit";
-import { appUrl, getMailer, type Mailer } from "../mailer";
+import { appUrl, type Mailer } from "../mailer";
 import { getSettingsSnapshot } from "../settings";
 import { emailIdentity } from "../settings/identity";
 import { receivingNotificationEmail } from "../email-templates";
-import { sanitizeHeaderValue } from "./statement-reminder";
 import { formatDate } from "../format";
+import { fireAlert } from "./alerts";
 
 export type ReceivingNotifyResult = {
   status: "sent" | "partial" | "failed" | "skipped" | "disabled";
@@ -60,17 +67,6 @@ export async function notifyGoodsReceived(
     if (!rr || rr.status !== "POSTED") return { status: "skipped", recipients: [] };
     const po = rr.purchaseOrder;
 
-    const users = await db.user.findMany({
-      where: { active: true, OR: [{ isAdmin: true }, { isApprover: true }, { id: po.createdById }] },
-      select: { email: true },
-      orderBy: { email: "asc" },
-    });
-    const recipients = [...new Map(users.map((u) => [u.email.toLowerCase(), u.email])).values()];
-    if (recipients.length === 0) {
-      console.error(`[receiving] goods-received email for ${rr.number} has no recipients.`);
-      return { status: "skipped", recipients: [] };
-    }
-
     const poLineById = new Map(po.items.map((l) => [l.id, l]));
     const receivedLines = rr.items
       .filter((i) => Number(i.qtyReceived) > 0)
@@ -107,37 +103,21 @@ export async function notifyGoodsReceived(
       },
       emailIdentity(snap.settings),
     );
-    const subject = sanitizeHeaderValue(draft.subject);
-
-    const mailer = deps.mailer ?? getMailer();
-    let sent = 0;
-    let failed = 0;
-    for (const to of recipients) {
-      try {
-        await mailer.send({ to, subject, text: draft.text, html: draft.html });
-        sent += 1;
-      } catch {
-        failed += 1;
-      }
-    }
-    const status: ReceivingNotifyResult["status"] = failed === 0 ? "sent" : sent === 0 ? "failed" : "partial";
-
-    try {
-      await writeAudit(db, {
-        userId: rr.createdById,
+    // Item 8 engine: resolves the rule's role users + extra addresses,
+    // always includes the PO's creator, sends one email per recipient and
+    // writes the same audit row item 5 wrote (after.receivingEmail).
+    return fireAlert(
+      "goodsReceived",
+      {
         entityType: "ReceivingReport",
         entityId: rr.id,
-        action: "send_email",
-        after: { recipients, receivingEmail: status, subject },
-        diff: false,
-      });
-    } catch {
-      // Auditing the send must never throw either.
-    }
-    if (failed > 0) {
-      console.error(`[receiving] goods-received email for ${rr.number}: ${sent} sent, ${failed} failed.`);
-    }
-    return { status, recipients };
+        actorId: rr.createdById,
+        extraRecipientUserIds: [po.createdById],
+        auditStatusKey: "receivingEmail",
+        buildEmail: () => draft,
+      },
+      deps,
+    );
   } catch (e) {
     const name = e instanceof Error ? e.name : "Error";
     console.error(`[receiving] goods-received notification failed name=${name}`);

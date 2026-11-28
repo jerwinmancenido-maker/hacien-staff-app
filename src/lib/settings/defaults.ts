@@ -135,6 +135,17 @@ export const DEFAULT_SETTINGS: Settings = {
     itemsImportEnabled: false,
     periodCloseEnabled: false,
   },
+  // Adoption item 8: email alert rules. ON by default for Admins and
+  // Approvers — the same people who got the item-5 receiving email. The
+  // goodsReceived default reproduces that email's recipient set exactly
+  // (the engine adds the PO's creator on top, as item 5 always did).
+  alerts: {
+    goodsReceived: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    supplierPayment: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    collection: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    quoteApproved: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+    salesOrderConfirmed: { enabled: true, channel: "email", roles: ["admin", "approver"], emails: [] },
+  },
   // Q16 S-95: Default chosen — all OFF until UniSMS keys, DPA + DB location,
   // and HACIEN sender ID are confirmed.
   messaging: {
