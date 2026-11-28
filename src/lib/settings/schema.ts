@@ -86,6 +86,28 @@ const paymentAccountEwallet = z.object({
   accountNumberFull,
 });
 
+const alertRole = z.enum(["admin", "approver", "staff"]);
+
+const alertEmailAddress = z
+  .string()
+  .trim()
+  .min(3, "Enter a valid email address.")
+  .max(254)
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a valid email address.");
+
+/**
+ * One email alert rule (ERP adoption item 8). The channel is part of the
+ * stored shape so a chat channel can be added later without reshaping the
+ * data — today "email" is the only value: there is no chat/Telegram
+ * integration in this app, and adding one needs a bot key (a secret).
+ */
+const alertRule = z.object({
+  enabled: z.boolean(),
+  channel: z.literal("email").default("email"),
+  roles: z.array(alertRole).max(3, "At most 3 roles."),
+  emails: z.array(alertEmailAddress).max(20, "At most 20 extra addresses."),
+});
+
 export const settingsSections = {
   approval: z.object({
     marginBelowPct: z.coerce.number().min(0, "0 or more.").max(100, "100 or less."),
@@ -319,6 +341,15 @@ export const settingsSections = {
     /** Adoption item 5: goods-received team email. ON by default. */
     receivingEmailEnabled: z.boolean().default(true),
   }),
+  // Adoption item 8: email alert rules — one rule per event. Alerts only:
+  // an alert never carries an action; approvals stay in the app.
+  alerts: z.object({
+    goodsReceived: alertRule,
+    supplierPayment: alertRule,
+    collection: alertRule,
+    quoteApproved: alertRule,
+    salesOrderConfirmed: alertRule,
+  }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,
   // and the HACIEN sender ID are confirmed. Turning a template on alone does
@@ -439,6 +470,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   invoiceBooklet: "invoice booklet",
   collections: "collections",
   features: "features",
+  alerts: "email alerts",
   messaging: "order text updates",
   taxCalendar: "tax calendar",
   print: "print & company details",
@@ -449,3 +481,43 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
 export function isSettingsKey(key: string): key is SettingsKey {
   return (SETTINGS_KEYS as string[]).includes(key);
 }
+
+export const ALERT_EVENT_KEYS = [
+  "goodsReceived",
+  "supplierPayment",
+  "collection",
+  "quoteApproved",
+  "salesOrderConfirmed",
+] as const;
+export type AlertEventKey = (typeof ALERT_EVENT_KEYS)[number];
+export type AlertRole = z.infer<typeof alertRole>;
+export type AlertRule = Settings["alerts"][AlertEventKey];
+
+/** Labels + help for the Settings "Email alerts" form and audit text. */
+export const ALERT_EVENTS: readonly { key: AlertEventKey; label: string; help: string }[] = [
+  {
+    key: "goodsReceived",
+    label: "Goods received",
+    help: "When a receiving report is posted for a purchase order. The PO's creator always gets this one too, on top of the roles and addresses below.",
+  },
+  {
+    key: "supplierPayment",
+    label: "Supplier payment recorded",
+    help: "When a payment to a supplier is recorded.",
+  },
+  {
+    key: "collection",
+    label: "Collection recorded",
+    help: "When a customer collection (payment received) is recorded.",
+  },
+  {
+    key: "quoteApproved",
+    label: "Quote approved",
+    help: "When a quote's approval is granted.",
+  },
+  {
+    key: "salesOrderConfirmed",
+    label: "Sales order confirmed",
+    help: "When a quote is converted into a sales order.",
+  },
+];
