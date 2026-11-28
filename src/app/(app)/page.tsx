@@ -6,6 +6,7 @@ import { loadHomeDashboard } from "@/lib/home/dashboard";
 import { withConnectionRetry } from "@/lib/connection-retry";
 import { PageHeader } from "@/components/ui";
 import {
+  HomeCountsStrip,
   HomeGettingStarted,
   HomeKpiCards,
   HomeNeedsAction,
@@ -90,6 +91,7 @@ export default async function HomePage() {
         <div className={`home-dashboard${showSales ? " has-sales" : " is-staff"}`}>
           {showSales && dash.kpis ? <HomeKpiCards kpis={dash.kpis} /> : null}
           {dash.pipeline ? <HomePipelineCard pipeline={dash.pipeline} variant="phone" /> : null}
+          <HomeCountsStrip counts={dash.counts} />
 
           <div className={`home-mid${showSales ? "" : " home-mid-full"}`}>
             {showSales && dash.sales ? <HomeSalesSection sales={dash.sales} /> : null}

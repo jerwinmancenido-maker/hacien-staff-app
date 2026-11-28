@@ -12,7 +12,12 @@ import {
   homeTodayPlusDaysYmd,
   incomeTaxStatusLabel,
 } from "@/lib/home/dashboard";
-import { customersNoWithholdingHref } from "@/lib/home/hrefs";
+import {
+  cashHomeHref,
+  customersNoWithholdingHref,
+  salesOrdersOpenStatusHref,
+  salesOrdersToDeliverHref,
+} from "@/lib/home/hrefs";
 import { collectedWholePesos, hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "@/lib/home/money";
 import { nonVatBarFillClass, nonVatBarTone } from "@/lib/home/nonVatBar";
 import {
@@ -24,10 +29,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   canShowActionRow,
+  canShowHomeCashBalances,
   canShowMoneyFigure,
   isHomeEmpty,
   showSupplierBillsDueSoon,
   showTaxDeadline,
+  type HomeFeatureFlags,
 } from "@/lib/home/visibility";
 import { roleFlags, type PermissionUser } from "@/lib/permissions";
 
@@ -321,5 +328,24 @@ describe("incomeTaxStatusLabel (F8 — Home card middle state)", () => {
     const src = readFileSync(path.join(process.cwd(), "src/components/books/TaxCalendarMarkDoneForm.tsx"), "utf8");
     expect(src).toContain("Undo this note?");
     expect(src).toContain("Yes, undo");
+  });
+});
+
+describe("home counts strip (ERP adoption item 9)", () => {
+  const flagsCash: HomeFeatureFlags = { payablesEnabled: false, cashEnabled: true, booksEnabled: false };
+  const flagsOff: HomeFeatureFlags = { payablesEnabled: false, cashEnabled: false, booksEnabled: false };
+
+  it("links each count card at the exact filtered list it counts", () => {
+    expect(salesOrdersToDeliverHref()).toBe("/sales-orders?toDeliver=1&business=own");
+    expect(salesOrdersOpenStatusHref()).toBe("/sales-orders?status=OPEN&business=own");
+    expect(cashHomeHref()).toBe("/cash");
+  });
+
+  it("gates cash balances on the Cash feature + manage_billing (the KPI money gate)", () => {
+    expect(canShowHomeCashBalances(user({ roles: ["ADMIN"], costs: true }), flagsCash)).toBe(true);
+    expect(canShowHomeCashBalances(user({ roles: ["APPROVER"] }), flagsCash)).toBe(true);
+    expect(canShowHomeCashBalances(user({ roles: ["STAFF"] }), flagsCash)).toBe(false);
+    expect(canShowHomeCashBalances(user({ roles: ["VIEWER"] }), flagsCash)).toBe(false);
+    expect(canShowHomeCashBalances(user({ roles: ["ADMIN"], costs: true }), flagsOff)).toBe(false);
   });
 });

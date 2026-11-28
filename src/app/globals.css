@@ -6930,6 +6930,33 @@ button.contact-card-add {
   color: #b91c1c;
 }
 
+/* Count + balance strip (ERP adoption item 9): the KPI cards' language,
+   auto-fitting columns so 2 count cards + N account cards wrap without
+   squeezing any value. */
+.home-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(200px * var(--ui-scale, 1))), 1fr));
+  gap: calc(12px * var(--ui-scale, 1));
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+.home-counts > .card {
+  margin-top: 0; /* defeat global `.card + .card { margin-top }` */
+  height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+a.home-count {
+  text-decoration: none;
+  color: inherit;
+}
+/* Account names run longer than KPI labels — wrap, never clip. */
+.home-count .home-kl {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
 .home-mid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, calc(300px * var(--ui-scale, 1)));
@@ -7613,6 +7640,11 @@ button.contact-card-add {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: calc(8px * var(--ui-scale, 1));
   }
+  .home-counts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: calc(8px * var(--ui-scale, 1));
+  }
+
   /* Phone Pipeline: 2 KPI-sized tiles right after the KPI strip. */
   .home-pipeline-phone {
     display: grid !important;
