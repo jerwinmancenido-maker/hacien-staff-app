@@ -429,12 +429,35 @@ export function ProfessionalPrintDocument({ doc, hideCounterpartyTin = false }: 
           </p>
         )}
 
-        {(doc.terms || doc.notes || doc.deliveryNotes || doc.warrantyNotes) && (
+        {(doc.terms || doc.notes || doc.deliveryNotes || doc.warrantyNotes || doc.paymentSchedule?.length) && (
           <section className="pp-notes">
             {doc.terms && (
               <div className="pp-note-row">
                 <span className="pp-label-inline">Remarks: </span>
                 <span>{doc.terms}</span>
+              </div>
+            )}
+            {doc.paymentSchedule && doc.paymentSchedule.length > 0 && (
+              <div className="pp-schedule">
+                <div className="pp-label">Payment schedule</div>
+                <table className="pp-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Payment</th>
+                      <th>Due</th>
+                      <th className="num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doc.paymentSchedule.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.label}</td>
+                        <td>{r.due}</td>
+                        <td className="num">{formatPeso(r.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
             {doc.deliveryNotes && (
