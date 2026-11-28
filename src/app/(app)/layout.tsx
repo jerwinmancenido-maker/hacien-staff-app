@@ -16,6 +16,7 @@ import { AccountMenu } from "@/components/AccountMenu";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumb, BreadcrumbLabelProvider, SidebarNav } from "@/components/Sidebar";
+import { setSidebarHiddenAction } from "./account/actions";
 import { Avatar } from "@/components/ui";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { getNotifications } from "@/lib/notifications";
@@ -130,7 +131,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <BreadcrumbLabelProvider>
-      <AppFrame sidebar={sidebar} breadcrumb={<Breadcrumb rootLabel={settings.identity.appShortName} />} topbarRight={topbarRight}>
+      <AppFrame
+        sidebar={sidebar}
+        breadcrumb={<Breadcrumb rootLabel={settings.identity.appShortName} />}
+        topbarRight={topbarRight}
+        initialSidebarHidden={user.sidebarHidden}
+        onSidebarHiddenChange={setSidebarHiddenAction}
+      >
         <IdleSignOut idleMs={sessionLimits.idleMs} signOutAction={signOut} remainingMs={idleRemainingMs} />
         {children}
       </AppFrame>
