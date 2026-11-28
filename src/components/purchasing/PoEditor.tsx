@@ -12,6 +12,7 @@ import { useFormAction } from "@/components/useFormAction";
 import { formatMoneyInput, formatPeso } from "@/lib/format";
 import { fromScaled, lineAmounts, toScaled, type ItemKind } from "@/lib/quotes/calc";
 import { overOrder, type SoPickerRow } from "@/lib/purchasing/picker";
+import { costDrift, driftDetailText } from "@/lib/purchasing/drift";
 import type { FormState } from "@/lib/validation/forms";
 import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
@@ -57,7 +58,10 @@ type Row = PoEditorItem & { key: string };
 
 /** "Changed vs SO" comparison that never throws on half-typed editor input
  * (e.g. "2." while retyping 2.00 → 3.00). Unparseable counts as changed —
- * the marker is informational. Raw toScaled here crashed the PO editor. */
+ * the marker is informational. Raw toScaled here crashed the PO editor.
+ * A cost change ADDITIONALLY raises the drift warning (see
+ * lib/purchasing/drift): a stronger warn-styled line naming both prices
+ * and the difference %. */
 function changedVsSo(i: Row): boolean {
   try {
     return (
@@ -171,6 +175,8 @@ export function PoEditor({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQty, setPickerQty] = useState<Record<string, string>>({});
   const [pickerCost, setPickerCost] = useState<Record<string, string>>({});
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const confirmDriftRef = useRef<HTMLInputElement>(null);
 
   /** Add one picker row as a linked PO line. A zero cost needs a confirm
    * (audit B5); going past the remaining qty only warns (settled rule). */
@@ -283,6 +289,31 @@ export function PoEditor({
       {state.message && (
         <div className={`alert ${state.ok ? "ok" : "error"}`} role="status">
           {state.message}
+        </div>
+      )}
+      {state.warning && state.warning !== dismissedWarning && (
+        <div className="alert warn" role="alert">
+          <p>{state.warning}</p>
+          <input ref={confirmDriftRef} type="hidden" name="confirmDriftWarning" defaultValue="" />
+          <div className="form-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={pending}
+              onClick={(ev) => {
+                // Only this button confirms the drift: set the flag, then
+                // submit. The main Save button submits with the flag still
+                // blank, so the server re-issues the warning (PR #360 pattern).
+                if (confirmDriftRef.current) confirmDriftRef.current.value = "1";
+                ev.currentTarget.form?.requestSubmit();
+              }}
+            >
+              Save anyway
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => setDismissedWarning(state.warning ?? null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       {status === "APPROVED" && (
@@ -493,13 +524,20 @@ export function PoEditor({
               </tr>
             </thead>
             <tbody>
-              {items.map((i, idx) => (
+              {items.map((i, idx) => {
+                const drift = i.linked && i.soUnitCost != null ? costDrift(i.unitCost, i.soUnitCost) : null;
+                return (
                 <tr key={i.key}>
                   <td data-label="Description">
                     <PoDescTextarea label={`Line ${idx + 1} description`} value={i.description} onValue={(v) => setItem(i.key, { description: v })} />
                     {i.linked && <div className="small faint">From the sales order</div>}
                     {i.linked && i.soQty != null && changedVsSo(i) && (
                       <div className="small faint">Changed vs sales order — SO: {i.soQty} × {formatPeso(i.soUnitCost ?? "0")}</div>
+                    )}
+                    {drift && (
+                      <div className="small warn-text">
+                        Cost differs from the sales order — {driftDetailText({ ...drift, description: i.description, poUnitCost: i.unitCost, soUnitCost: i.soUnitCost ?? "0" })}
+                      </div>
                     )}
                     {i.linked && i.remainingQty != null && overOrder(i.qty, i.remainingQty) && (
                       <div className="small warn-text">More than what is left on the sales order ({i.remainingQty} left) — saved as an extra.</div>
@@ -527,7 +565,8 @@ export function PoEditor({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
