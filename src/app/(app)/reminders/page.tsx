@@ -24,6 +24,7 @@ export default async function RemindersPage() {
           {r.entityNumber ? ` ${r.entityNumber}` : ""}
         </Link>
         <div className="small faint">{r.note}</div>
+        {r.doneReason ? <div className="small faint">{r.doneReason}</div> : null}
       </td>
       <td className="num">{formatDate(new Date(`${r.remindAt}T00:00:00.000Z`))}</td>
       <td>
@@ -36,9 +37,9 @@ export default async function RemindersPage() {
     </tr>
   );
 
-  const table = (rows: typeof reminders, label: string, empty: string) => (
+  const table = (rows: typeof reminders, label: string, empty: string, id?: string) => (
     <>
-      <h2>{label}</h2>
+      <h2 id={id}>{label}</h2>
       {rows.length === 0 ? (
         <p className="faint">{empty}</p>
       ) : (
@@ -61,7 +62,7 @@ export default async function RemindersPage() {
   return (
     <>
       <PageHeader title="Reminders" subtitle="Your own reminders on quotes, sales orders and supplier POs. Set one from any of those records." />
-      {table(overdue, "Overdue", "Nothing overdue.")}
+      {table(overdue, "Overdue", "Nothing overdue.", "overdue")}
       {table(upcoming, "Upcoming", "No upcoming reminders — set one from a quote, sales order or PO.")}
       {table(done, "Done", "Nothing done yet.")}
     </>

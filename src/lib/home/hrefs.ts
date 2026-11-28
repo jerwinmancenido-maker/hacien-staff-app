@@ -123,6 +123,12 @@ export function salesOrdersOpenStatusHref(): string {
   return `/sales-orders?status=OPEN&business=own`;
 }
 
+/** My reminders, overdue section — the list behind the Home overdue count
+ *  (the Reminders page opens with exactly that section). */
+export function remindersOverdueHref(): string {
+  return "/reminders#overdue";
+}
+
 /** Cash home — the page whose table carries the "Not assigned" row. */
 export function cashHomeHref(): string {
   return "/cash";

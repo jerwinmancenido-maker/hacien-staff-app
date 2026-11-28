@@ -39,6 +39,7 @@ import {
 import type { CreateFromSoInput, PoInput, PoLineInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { defaultAddress } from "./addresses";
+import { autoCloseReminders } from "./reminders";
 
 export type PoActor = PermissionUser & { id: string };
 
@@ -772,6 +773,11 @@ async function transition(
     const err = await check(before, tx);
     if (err) throw new DocRuleError(err);
     const after = await tx.purchaseOrder.update({ where: { id }, data: { ...data(before), updatedBy: { connect: { id: actor.id } } } });
+    // Adoption item 13: CLOSED is the terminal PO state reached through this
+    // helper (close / short-close) — close its reminders in the same tx.
+    if (after.status === "CLOSED") {
+      await autoCloseReminders(tx, "PURCHASE_ORDER", id, "Auto-closed: PO closed");
+    }
     await writeAudit(tx, {
       userId: actor.id,
       entityType: "PurchaseOrder",
@@ -877,6 +883,7 @@ export async function voidPurchaseOrder(id: string, reason: string, actor: PoAct
     if (err) throw new DocRuleError(err);
     const now = new Date();
     const after = await tx.purchaseOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
+    await autoCloseReminders(tx, "PURCHASE_ORDER", id, "Auto-closed: PO voided");
     // Free the SO lines so they can go on a new PO.
     await tx.purchaseOrderItem.updateMany({
       where: { purchaseOrderId: id },
