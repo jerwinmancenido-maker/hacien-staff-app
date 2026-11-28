@@ -46,6 +46,9 @@ model User {
   // Turned-off users cannot sign in; they are never deleted.
   active       Boolean   @default(true)
   archivedAt   DateTime?
+  // ERP adoption item 2: the user's own sidebar show/hide choice,
+  // remembered across sign-ins and devices (the ERP forgets on reload).
+  sidebarHidden Boolean  @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

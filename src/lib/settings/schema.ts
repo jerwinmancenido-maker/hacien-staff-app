@@ -316,6 +316,8 @@ export const settingsSections = {
     itemsImportEnabled: z.boolean().default(false),
     /** Phase 4 #10: period close controls on the Books page. OFF by default. */
     periodCloseEnabled: z.boolean().default(false),
+    /** Adoption item 5: goods-received team email. ON by default. */
+    receivingEmailEnabled: z.boolean().default(true),
   }),
   // Q16 S-95: order text updates, Admin toggles on the Messages page.
   // Default chosen: ALL OFF until UniSMS keys, the UniSMS DPA + DB location,
