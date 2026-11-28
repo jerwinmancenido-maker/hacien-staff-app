@@ -430,7 +430,7 @@ type SoProps = {
   billings?: { id: string; number: string }[];
 };
 
-export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, customerId, isAdmin = false, ownCompanyName, currentBusinessId = null, businesses = [], reclassifyBusinessAction, showGapNote = false, gapPartial = false, gapReasonCode = null, currentGapNote = null, setGapReasonAction, canRemind = false, reminderAction }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; customerId?: string; isAdmin?: boolean; ownCompanyName?: string; currentBusinessId?: string | null; businesses?: { id: string; name: string; active: boolean }[]; reclassifyBusinessAction?: (state: FormState, form: FormData) => Promise<FormState>; showGapNote?: boolean; gapPartial?: boolean; gapReasonCode?: string | null; currentGapNote?: string | null; setGapReasonAction?: (state: FormState, form: FormData) => Promise<FormState>; canRemind?: boolean; reminderAction?: (state: FormState, form: FormData) => Promise<FormState> }) {
+export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDelete, voidAction, deleteAction, billings = [], canBill = false, canCreatePos = false, canCollect = false, canRecordDelivery = false, customerId, isAdmin = false, ownCompanyName, currentBusinessId = null, businesses = [], reclassifyBusinessAction, showGapNote = false, gapPartial = false, gapReasonCode = null, currentGapNote = null, setGapReasonAction, canRemind = false, reminderAction }: SoProps & { canBill?: boolean; canCreatePos?: boolean; canCollect?: boolean; canRecordDelivery?: boolean; customerId?: string; isAdmin?: boolean; ownCompanyName?: string; currentBusinessId?: string | null; businesses?: { id: string; name: string; active: boolean }[]; reclassifyBusinessAction?: (state: FormState, form: FormData) => Promise<FormState>; showGapNote?: boolean; gapPartial?: boolean; gapReasonCode?: string | null; currentGapNote?: string | null; setGapReasonAction?: (state: FormState, form: FormData) => Promise<FormState>; canRemind?: boolean; reminderAction?: (state: FormState, form: FormData) => Promise<FormState> }) {
   const [voiding, setVoiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
@@ -442,6 +442,11 @@ export function SalesOrderActions({ id, number, status, canEdit, canVoid, canDel
   // separate buttons on the SO page; they are menu items now.
   if (canBill) items.push({ key: "record-billing", label: "Record billing", href: `/billing/billings/new?salesOrderId=${id}` });
   if (canCollect && customerId) items.push({ key: "record-collection", label: "Record collection", href: `/billing/collections/new?customerId=${customerId}` });
+  // Adoption item 12: Record delivery deep-links into the Deliveries tab
+  // with the existing delivery form open — never a second form. The page
+  // shows it only while a delivery can actually be recorded (OPEN order,
+  // edit_data, qty still remaining), mirroring DeliverySection's own gate.
+  if (canRecordDelivery) items.push({ key: "record-delivery", label: "Record delivery", href: `/sales-orders/${id}?tab=deliveries&record=1` });
   if (canCreatePos) items.push({ key: "create-pos", label: "Create POs", href: `/sales-orders/${id}/purchase-orders` });
   // REQ-SO-ACTIONS-MOVE-001: the Business card and the billing gap-note
   // card moved off the page body into this menu; each item opens the
