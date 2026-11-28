@@ -148,3 +148,96 @@ export function storeOrderConfirmationEmail(
     `</td></tr></table></td></tr></table></body></html>`;
   return { subject, text, html };
 }
+
+export type ReceivingNotification = {
+  poNumber: string;
+  rrNumber: string;
+  supplierName: string;
+  recordedByName: string;
+  receivedByName: string;
+  receivedDateLabel: string;
+  fullyReceived: boolean;
+  /** Lines on THIS receiving report: qty now, running total, ordered qty. */
+  lines: { title: string; unit: string; qtyNow: string; qtyReceivedTotal: string; qtyOrdered: string }[];
+  /** Lines still owed after this report (empty when fully received). */
+  outstanding: { title: string; unit: string; qtyRemaining: string }[];
+  poUrl: string;
+};
+
+/**
+ * Staff-facing goods-received note (ERP adoption item 5). Quantities only —
+ * receiving carries no prices, and this email never shows costs. Same shell
+ * as the other staff emails, STAFF APP lockup included: the readers are the
+ * team, not a customer.
+ */
+export function receivingNotificationEmail(
+  o: ReceivingNotification,
+  identity: EmailIdentity = emailIdentity(DEFAULT_SETTINGS),
+): { subject: string; text: string; html: string } {
+  const subject = o.fullyReceived
+    ? `Goods received — ${o.poNumber} fully received`
+    : `Goods received — ${o.poNumber} (partial)`;
+
+  const receivedText = o.lines.map(
+    (l) => `- ${l.title} — ${qtyLabel(l.qtyNow)} ${l.unit} received (${qtyLabel(l.qtyReceivedTotal)} of ${qtyLabel(l.qtyOrdered)} ${l.unit} in total)`,
+  );
+  const outstandingText = o.outstanding.map((l) => `- ${l.title} — ${qtyLabel(l.qtyRemaining)} ${l.unit} still to come`);
+  const textLines = [
+    `Goods were received for purchase order ${o.poNumber} — receiving report ${o.rrNumber}.`,
+    "",
+    `Supplier: ${o.supplierName}`,
+    `Recorded by: ${o.recordedByName} · Received by: ${o.receivedByName} · Date: ${o.receivedDateLabel}`,
+    "",
+    "Received this time:",
+    ...receivedText,
+    "",
+    ...(o.fullyReceived
+      ? [`This completes the order — everything on ${o.poNumber} has now been received.`, ""]
+      : ["Still outstanding:", ...outstandingText, ""]),
+    `View the purchase order: ${o.poUrl}`,
+    "",
+    identity.shortName,
+    identity.footerLine,
+  ];
+  const text = textLines.join("\n");
+
+  const receivedRows = o.lines
+    .map(
+      (l) =>
+        `<tr><td style="padding:8px 0;font-size:14px;line-height:1.5;">${escapeHtml(l.title)}<br><span style="color:#666666;font-size:13px;">${escapeHtml(qtyLabel(l.qtyReceivedTotal))} of ${escapeHtml(qtyLabel(l.qtyOrdered))} ${escapeHtml(l.unit)} in total</span></td>` +
+        `<td align="right" style="padding:8px 0;font-size:14px;white-space:nowrap;">${escapeHtml(qtyLabel(l.qtyNow))} ${escapeHtml(l.unit)}</td></tr>`,
+    )
+    .join("");
+  const outstandingBlock = o.fullyReceived
+    ? `<p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#444444;">This completes the order — everything on ${escapeHtml(o.poNumber)} has now been received.</p>`
+    : `<p style="margin:20px 0 8px;font-size:14px;font-weight:bold;">Still outstanding</p>` +
+      o.outstanding
+        .map(
+          (l) =>
+            `<p style="margin:0 0 4px;font-size:14px;line-height:1.5;">${escapeHtml(l.title)} — ${escapeHtml(qtyLabel(l.qtyRemaining))} ${escapeHtml(l.unit)} still to come</p>`,
+        )
+        .join("");
+  const html =
+    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>` +
+    `<body style="margin:0;padding:0;background:#f2f2f2;font-family:Arial,Helvetica,sans-serif;color:#111111;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;">` +
+    `<tr><td align="center" style="padding:40px 16px;">` +
+    `<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">` +
+    `<tr><td style="background:#111111;padding:20px 32px;">` +
+    `<span style="font-size:20px;font-weight:bold;letter-spacing:2px;color:#ffffff;">${escapeHtml(identity.wordmark)}</span>` +
+    `<span style="font-size:12px;letter-spacing:2px;color:#cccccc;"> &nbsp;STAFF APP</span>` +
+    `</td></tr>` +
+    `<tr><td style="padding:32px;">` +
+    `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;">Goods received</h1>` +
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Goods were received for purchase order <strong>${escapeHtml(o.poNumber)}</strong> — receiving report ${escapeHtml(o.rrNumber)}.</p>` +
+    `<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#444444;">Supplier: ${escapeHtml(o.supplierName)}<br>Recorded by: ${escapeHtml(o.recordedByName)} · Received by: ${escapeHtml(o.receivedByName)} · Date: ${escapeHtml(o.receivedDateLabel)}</p>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${receivedRows}</table>` +
+    outstandingBlock +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 0;"><tr><td align="center" bgcolor="${identity.accentColor}" style="background:${identity.accentColor};border-radius:6px;"><a href="${escapeHtml(o.poUrl)}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">View the purchase order</a></td></tr></table>` +
+    `</td></tr>` +
+    `<tr><td style="padding:20px 32px;border-top:1px solid #eeeeee;">` +
+    `<p style="margin:0 0 4px;font-size:12px;color:#999999;">${escapeHtml(identity.footerLine)}</p>` +
+    `<p style="margin:0;font-size:12px;color:#999999;">This is an automated message.</p>` +
+    `</td></tr></table></td></tr></table></body></html>`;
+  return { subject, text, html };
+}
