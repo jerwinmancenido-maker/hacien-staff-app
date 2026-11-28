@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { formatDate, formatPeso } from "@/lib/format";
-import { groupItemDocuments, groupItemHistory, listItemDetailEntries, listSupplierPriceComparison } from "@/lib/items/history";
+import {
+  getItemLastCost,
+  groupItemDocuments,
+  groupItemHistory,
+  listItemDetailEntries,
+  listSupplierPriceComparison,
+  type ItemHistoryRow,
+} from "@/lib/items/history";
+import { dealMargin } from "@/lib/services/profit";
 import type { ItemTab } from "@/lib/items/tabs";
 
 /** Document type label for the where-used list. */
@@ -11,6 +19,65 @@ const day = (ymdStr: string | null) => (ymdStr ? formatDate(new Date(`${ymdStr}T
 
 function docHref(kind: "quote" | "sales_order" | "purchase_order", id: string): string {
   return kind === "quote" ? `/quotes/${id}` : kind === "sales_order" ? `/sales-orders/${id}` : `/purchase-orders/${id}`;
+}
+
+/**
+ * Adoption item 11: margin glance — the item's last selling price (the
+ * same "Last price" as the section above) against its last supplier cost
+ * overall (getItemLastCost), with the margin from the shared dealMargin
+ * math (margin % is blank when the price is 0 or the cost was never set).
+ * Costs are cost data: this section renders only when showCosts and is
+ * absent entirely otherwise — no placeholder that could leak a figure.
+ */
+async function MarginGlance({ description, last }: { description: string; last: ItemHistoryRow | undefined }) {
+  const lastCost = await getItemLastCost(description);
+  const sellPrice = last?.lastPrice ?? null;
+  const margin = sellPrice != null && lastCost != null ? dealMargin(sellPrice, lastCost.lastCost) : null;
+  return (
+    <section aria-label="Margin glance">
+      <h2>Margin glance</h2>
+      {lastCost == null ? (
+        <p className="faint">No purchase yet — no supplier PO for this item, so there is no cost to compare.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="list">
+            <thead>
+              <tr>
+                <th className="num">Last price</th>
+                <th className="num">Last cost</th>
+                <th className="num">Margin</th>
+                <th className="num">Margin %</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="num">
+                  {sellPrice != null ? (
+                    <>
+                      {formatPeso(sellPrice)}
+                      <div className="small faint">
+                        {last?.lastPriceRef} · {day(last?.lastPriceDate ?? null)}
+                      </div>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="num">
+                  {formatPeso(lastCost.lastCost)}
+                  <div className="small faint">
+                    {lastCost.supplierName} · {lastCost.poNumber} · {day(lastCost.lastCostDate)}
+                  </div>
+                </td>
+                <td className="num">{margin ? formatPeso(margin.margin) : "—"}</td>
+                <td className="num">{margin?.marginPct != null ? `${margin.marginPct}%` : "—"}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 /** Tab badge counts for the item detail pages: priced lines, documents the
@@ -220,6 +287,7 @@ export default async function ItemHistoryDetail({
           </div>
         )}
       </section>
+      {showCosts ? <MarginGlance description={description} last={last} /> : null}
     </div>
   );
 }
