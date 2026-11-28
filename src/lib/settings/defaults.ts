@@ -71,6 +71,15 @@ export const DEFAULT_SETTINGS: Settings = {
       "COD",
     ],
     contactRoles: ["End user", "Procurement", "Accounting", "Other"],
+    // ERP adoption item 10: mirrors PAYMENT_TERM_PRESET_SEED in ./schema
+    // (kept literal so prisma/seed.mts can load this file without a deep
+    // import chain; pinned equal by tests).
+    paymentTermPresets: [
+      { name: "COD", text: "COD", active: true },
+      { name: "50/50", text: "50% down, 50% on delivery", active: true },
+      { name: "Net 30", text: "Net 30 (approved accounts only)", active: true },
+      { name: "100% upfront", text: "100% upfront (software and special orders)", active: true },
+    ],
   },
   documents: { expiryWarningDays: 30 },
   invoiceBooklet: {

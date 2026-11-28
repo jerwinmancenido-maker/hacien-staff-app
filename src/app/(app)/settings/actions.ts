@@ -7,9 +7,9 @@ import { redirect } from "next/navigation";
 import { requireActionPermission } from "@/lib/auth/current-user";
 import { runAction } from "@/lib/actions";
 import { ROLES, type Role } from "@/lib/permissions";
-import { saveSettings } from "@/lib/settings";
+import { getSettingsSnapshot, saveSettings } from "@/lib/settings";
 import { settingsValueFromForm } from "@/lib/settings/form";
-import { isSettingsKey } from "@/lib/settings/schema";
+import { isSettingsKey, paymentTermPresetsSchema } from "@/lib/settings/schema";
 import { saveWithholdingRates } from "@/lib/services/withholding";
 import { saveBusiness, setBusinessActive } from "@/lib/services/businesses";
 import { createUser, resendInvite, setUserActive, updateUser, userSchema } from "@/lib/services/users";
@@ -95,6 +95,46 @@ export async function savePrintCompanyAction(_prev: FormState, form: FormData): 
         : "Nothing changed.",
     };
   }, values);
+}
+
+/**
+ * ERP adoption item 10: save the payment-term presets. Presets live in the
+ * settings "lists" section alongside the plain payment-terms options; this
+ * action swaps only the presets, keeping the rest of the section as-is.
+ * The save goes through saveSettings, so it is versioned and audited like
+ * every other settings change. Presets are never deleted — untick Active.
+ */
+export async function savePaymentTermPresetsAction(_prev: FormState, form: FormData): Promise<FormState> {
+  return runAction(async () => {
+    const user = await requireActionPermission("manage_settings");
+    let rows: unknown;
+    try {
+      rows = JSON.parse(str(form, "rows"));
+    } catch {
+      return { message: "Couldn't read the table. Reload the page and try again." };
+    }
+    const parsed = paymentTermPresetsSchema.safeParse(rows);
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) fieldErrors[issue.path.join(".") || "_"] ??= issue.message;
+      return { fieldErrors, message: fieldErrors._ ?? "Fix the rows marked below." };
+    }
+    const snap = await getSettingsSnapshot();
+    const result = await saveSettings({
+      key: "lists",
+      value: { ...snap.settings.lists, paymentTermPresets: parsed.data },
+      userId: user.id,
+      baseVersionId: str(form, "baseVersionId"),
+    });
+    if (!result.ok) return { fieldErrors: result.fieldErrors, message: "Fix the fields marked below." };
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message: result.changed
+        ? `Saved as version ${result.version.version}. New documents use it from now on.`
+        : "Nothing changed.",
+    };
+  });
 }
 
 export async function saveWithholdingAction(_prev: FormState, form: FormData): Promise<FormState> {

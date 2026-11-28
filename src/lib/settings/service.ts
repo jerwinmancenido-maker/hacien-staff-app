@@ -79,6 +79,13 @@ function toSnapshot(v: SettingsVersionRecord): SettingsSnapshot {
         };
       })(),
       collections: { ...DEFAULT_SETTINGS.collections, ...(v.data as Partial<Settings>).collections },
+      lists: {
+        ...DEFAULT_SETTINGS.lists,
+        ...(v.data as Partial<Settings>).lists,
+        // Snapshots saved before presets existed keep the seed presets.
+        paymentTermPresets:
+          (v.data as Partial<Settings>).lists?.paymentTermPresets ?? DEFAULT_SETTINGS.lists.paymentTermPresets,
+      },
       features: { ...DEFAULT_SETTINGS.features, ...(v.data as Partial<Settings>).features },
       messaging: { ...DEFAULT_SETTINGS.messaging, ...(v.data as Partial<Settings>).messaging },
       company: { ...DEFAULT_SETTINGS.company, ...(v.data as Partial<Settings>).company },

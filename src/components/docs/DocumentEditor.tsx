@@ -174,6 +174,9 @@ type Props = {
   /** Suppliers for the item lines; only passed to users who can see costs. */
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Payment-term presets from Settings (ERP adoption item 10): picking
+   * one fills the terms field with the preset's text. Active only. */
+  termsPresets?: { name: string; text: string }[];
   /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
   contactRoles: string[];
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -339,7 +342,7 @@ function WhSummaryChips({ docRates }: { docRates: { code: string; label: string;
   );
 }
 
-export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, contactRoles, action, cancelHref, priceLock, whFrozenSiNo, ownCompanyName = FALLBACK_SHORT_NAME }: Props) {
+export function DocumentEditor({ mode, isNew, initial, customers: customersProp, rates: allRates, suppliers, termsOptions, termsPresets = [], contactRoles, action, cancelHref, priceLock, whFrozenSiNo, ownCompanyName = FALLBACK_SHORT_NAME }: Props) {
   const { state, pending, onSubmit } = useFormAction(action);
   const formRef = useRef<HTMLFormElement>(null);
   const skipCostWarn = useRef(false);
@@ -762,6 +765,27 @@ export function DocumentEditor({ mode, isNew, initial, customers: customersProp,
               ))}
             </select>
           </div>
+          {termsPresets.length > 0 && (
+            <div className="field">
+              <label htmlFor="termsPreset">Preset</label>
+              <select
+                id="termsPreset"
+                value=""
+                onChange={(ev) => {
+                  const preset = termsPresets.find((p) => p.name === ev.target.value);
+                  if (preset) setH({ ...h, terms: preset.text });
+                }}
+              >
+                <option value="">Fill from a preset…</option>
+                {termsPresets.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">Fills the terms above · You can still change them after</div>
+            </div>
+          )}
           {mode === "quote" ? (
             <div className={`field full${e.withholdingCodes || e.withholding ? " has-error" : ""}`}>
               <WithholdingPickField

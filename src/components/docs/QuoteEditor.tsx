@@ -97,6 +97,9 @@ export type QuoteEditorProps = {
   rates: WithholdingSnapshot[];
   suppliers: { id: string; name: string }[] | null;
   termsOptions: string[];
+  /** Payment-term presets from Settings (ERP adoption item 10): picking
+   * one fills the terms field with the preset's text. Active only. */
+  termsPresets?: { name: string; text: string }[];
   /** Allowed contact roles from Settings → Lists (for the inline Add contact drawer). */
   contactRoles: string[];
   defaultValidityDays: number;
@@ -324,6 +327,7 @@ export function QuoteEditor({
   rates: allRates,
   suppliers,
   termsOptions,
+  termsPresets = [],
   contactRoles,
   defaultValidityDays,
   printDefaults,
@@ -2722,6 +2726,27 @@ export function QuoteEditor({
                 <div className="hint">Prints on the quote · From Settings, edit for this quote</div>
                 {e.terms && <div className="error">{e.terms}</div>}
               </div>
+              {termsPresets.length > 0 && (
+                <div className="quote-f quote-f-w2 field">
+                  <label htmlFor="termsPreset">Preset</label>
+                  <select
+                    id="termsPreset"
+                    value=""
+                    onChange={(ev) => {
+                      const preset = termsPresets.find((p) => p.name === ev.target.value);
+                      if (preset) setH({ ...h, terms: preset.text });
+                    }}
+                  >
+                    <option value="">Fill from a preset…</option>
+                    {termsPresets.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="hint">Fills the payment terms above · You can still change them after</div>
+                </div>
+              )}
               {showDeliveryWarranty ? (
                 <>
                   <div className="quote-f quote-f-w2 field">

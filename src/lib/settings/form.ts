@@ -1,7 +1,7 @@
 // Builds a settings section value from a submitted form (input names are the
 // field paths inside the section, e.g. "quote.prefix").
 
-import type { SettingsKey } from "./schema";
+import { PAYMENT_TERM_PRESET_SEED, paymentTermPresetsSchema, type SettingsKey } from "./schema";
 
 type Get = (name: string) => string | null;
 
@@ -125,8 +125,26 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         website: get("website") ?? "",
         logoStorageKey: get("logoStorageKey") ?? "",
       };
-    case "lists":
-      return { paymentTerms: lines(get("paymentTerms")), contactRoles: lines(get("contactRoles")) };
+    case "lists": {
+      // Presets ride along as a hidden JSON field (rendered by the Lists
+      // form from the current settings) so saving the plain lists never
+      // resets them; absent or unreadable JSON falls back to the seed.
+      let paymentTermPresets: unknown = PAYMENT_TERM_PRESET_SEED;
+      const rawPresets = get("paymentTermPresets");
+      if (rawPresets) {
+        try {
+          const parsed = paymentTermPresetsSchema.safeParse(JSON.parse(rawPresets));
+          if (parsed.success) paymentTermPresets = parsed.data;
+        } catch {
+          // Keep the seed fallback.
+        }
+      }
+      return {
+        paymentTerms: lines(get("paymentTerms")),
+        contactRoles: lines(get("contactRoles")),
+        paymentTermPresets,
+      };
+    }
     case "documents":
       return { expiryWarningDays: get("expiryWarningDays") };
     case "invoiceBooklet": {
