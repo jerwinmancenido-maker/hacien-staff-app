@@ -39,3 +39,16 @@ export async function disableTwoFactorAction(_prev: FormState, form: FormData): 
     return { ok: true, message: "Two-step sign-in is off." };
   });
 }
+
+/**
+ * ERP adoption item 2 (hideable sidebar): remember the signed-in user's own
+ * sidebar show/hide choice on their user record, so it survives reloads,
+ * sign-ins and device changes (the ERP forgets it on reload). Called
+ * fire-and-forget by the shell toggle; the (app) layout reads the value back
+ * on the next full load. Signed out = nothing to save to, silently done.
+ */
+export async function setSidebarHiddenAction(hidden: boolean): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) return;
+  await db.user.update({ where: { id: user.id }, data: { sidebarHidden: hidden } });
+}

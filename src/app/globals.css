@@ -3575,6 +3575,35 @@ pre.json {
   background: rgba(10, 10, 10, 0.4);
 }
 
+/* Desktop sidebar toggle (ERP adoption item 2): one button in the topbar
+   hides the sidebar completely — no icon rail — and the content takes the
+   full width. The choice is the user's own and is remembered (persisted on
+   the user record). At <=768px the sidebar is the off-canvas drawer: this
+   button steps aside and .nav-toggle / .nav-open govern, whatever the saved
+   desktop choice is. */
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(36px * var(--ui-scale, 1));
+  height: calc(36px * var(--ui-scale, 1));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+@media (min-width: 769px) {
+  .frame.sidebar-hidden {
+    grid-template-columns: 1fr;
+  }
+  .frame.sidebar-hidden .sidebar {
+    display: none;
+  }
+}
+
 /* ---------- Mobile Responsiveness (down to 375px) ---------- */
 @media (max-width: 768px) {
   .frame {
@@ -3586,6 +3615,9 @@ pre.json {
   }
   .nav-toggle {
     display: inline-flex;
+  }
+  .sidebar-toggle {
+    display: none;
   }
   .nav-backdrop {
     display: block;
