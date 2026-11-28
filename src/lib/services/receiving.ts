@@ -18,6 +18,7 @@ import type { ReceiptInput } from "../validation/purchasing";
 import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
+import { notifyGoodsReceived } from "./receiving-notify";
 import { assertPeriodOpen } from "./period-close";
 
 export type RrActor = PermissionUser & { id: string };
@@ -71,7 +72,7 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
   await ensureSeries(db, "RECEIVING_REPORT", year, format);
   const uploads = await prepareUploads(files);
   try {
-    return await withTxRetry(() =>
+    const posted = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const po = await lockForReceiving(tx, purchaseOrderId);
         const err = poActionError(po.status, "receive");
@@ -143,6 +144,12 @@ export async function postReceivingReport(purchaseOrderId: string, input: Receip
         return rr;
       }, DOC_TX),
     );
+    // Adoption item 5: tell the team the goods arrived. Runs AFTER the
+    // receiving transaction commits; notifyGoodsReceived never throws (a
+    // mail failure is logged + audited, the receiving stands) - the extra
+    // catch is belt-and-braces so the posting path cannot change.
+    await notifyGoodsReceived(posted.id).catch(() => {});
+    return posted;
   } catch (e) {
     await discardUploads(uploads);
     throw e;
