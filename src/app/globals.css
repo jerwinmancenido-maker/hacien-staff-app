@@ -4728,6 +4728,61 @@ table.list.collections-table td {
 .qty-bar span.full {
   background: var(--blue);
 }
+/* Order lists (ERP adoption item 7): per-document progress — labelled
+   mini-bars (Delivered/Billed/Paid, Received/Billed/Paid) in one cell.
+   Same track/fill language as .qty-bar. On phones the track hides and the
+   label + percent text stay, so the numbers survive at 390px. */
+.prog {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3px * var(--ui-scale, 1));
+  min-width: calc(132px * var(--ui-scale, 1));
+}
+.prog-row {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale, 1));
+}
+.prog-label {
+  flex: 0 0 calc(54px * var(--ui-scale, 1));
+  font-size: calc(11px * var(--ui-scale, 1));
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.prog-bar {
+  flex: 1 1 auto;
+  height: calc(6px * var(--ui-scale, 1));
+  border-radius: calc(999px * var(--ui-scale, 1));
+  background: var(--fill);
+  overflow: hidden;
+}
+.prog-bar span {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  border-radius: calc(999px * var(--ui-scale, 1));
+}
+.prog-bar span.full {
+  background: var(--blue);
+}
+.prog-pct {
+  flex: 0 0 auto;
+  min-width: calc(36px * var(--ui-scale, 1));
+  text-align: right;
+  font-size: calc(11.5px * var(--ui-scale, 1));
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .prog {
+    min-width: 0;
+  }
+  .prog-bar {
+    display: none;
+  }
+  .prog-label {
+    flex-basis: auto;
+  }
+}
 .attach-list {
   list-style: none;
   margin: 0;

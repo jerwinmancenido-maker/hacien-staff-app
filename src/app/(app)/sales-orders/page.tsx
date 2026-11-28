@@ -6,6 +6,7 @@ import { parsePageParam } from "@/lib/paging";
 import { ListPager } from "@/components/ListPager";
 import { formatDate, formatPeso } from "@/lib/format";
 import { DataTable } from "@/components/DataTable";
+import { ProgressBars } from "@/components/ProgressBars";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
 import { SO_STATUS_LABELS, SoStatusChip } from "@/components/docs/DocParts";
@@ -145,6 +146,7 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
             { key: "total", label: "Total", numeric: true },
             { key: "status", label: "Status" },
             { key: "date", label: "Date", className: "col-phone-hide" },
+            { key: "progress", label: "Progress", sortable: false },
           ]}
           rows={orders.map((o) => ({
             id: o.id,
@@ -161,6 +163,18 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
               total: <span className="strong">{formatPeso(o.contractPrice)}</span>,
               status: <SoStatusChip status={o.status} />,
               date: formatDate(new Date(`${o.date}T00:00:00.000Z`)),
+              progress: o.progress ? (
+                <ProgressBars
+                  context={o.number}
+                  measures={[
+                    { label: "Delivered", pct: o.progress.deliveredPct },
+                    { label: "Billed", pct: o.progress.billedPct },
+                    { label: "Paid", pct: o.progress.paidPct },
+                  ]}
+                />
+              ) : (
+                <span className="faint">—</span>
+              ),
             },
             sort: { number: o.number, customer: o.customerName, po: o.buyerPoNo, total: Number(o.contractPrice), status: o.status, date: o.date },
           }))}
