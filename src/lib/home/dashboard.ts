@@ -6,13 +6,15 @@ import { arAgingSummary, countPending2307Certificates, getAllBookletWarnings, li
 import { currentMonthPeriod } from "../books/period";
 import { isBooksEnabled } from "../books/features";
 import { isCashEnabled } from "../cash/features";
+import { CASH_ACCOUNT_TYPE_LABELS } from "../cash/labels";
 import { db } from "../db";
 import { addDays, formatDate, isoDate, manilaToday } from "../format";
 import { isPayablesEnabled } from "../payables/features";
 import { listSupplierBillsDueSoon } from "../payables/views";
 import { can, canSeeCosts, type PermissionUser } from "../permissions";
 import { listReceivingView, listPurchaseOrdersView } from "../purchasing/views";
-import { listQuotesView, listSalesOrdersView } from "../quotes/views";
+import { listQuotesView, listSalesOrdersPageView, listSalesOrdersView } from "../quotes/views";
+import { cashPositionSummary } from "../services/cash-accounts";
 import { listCustomers } from "../services/companies";
 import { getSettingsSnapshot } from "../settings";
 import { getNonVatMeter, formatNonVatPctLabel, NON_VAT_MESSAGES } from "../services/non-vat";
@@ -45,6 +47,9 @@ import {
   salesOrdersNeedsPoHref,
   supplierBillsDueSoonHref,
   taxCalendarHref,
+  cashHomeHref,
+  salesOrdersOpenStatusHref,
+  salesOrdersToDeliverHref,
 } from "./hrefs";
 import { hasOverdueOwed, owedByCustomersSplit, sumPesoAmounts } from "./money";
 import { formatCompactPesoLimit } from "./nonVatCopy";
@@ -69,6 +74,7 @@ import {
 } from "./sales";
 import {
   canShowActionRow,
+  canShowHomeCashBalances,
   canShowMoneyFigure,
   isHomeEmpty,
   showTaxDeadline,
@@ -242,6 +248,40 @@ export type HomeHeaderActions = {
   newBillingHref: string | null;
 };
 
+export type HomeCountCard = {
+  label: string;
+  count: number;
+  href: string;
+};
+
+export type HomeCashBalanceRow = {
+  id: string;
+  name: string;
+  /** Type label + last-4 hint, e.g. "Bank account · ···1177"; null when neither is set. */
+  detail: string | null;
+  balance: string;
+  href: string;
+};
+
+/**
+ * Count cards under the KPI strip (ERP adoption item 9). Every figure is a
+ * live count / balance computed from the same source its link opens:
+ * - ordersToDeliver: the SO list's own "Still to deliver" total — own-company
+ *   OPEN orders with at least one live line whose deliveredQty < qty (VOID
+ *   excluded by status; CLOSED orders are fully delivered by construction).
+ * - openSalesOrders: every own-company SO with status OPEN (the enum's only
+ *   non-VOID, non-CLOSED state).
+ * - cashBalances / unassignedCash: cashPositionSummary(), the exact figures
+ *   the Cash pages show; only present behind the dashboard money gate.
+ * Null / empty when the viewer may not see that figure.
+ */
+export type HomeCounts = {
+  ordersToDeliver: HomeCountCard | null;
+  openSalesOrders: HomeCountCard | null;
+  cashBalances: HomeCashBalanceRow[];
+  unassignedCash: { balance: string; href: string } | null;
+};
+
 export type HomeDashboard = {
   empty: boolean;
   gettingStarted: { addCustomerHref: string; makeQuoteHref: string } | null;
@@ -252,6 +292,7 @@ export type HomeDashboard = {
   /** KPI strip; null without manage_billing (same gate as sales). */
   kpis: HomeKpis | null;
   header: HomeHeaderActions;
+  counts: HomeCounts;
   money: HomeMoneyRow[];
   tax: HomeTaxDeadline | null;
   incomeTaxFilings?: HomeIncomeTaxFilings | null;
@@ -511,6 +552,44 @@ async function loadHomePipeline(user: PermissionUser): Promise<HomePipeline | nu
   });
 }
 
+async function loadHomeCounts(user: PermissionUser, features: HomeFeatureFlags): Promise<HomeCounts> {
+  const canViewOrders = can(user, "view");
+  const showCash = canShowHomeCashBalances(user, features);
+  const [toDeliverPage, openCount, cash] = await Promise.all([
+    // The linked list's own total, so the card can never disagree with the
+    // page it opens (same doctrine as the Needs action parity tests).
+    canViewOrders ? listSalesOrdersPageView({ toDeliver: true, businessId: "own" }, 1, 1) : null,
+    canViewOrders ? db.salesOrder.count({ where: { status: "OPEN", businessId: null } }) : null,
+    showCash ? cashPositionSummary() : null,
+  ]);
+  return {
+    ordersToDeliver:
+      toDeliverPage != null
+        ? { label: "Orders to deliver", count: toDeliverPage.total, href: salesOrdersToDeliverHref() }
+        : null,
+    openSalesOrders:
+      openCount != null
+        ? { label: "Open sales orders", count: openCount, href: salesOrdersOpenStatusHref() }
+        : null,
+    cashBalances: cash
+      ? cash.accounts.map((a) => ({
+          id: a.id,
+          name: a.name,
+          detail:
+            [CASH_ACCOUNT_TYPE_LABELS[a.type], a.accountHintLast4 ? `···${a.accountHintLast4}` : null]
+              .filter(Boolean)
+              .join(" · ") || null,
+          balance: a.balance,
+          href: a.href,
+        }))
+      : [],
+    unassignedCash:
+      cash && toScaled(cash.unassignedNet, 2) !== 0n
+        ? { balance: cash.unassignedNet, href: cashHomeHref() }
+        : null,
+  };
+}
+
 export async function loadHomeDashboard(
   user: PermissionUser,
   opts: { now?: Date } = {},
@@ -567,6 +646,7 @@ export async function loadHomeDashboard(
           })
         : null,
       header,
+      counts: await loadHomeCounts(user, features),
       money: [],
       tax: null,
       pipeline: null,
@@ -792,6 +872,8 @@ export async function loadHomeDashboard(
     }
   }
 
+  const counts = await loadHomeCounts(user, features);
+
   const salesWithRange =
     sales == null
       ? null
@@ -805,6 +887,7 @@ export async function loadHomeDashboard(
     sales: salesWithRange,
     kpis,
     header,
+    counts,
     money,
     tax,
     incomeTaxFilings,

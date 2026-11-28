@@ -6,7 +6,7 @@ import { formatPeso, formatPesoLimit } from "@/lib/format";
 import { formatHomeActionCount } from "@/lib/home/actionCount";
 import { collectedWholePesos } from "@/lib/home/money";
 import { HOME_RECENT_PHONE_ROWS } from "@/lib/home/activity";
-import type { HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
+import type { HomeCounts, HomeDashboard, HomeKpis } from "@/lib/home/dashboard";
 import type { HomePipeline } from "@/lib/home/pipeline";
 import type { HomeSales } from "@/lib/home/sales";
 import { EmptyState } from "@/components/ui";
@@ -18,6 +18,7 @@ import {
   CoinIcon,
   FileIcon,
   InboxIcon,
+  TruckIcon,
   UsersIcon,
 } from "@/components/Icons";
 
@@ -180,6 +181,64 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
           <div className="home-ks muted small">{kpis.billedThisYear.unbilledLabel}</div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Count + balance strip under the KPI cards (ERP adoption item 9): orders
+ * still to deliver, every open sales order, and — behind the dashboard
+ * money gate — each cash account's live balance plus any unassigned money.
+ * Every card links to the exact list its figure came from; no derived or
+ * decorative numbers.
+ */
+export function HomeCountsStrip({ counts }: { counts: HomeCounts }) {
+  const { ordersToDeliver, openSalesOrders, cashBalances, unassignedCash } = counts;
+  if (!ordersToDeliver && !openSalesOrders && cashBalances.length === 0 && !unassignedCash) {
+    return null;
+  }
+  return (
+    <div className="home-counts" aria-label="Orders and cash balances">
+      {ordersToDeliver ? (
+        <Link className="card home-kp home-count" href={ordersToDeliver.href}>
+          <div className="home-kl">
+            <TruckIcon size={14} />
+            {ordersToDeliver.label}
+          </div>
+          <div className="home-kv num">{ordersToDeliver.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {openSalesOrders ? (
+        <Link className="card home-kp home-count" href={openSalesOrders.href}>
+          <div className="home-kl">
+            <CartIcon size={14} />
+            {openSalesOrders.label}
+          </div>
+          <div className="home-kv num">{openSalesOrders.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {cashBalances.map((a) => (
+        <Link key={a.id} className="card home-kp home-count" href={a.href}>
+          <div className="home-kl">
+            <CoinIcon size={14} />
+            {a.name}
+          </div>
+          <div className={`home-kv num${Number(a.balance) < 0 ? " neg" : ""}`}>{formatPeso(a.balance)}</div>
+          {a.detail ? <div className="home-ks">{a.detail}</div> : null}
+        </Link>
+      ))}
+      {unassignedCash ? (
+        <Link className="card home-kp home-count" href={unassignedCash.href}>
+          <div className="home-kl">
+            <CoinIcon size={14} />
+            Not assigned
+          </div>
+          <div className={`home-kv num${Number(unassignedCash.balance) < 0 ? " neg" : ""}`}>
+            {formatPeso(unassignedCash.balance)}
+          </div>
+          <div className="home-ks">Old collections / payments with no account yet</div>
+        </Link>
+      ) : null}
     </div>
   );
 }
