@@ -312,3 +312,47 @@ export async function listItemHistory(opts: { q?: string; customerId?: string } 
   ];
   return groupItemHistory(entries);
 }
+
+export type ItemLastCost = {
+  lastCost: string;
+  lastCostDate: string;
+  poNumber: string;
+  supplierName: string;
+};
+
+/**
+ * Adoption item 11: the single latest PO cost overall for one item — the
+ * newest non-void PO line whose description matches exactly. This is the
+ * same derivation as listSupplierPriceComparison (the item's Suppliers
+ * tab, which the lot-quoting cost auto-fill also uses), collapsed from
+ * one row per supplier to the one most recent purchase, and carrying the
+ * supplier + PO so the figure stays traceable. Null when the item has
+ * never been purchased.
+ */
+export async function getItemLastCost(description: string): Promise<ItemLastCost | null> {
+  const want = normalizeDescription(description);
+  if (!want) return null;
+  const lines = await db.purchaseOrderItem.findMany({
+    where: {
+      description: { contains: description.trim() },
+      purchaseOrder: { status: { not: "VOID" } },
+    },
+    select: {
+      description: true,
+      unitCost: true,
+      purchaseOrder: {
+        select: { number: true, date: true, supplier: { select: { name: true } } },
+      },
+    },
+    orderBy: [{ purchaseOrder: { date: "desc" } }],
+    take: 1000,
+  });
+  const first = lines.find((l) => normalizeDescription(l.description) === want);
+  if (!first) return null;
+  return {
+    lastCost: String(first.unitCost),
+    lastCostDate: ymd(first.purchaseOrder.date) ?? "",
+    poNumber: first.purchaseOrder.number,
+    supplierName: first.purchaseOrder.supplier.name,
+  };
+}

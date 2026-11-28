@@ -1,5 +1,6 @@
 import { RecordBreadcrumbLabel } from "@/components/Sidebar";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { formatSerialDisplay } from "@/lib/billing/booklet";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/current-user";
@@ -32,7 +33,7 @@ import { SALES_ORDER_ATTACHMENT_KINDS } from "@/lib/attachment-kinds";
 import { createReminderAction } from "@/app/(app)/reminders/actions";
 import { listSalesOrderDeliveries } from "@/lib/services/deliveries";
 import { listCustomerReturns } from "@/lib/services/customer-returns";
-import { soDeliveryOverviewLabel, soDeliveryProgress } from "@/lib/sales-orders/delivery";
+import { soDeliveryOverviewLabel, soDeliveryProgress, soHasRemainingToDeliver } from "@/lib/sales-orders/delivery";
 import { deleteSalesOrderAction, recordDeliveryAction, reclassifySalesOrderBusinessAction, setSalesOrderGapReasonAction, uploadSalesOrderAttachmentsAction, voidCustomerReturnAction, voidDeliveryForOrder, voidSalesOrderAction } from "../actions";
 import { listBusinesses } from "@/lib/services/businesses";
 import { getSettingsSnapshot } from "@/lib/settings";
@@ -43,16 +44,51 @@ const day = (ymd: string | null) => (ymd ? formatDate(new Date(`${ymd}T00:00:00.
 const TABS = ["overview", "documents", "deliveries", "returns", "cost-margin", "activity", "attachments"] as const;
 type Tab = (typeof TABS)[number];
 
+/**
+ * Adoption item 12: one type group inside the Documents tab — a heading
+ * carrying the group's true count, then the group's rows in the shared
+ * list table (or a None-yet line when the group is empty). VOID rows are
+ * listed and marked, never hidden.
+ */
+function DocGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
+  return (
+    <>
+      <h3>
+        {label} <span className="faint">({count})</span>
+      </h3>
+      {count === 0 ? (
+        <p className="faint">None yet.</p>
+      ) : (
+        <div className="table-wrap items-table">
+          <table className="list" aria-label={label}>
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Number</th>
+                <th>Date</th>
+                <th className="num">Amount</th>
+                <th>Status</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>{children}</tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default async function SalesOrderPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ created?: string; tab?: string }>;
+  searchParams: Promise<{ created?: string; tab?: string; record?: string }>;
 }) {
   const user = await requirePagePermission("view");
   const { id } = await params;
-  const { created, tab: rawTab } = await searchParams;
+  const { created, tab: rawTab, record } = await searchParams;
   // Built on the server without cost fields for users who can't see costs.
   const so = await getSalesOrderView(id, user);
   if (!so) notFound();
@@ -85,6 +121,33 @@ export default async function SalesOrderPage({
     : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
   const canCollect = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.unpaidBilled, 2) > 0n;
+  // Adoption item 12: Record delivery joins the Actions menu under the
+  // same conditions the Deliveries tab itself uses (edit_data + OPEN)
+  // plus something still left to deliver (the section's own computation).
+  const canRecordDelivery =
+    can(user, "edit_data") &&
+    so.status === "OPEN" &&
+    soHasRemainingToDeliver(so.items.map((i) => ({ qty: i.qty, deliveredQty: i.deliveredQty ?? "0.00" })));
+  // Documents tab: VOID POs join the live ones there, marked VOID — the
+  // tab is the register of everything ever linked to this order.
+  // getSoPurchasing deliberately returns live POs only (its progress
+  // maths), so the void ones are fetched here in the same row shape,
+  // total kept cost-only exactly like the live rows.
+  const voidPurchaseOrders = (
+    await db.purchaseOrder.findMany({
+      where: { salesOrderId: so.id, status: "VOID" },
+      orderBy: [{ date: "desc" }, { number: "desc" }],
+      select: { id: true, number: true, status: true, subtotal: true, supplier: { select: { name: true } } },
+    })
+  ).map((po) => ({
+    id: po.id,
+    number: po.number,
+    status: po.status,
+    supplierName: po.supplier.name,
+    ...(so.canSeeCosts ? { total: po.subtotal.toString() } : {}),
+  }));
+  const documentPurchaseOrders = [...purchasing.purchaseOrders, ...voidPurchaseOrders];
+  const sourceCount = (so.quote ? 1 : 0) + (so.storeOrder ? 1 : 0);
   // Business entity: Admins get the reclassify form; everyone sees the label.
   const allBusinesses = user.isAdmin ? await listBusinesses() : [];
   const { settings } = await getSettingsSnapshot();
@@ -121,7 +184,7 @@ export default async function SalesOrderPage({
           </>
         }
         actions={
-          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} customerId={so.customer.id} isAdmin={user.isAdmin} ownCompanyName={settings.company.name} currentBusinessId={so.businessId} businesses={allBusinesses} reclassifyBusinessAction={reclassifySalesOrderBusinessAction.bind(null, so.id)} showGapNote={gapState?.show ?? false} gapPartial={gapState?.partial ?? false} gapReasonCode={so.gapReasonCode} currentGapNote={so.gapNote} setGapReasonAction={setSalesOrderGapReasonAction.bind(null, so.id)} canRemind={can(user, "edit_data")} reminderAction={createReminderAction} />
+          <SalesOrderActions id={so.id} number={so.number} status={so.status} canEdit={can(user, "edit_data")} canVoid={canVoid(user)} canDelete={canDeleteDocument(user)} voidAction={voidSalesOrderAction} deleteAction={deleteSalesOrderAction} billings={billings.map((b) => ({ id: b.id, number: b.number }))} canBill={canBill} canCreatePos={canCreatePos} canCollect={canCollect} canRecordDelivery={canRecordDelivery} customerId={so.customer.id} isAdmin={user.isAdmin} ownCompanyName={settings.company.name} currentBusinessId={so.businessId} businesses={allBusinesses} reclassifyBusinessAction={reclassifySalesOrderBusinessAction.bind(null, so.id)} showGapNote={gapState?.show ?? false} gapPartial={gapState?.partial ?? false} gapReasonCode={so.gapReasonCode} currentGapNote={so.gapNote} setGapReasonAction={setSalesOrderGapReasonAction.bind(null, so.id)} canRemind={can(user, "edit_data")} reminderAction={createReminderAction} />
         }
       />
       {created && (
@@ -147,7 +210,7 @@ export default async function SalesOrderPage({
         active={tab}
         tabs={[
           { key: "overview", label: "Overview", href: base },
-          { key: "documents", label: "Documents", count: billings.length + collections.length + deliveries.length + purchasing.purchaseOrders.length + 1, href: `${base}?tab=documents` },
+          { key: "documents", label: "Documents", count: billings.length + collections.length + deliveries.length + documentPurchaseOrders.length + sourceCount, href: `${base}?tab=documents` },
           { key: "deliveries", label: "Deliveries", count: deliveries.length, href: `${base}?tab=deliveries` },
           {
             key: "returns",
@@ -182,133 +245,128 @@ export default async function SalesOrderPage({
       {tab === "documents" && (
         <div className="card">
           <h2>Documents</h2>
-          <p className="small muted">Source quote, billings, collections, delivery receipts and purchase orders for this order. Receiving and supplier bills stay in the Cost &amp; margin tab.</p>
-          <div className="table-wrap items-table">
-            <table className="list" aria-label="Documents">
-              <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Number</th>
-                  <th>Date</th>
-                  <th className="num">Amount</th>
-                  <th>Status</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {so.quote && (
-                  <tr className="clickable row-has-link">
-                    <td>
-                      <Link href={`/quotes/${so.quote.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      Source quote
-                    </td>
-                    <td className="strong">
-                      <Link href={`/quotes/${so.quote.id}`} target="_blank" rel="noopener">{so.quote.number}</Link>
-                    </td>
-                    <td>{day(so.quote.date)}</td>
-                    <td className="num">{formatPeso(so.quote.contractPrice)}</td>
-                    <td>
-                      <QuoteStatusChip status={so.quote.status} />
-                    </td>
-                    <td />
-                  </tr>
-                )}
-                {so.storeOrder && (
-                  <tr className="clickable row-has-link">
-                    <td>
-                      <Link href={`/store-orders/${so.storeOrder.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      Web order
-                    </td>
-                    <td className="strong">
-                      <Link href={`/store-orders/${so.storeOrder.id}`}>{so.storeOrder.number}</Link>
-                    </td>
-                    <td>{day(so.date)}</td>
-                    <td className="num">{formatPeso(so.totals.contractPrice)}</td>
-                    <td>Paid</td>
-                    <td />
-                  </tr>
-                )}
-                {billings.map((b) => (
-                  <tr key={b.id} className="clickable row-has-link">
-                    <td>
-                      <Link href={`/billing/billings/${b.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      Billing
-                    </td>
-                    <td className="strong">
-                      <Link href={`/billing/billings/${b.id}`} target="_blank" rel="noopener">{b.number}</Link>
-                    </td>
-                    <td>{day(b.invoiceDate)}</td>
-                    <td className="num">{formatPeso(b.amount)}</td>
-                    <td>
-                      <BillingStatusChip status={b.status} />
-                    </td>
-                    <td>
-                      <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
-                        Print
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-                {collections.map((c) => (
-                  <tr key={c.id} className="clickable row-has-link">
-                    <td>
-                      <Link href={`/billing/collections/${c.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      Collection
-                    </td>
-                    <td className="strong">
-                      <Link href={`/billing/collections/${c.id}`} target="_blank" rel="noopener">{c.number}</Link>
-                    </td>
-                    <td>{day(c.date)}</td>
-                    <td className="num">{formatPeso(c.amountReceived)}</td>
-                    <td>{c.status}</td>
-                    <td />
-                  </tr>
-                ))}
-                {deliveries.map((d) => (
-                  <tr key={d.id} className="clickable row-has-link">
-                    <td>
-                      <Link href={`${base}?tab=deliveries`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      Delivery receipt
-                    </td>
-                    <td className="strong">
-                      <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{formatSerialDisplay(d.drNumber)}</Link>
-                    </td>
-                    <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
-                    <td className="num">—</td>
-                    <td>{d.voidedAt ? "Void" : "Delivered"}</td>
-                    <td>
-                      {!d.voidedAt && (
-                        <Link href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noopener">
-                          Print
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {purchasing.purchaseOrders.map((p) => (
-                  <tr key={p.number} className={p.id ? "clickable row-has-link" : undefined}>
-                    <td>
-                      {p.id ? (
-                        <Link href={`/purchase-orders/${p.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
-                      ) : null}
-                      Purchase order · {p.supplierName}
-                    </td>
-                    <td className="strong">
-                      {p.id ? <Link href={`/purchase-orders/${p.id}`} target="_blank" rel="noopener">{p.number}</Link> : p.number}
-                    </td>
-                    <td>—</td>
-                    <td className="num">{p.total ? formatPeso(p.total) : "—"}</td>
-                    <td>{p.status}</td>
-                    <td />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="small muted">Every document linked to this order, grouped by type with its count. Receiving and supplier bills stay in the Cost &amp; margin tab.</p>
+          <DocGroup label="Source" count={sourceCount}>
+            {so.quote && (
+              <tr className="clickable row-has-link">
+                <td>
+                  <Link href={`/quotes/${so.quote.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  Source quote
+                </td>
+                <td className="strong">
+                  <Link href={`/quotes/${so.quote.id}`} target="_blank" rel="noopener">{so.quote.number}</Link>
+                </td>
+                <td>{day(so.quote.date)}</td>
+                <td className="num">{formatPeso(so.quote.contractPrice)}</td>
+                <td>
+                  <QuoteStatusChip status={so.quote.status} />
+                </td>
+                <td />
+              </tr>
+            )}
+            {so.storeOrder && (
+              <tr className="clickable row-has-link">
+                <td>
+                  <Link href={`/store-orders/${so.storeOrder.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  Web order
+                </td>
+                <td className="strong">
+                  <Link href={`/store-orders/${so.storeOrder.id}`}>{so.storeOrder.number}</Link>
+                </td>
+                <td>{day(so.date)}</td>
+                <td className="num">{formatPeso(so.totals.contractPrice)}</td>
+                <td>Paid</td>
+                <td />
+              </tr>
+            )}
+          </DocGroup>
+          <DocGroup label="Billings" count={billings.length}>
+            {billings.map((b) => (
+              <tr key={b.id} className="clickable row-has-link">
+                <td>
+                  <Link href={`/billing/billings/${b.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  Billing
+                </td>
+                <td className="strong">
+                  <Link href={`/billing/billings/${b.id}`} target="_blank" rel="noopener">{b.number}</Link>
+                </td>
+                <td>{day(b.invoiceDate)}</td>
+                <td className="num">{formatPeso(b.amount)}</td>
+                <td>
+                  <BillingStatusChip status={b.status} />
+                </td>
+                <td>
+                  <Link href={`/print/billings/${b.id}`} target="_blank" rel="noopener">
+                    Print
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </DocGroup>
+          <DocGroup label="Collections" count={collections.length}>
+            {collections.map((c) => (
+              <tr key={c.id} className="clickable row-has-link">
+                <td>
+                  <Link href={`/billing/collections/${c.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  Collection
+                </td>
+                <td className="strong">
+                  <Link href={`/billing/collections/${c.id}`} target="_blank" rel="noopener">{c.number}</Link>
+                </td>
+                <td>{day(c.date)}</td>
+                <td className="num">{formatPeso(c.amountReceived)}</td>
+                <td>{c.status}</td>
+                <td />
+              </tr>
+            ))}
+          </DocGroup>
+          <DocGroup label="Delivery receipts" count={deliveries.length}>
+            {deliveries.map((d) => (
+              <tr key={d.id} className="clickable row-has-link">
+                <td>
+                  <Link href={`${base}?tab=deliveries`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  Delivery receipt
+                </td>
+                <td className="strong">
+                  <Link href={`${base}?tab=deliveries`} target="_blank" rel="noopener">{formatSerialDisplay(d.drNumber)}</Link>
+                </td>
+                <td>{day(d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : null)}</td>
+                <td className="num">—</td>
+                <td>{d.voidedAt ? "Void" : "Delivered"}</td>
+                <td>
+                  {!d.voidedAt && (
+                    <Link href={`/print/deliveries/${d.id}/attachment`} target="_blank" rel="noopener">
+                      Print
+                    </Link>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </DocGroup>
+          <DocGroup label="Purchase orders" count={documentPurchaseOrders.length}>
+            {documentPurchaseOrders.map((p) => (
+              <tr key={p.number} className={p.id ? "clickable row-has-link" : undefined}>
+                <td>
+                  {p.id ? (
+                    <Link href={`/purchase-orders/${p.id}`} className="row-stretched-link" tabIndex={-1} aria-hidden />
+                  ) : null}
+                  Purchase order · {p.supplierName}
+                </td>
+                <td className="strong">
+                  {p.id ? <Link href={`/purchase-orders/${p.id}`} target="_blank" rel="noopener">{p.number}</Link> : p.number}
+                </td>
+                <td>—</td>
+                <td className="num">{p.total ? formatPeso(p.total) : "—"}</td>
+                <td>{p.status}</td>
+                <td />
+              </tr>
+            ))}
+          </DocGroup>
         </div>
       )}
       {tab === "deliveries" && (
           <DeliverySection
+            startOpen={record === "1"}
             nextDrNo={drBooklet?.nextFree ?? null}
             drSeriesFrom={drBooklet?.range.seriesFrom ?? null}
             drSeriesTo={drBooklet?.range.seriesTo ?? null}
