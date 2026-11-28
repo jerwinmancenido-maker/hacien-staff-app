@@ -575,6 +575,10 @@ model Reminder {
   createdById String
   createdBy   User      @relation(fields: [createdById], references: [id])
   doneAt     DateTime?
+  // Adoption item 13: why an auto-close fired (e.g. "Auto-closed: order
+  // fully delivered"). Null on open reminders and on ones the owner closed
+  // by hand — the absence of a reason IS the "closed by hand" signal.
+  doneReason String?   @db.VarChar(200)
   createdAt  DateTime  @default(now())
 
   @@index([createdById, remindAt])

@@ -24,6 +24,7 @@ import { recomputeBillingStatus } from "./billings";
 import { defaultExpenseCategoryId } from "./expenses";
 import { notifyPaymentReceived } from "../messaging/order-text-triggers";
 import { notifyCollectionRecorded } from "./alerts";
+import { notifyCustomerPaymentReceived } from "./customer-notify";
 import { claimBookletSerial } from "./booklet";
 import {
   deductionsError,
@@ -828,6 +829,9 @@ export async function recordCollection(
     await notifyPaymentReceived(collection.id, actor.id);
     // Adoption item 8: email alert for the team (post-commit, never throws).
     await notifyCollectionRecorded(collection.id, actor.id).catch(() => {});
+    // Adoption item 16: payment-received email to the customer, one per
+    // billing settled (post-commit, never throws).
+    await notifyCustomerPaymentReceived(collection.id, actor.id).catch(() => {});
     return collection;
   } catch (e) {
     await discardUploads(uploads);

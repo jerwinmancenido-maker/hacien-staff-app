@@ -377,6 +377,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.receivingEmailEnabled,
                 hint: "ON by default. Who receives it is set under Email alerts below (default: the PO's creator and every active Admin/Approver). The bell also shows goods received in the last 7 days.",
               },
+              {
+                name: "customerPaymentEmailEnabled",
+                label: "Email the customer when a payment is applied to their billing",
+                kind: "checkbox",
+                value: s.features.customerPaymentEmailEnabled,
+                hint: "ON by default. One receipt email per billing a collection settles, sent to the customer's main contact email — what was applied (cash, plus withholding tax if any) and the balance left on that billing.",
+              },
+              {
+                name: "customerDeliveryEmailEnabled",
+                label: "Email the customer when a delivery is recorded on their order",
+                kind: "checkbox",
+                value: s.features.customerDeliveryEmailEnabled,
+                hint: "ON by default. One email per delivery, sent to the customer's main contact email — the DR number, what was delivered, and what remains to deliver.",
+              },
             ]}
           />
         )}

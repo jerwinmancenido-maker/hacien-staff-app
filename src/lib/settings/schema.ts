@@ -394,6 +394,10 @@ export const settingsSections = {
     periodCloseEnabled: z.boolean().default(false),
     /** Adoption item 5: goods-received team email. ON by default. */
     receivingEmailEnabled: z.boolean().default(true),
+    /** Adoption item 16: payment-received email to the customer, one per billing settled. ON by default. */
+    customerPaymentEmailEnabled: z.boolean().default(true),
+    /** Adoption item 16: delivery-recorded email to the customer. ON by default. */
+    customerDeliveryEmailEnabled: z.boolean().default(true),
   }),
   // Adoption item 8: email alert rules — one rule per event. Alerts only:
   // an alert never carries an action; approvals stay in the app.

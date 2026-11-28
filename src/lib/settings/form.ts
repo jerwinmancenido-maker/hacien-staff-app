@@ -188,6 +188,8 @@ export function settingsValueFromForm(key: SettingsKey, get: Get): unknown {
         itemsImportEnabled: checked(get("itemsImportEnabled")),
         periodCloseEnabled: checked(get("periodCloseEnabled")),
         receivingEmailEnabled: checked(get("receivingEmailEnabled")),
+        customerPaymentEmailEnabled: checked(get("customerPaymentEmailEnabled")),
+        customerDeliveryEmailEnabled: checked(get("customerDeliveryEmailEnabled")),
       };
     case "alerts": {
       // One block per event: <event>.enabled, <event>.role.<role>,

@@ -15,6 +15,7 @@ import { voidReasonSchema } from "../validation/quotes";
 import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { notifyOrderDelivered } from "../messaging/order-text-triggers";
+import { notifyCustomerDeliveryRecorded } from "./customer-notify";
 import { refreshSalesOrderCloseState } from "./sales-orders";
 import { claimBookletSerial } from "./booklet";
 import { assertPeriodOpen } from "./period-close";
@@ -199,6 +200,9 @@ export async function recordDelivery(
       }, DOC_TX),
     );
     await notifyOrderDelivered(salesOrderId, delivery.id, actor.id);
+    // Adoption item 16: delivery-recorded email to the customer
+    // (post-commit, never throws).
+    await notifyCustomerDeliveryRecorded(delivery.id, actor.id).catch(() => {});
     return delivery;
   } catch (e) {
     await discardUploads(uploads);

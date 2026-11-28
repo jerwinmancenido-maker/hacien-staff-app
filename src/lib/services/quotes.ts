@@ -46,6 +46,7 @@ import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./
 import { notifyOrderConfirmed } from "../messaging/order-text-triggers";
 import { notifyQuoteApproved, notifySalesOrderConfirmed } from "./alerts";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 export type DocActor = PermissionUser & { id: string };
 
@@ -873,6 +874,10 @@ async function setStatus(id: string, actor: DocActor, from: readonly Quote["stat
         ...(override ? { approvalOverride: override.join("; "), approval: "approved (confirmed at send)" } : {}),
       },
     });
+    // Adoption item 13: LOST is a terminal quote state — close its reminders.
+    if (to === "LOST") {
+      await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote marked as lost");
+    }
     return after;
   });
 }
@@ -1024,6 +1029,7 @@ export async function voidQuote(id: string, reason: string, actor: DocActor) {
       data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id },
       include: { items: { where: { removedAt: null } } },
     });
+    await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote voided");
     await tx.documentVoid.create({
       data: {
         docType: "QUOTE",
@@ -1233,6 +1239,7 @@ export async function convertQuoteToSalesOrder(id: string, input: ConvertInput, 
         where: { id },
         data: { status: "WON", ...(override ? overrideApprovalData(actor) : {}), updatedById: actor.id },
       });
+      await autoCloseReminders(tx, "QUOTE", id, "Auto-closed: quote converted to a sales order");
       await writeAudit(tx, {
         userId: actor.id,
         entityType: "Quote",
