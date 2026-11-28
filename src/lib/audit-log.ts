@@ -14,6 +14,7 @@ export const AUDIT_ENTITIES = [
   "Billing",
   "Collection",
   "SupplierBill",
+  "SupplierPaymentRequest",
   "ReceivingReport",
   "SupplierReturn",
   "SupplierPayment",
@@ -46,6 +47,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Billing: "Billing",
   Collection: "Collection",
   SupplierBill: "Supplier bill",
+  SupplierPaymentRequest: "Payment request",
   ReceivingReport: "Receiving report",
   SupplierReturn: "Supplier return",
   SupplierPayment: "Supplier payment",
@@ -165,6 +167,15 @@ export async function resolveAuditLabels(rows: { entityType: string; entityId: s
           CashTransfer: db.cashTransfer,
         }[type] as { findMany: (a: { where: { id: { in: string[] } }; select: { id: true; number: true } }) => Promise<{ id: string; number: string }[]> };
         put(type, (await model.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })).map((r) => ({ id: r.id, label: r.number })));
+        break;
+      }
+      case "SupplierPaymentRequest": {
+        // A request has no number of its own — label it by its bill.
+        const found = await db.supplierPaymentRequest.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, supplierBill: { select: { billNumber: true } } },
+        });
+        put(type, found.map((r) => ({ id: r.id, label: `Bill ${r.supplierBill.billNumber}` })));
         break;
       }
       case "SupplierBill": {

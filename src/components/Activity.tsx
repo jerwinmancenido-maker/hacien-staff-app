@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ENTITY_LABELS: Record<string, string> = {
+  SupplierPaymentRequest: "a payment request",
   Contact: "a contact",
   Quote: "the quote",
   SalesOrder: "the sales order",

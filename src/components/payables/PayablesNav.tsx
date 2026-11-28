@@ -5,6 +5,7 @@ export const PAYABLES_NAV_TABS = [
   { key: "home", label: "Overview", href: "/payables" },
   { key: "we-owe", label: "We owe", href: "/payables/we-owe" },
   { key: "payments", label: "Payments", href: "/payables/payments" },
+  { key: "requests", label: "Payment requests", href: "/payables/payment-requests" },
   { key: "aging", label: "Aging", href: "/payables/aging" },
   { key: "2307", label: "2307 to issue", href: "/payables/2307" },
 ] as const;
