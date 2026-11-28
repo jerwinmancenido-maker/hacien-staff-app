@@ -295,7 +295,8 @@ export function PoEditor({
         <div className="alert warn" role="alert">
           <p>{state.warning}</p>
           <input ref={confirmDriftRef} type="hidden" name="confirmDriftWarning" defaultValue="" />
-          <div className="form-actions">
+          {/* No form-actions wrapper here: S-71 keeps this editor top-bar only. */}
+          <div>
             <button
               className="btn"
               type="button"
