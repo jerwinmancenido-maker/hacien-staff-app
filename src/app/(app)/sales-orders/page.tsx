@@ -9,7 +9,7 @@ import { DataTable } from "@/components/DataTable";
 import { ProgressBars } from "@/components/ProgressBars";
 import { Chip, EmptyState, PageHeader, PrimaryCell } from "@/components/ui";
 import { SearchIcon } from "@/components/Icons";
-import { SO_STATUS_LABELS, SoStatusChip } from "@/components/docs/DocParts";
+import { SO_STATUS_LABELS, SoStageLabel, SoStatusChip } from "@/components/docs/DocParts";
 import { listBusinesses } from "@/lib/services/businesses";
 
 type Search = { q?: string; status?: string; needsPo?: string; open?: string; toDeliver?: string; business?: string; page?: string };
@@ -161,7 +161,12 @@ export default async function SalesOrdersPage({ searchParams }: { searchParams: 
               customer: <PrimaryCell name={o.customerName} />,
               po: o.buyerPoNo ?? <span className="faint">—</span>,
               total: <span className="strong">{formatPeso(o.contractPrice)}</span>,
-              status: <SoStatusChip status={o.status} />,
+              status: (
+                <>
+                  <SoStatusChip status={o.status} />
+                  <SoStageLabel status={o.status} progress={o.progress} />
+                </>
+              ),
               date: formatDate(new Date(`${o.date}T00:00:00.000Z`)),
               progress: o.progress ? (
                 <ProgressBars
