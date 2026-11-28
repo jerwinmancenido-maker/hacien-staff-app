@@ -348,7 +348,15 @@ export default async function SalesOrderPage({
           />
       )}
       {tab === "activity" && (
-        <Activity targets={[{ entityType: "SalesOrder", ids: [so.id] }]} viewer={user} />
+        <Activity
+          targets={[
+            { entityType: "SalesOrder", ids: [so.id] },
+            { entityType: "Billing", ids: billings.map((b) => b.id) },
+            { entityType: "Collection", ids: collections.map((c) => c.id) },
+            { entityType: "Delivery", ids: deliveries.map((d) => d.id) },
+          ]}
+          viewer={user}
+        />
       )}
 
       {tab === "returns" && (
