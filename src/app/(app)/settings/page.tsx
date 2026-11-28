@@ -368,6 +368,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 value: s.features.warrantyClaimsEnabled,
                 hint: "OFF by default. Turn on to file and track supplier warranty claims from the Receiving pages.",
               },
+              {
+                name: "receivingEmailEnabled",
+                label: "Email the team when goods are received",
+                kind: "checkbox",
+                value: s.features.receivingEmailEnabled,
+                hint: "ON by default. One email per receiving report to the PO's creator and every active Admin/Approver. The bell also shows goods received in the last 7 days.",
+              },
             ]}
           />
         )}
