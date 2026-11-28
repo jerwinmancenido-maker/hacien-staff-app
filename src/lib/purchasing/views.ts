@@ -170,6 +170,15 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
             where: { supplierPayment: { status: "POSTED" } },
             include: { supplierPayment: { select: { id: true, number: true } } },
           },
+          paymentRequests: {
+            orderBy: [{ createdAt: "desc" }],
+            select: {
+              id: true,
+              status: true,
+              amount: true,
+              supplierPayment: { select: { id: true, number: true } },
+            },
+          },
         },
       },
     },
@@ -304,6 +313,13 @@ export async function getPurchaseOrderView(id: string, viewer: Viewer) {
         number: a.supplierPayment.number,
         cashApplied: money(a.cashApplied),
         withholdingApplied: money(a.withholdingApplied),
+      })),
+      paymentRequests: b.paymentRequests.map((r) => ({
+        id: r.id,
+        status: r.status,
+        amount: money(r.amount),
+        paymentId: r.supplierPayment?.id ?? null,
+        paymentNumber: r.supplierPayment?.number ?? null,
       })),
     })),
     attachments: po.attachments.map((a) => ({

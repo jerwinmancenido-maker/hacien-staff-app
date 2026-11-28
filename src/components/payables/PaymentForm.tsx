@@ -69,6 +69,7 @@ export function PaymentForm({
   cashAccounts = [],
   cashEnabled = false,
   canEdit,
+  paymentRequest = null,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   supplierId: string;
@@ -82,6 +83,8 @@ export function PaymentForm({
   /** When false (CASH_ENABLED off), hide the paid-from account selector. */
   cashEnabled?: boolean;
   canEdit: boolean;
+  /** ERP adoption item 3: this payment settles an APPROVED payment request. */
+  paymentRequest?: { id: string; billNumber: string; amount: string } | null;
 }) {
   const { state, pending, submit } = useFormAction(action);
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
@@ -170,6 +173,21 @@ export function PaymentForm({
         </div>
       )}
       <input type="hidden" name="supplierId" value={supplierId} />
+      {paymentRequest && (
+        <>
+          <input type="hidden" name="paymentRequestId" value={paymentRequest.id} />
+          <div className="alert" role="status" style={{ marginBottom: 16 }}>
+            Paying the approved payment request of <b>{formatPeso(paymentRequest.amount)}</b> for bill{" "}
+            <b>{paymentRequest.billNumber}</b>. This payment must put at least that much against that bill — saving
+            marks the request Paid.
+          </div>
+          {e.paymentRequestId && (
+            <div className="alert error" role="alert" style={{ marginBottom: 16 }}>
+              {e.paymentRequestId}
+            </div>
+          )}
+        </>
+      )}
 
       <div className="form-grid">
         <div className="field full">

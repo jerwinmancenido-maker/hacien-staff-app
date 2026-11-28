@@ -6,7 +6,7 @@ import { maskBankAccountNumber } from "@/lib/bank-mask";
 import { resolveSupplierBank } from "@/lib/banks";
 import { db } from "@/lib/db";
 import { formatPeso, manilaToday } from "@/lib/format";
-import { ymd } from "@/lib/documents/common";
+import { money, ymd } from "@/lib/documents/common";
 import { openSupplierBillsForPayment } from "@/lib/services/supplier-payments";
 import { supplierPayableBalance } from "@/lib/payables/views";
 import { CASH_ACCOUNT_TYPE_LABELS } from "@/lib/cash/labels";
@@ -17,10 +17,25 @@ import { PayablesNav } from "@/components/payables/PayablesNav";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { recordSupplierPaymentAction } from "../../actions";
 
-export default async function NewPaymentPage({ searchParams }: { searchParams: Promise<{ supplierId?: string }> }) {
+export default async function NewPaymentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ supplierId?: string; requestId?: string }>;
+}) {
   const user = await requirePagePermission("view");
   const canManage = canMaintainSupplierPayment(user);
   const sp = await searchParams;
+  // ERP adoption item 3: arriving from an APPROVED payment request pins
+  // the supplier and pre-fills the amount; the request settles on save.
+  const payRequest = sp.requestId
+    ? await db.supplierPaymentRequest.findUnique({
+        where: { id: sp.requestId },
+        include: { supplierBill: { select: { id: true, billNumber: true, supplierId: true } } },
+      })
+    : null;
+  const activeRequest =
+    payRequest && payRequest.status === "APPROVED" ? payRequest : null;
+  if (activeRequest && !sp.supplierId) sp.supplierId = activeRequest.supplierBill.supplierId;
   const suppliers = await db.supplier.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
@@ -74,12 +89,17 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
   }
 
   const supplier = await db.supplier.findUnique({
-    where: { id: sp.supplierId },
+    where: { id: sp.supplierId as string },
     select: { id: true, name: true, bankAccountNumber: true, bankName: true, bankBranch: true },
   });
   if (!supplier) notFound();
   const maskedBankNumber = maskBankAccountNumber(supplier.bankAccountNumber);
-  const open = await openSupplierBillsForPayment(supplier.id);
+  const openRaw = await openSupplierBillsForPayment(supplier.id);
+  // With a request in play, its bill goes first so the form's
+  // auto-allocation covers it before anything else.
+  const open = activeRequest
+    ? [...openRaw].sort((a, b) => (a.id === activeRequest.supplierBillId ? -1 : b.id === activeRequest.supplierBillId ? 1 : 0))
+    : openRaw;
   const today = ymd(manilaToday())!;
   const cashOn = await isCashEnabled();
   const cashAccounts = cashOn ? await listActiveCashAccounts() : [];
@@ -99,7 +119,17 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: P
           supplierName={supplier.name}
           supplierBankNumber={maskedBankNumber}
           supplierBankName={resolveSupplierBank(supplier).bankName}
-          defaults={{ date: today, amountPaid: "", method: "BANK_TRANSFER", cashAccountId: defaultCash ?? "" }}
+          defaults={{
+            date: today,
+            amountPaid: activeRequest ? money(activeRequest.amount) : "",
+            method: "BANK_TRANSFER",
+            cashAccountId: defaultCash ?? "",
+          }}
+          paymentRequest={
+            activeRequest
+              ? { id: activeRequest.id, billNumber: activeRequest.supplierBill.billNumber, amount: money(activeRequest.amount) }
+              : null
+          }
           cashEnabled={cashOn}
           cashAccounts={cashAccounts.map((a) => ({
             id: a.id,

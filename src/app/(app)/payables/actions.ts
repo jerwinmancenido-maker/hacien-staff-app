@@ -29,6 +29,7 @@ export async function recordSupplierPaymentAction(_prev: FormState, form: FormDa
   const parsed = parseSupplierPaymentForm(form);
   if (!parsed.ok) return { values: parsed.values, fieldErrors: parsed.fieldErrors, message: "Fix the fields marked below." };
   const echo: Record<string, string> = {
+    paymentRequestId: parsed.data.paymentRequestId ?? "",
     supplierId: parsed.data.supplierId,
     date: parsed.data.date.toISOString().slice(0, 10),
     method: parsed.data.method,

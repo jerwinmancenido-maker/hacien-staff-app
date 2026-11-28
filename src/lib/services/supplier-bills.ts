@@ -12,6 +12,7 @@ import { poActionError } from "../purchasing/status";
 import type { BillInput } from "../validation/purchasing";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { assertPoAccess, lockPurchaseOrder, type PoActor } from "./purchase-orders";
+import { cancelOpenRequestsForBillInTx } from "./payment-requests";
 import { assertPeriodOpen } from "./period-close";
 
 export const billKey = (supplierId: string, billNumber: string) => `${supplierId}:${billNumber.trim().toLowerCase()}`;
@@ -136,6 +137,9 @@ export async function voidSupplierBill(id: string, reason: string, actor: PoActo
     }
     const now = new Date();
     const after = await tx.supplierBill.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, activeKey: null } });
+    // ERP adoption item 3: voiding the bill cancels its open payment
+    // requests in this same transaction — they can never be paid now.
+    await cancelOpenRequestsForBillInTx(tx, id, before.billNumber, why, actor.id);
     await tx.documentVoid.create({
       data: {
         docType: "SUPPLIER_BILL",

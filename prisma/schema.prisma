@@ -85,6 +85,8 @@ model User {
   collectionsCreated           Collection[]              @relation("CollectionCreatedBy")
   collectionsChecked           Collection[]              @relation("CollectionAdminCheckedBy")
   supplierPaymentsCreated      SupplierPayment[]         @relation("SupplierPaymentCreatedBy")
+  paymentRequestsMade          SupplierPaymentRequest[]  @relation("PaymentRequestRequestedBy")
+  paymentRequestsDecided       SupplierPaymentRequest[]  @relation("PaymentRequestDecidedBy")
   cashAccountsCreated          CashAccount[]             @relation("CashAccountCreatedBy")
   cashAccountsUpdated          CashAccount[]             @relation("CashAccountUpdatedBy")
   expensesCreated              Expense[]                 @relation("ExpenseCreatedBy")
@@ -1197,6 +1199,17 @@ enum SupplierBillStatus {
   VOID
 }
 
+// Payment requests (ERP adoption item 3, 2026-11-28): the request-to-pay
+// step in front of a supplier payment. PAID is set only by the payment
+// that settled the request; CANCELLED only by voiding the bill.
+enum SupplierPaymentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
 // One PO per supplier. Made from a sales order (salesOrderId set; lines link to
 // SO lines) or standalone. Unit costs, totals and the supplier are cost data:
 // only users with "Can see costs" open PO pages (src/lib/purchasing/views.ts).
@@ -1563,6 +1576,7 @@ model SupplierBill {
   attachments  DocumentAttachment[]
   allocations  SupplierPaymentAllocation[]
   withholdings SupplierWithholding2307[]
+  paymentRequests SupplierPaymentRequest[]
 
   @@index([supplierId])
   @@index([purchaseOrderId])
@@ -2004,11 +2018,44 @@ model SupplierPayment {
   allocations  SupplierPaymentAllocation[]
   withholdings SupplierWithholding2307[]
   attachments  DocumentAttachment[]
+  paymentRequests SupplierPaymentRequest[]
 
   @@index([supplierId])
   @@index([status])
   @@index([date])
   @@index([cashAccountId])
+}
+
+// A request to pay one supplier bill, approved before money moves
+// (ERP adoption item 3). The request never moves money itself: an
+// APPROVED request is settled by an ordinary supplier payment, which
+// links back here (supplierPaymentId) and flips the status to PAID.
+// Open requests (PENDING + APPROVED) reserve against the bill's
+// outstanding balance — see services/payment-requests.ts.
+model SupplierPaymentRequest {
+  id                String                       @id @default(cuid())
+  supplierBillId    String
+  supplierBill      SupplierBill                 @relation(fields: [supplierBillId], references: [id])
+  amount            Decimal                      @db.Decimal(15, 2)
+  dueDate           DateTime                     @db.Date
+  note              String?                      @db.Text
+  status            SupplierPaymentRequestStatus @default(PENDING)
+  requestedById     String
+  requestedBy       User                         @relation("PaymentRequestRequestedBy", fields: [requestedById], references: [id])
+  decidedById       String?
+  decidedBy         User?                        @relation("PaymentRequestDecidedBy", fields: [decidedById], references: [id])
+  decidedAt         DateTime?
+  decisionNote      String?                      @db.Text
+  supplierPaymentId String?
+  supplierPayment   SupplierPayment?             @relation(fields: [supplierPaymentId], references: [id])
+  paidAt            DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@index([supplierBillId])
+  @@index([status])
+  @@index([requestedById])
+  @@index([dueDate])
 }
 
 // Links cash + optional EWT from a supplier payment onto a supplier bill.
