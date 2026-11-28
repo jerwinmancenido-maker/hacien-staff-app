@@ -19,6 +19,7 @@ import { deriveSupplierBillStatus } from "../payables/status";
 import type { MarkSupplier2307IssuedInput, SupplierPaymentInput } from "../validation/payables";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { assertPeriodOpen } from "./period-close";
+import { notifySupplierPaymentRecorded } from "./alerts";
 
 export type PayablesActor = PermissionUser & { id: string };
 
@@ -194,7 +195,7 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
   const uploads = await prepareUploads(files);
 
   try {
-    return await withTxRetry(() =>
+    const payment = await withTxRetry(() =>
       db.$transaction(async (tx) => {
         const supplier = await lockSupplier(tx, input.supplierId);
         const allocInputs: PaymentAllocationInput[] = input.allocations.map((a) => ({
@@ -308,6 +309,11 @@ export async function recordSupplierPayment(input: SupplierPaymentInput, actor: 
         return payment;
       }, DOC_TX),
     );
+    // Adoption item 8: tell the team a supplier payment was recorded.
+    // Runs AFTER the payment transaction commits; the alert never throws
+    // (a mail failure is logged + audited, the payment stands).
+    await notifySupplierPaymentRecorded(payment.id, actor.id).catch(() => {});
+    return payment;
   } catch (e) {
     await discardUploads(uploads);
     throw e;
