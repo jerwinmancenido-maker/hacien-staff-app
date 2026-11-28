@@ -34,6 +34,7 @@ import {
   printedTermsLabel,
   sanitizePrintedNotes,
 } from "./terms-block";
+import { buildPaymentSchedule } from "./payment-schedule";
 import { validityDaysFromDates } from "@/lib/quotes/validity";
 import { HIDE_STATUS_ON_PRINT, taxFooterLines, THANK_YOU, type PrintDocKind } from "./tax-wording";
 import type { ProfessionalPrintModel, PrintLineItem, PrintLotPart, PrintMoneyLine, PrintSignatory } from "./types";
@@ -497,6 +498,14 @@ export async function getBillingPrintModel(id: string): Promise<{ doc: Professio
     // Words must equal the Total shown (gross), to the centavo.
     totalInWords: amountInWords(amount),
     terms: printedTermsLabel(b.salesOrder.terms),
+    // Item 14: the payment-schedule table under the terms — rows only
+    // for the COD / 50-50 / Net 30 kinds, null (no table, print
+    // byte-identical) for every other terms value.
+    paymentSchedule: buildPaymentSchedule({
+      paymentTerms: b.salesOrder.terms,
+      total: amount,
+      invoiceDateYmd: ymd(b.invoiceDate),
+    }),
     notes: sanitizePrintedNotes(b.notes),
     signatories: customerSignatories(b.createdBy.name),
     ...footer,

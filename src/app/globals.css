@@ -5843,6 +5843,29 @@ button.contact-card-add {
   border-top: 1px solid var(--pp-rule);
   padding-top: calc(6px * var(--ui-scale, 1));
 }
+/* Item 14: the billing statement's payment-schedule table, printed
+   under the terms (Remarks) row for COD / 50-50 / Net 30 only. */
+.pp-schedule {
+  margin-top: calc(6px * var(--ui-scale, 1));
+}
+.pp-schedule-table {
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+.pp-schedule-table th,
+.pp-schedule-table td {
+  text-align: left;
+  font-weight: 400;
+  padding: calc(2px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)) calc(2px * var(--ui-scale, 1)) 0;
+}
+.pp-schedule-table th {
+  font-weight: 500;
+  color: #333;
+}
+.pp-schedule-table .num {
+  text-align: right;
+  padding-right: 0;
+}
 .pp-terms-block {
   font-size: 7pt;
   line-height: 1.35;
