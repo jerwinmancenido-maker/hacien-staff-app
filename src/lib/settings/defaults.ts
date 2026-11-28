@@ -132,6 +132,11 @@ export const DEFAULT_SETTINGS: Settings = {
     warrantyClaimsEnabled: false,
     // Adoption item 5: email the team when goods are received. ON by default.
     receivingEmailEnabled: true,
+    // Adoption item 16: email the customer when a payment is applied to
+    // their billing, and when a delivery is recorded on their order.
+    // ON by default — the same posture as the item-5 automatic email.
+    customerPaymentEmailEnabled: true,
+    customerDeliveryEmailEnabled: true,
     itemsImportEnabled: false,
     periodCloseEnabled: false,
   },

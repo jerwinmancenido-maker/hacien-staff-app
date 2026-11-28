@@ -17,6 +17,7 @@ import { voidReasonSchema, type GovDealInput, type SalesOrderInput } from "../va
 import { checkSuppliers, type DocActor } from "./quotes";
 import { buildWithholdingSnapshot, listWithholdingRates, snapshotList } from "./withholding";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 type SoWithItems = SalesOrder & { items: (SalesOrderItem & { components?: SalesOrderItemComponent[] })[] };
 
@@ -161,6 +162,12 @@ export async function refreshSalesOrderCloseState(tx: Tx, salesOrderId: string, 
   const delivered = soDeliveryProgress(
     items.map((i) => ({ qty: money(i.qty), deliveredQty: money(i.deliveredQty) })),
   );
+  // Adoption item 13: full delivery is a done state for reminders — close
+  // them in this same transaction (idempotent: only open ones are touched,
+  // so repeat refreshes and a later reopen change nothing).
+  if (delivered.fullyDelivered) {
+    await autoCloseReminders(tx, "SALES_ORDER", salesOrderId, "Auto-closed: order fully delivered");
+  }
   const target = moneySnap.completed && delivered.fullyDelivered ? "CLOSED" : "OPEN";
   if (target === so.status) return;
   await tx.salesOrder.update({ where: { id: salesOrderId }, data: { status: target, updatedById: actorId } });
@@ -633,6 +640,7 @@ export async function voidSalesOrder(id: string, reason: string, actor: DocActor
     if (before.quoteId) await tx.$queryRaw`SELECT \`id\` FROM \`Quote\` WHERE \`id\` = ${before.quoteId} FOR UPDATE`;
     const now = new Date();
     const after = await tx.salesOrder.update({ where: { id }, data: { status: "VOID", voidedAt: now, voidReason: why, updatedById: actor.id } });
+    await autoCloseReminders(tx, "SALES_ORDER", id, "Auto-closed: order voided");
     await tx.documentVoid.create({
       data: {
         docType: "SALES_ORDER",

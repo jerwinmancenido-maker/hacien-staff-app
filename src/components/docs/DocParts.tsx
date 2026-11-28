@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { formatPeso } from "@/lib/format";
 import { Chip, type ChipTone } from "@/components/ui";
 import { COST_NOT_SET_LABEL, lineCostMissing, supplierCostMissing, type SupplierCostState } from "@/lib/quotes/calc";
+import { salesOrderStage, type StageMeasures } from "@/lib/progress";
 import { FALLBACK_SHORT_NAME } from "@/lib/settings/identity";
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost", VOID: "Void" };
@@ -20,6 +21,20 @@ export function QuoteStatusChip({ status }: { status: string }) {
 
 export function SoStatusChip({ status }: { status: string }) {
   return <Chip tone={SO_TONES[status]}>{SO_STATUS_LABELS[status] ?? status}</Chip>;
+}
+
+/**
+ * ERP adoption item 15: the derived stage as a quiet line under the status
+ * chip (list) — computed at render by lib/progress, never stored. Renders
+ * nothing when there are no measures (VOID rows), when the derivation
+ * returns null, or when the stage would merely repeat the status chip
+ * (CLOSED → "Closed").
+ */
+export function SoStageLabel({ status, progress }: { status: string; progress: StageMeasures | null }) {
+  if (!progress) return null;
+  const stage = salesOrderStage(status, progress);
+  if (!stage || stage === SO_STATUS_LABELS[status]) return null;
+  return <span className="stage-line">{stage}</span>;
 }
 
 /** Soft margin/total advisory (not the workflow approval chip). Hidden once workflow-approved. */

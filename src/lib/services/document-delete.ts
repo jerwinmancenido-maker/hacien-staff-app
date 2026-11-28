@@ -14,6 +14,7 @@ import { assertNotDelete, deleteAllowanceGate, HardDeleteError, noDeleteExtensio
 import { assertCanDeleteDocument, type PermissionUser } from "../permissions";
 import { voidReasonSchema } from "../validation/quotes";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 /** The gate's run method, reachable only via DELETE_ALLOWANCE_KEY. */
 const withDeleteAllowance = deleteAllowanceGate[DELETE_ALLOWANCE_KEY];
@@ -86,10 +87,7 @@ async function lockCollection(tx: Tx, id: string) {
 }
 
 async function markRemindersDone(tx: Tx, entityType: "QUOTE" | "SALES_ORDER", entityId: string) {
-  await tx.reminder.updateMany({
-    where: { entityType, entityId, doneAt: null },
-    data: { doneAt: new Date() },
-  });
+  await autoCloseReminders(tx, entityType, entityId, "Auto-closed: record deleted");
 }
 
 const ATTACHMENT = "This document has an attachment, so it can't be deleted.";

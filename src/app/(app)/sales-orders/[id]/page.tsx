@@ -15,6 +15,8 @@ import { CreditLimitWarning } from "@/components/billing/CreditLimitWarning";
 import { salesOrderMoney } from "@/lib/billing/status";
 import { soBillingSummary } from "@/lib/services/billings";
 import { toScaled } from "@/lib/quotes/calc";
+import { percentOf, salesOrderStage } from "@/lib/progress";
+import { sumMoney } from "@/lib/purchasing/cost-margin";
 import { Activity } from "@/components/Activity";
 import { BillingStatusChip, OverdueBadge } from "@/components/billing/BillingParts";
 import { PillTabs } from "@/components/PillTabs";
@@ -119,6 +121,21 @@ export default async function SalesOrderPage({
         },
       ])
     : null;
+  // Adoption item 15: the derived stage for the header, from the SAME
+  // item-7 measures the SO list computes — delivered from the live lines,
+  // billed/paid from soBillingSummary (the list's exact aggregates:
+  // non-void billings; POSTED allocations + POSTED return-credit
+  // applications). Computed at render, never stored.
+  const stage = billingSummary
+    ? salesOrderStage(so.status, {
+        deliveredPct: percentOf(
+          sumMoney(so.items.map((i) => i.deliveredQty ?? "0.00")),
+          sumMoney(so.items.map((i) => i.qty)),
+        ),
+        billedPct: percentOf(billingSummary.billed, billingSummary.contractPrice),
+        paidPct: percentOf(billingSummary.collected, billingSummary.billed),
+      })
+    : null;
   const canBill = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.leftToBill, 2) > 0n;
   const canCollect = can(user, "record_billing") && so.status === "OPEN" && !so.businessId && money != null && toScaled(money.unpaidBilled, 2) > 0n;
   // Adoption item 12: Record delivery joins the Actions menu under the
@@ -176,6 +193,7 @@ export default async function SalesOrderPage({
             {so.number}
             {so.business && <Chip tone="dark">{so.business.shortLabel}</Chip>}
             {money?.completed ? <Chip tone="grey">Fully billed &amp; paid</Chip> : <SoStatusChip status={so.status} />}
+            {stage && stage !== "Closed" && !(money?.completed && stage === "Paid in full") && <Chip tone="grey">{stage}</Chip>}
           </>
         }
         subtitle={

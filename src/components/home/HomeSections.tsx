@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui";
 import { HomeSalesChart } from "@/components/home/HomeSalesChart";
 import {
   AlertTriangleIcon,
+  BellIcon,
   CartIcon,
   ChevronRightIcon,
   CoinIcon,
@@ -193,8 +194,8 @@ export function HomeKpiCards({ kpis }: { kpis: HomeKpis }) {
  * decorative numbers.
  */
 export function HomeCountsStrip({ counts }: { counts: HomeCounts }) {
-  const { ordersToDeliver, openSalesOrders, cashBalances, unassignedCash } = counts;
-  if (!ordersToDeliver && !openSalesOrders && cashBalances.length === 0 && !unassignedCash) {
+  const { ordersToDeliver, openSalesOrders, overdueReminders, cashBalances, unassignedCash } = counts;
+  if (!ordersToDeliver && !openSalesOrders && !overdueReminders && cashBalances.length === 0 && !unassignedCash) {
     return null;
   }
   return (
@@ -215,6 +216,15 @@ export function HomeCountsStrip({ counts }: { counts: HomeCounts }) {
             {openSalesOrders.label}
           </div>
           <div className="home-kv num">{openSalesOrders.count.toLocaleString("en-US")}</div>
+        </Link>
+      ) : null}
+      {overdueReminders ? (
+        <Link className="card home-kp home-count" href={overdueReminders.href}>
+          <div className="home-kl">
+            <BellIcon size={14} />
+            {overdueReminders.label}
+          </div>
+          <div className="home-kv num">{overdueReminders.count.toLocaleString("en-US")}</div>
         </Link>
       ) : null}
       {cashBalances.map((a) => (

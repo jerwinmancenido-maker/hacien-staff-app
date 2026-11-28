@@ -4783,6 +4783,17 @@ table.list.collections-table td {
     flex-basis: auto;
   }
 }
+/* Order lists (ERP adoption item 15): the derived stage as one quiet line
+   under the status chip — same muted register as .prog-label. No wrap:
+   the line sizes the status cell, and the table wrapper scrolls on
+   narrow screens exactly as it does for the progress cell. */
+.stage-line {
+  display: block;
+  margin-top: calc(3px * var(--ui-scale, 1));
+  font-size: calc(11.5px * var(--ui-scale, 1));
+  color: var(--text-2);
+  white-space: nowrap;
+}
 .attach-list {
   list-style: none;
   margin: 0;

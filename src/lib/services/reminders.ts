@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import { DocRuleError } from "@/lib/documents/common";
 import { ymd } from "@/lib/documents/common";
 
@@ -63,7 +63,39 @@ export async function createReminder(
 export async function setReminderDone(id: string, userId: string, done: boolean) {
   const existing = await db.reminder.findUnique({ where: { id } });
   if (!existing || existing.createdById !== userId) throw new DocRuleError("Reminder not found.");
-  return db.reminder.update({ where: { id }, data: { doneAt: done ? new Date() : null } });
+  // A hand toggle always clears the auto-close reason: done by hand carries
+  // no reason, and undoing an auto-close reopens the reminder clean.
+  return db.reminder.update({ where: { id }, data: { doneAt: done ? new Date() : null, doneReason: null } });
+}
+
+/**
+ * Adoption item 13: auto-close every OPEN reminder on a record, inside the
+ * caller's transaction, at the moment the record reaches a done state.
+ * Event-based, never recomputed: a reminder closed here stays closed even
+ * if the record later reopens, and one already closed by hand is untouched
+ * (the doneAt: null filter), so its original doneAt is preserved. Closes
+ * every owner's open reminders on the record — the same rule the document
+ * delete flow has always used (markRemindersDone there) — while visibility
+ * stays personal: each owner only ever sees their own list.
+ */
+export async function autoCloseReminders(
+  tx: Tx,
+  entityType: ReminderTarget,
+  entityId: string,
+  reason: string,
+): Promise<number> {
+  const res = await tx.reminder.updateMany({
+    where: { entityType, entityId, doneAt: null },
+    data: { doneAt: new Date(), doneReason: reason },
+  });
+  return res.count;
+}
+
+/** My open reminders whose date has passed (Home overdue count). */
+export async function countMyOverdueReminders(userId: string, today: Date): Promise<number> {
+  return db.reminder.count({
+    where: { createdById: userId, doneAt: null, remindAt: { lt: today } },
+  });
 }
 
 export type ReminderRow = {
@@ -75,6 +107,8 @@ export type ReminderRow = {
   note: string;
   remindAt: string;
   doneAt: string | null;
+  /** Adoption item 13: the auto-close reason, when the record finished the reminder. */
+  doneReason: string | null;
 };
 
 export async function listMyReminders(userId: string): Promise<ReminderRow[]> {
@@ -103,5 +137,6 @@ export async function listMyReminders(userId: string): Promise<ReminderRow[]> {
     note: r.note,
     remindAt: ymd(r.remindAt) ?? "",
     doneAt: r.doneAt ? r.doneAt.toISOString() : null,
+    doneReason: r.doneReason ?? null,
   }));
 }
