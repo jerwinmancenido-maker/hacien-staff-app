@@ -92,6 +92,13 @@ const fake = vi.hoisted(() => {
         return { seq: 1 };
       },
     },
+    // Adoption item 13: convertQuoteToSalesOrder auto-closes the quote's
+    // reminders inside the tx. No reminder rows exist in this fake.
+    reminder: {
+      async updateMany() {
+        return { count: 0 };
+      },
+    },
     async $transaction(fn: (tx: unknown) => Promise<unknown>) {
       return fn(client);
     },

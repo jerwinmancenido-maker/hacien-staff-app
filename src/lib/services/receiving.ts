@@ -20,6 +20,7 @@ import { normalizeSerialNumbers } from "../serials";
 import { createAttachments, discardUploads, prepareUploads, type UploadFile } from "./attachments";
 import { notifyGoodsReceived } from "./receiving-notify";
 import { assertPeriodOpen } from "./period-close";
+import { autoCloseReminders } from "./reminders";
 
 export type RrActor = PermissionUser & { id: string };
 
@@ -51,6 +52,12 @@ async function lockForReceiving(tx: Tx, purchaseOrderId: string): Promise<{ stat
 async function setPoStatus(tx: Tx, purchaseOrderId: string, from: PoStatus, to: PoStatus, actorId: string, reason: string) {
   if (from === to) return;
   await tx.purchaseOrder.update({ where: { id: purchaseOrderId }, data: { status: to, updatedById: actorId } });
+  // Adoption item 13: fully received is the PO's done state — close its
+  // reminders in the same transaction (a later RR void recomputes the
+  // status back down but never resurrects a closed reminder).
+  if (to === "RECEIVED") {
+    await autoCloseReminders(tx, "PURCHASE_ORDER", purchaseOrderId, "Auto-closed: PO fully received");
+  }
   await writeAudit(tx, { userId: actorId, entityType: "PurchaseOrder", entityId: purchaseOrderId, action: "update", before: { status: from }, after: { status: to, reason }, diff: false });
 }
 
